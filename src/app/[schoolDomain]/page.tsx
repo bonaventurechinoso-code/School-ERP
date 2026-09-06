@@ -82,36 +82,46 @@ export default async function PublicGuestPortalPage({
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero Section - Split Screen Layout */}
       <main className="flex-1">
-        <div className="bg-slate-900 text-white py-24 md:py-32 relative overflow-hidden">
-          {/* Dynamic Tier Image Background */}
+        <div className="bg-slate-900 text-white relative overflow-hidden">
+          {/* Mobile Background Image (absolute & faded) */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/90 to-slate-900/90 mix-blend-multiply z-0 md:hidden"></div>
           <div 
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-overlay"
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30 md:hidden mix-blend-overlay z-0"
             style={{ backgroundImage: `url('${heroImageUrl}')` }}
           ></div>
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/80 to-slate-900/80 mix-blend-multiply"></div>
-          
-          <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-            <h2 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-              {finalHeroTitle}
-            </h2>
-            <p className="text-lg md:text-xl text-slate-300 mb-10 max-w-3xl mx-auto leading-relaxed">
-              {aboutUs}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                href={`/${school.subdomain}/apply`}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-lg shadow-xl hover:shadow-blue-500/20 transition-all transform hover:-translate-y-1"
-              >
-                Apply Online / Start New Application
-              </Link>
-              <a 
-                href="#contact"
-                className="inline-flex items-center justify-center px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-lg transition-all backdrop-blur-sm border border-white/10"
-              >
-                Contact Us
-              </a>
+
+          <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col md:flex-row items-center">
+            {/* Text Content (Left side on desktop) */}
+            <div className="w-full md:w-1/2 py-24 md:py-32 pr-0 md:pr-12 text-center md:text-left">
+              <h2 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
+                {finalHeroTitle}
+              </h2>
+              <p className="text-lg md:text-xl text-slate-300 mb-10 max-w-2xl leading-relaxed mx-auto md:mx-0">
+                {aboutUs}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                <Link 
+                  href={`/${school.subdomain}/apply`}
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-lg shadow-xl hover:shadow-blue-500/20 transition-all transform hover:-translate-y-1"
+                >
+                  Apply Online / Start New Application
+                </Link>
+                <a 
+                  href="#contact"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-lg transition-all backdrop-blur-sm border border-white/10"
+                >
+                  Contact Us
+                </a>
+              </div>
+            </div>
+            
+            {/* Image Content (Right side on desktop) */}
+            <div className="hidden md:block w-full md:w-1/2 absolute right-0 top-0 bottom-0 h-full">
+               {/* Soft gradient blend on the left edge of the image */}
+               <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/40 to-transparent z-10"></div>
+               <img src={heroImageUrl} alt={`${primaryTier || 'School'} Campus Environment`} className="w-full h-full object-cover" />
             </div>
           </div>
         </div>

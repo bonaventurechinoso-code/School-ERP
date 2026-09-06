@@ -56,15 +56,25 @@ const SECONDARY_IMAGES = [
   "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=2000"
 ];
 
-const HIGHER_ED_IMAGES = [
+const UNIVERSITY_IMAGES = [
   "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=2000",
   "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000"
+];
+
+const POLYTECHNIC_IMAGES = [
+  "https://images.unsplash.com/photo-1581092921461-eab62e97a780?auto=format&fit=crop&q=80&w=2000",
+  "https://images.unsplash.com/photo-1537432376769-00f5c2f4c8d2?auto=format&fit=crop&q=80&w=2000"
+];
+
+const COLLEGE_IMAGES = [
+  "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=2000",
+  "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&q=80&w=2000"
 ];
 
 export function getHeroImage(tierName: string, customImage?: string): string {
   if (customImage) return customImage;
   
-  if (!tierName) return HIGHER_ED_IMAGES[0];
+  if (!tierName) return UNIVERSITY_IMAGES[0];
   
   const up = tierName.toUpperCase();
   const pick = (arr: string[]) => arr[tierName.length % arr.length]; // Deterministic pick based on string length
@@ -78,7 +88,13 @@ export function getHeroImage(tierName: string, customImage?: string): string {
   if (up.includes("SECONDARY") || up.includes("HIGH SCHOOL")) {
     return pick(SECONDARY_IMAGES);
   }
+  if (up.includes("POLYTECHNIC")) {
+    return pick(POLYTECHNIC_IMAGES);
+  }
+  if (up.includes("COLLEGE")) {
+    return pick(COLLEGE_IMAGES);
+  }
   
-  // Default to higher ed images for university, polytechnic, college, etc.
-  return pick(HIGHER_ED_IMAGES);
+  // Default to university images
+  return pick(UNIVERSITY_IMAGES);
 }
