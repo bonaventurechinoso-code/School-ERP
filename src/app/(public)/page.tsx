@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronDown, GraduationCap, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -47,13 +48,22 @@ export default function LandingPage() {
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Early childhood management tailored for care</p>
                         </div>
                       </Link>
-                      <Link href="#primary_secondary" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+                      <Link href="#primary" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
                         <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-400">
                           <Building className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Primary & Secondary Schools</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Complete lifecycle management for Nigerian primary, junior, and senior secondary schools.</p>
+                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Primary Schools</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Complete lifecycle management for Nigerian primary schools.</p>
+                        </div>
+                      </Link>
+                      <Link href="#secondary" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+                        <div className="bg-teal-100 dark:bg-teal-900/30 p-2 rounded-lg text-teal-600 dark:text-teal-400">
+                          <Building className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Secondary Schools</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Streamlined academics for junior and senior secondary education.</p>
                         </div>
                       </Link>
                       <Link href="#higher-ed" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
@@ -92,30 +102,43 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-32 overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 dark:opacity-[0.02]"></div>
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-100/50 dark:bg-blue-900/20 blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-100/50 dark:bg-purple-900/20 blur-3xl"></div>
+      <section className="relative pt-24 pb-32 overflow-hidden bg-slate-900">
+        {/* Background Image Integration */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <Image 
+            src="/assets/images/hero-graduation.jpg" 
+            alt="Students graduating and celebrating"
+            fill
+            className="object-cover"
+            priority
+          />
+        </div>
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-xs font-bold uppercase tracking-wider mb-8">
-            <span className="flex h-2 w-2 rounded-full bg-blue-500"></span>
+        {/* Dark overlay layer */}
+        <div className="absolute inset-0 bg-slate-950/70 z-10 pointer-events-none"></div>
+        
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-100/10 dark:bg-blue-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-100/10 dark:bg-purple-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
+        
+        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/50 border border-blue-400/50 text-blue-300 text-xs font-bold uppercase tracking-wider mb-8 backdrop-blur-sm shadow-sm">
+            <span className="flex h-2 w-2 rounded-full bg-blue-400"></span>
             Version 2.0 Now Live
           </div>
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-8 leading-tight">
+          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-8 leading-tight drop-shadow-lg">
             The Unified Engine for <br className="hidden md:block"/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
               Modern Education
             </span>
           </h1>
-          <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-12 leading-relaxed">
-            A single, scalable ERP platform designed to drive operational excellence from Daycares to Universities. Manage admissions, finance, and academics in one place.
+          <p className="text-xl md:text-2xl text-slate-200 font-semibold max-w-3xl mx-auto mb-12 leading-relaxed drop-shadow-md">
+            A single, scalable ERP platform designed to drive operational excellence from Early Childhood Centers to Universities and Polytechnics. Manage admissions, finance, and academics in one place.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/register" className="w-full sm:w-auto bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+            <Link href="/register" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
               Start Free Trial <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link href="/admin" className="w-full sm:w-auto bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2">
+            <Link href="/admin" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2">
               Explore Demo Environment
             </Link>
           </div>
@@ -130,26 +153,26 @@ export default function LandingPage() {
             <p className="text-slate-500 dark:text-slate-400 mt-4 max-w-2xl mx-auto">Our multi-tenant architecture ensures complete data isolation while providing a powerful administrative platform.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-3xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800/50 hover:shadow-lg transition-shadow">
-              <div className="bg-blue-100 dark:bg-blue-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6">
+            <div className="p-8 rounded-3xl bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 hover:-translate-y-2 hover:shadow-xl hover:shadow-blue-900/10 transition-all duration-300 group">
+              <div className="bg-blue-100 dark:bg-blue-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <ShieldCheck className="h-7 w-7 text-blue-600 dark:text-blue-400" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">Multi-Tenant Security</h3>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">Isolated database schemas for every institution. Absolute data privacy and compliance with global education standards.</p>
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed font-medium">Isolated database schemas for every institution. Absolute data privacy and compliance with global education standards.</p>
             </div>
-            <div className="p-8 rounded-3xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800/50 hover:shadow-lg transition-shadow">
-              <div className="bg-purple-100 dark:bg-purple-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6">
+            <div className="p-8 rounded-3xl bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 hover:-translate-y-2 hover:shadow-xl hover:shadow-purple-900/10 transition-all duration-300 group">
+              <div className="bg-purple-100 dark:bg-purple-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <Users className="h-7 w-7 text-purple-600 dark:text-purple-400" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">Unified Lifecycle</h3>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">Track prospects from the initial admission stage all the way to alumni status seamlessly within a single intuitive dashboard.</p>
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed font-medium">Track prospects from the initial admission stage all the way to alumni status seamlessly within a single intuitive dashboard.</p>
             </div>
-            <div className="p-8 rounded-3xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800/50 hover:shadow-lg transition-shadow">
-              <div className="bg-orange-100 dark:bg-orange-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6">
+            <div className="p-8 rounded-3xl bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 hover:-translate-y-2 hover:shadow-xl hover:shadow-orange-900/10 transition-all duration-300 group">
+              <div className="bg-orange-100 dark:bg-orange-900/30 w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <Zap className="h-7 w-7 text-orange-600 dark:text-orange-400" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">Automated Finance</h3>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">Generate fee templates, process invoices automatically, and accept payments with zero manual reconciliation required.</p>
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed font-medium">Generate fee templates, process invoices automatically, and accept payments with zero manual reconciliation required.</p>
             </div>
           </div>
         </div>

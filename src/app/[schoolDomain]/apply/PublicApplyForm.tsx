@@ -136,7 +136,7 @@ export default function PublicApplyForm({
           Thank you for applying to {schoolName}. Our admissions team will review your inquiry and reach out shortly.
         </p>
         <button 
-          onClick={() => window.location.href = `/`} 
+          onClick={() => window.location.href = `/${schoolDomain}`} 
           className="mt-8 px-8 py-3 text-white rounded-xl font-bold transition-transform hover:-translate-y-0.5 shadow-lg"
           style={{ backgroundColor: brandColor }}
         >

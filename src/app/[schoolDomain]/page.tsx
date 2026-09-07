@@ -38,9 +38,21 @@ export default async function PublicGuestPortalPage({
     );
   }
 
-  // Determine Primary Tier for Mock Data
-  const primaryTier = school.academicTiers.length > 0 ? school.academicTiers[0].name : "";
-  const { heroTitle, aboutUs } = generateTierMockData(primaryTier, school.name);
+  // Resolve precise tier based on academicTiers for clean nomenclature
+  let preciseTier = "UNIVERSITY";
+  const schoolNameUpper = school.name.toUpperCase();
+  if (school.academicTiers.length > 0) {
+    const tierNames = school.academicTiers.map(t => t.name.toUpperCase());
+    if (tierNames.some(t => t.includes("UNIVERSITY"))) preciseTier = "UNIVERSITY";
+    else if (tierNames.some(t => t.includes("POLYTECHNIC"))) preciseTier = "POLYTECHNIC";
+    else if (tierNames.some(t => t.includes("COLLEGE"))) preciseTier = "COLLEGE_OF_EDUCATION";
+    else if (tierNames.some(t => t.includes("HIGHER ED"))) preciseTier = "UNIVERSITY";
+    else if (tierNames.some(t => t.includes("PRIMARY")) || schoolNameUpper.includes("PRIMARY")) preciseTier = "PRIMARY";
+  } else if (schoolNameUpper.includes("PRIMARY")) {
+    preciseTier = "PRIMARY";
+  }
+  // Use preciseTier for clean nomenclature
+  const { heroTitle, aboutUs } = generateTierMockData(preciseTier, school.name);
   
   // Use custom welcome greeting if provided and different from default
   const finalHeroTitle = (school.welcomeGreeting && school.welcomeGreeting !== "Welcome to our institution!") 
@@ -51,7 +63,15 @@ export default async function PublicGuestPortalPage({
   const contactPhone = "+234 (0) 800 000 0000"; // Mocked since no native column exists yet
   
   // Resolve tier-specific hero background image
-  const heroImageUrl = getHeroImage(primaryTier, (school as any).metadata?.heroImage);
+  let defaultHeroImage = "/assets/images/university-campus.jpg";
+  switch (preciseTier) {
+    case "POLYTECHNIC": defaultHeroImage = "/assets/images/polytechnic-workshop.jpg"; break;
+    case "COLLEGE_OF_EDUCATION": defaultHeroImage = "/assets/images/college-lecture.jpg"; break;
+    case "UNIVERSITY":
+    default:
+      defaultHeroImage = "/assets/images/university-campus.jpg"; break;
+  }
+  const heroImageUrl = (school as any).metadata?.customHeroImage || defaultHeroImage;
 
   // Metadata Layer Extraction (Simulated/Fallback until DB column is added)
   const metadata = {
@@ -82,46 +102,39 @@ export default async function PublicGuestPortalPage({
         </div>
       </header>
 
-      {/* Hero Section - Split Screen Layout */}
+      {/* Hero Section */}
       <main className="flex-1">
-        <div className="bg-slate-900 text-white relative overflow-hidden">
-          {/* Mobile Background Image (absolute & faded) */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/90 to-slate-900/90 mix-blend-multiply z-0 md:hidden"></div>
-          <div 
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30 md:hidden mix-blend-overlay z-0"
-            style={{ backgroundImage: `url('${heroImageUrl}')` }}
-          ></div>
+        <div className="relative w-full min-h-[600px] overflow-hidden bg-slate-950 text-white flex items-center">
+          {/* Full Background Image */}
+          <div className="absolute inset-0 w-full h-full z-0">
+            <img 
+              src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1920&q=80" 
+              className="w-full h-full object-cover" 
+              alt="Graduation Background" 
+            />
+            <div className="absolute inset-0 bg-slate-950/75 mix-blend-multiply pointer-events-none" />
+          </div>
 
-          <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col md:flex-row items-center">
-            {/* Text Content (Left side on desktop) */}
-            <div className="w-full md:w-1/2 py-24 md:py-32 pr-0 md:pr-12 text-center md:text-left">
-              <h2 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-                {finalHeroTitle}
-              </h2>
-              <p className="text-lg md:text-xl text-slate-300 mb-10 max-w-2xl leading-relaxed mx-auto md:mx-0">
-                {aboutUs}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                <Link 
-                  href={`/${school.subdomain}/apply`}
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-lg shadow-xl hover:shadow-blue-500/20 transition-all transform hover:-translate-y-1"
-                >
-                  Apply Online / Start New Application
-                </Link>
-                <a 
-                  href="#contact"
-                  className="inline-flex items-center justify-center px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-lg transition-all backdrop-blur-sm border border-white/10"
-                >
-                  Contact Us
-                </a>
-              </div>
-            </div>
-            
-            {/* Image Content (Right side on desktop) */}
-            <div className="hidden md:block w-full md:w-1/2 absolute right-0 top-0 bottom-0 h-full">
-               {/* Soft gradient blend on the left edge of the image */}
-               <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/40 to-transparent z-10"></div>
-               <img src={heroImageUrl} alt={`${primaryTier || 'School'} Campus Environment`} className="w-full h-full object-cover" />
+          <div className="max-w-7xl mx-auto px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-24 md:py-32">
+            <h2 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight text-white drop-shadow-lg">
+              {finalHeroTitle}
+            </h2>
+            <p className="text-lg md:text-xl text-slate-200 mb-10 max-w-2xl leading-relaxed mx-auto drop-shadow-md">
+              {aboutUs}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link 
+                href={`/${school.subdomain}/apply`}
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-lg shadow-xl hover:shadow-blue-500/20 transition-all transform hover:-translate-y-1"
+              >
+                Apply Online / Start New Application
+              </Link>
+              <a 
+                href="#contact"
+                className="inline-flex items-center justify-center px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-lg transition-all backdrop-blur-sm border border-white/10"
+              >
+                Contact Us
+              </a>
             </div>
           </div>
         </div>
@@ -136,9 +149,17 @@ export default async function PublicGuestPortalPage({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {school.academicTiers.map((tier) => (
                 <div key={tier.id} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group cursor-pointer flex flex-col h-full">
-                  <h4 className="text-2xl font-bold text-slate-800 mb-4 group-hover:text-blue-600 transition-colors">{formatTierLabel(tier.name)}</h4>
+                  <h4 className="text-2xl font-bold text-slate-800 mb-4 group-hover:text-blue-600 transition-colors">
+                    {preciseTier === "PRIMARY" ? "Early Years & Primary Education" 
+                     : preciseTier === "POLYTECHNIC" ? "National Diploma (ND) & Higher National Diploma (HND) Programs"
+                     : "Undergraduate & Postgraduate Studies"}
+                  </h4>
                   <p className="text-slate-600 mb-8 flex-1 leading-relaxed">
-                    Comprehensive lifecycle management and rigorous academic structuring specifically tailored for the {formatTierLabel(tier.name)} tier.
+                    {preciseTier === "PRIMARY" 
+                      ? "A foundational lifecycle curriculum tailored to foster basic literacy, numeracy, cognitive development, and active early childhood learning stages." 
+                      : preciseTier === "POLYTECHNIC"
+                      ? "Hands-on technical and vocational curriculum designed for National Diploma (ND 1 & ND 2) and Higher National Diploma (HND 1 & HND 2) tracks, fostering practical engineering, financial, and professional competency."
+                      : "Comprehensive lifecycle management and rigorous academic structuring specifically engineered for degrees, research tracks, and professional campus programs."}
                   </p>
                   <Link 
                     href={`/${school.subdomain}/apply`}

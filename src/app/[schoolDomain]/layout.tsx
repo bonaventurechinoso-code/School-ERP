@@ -31,11 +31,29 @@ export default async function TenantLayout({
     tier.name.toUpperCase().includes("HIGHER ED")
   );
 
+  // Resolve precise tier based on academicTiers
+  let preciseTier = "K12_GENERIC";
+  if (school.academicTiers.length > 0) {
+    const tierNames = school.academicTiers.map(t => t.name.toUpperCase());
+    const hasPrimary = tierNames.some(t => t.includes("PRIMARY"));
+    const hasSecondary = tierNames.some(t => t.includes("SECONDARY") || t.includes("HIGH SCHOOL"));
+    
+    if (tierNames.some(t => t.includes("UNIVERSITY"))) preciseTier = "UNIVERSITY";
+    else if (tierNames.some(t => t.includes("POLYTECHNIC"))) preciseTier = "POLYTECHNIC";
+    else if (tierNames.some(t => t.includes("COLLEGE"))) preciseTier = "COLLEGE_OF_EDUCATION";
+    else if (tierNames.some(t => t.includes("HIGHER ED"))) preciseTier = "UNIVERSITY";
+    else if (hasPrimary && hasSecondary) preciseTier = "PRIMARY_SECONDARY";
+    else if (hasPrimary) preciseTier = "PRIMARY";
+    else if (hasSecondary) preciseTier = "SECONDARY";
+    else if (tierNames.some(t => t.includes("NURSERY") || t.includes("DAYCARE") || t.includes("EARLY CARE"))) preciseTier = "NURSERY";
+  }
+
   const tenantData: any = {
     id: school.id,
     name: school.name,
     subdomain: school.subdomain,
     institutionType: isHigherEd ? "HIGHER_ED" : "K12",
+    preciseTier: preciseTier,
     branding: {
       primaryColor: "#0f172a", // Defaulting to slate-900
     },

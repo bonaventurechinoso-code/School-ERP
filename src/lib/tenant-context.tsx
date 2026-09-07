@@ -11,6 +11,7 @@ export interface TenantData {
   name: string;        // Display name of the School (e.g., "Green Valley High")
   subdomain: string;   // The unique subdomain identifier
   institutionType: "K12" | "HIGHER_ED";
+  preciseTier: "PRIMARY" | "SECONDARY" | "PRIMARY_SECONDARY" | "NURSERY" | "UNIVERSITY" | "POLYTECHNIC" | "COLLEGE_OF_EDUCATION" | string;
   branding: {
     primaryColor: string;
     secondaryColor?: string;

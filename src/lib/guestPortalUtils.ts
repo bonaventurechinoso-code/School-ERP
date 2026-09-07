@@ -1,24 +1,37 @@
-export function generateTierMockData(tierName: string, schoolName: string) {
-  const normalizedTier = tierName.toUpperCase();
-
-  if (normalizedTier.includes("DAYCARE") || normalizedTier.includes("NURSERY") || normalizedTier.includes("EARLY CARE")) {
+export function generateTierMockData(preciseTier: string, schoolName: string) {
+  if (preciseTier === "NURSERY") {
     return {
       heroTitle: `Welcome to ${schoolName} Early Care & Nursery`,
       aboutUs: "A safe, nurturing, and creative environment where toddlers discover milestones through play, early literacy, and comprehensive caregiver attention."
     };
   }
   
-  if (normalizedTier.includes("SECONDARY") || normalizedTier.includes("PRIMARY") || normalizedTier.includes("HIGH SCHOOL")) {
+  if (preciseTier === "PRIMARY") {
+    return {
+      heroTitle: `Welcome to ${schoolName} Primary School`,
+      aboutUs: "Fostering academic excellence, moral discipline, and future leaders through well-structured Nigerian primary curriculum cycles."
+    };
+  }
+
+  if (preciseTier === "SECONDARY") {
+    return {
+      heroTitle: `Welcome to ${schoolName} Secondary School`,
+      aboutUs: "Fostering academic excellence, moral discipline, and future leaders through comprehensive secondary education from JSS 1 to SS 3."
+    };
+  }
+
+  if (preciseTier === "PRIMARY_SECONDARY") {
     return {
       heroTitle: `Welcome to ${schoolName} Primary & Secondary School`,
       aboutUs: "Fostering academic excellence, moral discipline, and future leaders through well-structured Nigerian curriculum cycles running from Primary 1 up to SS3."
     };
   }
 
-  if (normalizedTier.includes("UNIVERSITY") || normalizedTier.includes("HIGHER ED") || normalizedTier.includes("COLLEGE")) {
+  if (preciseTier === "UNIVERSITY" || preciseTier === "POLYTECHNIC" || preciseTier === "COLLEGE_OF_EDUCATION") {
+    const titleType = preciseTier === "UNIVERSITY" ? "University" : preciseTier === "POLYTECHNIC" ? "Polytechnic" : "College of Education";
     return {
       heroTitle: `Welcome to the Official Portal of ${schoolName}`,
-      aboutUs: "A premium institution of higher learning dedicated to global research, academic innovation, and professional competency across engineering, law, and medical faculties."
+      aboutUs: `A premium ${titleType.toLowerCase()} dedicated to global research, academic innovation, and professional competency.`
     };
   }
 
@@ -29,16 +42,17 @@ export function generateTierMockData(tierName: string, schoolName: string) {
   };
 }
 
-export function formatTierLabel(tierName: string): string {
-  if (!tierName) return "";
-  const up = tierName.toUpperCase();
-  if (up === "UNIVERSITY" || up.includes("UNIVERSITY")) return "University";
-  if (up === "POLYTECHNIC" || up.includes("POLYTECHNIC")) return "Polytechnic";
-  if (up === "COLLEGE_OF_EDUCATION" || up.includes("COLLEGE OF EDUCATION")) return "College of Education";
-  if (up === "PRIMARY_SECONDARY" || up.includes("SECONDARY") || up.includes("HIGH SCHOOL") || up.includes("PRIMARY")) return "Primary & Secondary School";
-  if (up === "DAYCARE" || up.includes("DAYCARE") || up.includes("NURSERY") || up.includes("EARLY CARE")) return "Nursery & Early Care";
-  if (up.includes("HIGHER ED") || up.includes("COLLEGE")) return "Higher Education";
-  return tierName;
+export function formatTierLabel(preciseTier: string): string {
+  if (!preciseTier) return "";
+  if (preciseTier === "UNIVERSITY") return "University";
+  if (preciseTier === "POLYTECHNIC") return "Polytechnic";
+  if (preciseTier === "COLLEGE_OF_EDUCATION") return "College of Education";
+  if (preciseTier === "PRIMARY_SECONDARY") return "Primary & Secondary School";
+  if (preciseTier === "PRIMARY") return "Primary School";
+  if (preciseTier === "SECONDARY") return "Secondary School";
+  if (preciseTier === "NURSERY") return "Nursery & Early Care";
+  if (preciseTier === "HIGHER_ED") return "Higher Education";
+  return preciseTier;
 }
 
 const NURSERY_IMAGES = [
@@ -71,27 +85,26 @@ const COLLEGE_IMAGES = [
   "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&q=80&w=2000"
 ];
 
-export function getHeroImage(tierName: string, customImage?: string): string {
+export function getHeroImage(preciseTier: string, customImage?: string): string {
   if (customImage) return customImage;
   
-  if (!tierName) return UNIVERSITY_IMAGES[0];
+  if (!preciseTier) return UNIVERSITY_IMAGES[0];
   
-  const up = tierName.toUpperCase();
-  const pick = (arr: string[]) => arr[tierName.length % arr.length]; // Deterministic pick based on string length
+  const pick = (arr: string[]) => arr[preciseTier.length % arr.length];
 
-  if (up.includes("DAYCARE") || up.includes("NURSERY") || up.includes("EARLY CARE")) {
+  if (preciseTier === "NURSERY") {
     return pick(NURSERY_IMAGES);
   }
-  if (up.includes("PRIMARY")) {
+  if (preciseTier === "PRIMARY" || preciseTier === "PRIMARY_SECONDARY") {
     return pick(PRIMARY_IMAGES);
   }
-  if (up.includes("SECONDARY") || up.includes("HIGH SCHOOL")) {
+  if (preciseTier === "SECONDARY") {
     return pick(SECONDARY_IMAGES);
   }
-  if (up.includes("POLYTECHNIC")) {
+  if (preciseTier === "POLYTECHNIC") {
     return pick(POLYTECHNIC_IMAGES);
   }
-  if (up.includes("COLLEGE")) {
+  if (preciseTier === "COLLEGE_OF_EDUCATION") {
     return pick(COLLEGE_IMAGES);
   }
   

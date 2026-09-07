@@ -23,10 +23,12 @@ export default function RegisterTenantPage() {
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
 
   const availableTiers = [
-    { id: "Nursery / Daycare", label: "Nursery / Daycare", desc: "Ages 0-4" },
-    { id: "Primary School", label: "Primary School", desc: "Grades K-5" },
-    { id: "Secondary / High School", label: "Secondary / High School", desc: "Grades 6-12" },
-    { id: "Higher Ed / College / University", label: "Higher Ed / College / University", desc: "Undergraduate & Graduate" },
+    { id: "NURSERY", label: "Nursery / Daycare", desc: "Ages 0-4" },
+    { id: "PRIMARY", label: "Primary School", desc: "Grades K-5" },
+    { id: "SECONDARY", label: "Secondary / High School", desc: "Grades 6-12" },
+    { id: "UNIVERSITY", label: "University", desc: "Undergraduate & Graduate" },
+    { id: "POLYTECHNIC", label: "Polytechnic", desc: "ND & HND Programs" },
+    { id: "COLLEGE_OF_EDUCATION", label: "College of Education", desc: "Teacher Training & NCE" },
   ];
 
   const handleNextStep = (e: React.FormEvent) => {

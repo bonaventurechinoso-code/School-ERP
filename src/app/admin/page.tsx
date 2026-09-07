@@ -6,7 +6,9 @@ import { PhoneInput } from "@/components/PhoneInput";
 
 const ACADEMIC_TIERS_OPTIONS = [
   { id: "DAYCARE", label: "Nursery / Early Care / Daycare" },
-  { id: "PRIMARY_SECONDARY", label: "Primary & Secondary School" },
+  { id: "PRIMARY", label: "Primary School" },
+  { id: "SECONDARY", label: "Secondary School" },
+  { id: "PRIMARY_SECONDARY", label: "Combined Primary & Secondary School" },
   { id: "UNIVERSITY", label: "Higher Ed: University" },
   { id: "POLYTECHNIC", label: "Higher Ed: Polytechnic" },
   { id: "COLLEGE_OF_EDUCATION", label: "Higher Ed: College of Education" }
