@@ -40,11 +40,11 @@ export default function MessageLogView({ schoolId, messageLogs, students, staff 
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-800">Direct Message Audit Logs</h3>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-lg font-bold text-slate-800 w-full text-center sm:text-left">Direct Message Audit Logs</h3>
         <button 
           onClick={() => setShowSimulate(!showSimulate)}
-          className="text-sm px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 transition font-medium"
+          className="w-full sm:w-auto text-sm px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 transition font-medium"
         >
           {showSimulate ? "Cancel Simulation" : "Simulate Outbound Message"}
         </button>
@@ -98,8 +98,8 @@ export default function MessageLogView({ schoolId, messageLogs, students, staff 
             <textarea required rows={3} className="w-full border border-slate-300 rounded-lg p-2" value={formData.body} onChange={e => setFormData({...formData, body: e.target.value})}></textarea>
           </div>
 
-          <div className="flex justify-end mt-2">
-            <button disabled={isPending} type="submit" className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50">
+          <div className="flex flex-col sm:flex-row justify-end mt-2">
+            <button disabled={isPending} type="submit" className="w-full sm:w-auto px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50">
               {isPending ? "Logging..." : "Log Message"}
             </button>
           </div>

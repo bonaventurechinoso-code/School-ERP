@@ -52,11 +52,11 @@ export default function TimetableView({ schoolId, timetable, courses, classrooms
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold text-slate-800">Weekly Timetable</h3>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h3 className="text-xl font-bold text-slate-800 w-full text-center sm:text-left">Weekly Timetable</h3>
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-sm transition hover:bg-blue-700"
+          className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-sm transition hover:bg-blue-700"
         >
           {showForm ? "Cancel" : "Add Class Session"}
         </button>

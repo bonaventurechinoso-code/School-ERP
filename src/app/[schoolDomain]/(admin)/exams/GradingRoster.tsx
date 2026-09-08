@@ -56,12 +56,12 @@ export default function GradingRoster({ schoolId, exams, students, examResults }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-800">Grading Roster</h3>
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-lg font-bold text-slate-800 w-full text-center sm:text-left">Grading Roster</h3>
+        <div className="flex flex-col sm:flex-row items-center gap-2 sm:space-x-3 w-full sm:w-auto">
           <label className="text-sm font-medium text-slate-600">Select Exam:</label>
           <select 
-            className="border border-slate-300 rounded-lg p-2 text-sm w-64"
+            className="border border-slate-300 rounded-lg p-2 text-sm w-full sm:w-64"
             value={selectedExamId}
             onChange={(e) => setSelectedExamId(e.target.value)}
           >

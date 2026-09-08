@@ -44,7 +44,7 @@ export default function StudentProfileDrawer({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 px-6 pt-2 bg-slate-50">
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 px-6 pt-2 bg-slate-50 hide-scrollbar">
           <button
             onClick={() => setActiveTab("BIO")}
             className={`py-3 px-4 font-semibold text-sm border-b-2 transition-colors ${
@@ -75,7 +75,7 @@ export default function StudentProfileDrawer({
         <div className="flex-1 overflow-y-auto p-6 bg-white">
           {activeTab === "BIO" && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</label>
                   <p className="font-medium text-slate-800">{student.firstName} {student.lastName}</p>
@@ -165,7 +165,7 @@ export default function StudentProfileDrawer({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 border border-slate-200 rounded-lg bg-slate-50/50">
                   <h4 className="text-sm font-semibold text-slate-700">Current Term Status</h4>
                   <p className="text-2xl font-bold text-green-600 mt-2">Registered</p>

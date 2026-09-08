@@ -60,14 +60,14 @@ export default function PortalSettingsForm({
             href={`/${subdomain}`} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg transition shadow-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg transition shadow-sm"
           >
             Visit Portal
           </a>
         </div>
       </div>
 
-      <div className="flex items-center justify-between w-full border-t border-slate-100 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full border-t border-slate-100 pt-6 gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Public Portal Status</h2>
           <p className="text-sm text-slate-500">Allow prospective students to apply from your public domain.</p>
@@ -98,11 +98,11 @@ export default function PortalSettingsForm({
         />
       </div>
 
-      <div className="flex justify-end border-t border-slate-100 pt-6">
+      <div className="flex flex-col sm:flex-row justify-end border-t border-slate-100 pt-6">
         <button 
           type="submit" 
           disabled={isPending}
-          className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+          className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
         >
           {isPending ? "Saving..." : "Save Changes"}
         </button>

@@ -6,7 +6,7 @@ import { Transaction } from "@prisma/client";
 export default function LedgerTable({ transactions }: { transactions: Transaction[] }) {
   if (transactions.length === 0) {
     return (
-      <div className="bg-white p-12 text-center rounded-2xl border border-slate-200">
+      <div className="bg-white p-6 sm:p-12 text-center rounded-2xl border border-slate-200">
         <h3 className="text-lg font-medium text-slate-800">No Transactions Yet</h3>
         <p className="text-slate-500 mt-2">Any income, expenses, and top-ups will appear here.</p>
       </div>
@@ -15,7 +15,7 @@ export default function LedgerTable({ transactions }: { transactions: Transactio
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+      <div className="p-4 sm:p-6 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2">
         <h3 className="text-lg font-semibold text-slate-800">Ledger & Expenses</h3>
         <span className="text-sm text-slate-500">{transactions.length} Records</span>
       </div>

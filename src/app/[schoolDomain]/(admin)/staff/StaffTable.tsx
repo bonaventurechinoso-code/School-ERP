@@ -90,10 +90,10 @@ export default function StaffTable({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-col sm:flex-row justify-end">
         <button 
           onClick={showForm ? () => setShowForm(false) : openCreateForm}
-          className="px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
+          className="w-full sm:w-auto px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
           style={{ backgroundColor: tenant.branding.primaryColor }}
         >
           {showForm ? "Cancel" : "Add Staff Member"}

@@ -33,7 +33,7 @@ export default async function TranscriptPrintView({ params }: { params: { school
   const { semesters, cumulativeGPA, degreeClass } = aggregateTranscripts(student.ExamResult);
 
   return (
-    <div className="max-w-4xl mx-auto bg-white p-8 sm:p-12 shadow-sm rounded-lg border border-slate-200">
+    <div className="max-w-4xl mx-auto bg-white p-4 sm:p-8 md:p-12 shadow-sm rounded-lg border border-slate-200 overflow-hidden">
       
       {/* Hide this action bar when printing */}
       <div className="flex justify-between items-center mb-8 pb-8 border-b border-slate-200 print:hidden">
@@ -60,13 +60,13 @@ export default async function TranscriptPrintView({ params }: { params: { school
       </div>
 
       {/* Student Details */}
-      <div className="flex justify-between items-end mb-10 pb-4 border-b-2 border-slate-800">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-10 pb-4 border-b-2 border-slate-800">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">{student.firstName} {student.lastName}</h2>
           <p className="text-slate-500 mt-1">Student ID: <span className="font-mono text-slate-700">{student.id.substring(0, 8)}</span></p>
           <p className="text-slate-500">Status: {student.status}</p>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <p className="text-slate-500">Date Issued:</p>
           <p className="font-semibold text-slate-800">{new Date().toLocaleDateString()}</p>
         </div>
@@ -85,7 +85,8 @@ export default async function TranscriptPrintView({ params }: { params: { school
                 <h3 className="font-bold text-slate-800">{sem.semester}</h3>
                 <span className="text-sm font-semibold text-slate-600">Term GPA: {sem.semesterGPA}</span>
               </div>
-              <table className="w-full text-left">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-600 text-sm uppercase tracking-wider">
                     <th className="py-2 px-2">Course Code</th>
@@ -107,6 +108,7 @@ export default async function TranscriptPrintView({ params }: { params: { school
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ))
         )}

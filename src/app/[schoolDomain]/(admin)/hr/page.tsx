@@ -39,15 +39,15 @@ export default async function HRPayrollPage({
             )}
           </ul>
           
-          <form action={createDepartment.bind(null, params.schoolDomain)} className="flex gap-2">
+          <form action={createDepartment.bind(null, params.schoolDomain)} className="flex flex-col sm:flex-row gap-2">
             <input 
               type="text" 
               name="name" 
               placeholder="New Dept Name" 
-              className="border p-2 rounded flex-1"
+              className="border p-2 rounded w-full sm:flex-1"
               required 
             />
-            <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-800">
+            <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-800 w-full sm:w-auto">
               Add
             </button>
           </form>
@@ -67,12 +67,12 @@ export default async function HRPayrollPage({
               </select>
             </div>
             
-            <div className="flex gap-4">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="w-full sm:flex-1">
                 <label className="block text-sm text-slate-600 mb-1">Amount</label>
                 <input type="number" name="amount" step="0.01" className="w-full border p-2 rounded" required />
               </div>
-              <div className="flex-1">
+              <div className="w-full sm:flex-1">
                 <label className="block text-sm text-slate-600 mb-1">Pay Date</label>
                 <input type="date" name="payDate" className="w-full border p-2 rounded" required />
               </div>

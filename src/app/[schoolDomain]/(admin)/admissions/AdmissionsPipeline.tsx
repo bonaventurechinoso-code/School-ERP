@@ -249,7 +249,7 @@ export default function AdmissionsPipeline({
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               
               {/* Contact Details Side-by-Side */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Student */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
@@ -336,7 +336,7 @@ export default function AdmissionsPipeline({
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+            <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3">
               <button 
                 onClick={() => setSelectedLead(null)}
                 className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors"
