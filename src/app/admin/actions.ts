@@ -8,7 +8,7 @@ import util from "util";
 
 const execAsync = util.promisify(exec);
 
-const VALID_TIERS = ['DAYCARE', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
+const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
 
 export async function createSchool(formData: FormData) {
   const name = formData.get("name") as string;

@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefi
 const basePrisma = globalForPrisma.prisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
 
-const VALID_TIERS = ['DAYCARE', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
+const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
 
 export async function POST(request: Request) {
   try {

@@ -184,14 +184,13 @@ export default function StaffTable({
                       ${staff.status === "ACTIVE" ? "bg-green-100 text-green-700 border-green-200" : ""}
                       ${staff.status === "ONBOARDING" ? "bg-yellow-100 text-yellow-700 border-yellow-200" : ""}
                       ${staff.status === "LEAVE" ? "bg-blue-100 text-blue-700 border-blue-200" : ""}
-                      ${["OFFBOARDED", "TERMINATED"].includes(staff.status) ? "bg-gray-100 text-gray-700 border-gray-200" : ""}
+                      ${staff.status === "OFFBOARDED" ? "bg-gray-100 text-gray-700 border-gray-200" : ""}
                     `}
                   >
-                    <option value="ONBOARDING">Onboarding</option>
                     <option value="ACTIVE">Active</option>
+                    <option value="ONBOARDING">Onboarding</option>
                     <option value="LEAVE">On Leave</option>
                     <option value="OFFBOARDED">Offboarded</option>
-                    <option value="TERMINATED">Terminated</option>
                   </select>
                 </td>
                 <td className="px-6 py-4 text-right space-x-2">

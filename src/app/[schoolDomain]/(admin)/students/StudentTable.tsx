@@ -237,13 +237,15 @@ export default function StudentTable({
           >
             {currentBulkLabel}
           </button>
-          <button 
-            onClick={showForm ? () => setShowForm(false) : openCreateForm}
-            className="px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
-            style={{ backgroundColor: tenant.branding.primaryColor }}
-          >
-            {showForm ? "Cancel" : "Add Student"}
-          </button>
+          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+            <button 
+              onClick={showForm ? () => setShowForm(false) : openCreateForm}
+              className="px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
+              style={{ backgroundColor: tenant.branding.primaryColor }}
+            >
+              {showForm ? "Cancel" : "Add Student"}
+            </button>
+          )}
         </div>
       </div>
 

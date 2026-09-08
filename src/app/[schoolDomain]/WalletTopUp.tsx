@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTenant } from "@/lib/tenant-context";
 
 export default function WalletTopUp({ 
   schoolId, 
@@ -13,6 +14,18 @@ export default function WalletTopUp({
   const [isOpen, setIsOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
+  const tenant = useTenant();
+
+  const planMap: Record<string, string> = {
+    BASIC: "Basic Education Setup",
+    EXCELLENCE: "Secondary Excellence Plan",
+    ENTERPRISE: "Enterprise Higher Ed",
+  };
+  const planName = planMap[tenant?.subscriptionPlan || "BASIC"] || "Basic Education Setup";
+
+  if (tenant?.userRole !== "ADMIN" && tenant?.userRole !== "BURSAR") {
+    return null;
+  }
 
   async function handleTopUp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -53,7 +66,7 @@ export default function WalletTopUp({
         </p>
         <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold border border-green-200">
           <div className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></div>
-          Portal Status: ACTIVE (Enterprise Tier)
+          Portal Status: ACTIVE ({planName})
         </div>
       </div>
       <button 

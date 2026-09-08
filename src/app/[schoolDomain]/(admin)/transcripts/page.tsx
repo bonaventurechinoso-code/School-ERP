@@ -5,6 +5,7 @@ import { aggregateTranscripts } from "@/lib/gpa";
 export default async function TranscriptsDashboard({ params }: { params: { schoolDomain: string } }) {
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
+    include: { academicTiers: true }
   });
 
   if (!school) {
@@ -14,6 +15,18 @@ export default async function TranscriptsDashboard({ params }: { params: { schoo
       </div>
     );
   }
+
+  const isBasicEd = school.academicTiers.some(tier => 
+    ["PRIMARY", "SECONDARY", "NURSERY", "HIGH SCHOOL", "DAYCARE"].some(t => tier.name.toUpperCase().includes(t))
+  );
+
+  const headerTitle = isBasicEd ? "Terminal Report Cards" : "Student Transcripts";
+  const headerSubtitle = isBasicEd 
+    ? "Continuous Assessment (CA) tracking, terminal exam scores, and automated report sheet generation." 
+    : "Cumulative GPA tracking and official record generation.";
+  const colHeader = isBasicEd ? "Terminal Average (%)" : "Cumulative GPA";
+  const linkPath = isBasicEd ? "report-cards" : "transcripts";
+  const linkLabel = isBasicEd ? "View Report Card" : "View Transcript";
 
   const tenantDb = getTenantClient(school.id);
   
@@ -37,10 +50,10 @@ export default async function TranscriptsDashboard({ params }: { params: { schoo
       
       <header>
         <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">
-          Student Transcripts
+          {headerTitle}
         </h2>
         <p className="text-slate-500 mt-2 text-lg">
-          Cumulative GPA tracking and official record generation.
+          {headerSubtitle}
         </p>
       </header>
 
@@ -50,7 +63,7 @@ export default async function TranscriptsDashboard({ params }: { params: { schoo
             <tr>
               <th className="px-6 py-4 font-semibold">Student Name</th>
               <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold">Cumulative GPA</th>
+              <th className="px-6 py-4 font-semibold">{colHeader}</th>
               <th className="px-6 py-4 font-semibold text-right">Action</th>
             </tr>
           </thead>
@@ -80,10 +93,10 @@ export default async function TranscriptsDashboard({ params }: { params: { schoo
                     </td>
                     <td className="px-6 py-4 text-right">
                       <a 
-                        href={`/${params.schoolDomain}/transcripts/${student.id}`}
+                        href={`/${params.schoolDomain}/${linkPath}/${student.id}`}
                         className="text-indigo-600 hover:text-indigo-900 font-medium bg-indigo-50 px-3 py-1.5 rounded-md hover:bg-indigo-100 transition"
                       >
-                        View Transcript
+                        {linkLabel}
                       </a>
                     </td>
                   </tr>

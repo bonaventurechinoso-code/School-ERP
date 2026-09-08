@@ -24,19 +24,25 @@ export default function ClientLayout({
   const tenant = useTenant();
   const isHigherEd = tenant.institutionType === "HIGHER_ED";
 
-  const links = [
+  const isPrimary = tenant.preciseTier === "PRIMARY";
+
+  const allLinks = [
     { label: "Dashboard", href: `/${schoolDomain}/dashboard` },
     { label: "Public Portal Settings", href: `/${schoolDomain}/portal-settings` },
     { label: "Admissions", href: `/${schoolDomain}/admissions` },
     { label: "Students", href: `/${schoolDomain}/students` },
     { label: isHigherEd ? "Faculty & Staff" : "Staff", href: `/${schoolDomain}/staff` },
-    { label: "Scheduling", href: `/${schoolDomain}/scheduling` },
+    { label: "Timetable", href: `/${schoolDomain}/scheduling` },
     { label: isHigherEd ? "Assessments" : "Exams", href: `/${schoolDomain}/exams` },
-    { label: "Transcripts", href: `/${schoolDomain}/transcripts` },
+    { label: isPrimary ? "Report Cards" : "Transcripts", href: `/${schoolDomain}/${isPrimary ? 'report-cards' : 'transcripts'}` },
     { label: "Communications", href: `/${schoolDomain}/communications` },
     { label: "Finance", href: `/${schoolDomain}/finance` },
     { label: "HR & Payroll", href: `/${schoolDomain}/hr` },
   ];
+
+  const links = tenant.userRole === "TEACHER" 
+    ? allLinks.filter(link => ["Dashboard", "Students", "Timetable", "Exams", "Assessments", "Report Cards", "Transcripts"].includes(link.label))
+    : allLinks;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex overflow-hidden transition-colors duration-200">
@@ -82,7 +88,7 @@ export default function ClientLayout({
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-zinc-100 break-words">Tenant Workspace</h1>
+            <h1 className="text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 font-semibold break-words">Administrative Desk</h1>
           </div>
           {/* Upper top-right navigation navbar utility bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">

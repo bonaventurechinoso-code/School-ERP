@@ -9,16 +9,29 @@ export default async function PublicGuestPortalPage({
 }: {
   params: { schoolDomain: string };
 }) {
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: params.schoolDomain },
-    include: {
-      academicTiers: true,
-      staff: {
-        take: 1, // Attempt to get the admin's email for contact
-        orderBy: { createdAt: 'asc' }
+  let school = null;
+  try {
+    school = await basePrisma.school.findUnique({
+      where: { subdomain: params.schoolDomain },
+      include: {
+        academicTiers: true,
+        staff: {
+          take: 1, // Attempt to get the admin's email for contact
+          orderBy: { createdAt: 'asc' }
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error("Tenant DB fetch error:", error);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
+          <h2 className="text-xl font-bold text-slate-800">Tenant Offline / Under Maintenance</h2>
+          <p>We are unable to connect to this tenant's metadata context at the moment. Please try again later.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!school) {
     return notFound();
@@ -94,10 +107,10 @@ export default async function PublicGuestPortalPage({
             </div>
           </div>
           <Link 
-            href={`/${school.subdomain}/apply`}
+            href={`/${school.subdomain}/login`}
             className="hidden md:inline-flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
           >
-            Apply Online <ArrowRight className="w-4 h-4" />
+            Staff Portal <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </header>

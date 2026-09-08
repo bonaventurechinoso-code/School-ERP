@@ -8,10 +8,23 @@ export default async function TenantLayout({
   children: ReactNode;
   params: { schoolDomain: string };
 }) {
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: params.schoolDomain },
-    include: { academicTiers: true },
-  });
+  let school = null;
+  try {
+    school = await basePrisma.school.findUnique({
+      where: { subdomain: params.schoolDomain },
+      include: { academicTiers: true },
+    });
+  } catch (error) {
+    console.error("Tenant DB fetch error:", error);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
+          <h2 className="text-xl font-bold text-slate-800">Tenant Offline / Under Maintenance</h2>
+          <p>We are unable to connect to this tenant's metadata context at the moment. Please try again later.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!school) {
     return (
@@ -54,10 +67,25 @@ export default async function TenantLayout({
     subdomain: school.subdomain,
     institutionType: isHigherEd ? "HIGHER_ED" : "K12",
     preciseTier: preciseTier,
+    subscriptionPlan: school.subscriptionPlan,
     branding: {
       primaryColor: "#0f172a", // Defaulting to slate-900
     },
   };
+
+  try {
+    const { cookies } = await import("next/headers");
+    const sessionToken = cookies().get("session")?.value;
+    if (sessionToken) {
+      const { jwtVerify } = await import("jose");
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const { payload } = await jwtVerify(sessionToken, secret);
+      tenantData.userRole = payload.role as string;
+    }
+  } catch (err) {
+    console.error("Failed to decode session role for tenant context");
+  }
 
   return (
     <TenantProvider tenant={tenantData}>

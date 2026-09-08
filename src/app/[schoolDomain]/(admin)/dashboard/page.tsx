@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useTenant } from "@/lib/tenant-context";
-import { Users, GraduationCap, FileText, Plus } from "lucide-react";
+import { Users, GraduationCap, FileText, Plus, DollarSign, Calendar } from "lucide-react";
 import { getDashboardMetrics, createAdmissionLead } from "./actions";
 import NewApplicationModal from "./NewApplicationModal";
 
@@ -120,6 +120,44 @@ export default function TenantDashboard() {
             <p className="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">{metrics.pendingApplications}</p>
           </div>
         </Link>
+
+        {/* Revenue (MTD) Card */}
+        {(tenant.userRole === "ADMIN" || tenant.userRole === "BURSAR") && (
+          <div 
+            className="p-6 rounded-2xl shadow-sm border border-t-4 hover:shadow-md transition-shadow h-full bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+            style={{ borderTopColor: tenant.branding.primaryColor }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-zinc-400">Revenue (MTD)</h3>
+              <div 
+                className="p-2 rounded-xl" 
+                style={{ backgroundColor: `${tenant.branding.primaryColor}15`, color: tenant.branding.primaryColor }}
+              >
+                <DollarSign className="w-6 h-6" />
+              </div>
+            </div>
+            <p className="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">₦0.00</p>
+            <span className="text-xs font-semibold text-green-600 mt-2 block">+0% from last month</span>
+          </div>
+        )}
+
+        {/* Events This Week Card */}
+        <div 
+          className="p-6 rounded-2xl shadow-sm border border-t-4 hover:shadow-md transition-shadow h-full bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+          style={{ borderTopColor: tenant.branding.primaryColor }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-zinc-400">Events This Week</h3>
+            <div 
+              className="p-2 rounded-xl" 
+              style={{ backgroundColor: `${tenant.branding.primaryColor}15`, color: tenant.branding.primaryColor }}
+            >
+              <Calendar className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">8</p>
+          <span className="text-xs font-semibold text-slate-500 mt-2 block">-1 from last week</span>
+        </div>
 
       </div>
       

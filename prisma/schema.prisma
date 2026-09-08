@@ -8,6 +8,28 @@ datasource db {
 }
 
 // ------------------------------------------------------
+// SUBSCRIPTION ENUMS
+// ------------------------------------------------------
+
+enum SubscriptionPlan {
+  BASIC
+  EXCELLENCE
+  ENTERPRISE
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+// ------------------------------------------------------
 // TENANT SCHEMA
 // ------------------------------------------------------
 
@@ -19,6 +41,13 @@ model School {
   updatedAt DateTime @updatedAt
   isActive  Boolean  @default(true)
   deletedAt DateTime?
+
+  // Subscription Details
+  subscriptionPlan      SubscriptionPlan   @default(BASIC)
+  billingCycle          BillingCycle       @default(MONTHLY)
+  subscriptionStatus    SubscriptionStatus @default(ACTIVE)
+  subscriptionStartedAt DateTime           @default(now())
+  subscriptionExpiresAt DateTime?
 
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")
@@ -35,6 +64,7 @@ model School {
   StaffAttendance   StaffAttendance[]
   Exam              Exam[]
   ExamResult        ExamResult[]
+  GradeRecord       GradeRecord[]
   Notice            Notice[]
   MessageLog        MessageLog[]
   departments       Department[]
@@ -49,6 +79,11 @@ model PlatformAdmin {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String   // Should be hashed in production
+  
+  // 2FA Fields
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -104,6 +139,7 @@ model Student {
   payments          Payment[]
   StudentAttendance StudentAttendance[]
   ExamResult        ExamResult[]
+  GradeRecord       GradeRecord[]
 
   @@index([schoolId, status]) // Performance index for tenant queries
   @@index([tierId])
@@ -149,12 +185,17 @@ model Staff {
   firstName String
   lastName  String
   email     String
+  password  String?
   role      String // e.g., TEACHER, ADMIN
 
   baseSalary        Float?
   bankAccountNumber String?
   bankName          String?
   accountName       String?
+
+  // 2FA Fields
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
 
   // Stored as String for SQLite compatibility. Expected values:
   // ONBOARDING, ACTIVE, LEAVE, OFFBOARDED, TERMINATED
@@ -412,6 +453,30 @@ model StaffAttendance {
 // ------------------------------------------------------
 // EXAMS & GRADING
 // ------------------------------------------------------
+
+model GradeRecord {
+  id        String @id @default(uuid())
+  schoolId  String
+  school    School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  term      String
+  className String
+  subject   String
+
+  ca1       Float
+  ca2       Float
+  exam      Float
+  totalScore Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, studentId, term, className, subject])
+  @@index([schoolId, studentId])
+}
 
 model Exam {
   id       String @id @default(uuid())

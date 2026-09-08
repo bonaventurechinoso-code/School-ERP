@@ -29,11 +29,18 @@ export default function AIChatWidget() {
     setIsTyping(true);
 
     try {
-      // Mocking the Node.js AI routing layer
-      // In production, this would hit /api/v1/ai/route.ts
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const res = await fetch("/api/v1/admin/ai-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: userMessage })
+      });
       
-      const aiResponse = `I have received your request: "${userMessage}". Currently, my backend connection to the isolated schema routing layer is pending configuration. Check back soon!`;
+      if (!res.ok) {
+        throw new Error("Failed to get AI response");
+      }
+      
+      const data = await res.json();
+      const aiResponse = data.response;
       
       setMessages(prev => [...prev, { role: "ai", text: aiResponse }]);
     } catch (error) {

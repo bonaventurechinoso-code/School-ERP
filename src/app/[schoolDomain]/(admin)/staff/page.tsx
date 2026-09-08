@@ -25,8 +25,8 @@ export default async function StaffPage({ params }: { params: { schoolDomain: st
 
   const totalActive = staffList.filter(s => s.status === "ACTIVE").length;
   const totalOnboarding = staffList.filter(s => s.status === "ONBOARDING").length;
-  const teachersCount = staffList.filter(s => s.role === "TEACHER").length;
-  const adminsCount = staffList.filter(s => s.role === "ADMIN").length;
+  const teachersCount = staffList.filter(s => s.role === "TEACHER" && s.status === "ACTIVE").length;
+  const adminsCount = staffList.filter(s => s.role === "ADMIN" && s.status === "ACTIVE").length;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

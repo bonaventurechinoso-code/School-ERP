@@ -17,6 +17,10 @@ export interface TenantData {
     secondaryColor?: string;
     logoUrl?: string;
   };
+  subscriptionPlan?: string;
+  subscriptionStatus?: "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | string;
+  subscriptionExpiresAt?: Date | string | null;
+  userRole?: string;
 }
 
 // ------------------------------------------------------

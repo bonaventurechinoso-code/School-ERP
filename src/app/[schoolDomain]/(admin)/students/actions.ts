@@ -2,6 +2,8 @@
 
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import * as jose from "jose";
 
 export async function createStudent(
   schoolId: string,
@@ -11,6 +13,22 @@ export async function createStudent(
     parentName?: string; parentOccupation?: string; parentEmail?: string; parentPhone?: string; parentWhatsApp?: string;
   }
 ) {
+  // RBAC GUARD
+  try {
+    const sessionToken = cookies().get("session")?.value;
+    if (!sessionToken) return { success: false, error: "HTTP 401 Unauthorized" };
+    
+    const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+    const secret = new TextEncoder().encode(jwtSecret);
+    const { payload } = await jose.jwtVerify(sessionToken, secret);
+    
+    if (payload.role === "TEACHER") {
+      return { success: false, error: "HTTP 403 Forbidden: Teachers are not permitted to manually register new students." };
+    }
+  } catch (err) {
+    return { success: false, error: "HTTP 401 Unauthorized" };
+  }
+
   const tenantDb = getTenantClient(schoolId);
   
   try {

@@ -24,8 +24,8 @@ export default function RegisterTenantPage() {
 
   const availableTiers = [
     { id: "NURSERY", label: "Nursery / Daycare", desc: "Ages 0-4" },
-    { id: "PRIMARY", label: "Primary School", desc: "Grades K-5" },
-    { id: "SECONDARY", label: "Secondary / High School", desc: "Grades 6-12" },
+    { id: "PRIMARY", label: "Primary School", desc: "Primary 1 - 6" },
+    { id: "SECONDARY", label: "Secondary / High School", desc: "JS1 - SS3" },
     { id: "UNIVERSITY", label: "University", desc: "Undergraduate & Graduate" },
     { id: "POLYTECHNIC", label: "Polytechnic", desc: "ND & HND Programs" },
     { id: "COLLEGE_OF_EDUCATION", label: "College of Education", desc: "Teacher Training & NCE" },

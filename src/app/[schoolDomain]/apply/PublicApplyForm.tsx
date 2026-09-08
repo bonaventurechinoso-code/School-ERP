@@ -146,37 +146,34 @@ export default function PublicApplyForm({
     );
   }
 
-  const inputStyles = "w-full border border-zinc-300 rounded-xl p-3 focus:ring-2 focus:outline-none transition-shadow bg-white text-zinc-900 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 placeholder-zinc-400 disabled:bg-slate-100 disabled:dark:bg-zinc-800 disabled:text-slate-400 disabled:dark:text-zinc-500 disabled:cursor-not-allowed";
-  const labelStyles = "block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1";
-  const sectionHeaderStyles = "font-bold text-zinc-900 dark:text-zinc-100 text-lg";
-  const sectionBorderStyles = "md:col-span-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 mt-6";
+  const inputStyles = "w-full border border-slate-200 rounded-xl p-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 disabled:bg-slate-50 disabled:dark:bg-zinc-800 disabled:text-slate-400 disabled:dark:text-zinc-500 disabled:cursor-not-allowed";
+  const labelStyles = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5";
+  const sectionHeaderStyles = "font-bold text-slate-900 dark:text-slate-100 text-xl mb-4";
+  const panelStyles = "md:col-span-2 bg-slate-50/50 dark:bg-zinc-900/50 p-6 md:p-8 rounded-2xl border border-slate-100 dark:border-zinc-800/80";
 
   return (
-    <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-500">
-      <div className="px-8 py-10 text-center bg-zinc-100 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-50 relative transition-colors duration-300">
+    <div className="bg-white text-slate-900 dark:bg-zinc-950 dark:text-slate-50 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+      <div className="p-8 text-center bg-slate-900 dark:bg-zinc-950 rounded-t-3xl relative transition-colors duration-300">
         <div className="absolute top-6 right-6">
           <ThemeToggle />
         </div>
-        <div 
-          className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm"
-          style={{ backgroundColor: `${brandColor}15`, color: brandColor }}
-        >
-          <GraduationCap className="w-8 h-8" />
+        <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm bg-white/10 backdrop-blur-sm border border-white/20">
+          <GraduationCap className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight">Apply to {schoolName}</h1>
-        <p className="mt-3 text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
+        <h1 className="text-2xl font-bold text-white tracking-tight">Apply to {schoolName}</h1>
+        <p className="mt-2 text-slate-200 text-sm max-w-lg mx-auto">
           Begin your journey with us by completing this quick inquiry form.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit} className="p-6 md:p-10 space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
           {/* Read-Only Academic Tier Badge */}
           {tiers.length > 0 && (
-            <div className="md:col-span-2 flex flex-col items-start mb-2">
+            <div className="md:col-span-2 flex flex-col items-start">
               <label className={labelStyles}>Academic Tier</label>
-              <div className="inline-flex items-center px-4 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300 font-medium text-sm shadow-sm transition-colors duration-300">
+              <div className="inline-flex items-center px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 font-medium text-sm shadow-sm">
                 <span className="w-2.5 h-2.5 rounded-full mr-3 shadow-sm" style={{ backgroundColor: brandColor }}></span>
                 {formatTierLabel(selectedTierName || tiers[0].name)}
               </div>
@@ -188,151 +185,111 @@ export default function PublicApplyForm({
               {/* Higher Ed Layout */}
               {isHigherEd ? (
                 <>
-                  <div className={sectionBorderStyles.replace("mt-6", "mt-2")}>
+                  <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>Applicant Details</h3>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Full Name *</label>
-                    <input required type="text" placeholder="e.g. Jane Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.applicantName} onChange={e => setFormData({...formData, applicantName: e.target.value})} />
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>Personal Email *</label>
-                    <input required type="email" placeholder="jane@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.studentEmail} onChange={e => setFormData({...formData, studentEmail: e.target.value})} />
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>Phone Number *</label>
-                    <input 
-                      required 
-                      type="tel" 
-                      inputMode="numeric" 
-                      pattern="[0-9+]*"
-                      minLength={14}
-                      maxLength={14} 
-                      placeholder="+155500000000" 
-                      className={inputStyles} 
-                      style={{ '--tw-ring-color': brandColor } as React.CSSProperties} 
-                      value={formData.studentPhone} 
-                      onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, studentPhone: val}))} 
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Full Name *</label>
+                        <input required type="text" placeholder="e.g. Jane Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.applicantName} onChange={e => setFormData({...formData, applicantName: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Personal Email *</label>
+                        <input required type="email" placeholder="jane@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.studentEmail} onChange={e => setFormData({...formData, studentEmail: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Phone Number *</label>
+                        <input required type="tel" inputMode="numeric" pattern="[0-9+]*" minLength={14} maxLength={14} placeholder="+155500000000" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.studentPhone} onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, studentPhone: val}))} />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className={sectionBorderStyles}>
+                  <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>Academic Programme Selection</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Academic Level *</label>
+                        <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.targetGrade} onChange={e => setFormData({...formData, targetGrade: e.target.value})}>
+                          <option value="">Select a level...</option>
+                          {renderClassOptions()}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelStyles}>{orgUnitLabel}</label>
+                        <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.facultyOrSchool} onChange={e => setFormData({...formData, facultyOrSchool: e.target.value, intendedCourseOrProgramme: ""})}>
+                          <option value="">Select...</option>
+                          {Object.keys(activeHierarchy).map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelStyles}>{courseProgrammeLabel}</label>
+                        <select required disabled={!formData.facultyOrSchool} className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.intendedCourseOrProgramme} onChange={e => setFormData({...formData, intendedCourseOrProgramme: e.target.value})}>
+                          <option value="">{formData.facultyOrSchool ? "Select a programme..." : "Make a selection above first"}</option>
+                          {formData.facultyOrSchool && activeHierarchy[formData.facultyOrSchool]?.map(prog => (
+                            <option key={prog} value={prog}>{prog}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Academic Level *</label>
-                    <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.targetGrade} onChange={e => setFormData({...formData, targetGrade: e.target.value})}>
-                      <option value="">Select a level...</option>
-                      {renderClassOptions()}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>{orgUnitLabel}</label>
-                    <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.facultyOrSchool} onChange={e => setFormData({...formData, facultyOrSchool: e.target.value, intendedCourseOrProgramme: ""})}>
-                      <option value="">Select...</option>
-                      {Object.keys(activeHierarchy).map(unit => (
-                        <option key={unit} value={unit}>{unit}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>{courseProgrammeLabel}</label>
-                    <select required disabled={!formData.facultyOrSchool} className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.intendedCourseOrProgramme} onChange={e => setFormData({...formData, intendedCourseOrProgramme: e.target.value})}>
-                      <option value="">{formData.facultyOrSchool ? "Select a programme..." : "Make a selection above first"}</option>
-                      {formData.facultyOrSchool && activeHierarchy[formData.facultyOrSchool]?.map(prog => (
-                        <option key={prog} value={prog}>{prog}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={sectionBorderStyles}>
+                  <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>Emergency Contact</h3>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Contact Full Name *</label>
-                    <input required type="text" placeholder="e.g. John Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentName} onChange={e => setFormData({...formData, parentName: e.target.value})} />
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>Contact Phone *</label>
-                    <input 
-                      required 
-                      type="tel" 
-                      inputMode="numeric" 
-                      pattern="[0-9+]*" 
-                      minLength={14}
-                      maxLength={14}
-                      placeholder="+155500000000" 
-                      className={inputStyles} 
-                      style={{ '--tw-ring-color': brandColor } as React.CSSProperties} 
-                      value={formData.parentContact} 
-                      onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, parentContact: val}))} 
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelStyles}>Contact Email</label>
-                    <input type="email" placeholder="contact@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentEmail} onChange={e => setFormData({...formData, parentEmail: e.target.value})} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Contact Full Name *</label>
+                        <input required type="text" placeholder="e.g. John Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentName} onChange={e => setFormData({...formData, parentName: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Contact Phone *</label>
+                        <input required type="tel" inputMode="numeric" pattern="[0-9+]*" minLength={14} maxLength={14} placeholder="+155500000000" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentContact} onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, parentContact: val}))} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Contact Email</label>
+                        <input type="email" placeholder="contact@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentEmail} onChange={e => setFormData({...formData, parentEmail: e.target.value})} />
+                      </div>
+                    </div>
                   </div>
                 </>
               ) : (
                 /* K-12 Layout */
                 <>
-                  <div className={sectionBorderStyles.replace("mt-6", "mt-2")}>
+                  <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>Student Details</h3>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Student Full Name *</label>
-                    <input required type="text" placeholder="e.g. Timmy Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.applicantName} onChange={e => setFormData({...formData, applicantName: e.target.value})} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Student Full Name *</label>
+                        <input required type="text" placeholder="e.g. Timmy Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.applicantName} onChange={e => setFormData({...formData, applicantName: e.target.value})} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Target Grade/Class *</label>
+                        <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.targetGrade} onChange={e => setFormData({...formData, targetGrade: e.target.value})}>
+                          <option value="">Select a class...</option>
+                          {renderClassOptions()}
+                        </select>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Target Grade/Class *</label>
-                    <select required className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.targetGrade} onChange={e => setFormData({...formData, targetGrade: e.target.value})}>
-                      <option value="">Select a class...</option>
-                      {renderClassOptions()}
-                    </select>
-                  </div>
-
-                  <div className={sectionBorderStyles}>
+                  <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>
                       {isHigherEd ? "Sponsor / Next of Kin Details" : "Parent / Guardian Details"}
                     </h3>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelStyles}>Parent/Guardian Full Name *</label>
-                    <input required type="text" placeholder="e.g. John Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentName} onChange={e => setFormData({...formData, parentName: e.target.value})} />
-                  </div>
-                  
-                  <div>
-                    <label className={labelStyles}>Parent Phone *</label>
-                    <input 
-                      required 
-                      type="tel" 
-                      inputMode="numeric" 
-                      pattern="[0-9+]*" 
-                      minLength={14}
-                      maxLength={14}
-                      placeholder="+155500000000" 
-                      className={inputStyles} 
-                      style={{ '--tw-ring-color': brandColor } as React.CSSProperties} 
-                      value={formData.parentContact} 
-                      onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, parentContact: val}))} 
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className={labelStyles}>Parent Email (Optional)</label>
-                    <input type="email" placeholder="john@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentEmail} onChange={e => setFormData({...formData, parentEmail: e.target.value})} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Parent/Guardian Full Name *</label>
+                        <input required type="text" placeholder="e.g. John Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentName} onChange={e => setFormData({...formData, parentName: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Parent Phone *</label>
+                        <input required type="tel" inputMode="numeric" pattern="[0-9+]*" minLength={14} maxLength={14} placeholder="+155500000000" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentContact} onChange={(e) => handleNumericChange(e, (val) => setFormData({...formData, parentContact: val}))} />
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Parent Email (Optional)</label>
+                        <input type="email" placeholder="john@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.parentEmail} onChange={e => setFormData({...formData, parentEmail: e.target.value})} />
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -341,7 +298,7 @@ export default function PublicApplyForm({
 
         </div>
 
-        <div className="pt-6 mt-8 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+        <div className="pt-8 flex justify-end">
           <button 
             type="submit" 
             disabled={isPending || !formData.tierId} 

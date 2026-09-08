@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LandingPage() {
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 font-sans selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-300">
@@ -173,6 +174,108 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">Automated Finance</h3>
               <p className="text-slate-600 dark:text-slate-400 leading-relaxed font-medium">Generate fee templates, process invoices automatically, and accept payments with zero manual reconciliation required.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-24 bg-white dark:bg-zinc-950 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Transparent, Tiered Pricing</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-4 max-w-2xl mx-auto">Select the perfect infrastructure tier tailored to your institution's specific operational needs and academic level.</p>
+            
+            {/* Billing Toggle Tabs */}
+            <div className="flex items-center justify-center mt-8 p-1.5 bg-slate-100 dark:bg-zinc-800/60 rounded-xl inline-flex mx-auto border border-slate-200 dark:border-zinc-700/50">
+              <button 
+                onClick={() => setIsAnnual(false)}
+                className={`relative px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+                  !isAnnual 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                Monthly
+              </button>
+              <button 
+                onClick={() => setIsAnnual(true)}
+                className={`relative flex items-center gap-2 px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+                  isAnnual 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                Annually 
+                <span className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+                  isAnnual 
+                    ? 'bg-white/20 text-white' 
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                }`}>
+                  Save 20%
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Card 1 */}
+            <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Basic Education Setup</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Daycares, Nursery, and Primary schools.</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-slate-900 dark:text-white">{isAnnual ? '₦20,000' : '₦25,000'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{isAnnual ? '/yr' : '/mo'}</span>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Student & Staff Profiles</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Basic Report Card Generation</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Basic Parent Communication Tools</span></li>
+              </ul>
+              <Link href="/register?tier=PRIMARY" className="w-full text-center bg-white dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 text-slate-900 dark:text-white font-semibold py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors">
+                Onboard Institution
+              </Link>
+            </div>
+
+            {/* Card 2 */}
+            <div className="bg-blue-600 dark:bg-blue-900 text-white border border-blue-500 dark:border-blue-800 rounded-3xl p-8 flex flex-col relative transform lg:-translate-y-4 shadow-2xl shadow-blue-900/20">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500 dark:bg-blue-700 text-white text-xs font-bold uppercase tracking-widest py-1 px-3 rounded-full">Most Popular</div>
+              <h3 className="text-2xl font-bold mb-2">Secondary Excellence Plan</h3>
+              <p className="text-blue-100 dark:text-blue-200 text-sm mb-6 min-h-[40px]">Targeted at Junior & Senior Secondary schools.</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold">{isAnnual ? '₦40,000' : '₦50,000'}</span>
+                <span className="text-blue-200">{isAnnual ? '/yr' : '/mo'}</span>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-300 shrink-0" /><span className="text-sm text-white">All Basic Features</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-300 shrink-0" /><span className="text-sm text-white">Continuous Assessment Tracking</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-300 shrink-0" /><span className="text-sm text-white">Complex Exam Processing</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-300 shrink-0" /><span className="text-sm text-white">Behavior Monitoring</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-300 shrink-0" /><span className="text-sm text-white">Class Portal Management</span></li>
+              </ul>
+              <Link href="/register?tier=SECONDARY" className="w-full text-center bg-white text-blue-600 font-bold py-3 rounded-xl hover:bg-slate-50 transition-colors shadow-lg">
+                Onboard Institution
+              </Link>
+            </div>
+
+            {/* Card 3 */}
+            <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Enterprise Higher Ed</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Universities, Polytechnics, and Colleges of Education.</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-slate-900 dark:text-white">{isAnnual ? '₦120,000' : '₦150,000'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{isAnnual ? '/yr' : '/mo'}</span>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">All Secondary Features</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Multi-Departmental Faculty Controls</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Dynamic Semester Course Registration</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Transcript Management</span></li>
+                <li className="flex items-start gap-3"><ShieldCheck className="h-5 w-5 text-blue-500 shrink-0" /><span className="text-sm text-slate-700 dark:text-slate-300">Multi-Tenant Split Billing Integration</span></li>
+              </ul>
+              <Link href="/register?tier=UNIVERSITY" className="w-full text-center bg-white dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 text-slate-900 dark:text-white font-semibold py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors">
+                Onboard Institution
+              </Link>
             </div>
           </div>
         </div>
