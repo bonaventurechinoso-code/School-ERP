@@ -2,7 +2,8 @@ import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { aggregateTranscripts } from "@/lib/gpa";
 
-export default async function TranscriptsDashboard({ params }: { params: { schoolDomain: string } }) {
+export default async function TranscriptsDashboard({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: { academicTiers: true }

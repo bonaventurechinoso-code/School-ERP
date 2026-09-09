@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import * as jose from 'jose';
+import { jwtVerify } from 'jose';
 
 export const config = {
   matcher: [
@@ -53,7 +53,7 @@ export async function middleware(req: NextRequest) {
       // Verify JWT
       const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
       const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jose.jwtVerify(sessionToken, secret);
+      const { payload } = await jwtVerify(sessionToken, secret);
 
       // --- RBAC Protection ---
       const role = payload.role as string;

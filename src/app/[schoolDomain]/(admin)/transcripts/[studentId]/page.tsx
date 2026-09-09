@@ -2,7 +2,8 @@ import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { aggregateTranscripts } from "@/lib/gpa";
 
-export default async function TranscriptPrintView({ params }: { params: { schoolDomain: string, studentId: string } }) {
+export default async function TranscriptPrintView({ params: paramsPromise }: { params: Promise<{ schoolDomain: string, studentId: string }> }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
   });
@@ -72,7 +73,7 @@ export default async function TranscriptPrintView({ params }: { params: { school
         </div>
       </div>
 
-      {/* Course Breakdown by Semester */}
+      {/* Subject Breakdown by Term / Semester */}
       <div className="mb-12 space-y-8">
         {semesters.length === 0 ? (
           <div className="py-8 text-center text-slate-500 italic border border-slate-200 rounded">
@@ -89,8 +90,8 @@ export default async function TranscriptPrintView({ params }: { params: { school
                 <table className="w-full text-left">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-600 text-sm uppercase tracking-wider">
-                    <th className="py-2 px-2">Course Code</th>
-                    <th className="py-2 px-2">Course Name</th>
+                    <th className="py-2 px-2">Subject Code</th>
+                    <th className="py-2 px-2">Subject Name</th>
                     <th className="py-2 px-2 text-center">Score %</th>
                     <th className="py-2 px-2 text-center">Grade</th>
                     <th className="py-2 px-2 text-center">GPA Pts</th>

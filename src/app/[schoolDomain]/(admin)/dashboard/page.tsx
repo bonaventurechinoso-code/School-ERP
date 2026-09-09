@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useTenant } from "@/lib/tenant-context";
-import { Users, GraduationCap, FileText, Plus, DollarSign, Calendar } from "lucide-react";
+import { Users, BookOpen, FileText, Plus, Wallet, Calendar } from "lucide-react";
 import { getDashboardMetrics, createAdmissionLead } from "./actions";
 import NewApplicationModal from "./NewApplicationModal";
 
@@ -63,7 +63,7 @@ export default function TenantDashboard() {
       </header>
       
       {/* Dashboard Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         
         {/* Enrolled Students Card */}
         <Link href={`/${tenant.subdomain}/students`} className="block col-span-2 md:col-span-1 active:scale-[0.98] transition-transform">
@@ -72,15 +72,15 @@ export default function TenantDashboard() {
             style={{ borderTopColor: tenant.branding.primaryColor }}
           >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
-              <GraduationCap className="w-32 h-32" />
+              <BookOpen className="w-32 h-32" />
             </div>
             <div className="flex items-center justify-between mb-4 relative z-10">
-              <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400">Total Enrolled</h3>
+              <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 truncate pr-2">Pupils/Students Enrolled</h3>
               <div 
                 className="p-2 md:p-2.5 rounded-xl shadow-sm" 
                 style={{ backgroundColor: `${tenant.branding.primaryColor}15`, color: tenant.branding.primaryColor }}
               >
-                <GraduationCap className="w-5 h-5 md:w-6 md:h-6" />
+                <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
               </div>
             </div>
             <p className="text-4xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">{metrics.enrolledStudents}</p>
@@ -102,7 +102,7 @@ export default function TenantDashboard() {
             >
               <Users className="w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <h3 className="font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 leading-tight">Active<br className="md:hidden" /> Staff</h3>
+            <h3 className="font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 leading-tight">Teachers &<br className="md:hidden" /> Staff</h3>
           </div>
           <p className="text-3xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">{metrics.activeStaff}</p>
         </div>
@@ -123,32 +123,32 @@ export default function TenantDashboard() {
               >
                 <FileText className="w-5 h-5 md:w-6 md:h-6" />
               </div>
-              <h3 className="font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 leading-tight">Pending<br className="md:hidden" /> Apps</h3>
+              <h3 className="font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 leading-tight">Pending<br className="md:hidden" /> Registrations</h3>
             </div>
             <p className="text-3xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">{metrics.pendingApplications}</p>
           </div>
         </Link>
 
-        {/* Revenue (MTD) Card */}
+        {/* Termly Revenue Card */}
         {(tenant.userRole === "ADMIN" || tenant.userRole === "BURSAR") && (
           <div 
             className="col-span-2 md:col-span-1 active:scale-[0.98] transition-transform p-5 md:p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-gradient-to-br from-white to-slate-50/50 border border-t-4 border-zinc-200 dark:bg-gradient-to-br dark:from-zinc-900 dark:to-zinc-900/50 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 relative overflow-hidden group"
             style={{ borderTopColor: tenant.branding.primaryColor }}
           >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
-              <DollarSign className="w-32 h-32" />
+              <Wallet className="w-32 h-32" />
             </div>
             <div className="flex items-center justify-between mb-4 relative z-10">
-              <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400">Revenue (MTD)</h3>
+              <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 truncate pr-2">TERMLY REVENUE</h3>
               <div 
                 className="p-2 md:p-2.5 rounded-xl shadow-sm" 
                 style={{ backgroundColor: `${tenant.branding.primaryColor}15`, color: tenant.branding.primaryColor }}
               >
-                <DollarSign className="w-5 h-5 md:w-6 md:h-6" />
+                <Wallet className="w-5 h-5 md:w-6 md:h-6" />
               </div>
             </div>
             <p className="text-4xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">₦0.00</p>
-            <span className="text-[10px] md:text-xs font-semibold text-green-600 mt-2 block relative z-10">+0% from last month</span>
+            <span className="text-[10px] md:text-xs font-semibold text-green-600 mt-2 block relative z-10">+0% from last term</span>
           </div>
         )}
 
@@ -161,7 +161,7 @@ export default function TenantDashboard() {
             <Calendar className="w-32 h-32" />
           </div>
           <div className="flex items-center justify-between mb-4 relative z-10">
-            <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400">Events This Week</h3>
+            <h3 className="font-bold text-xs md:text-sm uppercase tracking-widest text-slate-500 dark:text-zinc-400 truncate pr-2">Events This Week</h3>
             <div 
               className="p-2 md:p-2.5 rounded-xl shadow-sm" 
               style={{ backgroundColor: `${tenant.branding.primaryColor}15`, color: tenant.branding.primaryColor }}

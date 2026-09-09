@@ -2,11 +2,8 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import { createDepartment, generatePayroll, voidPayroll, disbursePayroll } from "./actions";
 import BankDetailsForm from "./BankDetailsForm";
 
-export default async function HRPayrollPage({
-  params
-}: {
-  params: { schoolDomain: string }
-}) {
+export default async function HRPayrollPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: {

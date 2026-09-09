@@ -74,9 +74,9 @@ export default function TimetableView({ schoolId, timetable, courses, classrooms
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Course</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
             <select required className="w-full border border-slate-300 rounded-lg p-2" value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})}>
-              <option value="">Select Course...</option>
+              <option value="">Select Subject...</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
             </select>
           </div>

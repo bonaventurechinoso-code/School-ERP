@@ -41,6 +41,7 @@ model School {
   updatedAt DateTime @updatedAt
   isActive  Boolean  @default(true)
   deletedAt DateTime?
+  contactPhone String?
 
   // Subscription Details
   subscriptionPlan      SubscriptionPlan   @default(BASIC)

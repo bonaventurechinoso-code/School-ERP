@@ -3,7 +3,9 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import AnnouncementsBoard from "./AnnouncementsBoard";
 import MessageLogView from "./MessageLogView";
 
-export default async function CommunicationsPage({ params, searchParams }: { params: { schoolDomain: string }, searchParams: { tab?: string } }) {
+export default async function CommunicationsPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ schoolDomain: string }>, searchParams: Promise<{ tab?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },

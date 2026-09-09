@@ -30,31 +30,31 @@ export default function ClientLayout({
   const allLinks = [
     { label: "Dashboard", href: `/${schoolDomain}/dashboard`, icon: Home },
     { label: "Public Portal Settings", href: `/${schoolDomain}/portal-settings`, icon: Settings },
-    { label: "Admissions", href: `/${schoolDomain}/admissions`, icon: UserPlus },
+    { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
     { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
-    { label: isHigherEd ? "Faculty & Staff" : "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
+    { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
     { label: "Timetable", href: `/${schoolDomain}/scheduling`, icon: null },
-    { label: isHigherEd ? "Assessments" : "Exams", href: `/${schoolDomain}/exams`, icon: null },
-    { label: isPrimary ? "Report Cards" : "Transcripts", href: `/${schoolDomain}/${isPrimary ? 'report-cards' : 'transcripts'}`, icon: null },
+    { label: "Assessments & Terms", href: `/${schoolDomain}/exams`, icon: null },
+    { label: "Academic Records", href: `/${schoolDomain}/transcripts`, icon: null },
     { label: "Communications", href: `/${schoolDomain}/communications`, icon: null },
     { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
-    { label: "HR & Payroll", href: `/${schoolDomain}/hr`, icon: null },
+    { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: null },
   ];
 
   const links = tenant.userRole === "TEACHER" 
-    ? allLinks.filter(link => ["Dashboard", "Students", "Timetable", "Exams", "Assessments", "Report Cards", "Transcripts"].includes(link.label))
+    ? allLinks.filter(link => ["Dashboard", "Students", "Timetable", "Assessments & Terms", "Academic Records"].includes(link.label))
     : allLinks;
 
   const mobileNavLinks = [
     { label: "Home", href: `/${schoolDomain}/dashboard`, icon: Home },
     { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
-    { label: "Admissions", href: `/${schoolDomain}/admissions`, icon: UserPlus },
-    { label: isHigherEd ? "Faculty" : "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
+    { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
+    { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
     { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
   ].filter(nav => links.some(link => link.href === nav.href));
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex overflow-hidden transition-colors duration-200">
+    <div className="flex flex-1 h-full w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -92,7 +92,7 @@ export default function ClientLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto pb-20 md:pb-0 relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pb-20 md:pb-0 relative">
         <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 w-full p-4 md:p-6 shadow-sm flex-shrink-0 sticky top-0 z-10 transition-colors duration-200">
           <div className="flex items-center justify-between w-full md:w-auto">
             <div className="flex items-center gap-3">
@@ -126,17 +126,17 @@ export default function ClientLayout({
 
       {/* Mobile Bottom Navigation */}
       {mobileNavLinks.length > 0 && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-slate-200/50 dark:border-zinc-800/50 flex justify-around items-center p-2 z-40 pb-safe shadow-[0_-4px_24px_rgba(0,0,0,0.05)]">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-t border-slate-200/50 dark:border-zinc-800/50 flex overflow-x-auto overflow-y-hidden hide-scrollbar p-2 z-40 pb-safe shadow-[0_-4px_24px_rgba(0,0,0,0.05)]">
           {mobileNavLinks.map((link) => {
             const isActive = pathname?.startsWith(link.href);
             return (
               <a
                 key={link.href}
                 href={link.href}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl min-w-[64px] transition-all active:scale-95 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                className={`flex flex-col flex-1 items-center justify-center p-2 rounded-xl min-w-[72px] transition-all active:scale-95 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
               >
-                {link.icon && <link.icon className={`w-6 h-6 mb-1 ${isActive ? 'fill-indigo-600/20 dark:fill-indigo-400/20' : ''}`} />}
-                <span className="text-[10px] font-semibold tracking-wide">{link.label}</span>
+                {link.icon && <link.icon className={`w-6 h-6 mb-1 flex-shrink-0 ${isActive ? 'fill-indigo-600/20 dark:fill-indigo-400/20' : ''}`} />}
+                <span className="text-[10px] font-semibold tracking-wide truncate max-w-full">{link.label}</span>
               </a>
             );
           })}

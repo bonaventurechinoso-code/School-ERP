@@ -5,11 +5,12 @@ import WalletTopUp from "../WalletTopUp";
 
 export default async function AdminLayout({
   children,
-  params,
+  params: paramsPromise,
 }: {
   children: ReactNode;
-  params: { schoolDomain: string };
+  params: Promise<{ schoolDomain: string }>;
 }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
   });

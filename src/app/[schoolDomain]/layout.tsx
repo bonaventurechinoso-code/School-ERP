@@ -6,12 +6,45 @@ export default async function TenantLayout({
   params,
 }: {
   children: ReactNode;
-  params: { schoolDomain: string };
+  params: Promise<{ schoolDomain: string }>;
 }) {
+  const { schoolDomain } = await params;
   let school = null;
+  const reservedKeywords = ["choice", "register", "admin", "api", "www", "app"];
+  
+  if (reservedKeywords.includes(schoolDomain.toLowerCase())) {
+    if (schoolDomain.toLowerCase() === "choice") {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+          <div className="w-full max-w-md p-8 text-center bg-white rounded-2xl shadow-xl border border-slate-200">
+            <h2 className="text-2xl font-extrabold text-slate-800 mb-2">Select Your Workspace</h2>
+            <p className="text-slate-500 mb-6">Choose an institutional tenant to continue.</p>
+            {/* Mock global selection list */}
+            <div className="space-y-3">
+              <a href="/admin" className="block w-full p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all font-semibold text-slate-700">
+                Platform Administration
+              </a>
+              <a href="/" className="block w-full p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all font-semibold text-slate-700">
+                Back to Home
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
+          <h2 className="text-xl font-bold text-slate-800">System Route</h2>
+          <p>This is a reserved system path.</p>
+        </div>
+      </div>
+    );
+  }
+
   try {
     school = await basePrisma.school.findUnique({
-      where: { subdomain: params.schoolDomain },
+      where: { subdomain: schoolDomain },
       include: { academicTiers: true },
     });
   } catch (error) {
@@ -20,7 +53,7 @@ export default async function TenantLayout({
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold text-slate-800">Tenant Offline / Under Maintenance</h2>
-          <p>We are unable to connect to this tenant's metadata context at the moment. Please try again later.</p>
+          <p>We are unable to connect to this tenant&apos;s metadata context at the moment. Please try again later.</p>
         </div>
       </div>
     );
@@ -31,7 +64,7 @@ export default async function TenantLayout({
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold text-slate-800">Tenant Not Found</h2>
-          <p>No school registered under domain: {params.schoolDomain}</p>
+          <p>No school registered under domain: {schoolDomain}</p>
         </div>
       </div>
     );

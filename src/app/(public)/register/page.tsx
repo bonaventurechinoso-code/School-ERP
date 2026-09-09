@@ -95,7 +95,7 @@ export default function RegisterTenantPage() {
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
         
         {/* Header */}
-        <div className="bg-slate-900 px-8 py-6 text-white">
+        <div className="bg-slate-900 px-5 py-5 md:px-8 md:py-6 text-white">
           <h1 className="text-2xl font-bold">Register Your School</h1>
           <p className="text-slate-400 mt-1">
             Step {step} of 2: {step === 1 ? "Institutional Identity" : "Academic Tier Allocation"}
@@ -103,7 +103,7 @@ export default function RegisterTenantPage() {
         </div>
 
         {/* Body */}
-        <div className="p-8">
+        <div className="p-5 md:p-8">
           {errorMsg && (
             <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-700 rounded-xl text-sm font-medium">
               {errorMsg}
@@ -200,9 +200,9 @@ export default function RegisterTenantPage() {
                           </svg>
                         )}
                       </div>
-                      <div>
-                        <h4 className={`font-bold ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{tier.label}</h4>
-                        <p className={`text-sm mt-1 ${isSelected ? "text-blue-700" : "text-slate-500"}`}>{tier.desc}</p>
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`font-bold truncate ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{tier.label}</h4>
+                        <p className={`text-xs md:text-sm mt-1 leading-tight md:leading-normal ${isSelected ? "text-blue-700" : "text-slate-500"}`}>{tier.desc}</p>
                       </div>
                     </div>
                   );
@@ -212,7 +212,7 @@ export default function RegisterTenantPage() {
               <div className="flex justify-between pt-6 border-t border-slate-100">
                 <button 
                   onClick={() => { setStep(1); setErrorMsg(""); }}
-                  className="px-6 py-3 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition"
+                  className="px-4 md:px-6 py-3 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition"
                   disabled={isSubmitting}
                 >
                   &larr; Back
@@ -220,7 +220,7 @@ export default function RegisterTenantPage() {
                 <button 
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 md:px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isSubmitting ? (
                     <>

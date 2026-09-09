@@ -7,12 +7,13 @@ import { Building2, Phone, Mail, ArrowRight } from "lucide-react";
 export default async function PublicGuestPortalPage({
   params,
 }: {
-  params: { schoolDomain: string };
+  params: Promise<{ schoolDomain: string }>;
 }) {
+  const { schoolDomain } = await params;
   let school = null;
   try {
     school = await basePrisma.school.findUnique({
-      where: { subdomain: params.schoolDomain },
+      where: { subdomain: schoolDomain },
       include: {
         academicTiers: true,
         staff: {
@@ -27,7 +28,7 @@ export default async function PublicGuestPortalPage({
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold text-slate-800">Tenant Offline / Under Maintenance</h2>
-          <p>We are unable to connect to this tenant's metadata context at the moment. Please try again later.</p>
+          <p>We are unable to connect to this tenant&apos;s metadata context at the moment. Please try again later.</p>
         </div>
       </div>
     );
@@ -120,6 +121,7 @@ export default async function PublicGuestPortalPage({
         <div className="relative w-full min-h-[600px] overflow-hidden bg-slate-950 text-white flex items-center">
           {/* Full Background Image */}
           <div className="absolute inset-0 w-full h-full z-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img 
               src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1920&q=80" 
               className="w-full h-full object-cover" 

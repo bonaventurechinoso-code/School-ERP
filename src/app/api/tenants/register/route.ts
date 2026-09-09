@@ -55,6 +55,62 @@ export async function POST(request: Request) {
     }
 
     // Provision the new tenant inside a transaction
+    if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
+      const subdomains = [
+          { suffix: '-nursery', tier: 'DAYCARE', name: `${schoolName} Nursery` },
+          { suffix: '-primary', tier: 'PRIMARY', name: `${schoolName} Primary` },
+          { suffix: '-secondary', tier: 'SECONDARY', name: `${schoolName} Secondary` }
+      ];
+      
+      const newSchools = await basePrisma.$transaction(async (tx) => {
+        const createdSchools = [];
+        for (const sub of subdomains) {
+          const tenantSubdomain = formattedSubdomain + sub.suffix;
+          const school = await tx.school.create({
+            data: {
+              name: sub.name,
+              subdomain: tenantSubdomain,
+              contactPhone,
+              isActive: true,
+            },
+          });
+          
+          await tx.academicTier.create({
+            data: { schoolId: school.id, name: sub.tier, level: 1 }
+          });
+          
+          const dept = await tx.department.create({
+            data: { schoolId: school.id, name: "Administration" }
+          });
+          
+          await tx.staff.create({
+            data: {
+              schoolId: school.id,
+              firstName: "Admin",
+              lastName: "User",
+              email: adminEmail,
+              role: "ADMIN",
+              departmentId: dept.id,
+              status: "ACTIVE",
+              activeAt: new Date(),
+              password: ""
+            }
+          });
+          
+          await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
+          createdSchools.push(school);
+        }
+        return createdSchools;
+      });
+      
+      return NextResponse.json({
+        success: true,
+        message: "Combined tenants successfully provisioned.",
+        tenant: newSchools[0],
+        redirectUrl: `/${formattedSubdomain}-primary/dashboard`
+      });
+    }
+
     const newSchool = await basePrisma.$transaction(async (tx) => {
       // Phase A: Create baseline Tenant management record
       // 1. Create School
@@ -62,6 +118,7 @@ export async function POST(request: Request) {
         data: {
           name: schoolName,
           subdomain: formattedSubdomain,
+          contactPhone,
           isActive: true,
         },
       });
@@ -88,6 +145,7 @@ export async function POST(request: Request) {
           role: "ADMIN",
           status: "ACTIVE",
           activeAt: new Date(),
+          password: ""
         }
       });
 

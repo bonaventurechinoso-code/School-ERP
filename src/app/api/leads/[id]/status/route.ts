@@ -4,8 +4,9 @@ import { sendAdmissionOfferEmail } from "@/lib/email-service";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await paramsPromise;
   try {
     const { status, schoolId } = await request.json();
 
@@ -22,7 +23,7 @@ export async function PATCH(
       expiresAt.setDate(expiresAt.getDate() + 7); // Valid for 7 days
 
       const updatedLead = await tenantDb.admissionLead.update({
-        where: { id: params.id },
+        where: { id: resolvedParams.id },
         data: { 
           status,
           offerToken: token,
@@ -39,7 +40,7 @@ export async function PATCH(
       await basePrisma.$transaction(async (tx) => {
         // 1. Update lead
         const updatedLead = await tx.admissionLead.update({
-          where: { id: params.id, schoolId },
+          where: { id: resolvedParams.id, schoolId },
           data: { status }
         });
 
@@ -63,7 +64,7 @@ export async function PATCH(
       });
     } else {
       await tenantDb.admissionLead.update({
-        where: { id: params.id },
+        where: { id: resolvedParams.id },
         data: { status }
       });
     }

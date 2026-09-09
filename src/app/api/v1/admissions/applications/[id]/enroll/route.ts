@@ -3,10 +3,11 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
+  const resolvedParams = await paramsPromise;
   try {
-    const { id } = await params;
+    const { id } = resolvedParams;
     const body = await req.json();
     const { schoolId } = body;
 

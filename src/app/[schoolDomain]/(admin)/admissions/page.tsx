@@ -2,7 +2,8 @@ import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import AdmissionsPipeline from "./AdmissionsPipeline";
 
-export default async function AdmissionsPage({ params }: { params: { schoolDomain: string } }) {
+export default async function AdmissionsPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: { academicTiers: true },

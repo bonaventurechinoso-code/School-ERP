@@ -184,7 +184,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Transparent, Tiered Pricing</h2>
-            <p className="text-slate-500 dark:text-slate-400 mt-4 max-w-2xl mx-auto">Select the perfect infrastructure tier tailored to your institution's specific operational needs and academic level.</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-4 max-w-2xl mx-auto">Select the perfect infrastructure tier tailored to your institution&apos;s specific operational needs and academic level.</p>
             
             {/* Billing Toggle Tabs */}
             <div className="flex items-center justify-center mt-8 p-1.5 bg-slate-100 dark:bg-zinc-800/60 rounded-xl inline-flex mx-auto border border-slate-200 dark:border-zinc-700/50">

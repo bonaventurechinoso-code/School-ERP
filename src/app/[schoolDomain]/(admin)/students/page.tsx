@@ -2,7 +2,8 @@ import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import StudentTable from "./StudentTable";
 
-export default async function StudentsPage({ params }: { params: { schoolDomain: string } }) {
+export default async function StudentsPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+  const params = await paramsPromise;
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
@@ -96,7 +97,7 @@ export default async function StudentsPage({ params }: { params: { schoolDomain:
       </header>
       
       {/* Student Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-green-500">
           <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
           <p className="text-3xl font-black text-slate-800">{totalEnrolled}</p>

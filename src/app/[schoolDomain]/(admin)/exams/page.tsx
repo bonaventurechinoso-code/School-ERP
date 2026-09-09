@@ -3,7 +3,9 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import ExamsList from "./ExamsList";
 import GradingRoster from "./GradingRoster";
 
-export default async function ExamsPage({ params, searchParams }: { params: { schoolDomain: string }, searchParams: { tab?: string } }) {
+export default async function ExamsPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ schoolDomain: string }>, searchParams: Promise<{ tab?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },

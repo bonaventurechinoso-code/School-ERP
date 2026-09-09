@@ -2,7 +2,8 @@ import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import PublicApplyForm from "./PublicApplyForm";
 
-export default async function ApplyPage({ params }: { params: { schoolDomain: string } }) {
+export default async function ApplyPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+  const params = await paramsPromise;
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: { academicTiers: true },

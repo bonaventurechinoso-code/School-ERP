@@ -1,22 +1,24 @@
 "use client";
 
-import { softDeleteSchool } from "./actions";
+import { deleteSchool } from "./actions";
+import { Trash2 } from "lucide-react";
 
 export default function DeleteSchoolForm({ schoolId }: { schoolId: string }) {
   return (
     <form
-      action={softDeleteSchool.bind(null, schoolId)}
+      action={deleteSchool.bind(null, schoolId)}
       onSubmit={(e) => {
-        if (!window.confirm("Warning: This will deactivate this school workspace and archive all associated tenant data. Proceed?")) {
+        if (!window.confirm("CRITICAL WARNING: This will permanently wipe this school workspace and ALL associated tenant data. This action cannot be undone. Proceed?")) {
           e.preventDefault();
         }
       }}
     >
       <button
         type="submit"
-        className="text-xs px-3 py-1 rounded border text-red-600 border-red-200 hover:bg-red-50"
+        className="p-1.5 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-700 dark:hover:text-red-300 transition-colors focus:ring-2 focus:ring-red-500 outline-none"
+        title="Delete Tenant"
       >
-        Delete
+        <Trash2 className="w-4 h-4" />
       </button>
     </form>
   );

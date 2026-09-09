@@ -1,14 +1,9 @@
 "use server";
 
-import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { basePrisma } from "@/lib/tenant-prisma";
 
-import { exec } from "child_process";
-import util from "util";
-
-const execAsync = util.promisify(exec);
-
-const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
+const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION', 'COMBINED_NURSERY_PRIMARY_SECONDARY'];
 
 export async function createSchool(formData: FormData) {
   const name = formData.get("name") as string;
@@ -36,69 +31,79 @@ export async function createSchool(formData: FormData) {
   }
 
   try {
-    const formattedSubdomain = subdomain;
-    
-    await basePrisma.$transaction(async (tx) => {
-      // Phase A: Create baseline Tenant management record
-      // 1. Create School
-      const school = await tx.school.create({
-        data: {
-          name,
-          subdomain: formattedSubdomain,
-          isActive: true
+    if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
+      const subdomains = [
+          { suffix: '-nursery', tier: 'DAYCARE', name: `${name} Nursery` },
+          { suffix: '-primary', tier: 'PRIMARY', name: `${name} Primary` },
+          { suffix: '-secondary', tier: 'SECONDARY', name: `${name} Secondary` }
+      ];
+      await basePrisma.$transaction(async (tx) => {
+        for (const sub of subdomains) {
+          const tenantSubdomain = subdomain + sub.suffix;
+          const school = await tx.school.create({
+            data: {
+              name: sub.name,
+              subdomain: tenantSubdomain,
+              isActive: true,
+              academicTiers: {
+                create: { name: sub.tier, level: 1 }
+              }
+            }
+          });
+          
+          const dept = await tx.department.create({
+            data: { name: "Administration", schoolId: school.id }
+          });
+          
+          await tx.staff.create({
+            data: {
+              schoolId: school.id,
+              firstName: "Admin",
+              lastName: "User",
+              email: adminEmail,
+              role: "ADMIN",
+              departmentId: dept.id,
+              status: "ACTIVE",
+              password: ""
+            }
+          });
         }
       });
+    } else {
+       await basePrisma.$transaction(async (tx) => {
+          const school = await tx.school.create({
+            data: {
+              name,
+              subdomain,
+              isActive: true,
+              academicTiers: {
+                create: tiers.map((tierName, idx) => ({ name: tierName, level: idx + 1 }))
+              }
+            }
+          });
 
-      // 2. Persist exact standardized backend enum keys as subtypes
-      const tierPromises = tiers.map((tierName: string, index: number) => {
-        return tx.academicTier.create({
-          data: {
-            schoolId: school.id,
-            name: tierName,
-            level: index + 1
-          }
-        });
-      });
-      await Promise.all(tierPromises);
-
-      // 3. Create Default Admin
-      await tx.staff.create({
-        data: {
-          schoolId: school.id,
-          firstName: "Admin",
-          lastName: "User",
-          email: adminEmail,
-          role: "ADMIN",
-          status: "ACTIVE",
-          activeAt: new Date()
-        }
-      });
-
-      // 4. Create Default Department
-      await tx.department.create({
-        data: {
-          schoolId: school.id,
-          name: "Administration"
-        }
-      });
-
-      // Phase B: Provision an isolated boundary
-      await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
-    });
-
-    // Schema Migration Handshake: Programmatically duplicate baseline structures
-    if (process.env.DATABASE_URL) {
-      const dbUrl = new URL(process.env.DATABASE_URL);
-      dbUrl.searchParams.set("schema", `tenant_${formattedSubdomain}`);
-      
-      await execAsync("npx prisma db push --skip-generate", {
-        env: { ...process.env, DATABASE_URL: dbUrl.toString() }
-      });
+          const dept = await tx.department.create({
+            data: { name: "Administration", schoolId: school.id }
+          });
+          
+          await tx.staff.create({
+            data: {
+              schoolId: school.id,
+              firstName: "Admin",
+              lastName: "User",
+              email: adminEmail,
+              role: "ADMIN",
+              departmentId: dept.id,
+              status: "ACTIVE",
+              password: ""
+            }
+          });
+       });
     }
 
     revalidatePath("/admin");
   } catch (error: any) {
-    console.error(error.message);
+    console.error("Database Error:", error.message);
   }
 }
 
@@ -114,11 +119,10 @@ export async function toggleSchoolStatus(schoolId: string, currentStatus: boolea
   }
 }
 
-export async function softDeleteSchool(schoolId: string) {
+export async function deleteSchool(schoolId: string) {
   try {
-    await basePrisma.school.update({
-      where: { id: schoolId },
-      data: { deletedAt: new Date() }
+    await basePrisma.school.delete({
+      where: { id: schoolId }
     });
     revalidatePath("/admin");
   } catch (error: any) {

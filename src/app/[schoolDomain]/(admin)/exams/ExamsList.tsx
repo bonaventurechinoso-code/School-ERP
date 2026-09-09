@@ -61,8 +61,9 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Course</label>
-            <select required className="w-full border border-slate-300 rounded-lg p-2" value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Subject / Course</label>
+            <select required className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})}>
+              <option value="">Select Subject...</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
