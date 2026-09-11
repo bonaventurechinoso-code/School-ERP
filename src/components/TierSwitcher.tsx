@@ -89,16 +89,10 @@ export default function TierSwitcher({
     return (
       <div className="mt-2 space-y-1.5">
         <div className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 tracking-wider">
-          <span className="flex items-center gap-1">
-            <Layers className="w-3 h-3 text-blue-400" />
-            Active Tier
+          <span className="flex items-center gap-1.5 text-slate-300 dark:text-zinc-400">
+            <Layers className="w-3 h-3 text-indigo-400" />
+            Academic Tier
           </span>
-          {activeTierObj.databaseName && (
-            <span className="font-mono text-[9px] text-emerald-400 flex items-center gap-1" title="Physical Isolated Database">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              {activeTierObj.databaseName}
-            </span>
-          )}
         </div>
         <div className="flex flex-col gap-1">
           {tiers.map((tier) => {
@@ -127,11 +121,6 @@ export default function TierSwitcher({
   // Topbar Layout (Horizontal Tab / Segmented Bar)
   return (
     <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-800/60 p-1 rounded-xl border border-slate-200 dark:border-zinc-700/80 shadow-xs">
-      <div className="flex items-center gap-1 px-2 text-[11px] font-bold text-slate-500 dark:text-zinc-400 hidden lg:flex">
-        <Database className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-        <span>Tier Database:</span>
-      </div>
-
       <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
         {tiers.map((tier) => {
           const isActive = activeTierObj.id === tier.id;
@@ -145,7 +134,7 @@ export default function TierSwitcher({
                 tier.name,
                 isActive
               )} ${isActive ? "shadow-xs" : "opacity-75 hover:opacity-100"}`}
-              title={`Switch database to ${tier.databaseName || tier.name}`}
+              title={`Switch tier to ${tier.name}`}
             >
               {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
               <span>{tier.name}</span>
@@ -153,12 +142,6 @@ export default function TierSwitcher({
           );
         })}
       </div>
-
-      {activeTierObj.databaseName && (
-        <span className="hidden xl:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 ml-1">
-          {activeTierObj.databaseName}
-        </span>
-      )}
     </div>
   );
 }

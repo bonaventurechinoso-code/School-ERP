@@ -14,7 +14,6 @@ interface StudentTableProps {
   schoolId: string;
   tiers: AcademicTier[];
   activeTier?: string;
-  activeTierDbName?: string | null;
   classrooms?: Array<{ id: string; name: string }>;
 }
 
@@ -23,7 +22,6 @@ export default function StudentTable({
   schoolId,
   tiers,
   activeTier,
-  activeTierDbName,
   classrooms = [],
 }: StudentTableProps) {
   const [isPending, startTransition] = useTransition();
@@ -241,18 +239,10 @@ export default function StudentTable({
             Active Tier Scope: <span className="font-bold text-slate-900 dark:text-zinc-100">{activeTier || "Default"}</span>
           </span>
           <span className="text-slate-400 dark:text-zinc-600">•</span>
-          <span className="text-slate-500 dark:text-zinc-400">
+          <span className="text-slate-500 dark:text-zinc-400 font-medium">
             Strict Physical Separation ({filteredStudents.length} {filteredStudents.length === 1 ? 'record' : 'records'})
           </span>
         </div>
-
-        {activeTierDbName && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-mono text-[11px] font-semibold shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <Database className="w-3 h-3 text-emerald-500" />
-            <span>DB: {activeTierDbName}</span>
-          </div>
-        )}
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">

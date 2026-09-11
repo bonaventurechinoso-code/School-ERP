@@ -58,22 +58,18 @@ export default function WalletTopUp({
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex-1">
-        <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-1">Wallet Balance</h3>
-        <p className="text-3xl font-bold text-slate-800">
+    <div className="flex items-center gap-3 bg-slate-50 dark:bg-zinc-800/70 border border-slate-200/80 dark:border-zinc-700/80 px-3.5 py-2 rounded-xl shadow-2xs">
+      <div>
+        <h3 className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest leading-none mb-1">Wallet Balance</h3>
+        <p className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-none">
           ₦{walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </p>
-        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold border border-green-200">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></div>
-          Portal Status: ACTIVE ({planName})
-        </div>
       </div>
       <button 
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition"
+        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition active:scale-95 cursor-pointer ml-1 whitespace-nowrap"
       >
-        Top Up Wallet
+        Top Up
       </button>
 
       {isOpen && (

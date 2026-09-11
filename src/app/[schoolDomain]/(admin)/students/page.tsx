@@ -130,39 +130,36 @@ export default async function StudentsPage({
           </p>
         </div>
 
-        {/* Dedicated Physical DB Connection Indicator */}
-        {activeTierObj?.databaseName && (
-          <div className="flex items-center gap-2.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-semibold shadow-xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            <div>
-              <span className="text-[10px] uppercase tracking-wider font-bold block text-emerald-600 dark:text-emerald-400">Isolated Database</span>
-              <span className="font-mono font-bold text-xs">{activeTierObj.databaseName}</span>
-            </div>
+        {/* Active Tier Scope Indicator */}
+        {activeTierObj && (
+          <div className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-bold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span>Tier Scope: {activeTierObj.name}</span>
           </div>
         )}
       </header>
       
       {/* Student Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-green-500">
-          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
-          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{totalEnrolled}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-green-500">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{totalEnrolled}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-yellow-500">
-          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Active Prospects</h3>
-          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{activeProspects}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-yellow-500">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Active Prospects</h3>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{activeProspects}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-indigo-500">
-          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Applicants</h3>
-          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{totalApplicants}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-indigo-500">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Total Applicants</h3>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{totalApplicants}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-red-500">
-          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Suspended</h3>
-          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{suspendedStudents}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-red-500">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Suspended</h3>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{suspendedStudents}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-blue-500">
-          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Alumni</h3>
-          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{alumniCount}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-blue-500">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Alumni</h3>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{alumniCount}</p>
         </div>
       </div>
 
@@ -171,7 +168,6 @@ export default async function StudentsPage({
         schoolId={school.id} 
         tiers={school.academicTiers}
         activeTier={activeTierName}
-        activeTierDbName={activeTierObj?.databaseName || null}
         classrooms={classrooms}
       />
       

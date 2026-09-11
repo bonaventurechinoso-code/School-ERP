@@ -152,13 +152,7 @@ export default function ClientLayout({
           </div>
 
           {/* Upper top-right navigation navbar utility bar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
-            {/* Topbar Tier Switcher */}
-            {tiers && tiers.length > 0 && (
-              <div className="w-full sm:w-auto">
-                <TierSwitcher tiers={tiers} currentTier={currentTier} schoolDomain={schoolDomain} variant="topbar" />
-              </div>
-            )}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             <div className="w-full sm:w-auto">
               {headerContent}
             </div>
