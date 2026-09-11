@@ -21,6 +21,9 @@ export interface TenantData {
   subscriptionStatus?: "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | string;
   subscriptionExpiresAt?: Date | string | null;
   userRole?: string;
+  session?: any;
+  permissions?: string[];
+  activeTiers?: string[];
   isMultiDbEnabled?: boolean;
   tierDatabases?: Array<{ tierName: string; databaseName: string; databaseUrl: string }>;
 }

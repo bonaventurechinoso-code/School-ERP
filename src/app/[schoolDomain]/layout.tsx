@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
+import { SessionProvider } from "@/lib/session-context";
+import { getSession } from "@/lib/auth";
 export default async function TenantLayout({
   children,
   params,
@@ -106,24 +108,19 @@ export default async function TenantLayout({
     },
   };
 
-  try {
-    const { cookies } = await import("next/headers");
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get("session")?.value;
-    if (sessionToken) {
-      const { jwtVerify } = await import("jose");
-      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-      const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jwtVerify(sessionToken, secret);
-      tenantData.userRole = payload.role as string;
-    }
-  } catch (err) {
-    console.error("Failed to decode session role for tenant context");
+  const session = await getSession();
+  if (session) {
+    tenantData.userRole = session.role;
+    tenantData.session = session;
+    tenantData.permissions = session.permissions;
+    tenantData.activeTiers = session.activeTiers;
   }
 
   return (
-    <TenantProvider tenant={tenantData}>
-      {children}
-    </TenantProvider>
+    <SessionProvider session={session}>
+      <TenantProvider tenant={tenantData}>
+        {children}
+      </TenantProvider>
+    </SessionProvider>
   );
 }

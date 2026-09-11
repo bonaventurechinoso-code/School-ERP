@@ -6,6 +6,7 @@ import { Menu, X, Home, Users, CreditCard, Settings, UserPlus, Briefcase, Calend
 import AIChatWidget from "@/components/AIChatWidget";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTenant } from "@/lib/tenant-context";
+import { useSession } from "@/lib/session-context";
 import TierSwitcher from "@/components/TierSwitcher";
 
 export interface ClientLayoutTier {
@@ -54,8 +55,11 @@ export default function ClientLayout({
     { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
   ];
 
-  const userRole = (tenant.userRole || "").toUpperCase();
+  const sessionData = useSession();
+  const userRole = (sessionData.role || tenant.userRole || "").trim().toUpperCase();
   const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
+  // Strict evaluation: only SUPER_ADMIN or SCHOOL_ADMIN are allowed to view/top up wallet balance
+  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
 
   const links = (() => {
     switch (userRole) {
@@ -130,8 +134,8 @@ export default function ClientLayout({
           })}
         </nav>
 
-        {/* Bottom Sidebar - Wallet Balance Container (SUPER_ADMIN & SCHOOL_ADMIN only) */}
-        {isAuthorizedAdmin && headerContent && (
+        {/* Bottom Sidebar - Wallet Balance Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
+        {isWalletAuthorized && headerContent && (
           <div className="p-3 border-t border-slate-800/60 bg-slate-900/60 mt-auto hidden md:block">
             {headerContent}
           </div>
@@ -161,7 +165,7 @@ export default function ClientLayout({
 
           {/* Upper top-right navigation navbar utility bar */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            {isAuthorizedAdmin && headerContent && (
+            {isWalletAuthorized && headerContent && (
               <div className="w-full sm:w-auto md:hidden">
                 {headerContent}
               </div>

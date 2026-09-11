@@ -51,8 +51,8 @@ export default async function AdminLayout({
   }
 
   // 2. SECURE WALLET BALANCE ACCESSIBILITY (SUPER_ADMIN & SCHOOL_ADMIN ONLY)
-  const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
-  const walletElement = isAuthorizedAdmin ? (
+  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
+  const walletElement = isWalletAuthorized ? (
     <WalletTopUp schoolId={school.id} walletBalance={school.walletBalance} />
   ) : null;
 

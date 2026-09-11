@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
 
+import { useSession } from "@/lib/session-context";
+
 export default function WalletTopUp({ 
   schoolId, 
   walletBalance 
@@ -15,6 +17,7 @@ export default function WalletTopUp({
   const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
   const tenant = useTenant();
+  const { role } = useSession();
 
   const planMap: Record<string, string> = {
     BASIC: "Basic Education Setup",
@@ -23,10 +26,11 @@ export default function WalletTopUp({
   };
   const planName = planMap[tenant?.subscriptionPlan || "BASIC"] || "Basic Education Setup";
 
-  const userRole = (tenant?.userRole || "").toUpperCase();
-  const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
+  const userRole = (role || tenant?.userRole || "").trim().toUpperCase();
+  // Strictly enforce only SUPER_ADMIN or SCHOOL_ADMIN can view and top up wallet
+  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
 
-  if (!isAuthorizedAdmin) {
+  if (!isWalletAuthorized) {
     return null;
   }
 
