@@ -115,28 +115,15 @@ export default async function StudentsPage({
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100 flex items-center gap-3">
-            <span>Student Roster</span>
-            {activeTierObj && (
-              <span className="text-xs uppercase tracking-wider px-3 py-1 rounded-full font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                {activeTierObj.name}
-              </span>
-            )}
-          </h2>
-          <p className="text-slate-500 dark:text-zinc-400 mt-2 text-base md:text-lg">
-            Showing records isolated strictly within the active institution tier.
-          </p>
-        </div>
-
-        {/* Active Tier Scope Indicator */}
-        {activeTierObj && (
-          <div className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-bold shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            <span>Tier Scope: {activeTierObj.name}</span>
-          </div>
-        )}
+      <header className="flex items-center justify-between">
+        <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+          <span>Student Roster</span>
+          {activeTierObj && (
+            <span className="text-xs uppercase tracking-wider px-3 py-1 rounded-full font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              {activeTierObj.name}
+            </span>
+          )}
+        </h2>
       </header>
       
       {/* Student Metrics */}

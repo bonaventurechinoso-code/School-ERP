@@ -2,7 +2,6 @@
 
 import React, { useState, useTransition } from "react";
 import { Student, AcademicTier } from "@prisma/client";
-import { Layers, Database } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
@@ -229,21 +228,6 @@ export default function StudentTable({
 
   return (
     <div className="space-y-6">
-      {/* Physical Database Isolation Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-zinc-900 dark:to-zinc-900/50 rounded-xl border border-slate-200/80 dark:border-zinc-800 text-xs">
-        <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300">
-          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
-            <Layers className="w-3.5 h-3.5" />
-          </span>
-          <span className="font-semibold">
-            Active Tier Scope: <span className="font-bold text-slate-900 dark:text-zinc-100">{activeTier || "Default"}</span>
-          </span>
-          <span className="text-slate-400 dark:text-zinc-600">•</span>
-          <span className="text-slate-500 dark:text-zinc-400 font-medium">
-            Strict Physical Separation ({filteredStudents.length} {filteredStudents.length === 1 ? 'record' : 'records'})
-          </span>
-        </div>
-      </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
