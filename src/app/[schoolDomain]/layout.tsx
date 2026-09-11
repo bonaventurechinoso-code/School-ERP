@@ -108,7 +108,8 @@ export default async function TenantLayout({
 
   try {
     const { cookies } = await import("next/headers");
-    const sessionToken = cookies().get("session")?.value;
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get("session")?.value;
     if (sessionToken) {
       const { jwtVerify } = await import("jose");
       const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";

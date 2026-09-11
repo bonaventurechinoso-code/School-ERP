@@ -15,7 +15,8 @@ export async function createStudent(
 ) {
   // RBAC GUARD
   try {
-    const sessionToken = cookies().get("session")?.value;
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get("session")?.value;
     if (!sessionToken) return { success: false, error: "HTTP 401 Unauthorized" };
     
     const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";

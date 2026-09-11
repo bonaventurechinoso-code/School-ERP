@@ -5,7 +5,7 @@ import { PhoneInput } from "@/components/PhoneInput";
 import { Server, Users, ShieldCheck, Power, Settings } from "lucide-react";
 
 const ACADEMIC_TIERS_OPTIONS = [
-  { id: "DAYCARE", label: "Nursery / Early Care / Daycare" },
+  { id: "DAYCARE", label: "Daycare / Nursery" },
   { id: "PRIMARY", label: "Primary School" },
   { id: "SECONDARY", label: "Secondary School" },
   { id: "PRIMARY_SECONDARY", label: "Combined Primary & Secondary School" },
@@ -197,9 +197,17 @@ export default async function AdminDashboardPage() {
                             let badgeStyle = "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700";
                             let displayLabel = tier.name;
                             
-                            if (tier.name === "DAYCARE") {
+                            const upperName = (tier.name || "").toUpperCase();
+                            if (
+                              upperName === "DAYCARE" ||
+                              upperName === "NURSERY" ||
+                              upperName === "DAYCARE / NURSERY" ||
+                              upperName === "DAY CARE / NURSERY" ||
+                              upperName === "NURSERY / EARLY CARE / DAYCARE" ||
+                              upperName === "NURSERY / DAYCARE"
+                            ) {
                               badgeStyle = "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
-                              displayLabel = "Daycare";
+                              displayLabel = "Daycare / Nursery";
                             } else if (tier.name === "PRIMARY_SECONDARY") {
                               badgeStyle = "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
                               displayLabel = "K-12";
@@ -211,12 +219,15 @@ export default async function AdminDashboardPage() {
                               if (tier.name === "UNIVERSITY") displayLabel = "University";
                               if (tier.name === "POLYTECHNIC") displayLabel = "Polytechnic";
                               if (tier.name === "COLLEGE_OF_EDUCATION") displayLabel = "College of Ed";
-                            } else if (tier.name === "PRIMARY") {
+                            } else if (tier.name === "PRIMARY" || upperName === "PRIMARY SCHOOL") {
                               badgeStyle = "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20";
                               displayLabel = "Primary";
-                            } else if (tier.name === "SECONDARY") {
+                            } else if (tier.name === "SECONDARY" || upperName === "SECONDARY SCHOOL") {
                               badgeStyle = "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20";
                               displayLabel = "Secondary";
+                            } else if (upperName.includes("HIGHER INSTITUTION") || upperName.includes("UNIVERSITY")) {
+                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
+                              displayLabel = "University";
                             }
 
                             return (
@@ -230,8 +241,8 @@ export default async function AdminDashboardPage() {
                       <td className="px-5 py-4 text-center font-mono text-slate-600 dark:text-zinc-400">{school.students_count || 0}</td>
                       <td className="px-5 py-4 text-center font-mono text-slate-600 dark:text-zinc-400">{school.staff_count || 0}</td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm ${school.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'}`}>
-                          {school.is_active ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm ${school.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'}`}>
+                          {school.isActive ? (
                             <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> ACTIVE</>
                           ) : (
                             <><span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"></span> SUSPENDED</>
@@ -240,11 +251,11 @@ export default async function AdminDashboardPage() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <form action={toggleSchoolStatus.bind(null, school.id, school.is_active)}>
+                          <form action={toggleSchoolStatus.bind(null, school.id, school.isActive)}>
                             <button 
                               type="submit" 
-                              title={school.is_active ? "Suspend Tenant" : "Activate Tenant"}
-                              className={`p-1.5 rounded-md transition-colors focus:ring-2 outline-none ${school.is_active ? 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 focus:ring-slate-400' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:text-emerald-400 dark:hover:bg-emerald-500/20 focus:ring-emerald-500'}`}
+                              title={school.isActive ? "Suspend Tenant" : "Activate Tenant"}
+                              className={`p-1.5 rounded-md transition-colors focus:ring-2 outline-none ${school.isActive ? 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 focus:ring-slate-400' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:text-emerald-400 dark:hover:bg-emerald-500/20 focus:ring-emerald-500'}`}
                             >
                               <Power className="w-4 h-4" />
                             </button>

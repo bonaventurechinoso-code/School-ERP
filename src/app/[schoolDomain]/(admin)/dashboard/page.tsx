@@ -147,8 +147,10 @@ export default function TenantDashboard() {
                 <Wallet className="w-5 h-5 md:w-6 md:h-6" />
               </div>
             </div>
-            <p className="text-4xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">₦0.00</p>
-            <span className="text-[10px] md:text-xs font-semibold text-green-600 mt-2 block relative z-10">+0% from last term</span>
+            <p className="text-4xl md:text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100 relative z-10">
+              ₦{((metrics as any).termlyRevenue || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[10px] md:text-xs font-semibold text-green-600 mt-2 block relative z-10">Verified Payments</span>
           </div>
         )}
 

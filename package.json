@@ -10,9 +10,11 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@google/genai": "^2.21.0",
     "@prisma/client": "^5.14.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
     "jose": "^6.2.12",
     "lucide-react": "^0.378.0",
     "next": "15.0.0-rc.0",

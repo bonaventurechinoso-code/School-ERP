@@ -6,7 +6,8 @@ import { basePrisma } from "@/lib/tenant-prisma";
 export async function POST(req: Request) {
   try {
     // 1. Session Verification
-    const sessionToken = cookies().get("session")?.value;
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get("session")?.value;
     if (!sessionToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

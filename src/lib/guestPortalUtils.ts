@@ -1,7 +1,7 @@
 export function generateTierMockData(preciseTier: string, schoolName: string) {
-  if (preciseTier === "NURSERY") {
+  if (preciseTier === "NURSERY" || preciseTier === "DAYCARE") {
     return {
-      heroTitle: `Welcome to ${schoolName} Early Care & Nursery`,
+      heroTitle: `Welcome to ${schoolName} Daycare / Nursery`,
       aboutUs: "A safe, nurturing, and creative environment where toddlers discover milestones through play, early literacy, and comprehensive caregiver attention."
     };
   }
@@ -50,7 +50,7 @@ export function formatTierLabel(preciseTier: string): string {
   if (preciseTier === "PRIMARY_SECONDARY") return "Primary & Secondary School";
   if (preciseTier === "PRIMARY") return "Primary School";
   if (preciseTier === "SECONDARY") return "Secondary School";
-  if (preciseTier === "NURSERY") return "Nursery & Early Care";
+  if (preciseTier === "NURSERY" || preciseTier === "DAYCARE") return "Daycare / Nursery";
   if (preciseTier === "HIGHER_ED") return "Higher Education";
   return preciseTier;
 }

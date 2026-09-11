@@ -38,7 +38,8 @@ export async function POST(req: Request) {
           .setExpirationTime("12h")
           .sign(secret);
 
-        cookies().set("session", sessionToken, {
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionToken, {
           httpOnly: true,
           secure: false, // TS knows we are in development block
           sameSite: "lax",
@@ -75,7 +76,41 @@ export async function POST(req: Request) {
           .setExpirationTime("12h")
           .sign(secret);
 
-        cookies().set("session", sessionToken, {
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 12
+        });
+
+      } else if (email === "bursar@school.edu" && password === "Password123") {
+        const tenant = await basePrisma.school.findUnique({
+          where: { subdomain: schoolDomain }
+        });
+
+        if (!tenant || !tenant.isActive) {
+          return NextResponse.json({ error: "Unauthorized: Tenant does not exist or is inactive." }, { status: 401 });
+        }
+
+        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+        const secret = new TextEncoder().encode(jwtSecret);
+        const alg = "HS256";
+
+        const sessionToken = await new jose.SignJWT({
+          userId: "test-bursar-789",
+          tenantId: tenant.id,
+          role: "BURSAR",
+          schoolDomain: tenant.subdomain
+        })
+          .setProtectedHeader({ alg })
+          .setIssuedAt()
+          .setExpirationTime("12h")
+          .sign(secret);
+
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionToken, {
           httpOnly: true,
           secure: false,
           sameSite: "lax",
@@ -85,7 +120,45 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ 
           success: true, 
-          role: "TEACHER", 
+          role: "BURSAR", 
+          schoolDomain: tenant.subdomain 
+        });
+      } else if (email === "student@school.edu" && password === "Password123") {
+        const tenant = await basePrisma.school.findUnique({
+          where: { subdomain: schoolDomain }
+        });
+
+        if (!tenant || !tenant.isActive) {
+          return NextResponse.json({ error: "Unauthorized: Tenant does not exist or is inactive." }, { status: 401 });
+        }
+
+        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+        const secret = new TextEncoder().encode(jwtSecret);
+        const alg = "HS256";
+
+        const sessionToken = await new jose.SignJWT({
+          userId: "test-student-999",
+          tenantId: tenant.id,
+          role: "STUDENT",
+          schoolDomain: tenant.subdomain
+        })
+          .setProtectedHeader({ alg })
+          .setIssuedAt()
+          .setExpirationTime("12h")
+          .sign(secret);
+
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 12
+        });
+
+        return NextResponse.json({ 
+          success: true, 
+          role: "STUDENT", 
           schoolDomain: tenant.subdomain 
         });
       }
@@ -123,7 +196,7 @@ export async function POST(req: Request) {
 
     // 2. ROLE-BASED ACCESS CONTROL (RBAC) FILTER
     const uppercaseRole = staff.role.toUpperCase();
-    if (["STUDENT", "GUEST"].includes(uppercaseRole) || !["ADMIN", "TEACHER", "SUPERVISOR", "STAFF"].includes(uppercaseRole)) {
+    if (["STUDENT", "GUEST"].includes(uppercaseRole) || !["ADMIN", "TEACHER", "SUPERVISOR", "STAFF", "BURSAR"].includes(uppercaseRole)) {
       return NextResponse.json({ 
         error: "Access Denied: This portal is strictly reserved for authorized institutional staff." 
       }, { status: 403 });
@@ -146,7 +219,8 @@ export async function POST(req: Request) {
       .sign(secret);
 
     // Bake into HTTP-only secure cookie
-    cookies().set("session", sessionToken, {
+    const cookieStore = await cookies();
+    cookieStore.set("session", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

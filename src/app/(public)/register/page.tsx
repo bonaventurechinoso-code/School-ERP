@@ -23,7 +23,7 @@ export default function RegisterTenantPage() {
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
 
   const availableTiers = [
-    { id: "NURSERY", label: "Nursery / Daycare", desc: "Ages 0-4" },
+    { id: "NURSERY", label: "Daycare / Nursery", desc: "Ages 0-4" },
     { id: "PRIMARY", label: "Primary School", desc: "Primary 1 - 6" },
     { id: "SECONDARY", label: "Secondary / High School", desc: "JS1 - SS3" },
     { id: "UNIVERSITY", label: "University", desc: "Undergraduate & Graduate" },

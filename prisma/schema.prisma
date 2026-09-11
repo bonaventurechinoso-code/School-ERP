@@ -156,7 +156,7 @@ model AcademicTier {
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   
-  name     String // e.g., "Daycare", "Elementary", "High School"
+  name     String // e.g., "Daycare / Nursery", "Elementary", "High School"
   level    Int?   // Optional numeric sort order
 
   students   Student[]

@@ -1,8 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
-import { Save } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
+
+interface StudentScore {
+  id: string;
+  name: string;
+  ca1: string;
+  ca2: string;
+  exam: string;
+  saving?: boolean;
+  saved?: boolean;
+  error?: string;
+}
 
 export default function ReportCardsPage() {
   const tenant = useTenant();
@@ -10,19 +21,70 @@ export default function ReportCardsPage() {
   const [className, setClassName] = useState("");
   const [subject, setSubject] = useState("");
 
-  const hasFilters = term && className && subject;
+  const [isLoading, setIsLoading] = useState(false);
+  const [roster, setRoster] = useState<StudentScore[]>([]);
+  const hasFilters = Boolean(term && className && subject);
 
-  // Mock student roster for the UI layout
-  const mockStudents = [
-    { id: "1", name: "Ibrahim Musa", ca1: "", ca2: "", exam: "" },
-    { id: "2", name: "Chisom Okafor", ca1: "", ca2: "", exam: "" },
-    { id: "3", name: "Amina Bello", ca1: "", ca2: "", exam: "" },
-  ];
+  React.useEffect(() => {
+    if (hasFilters) {
+      setIsLoading(true);
+      fetch(`/api/v1/report-cards/roster?term=${encodeURIComponent(term)}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.roster) {
+            setRoster(data.roster);
+          }
+        })
+        .catch(err => console.error("Failed to load roster", err))
+        .finally(() => setIsLoading(false));
+    } else {
+      setRoster([]);
+    }
+  }, [term, className, subject, hasFilters]);
+
+  const handleScoreChange = (id: string, field: "ca1" | "ca2" | "exam", value: string) => {
+    setRoster(prev => prev.map(s => {
+      if (s.id === id) {
+        return { ...s, [field]: value, saved: false, error: undefined };
+      }
+      return s;
+    }));
+  };
+
+  const handleSaveGrade = async (student: StudentScore) => {
+    setRoster(prev => prev.map(s => s.id === student.id ? { ...s, saving: true, error: undefined } : s));
+
+    try {
+      const res = await fetch("/api/v1/report-cards/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: student.id,
+          term,
+          className,
+          subject,
+          ca1: Number(student.ca1) || 0,
+          ca2: Number(student.ca2) || 0,
+          exam: Number(student.exam) || 0,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setRoster(prev => prev.map(s => s.id === student.id ? { ...s, saving: false, saved: true } : s));
+      } else {
+        setRoster(prev => prev.map(s => s.id === student.id ? { ...s, saving: false, error: data.error || "Save failed" } : s));
+      }
+    } catch (err: any) {
+      setRoster(prev => prev.map(s => s.id === student.id ? { ...s, saving: false, error: err.message || "Network error" } : s));
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 min-h-screen pb-12">
       <header>
-        <h2 className="text-3xl font-extrabold tracking-tight" style={{ color: tenant.branding.primaryColor }}>
+        <h2 className="text-3xl font-extrabold tracking-tight" style={{ color: tenant.branding?.primaryColor || "#0f172a" }}>
           Terminal Report Cards
         </h2>
         <p className="mt-2 text-lg text-slate-500">
@@ -110,7 +172,7 @@ export default function ReportCardsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {mockStudents.map((student) => {
+                {roster.map((student) => {
                   const ca1Num = Number(student.ca1) || 0;
                   const ca2Num = Number(student.ca2) || 0;
                   const examNum = Number(student.exam) || 0;
@@ -118,12 +180,19 @@ export default function ReportCardsPage() {
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900">{student.name}</td>
+                      <td className="px-6 py-4 font-medium text-slate-900">
+                        {student.name}
+                        {student.error && (
+                          <span className="block text-xs text-red-500 mt-0.5">{student.error}</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <input 
                           type="number" 
                           max="20" 
                           min="0"
+                          value={student.ca1}
+                          onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
                           className="w-24 border border-slate-300 rounded-md p-1.5 text-center focus:ring-2 focus:ring-blue-500 outline-none" 
                           placeholder="0 - 20"
                         />
@@ -133,6 +202,8 @@ export default function ReportCardsPage() {
                           type="number" 
                           max="20" 
                           min="0"
+                          value={student.ca2}
+                          onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
                           className="w-24 border border-slate-300 rounded-md p-1.5 text-center focus:ring-2 focus:ring-blue-500 outline-none" 
                           placeholder="0 - 20"
                         />
@@ -142,6 +213,8 @@ export default function ReportCardsPage() {
                           type="number" 
                           max="60" 
                           min="0"
+                          value={student.exam}
+                          onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
                           className="w-24 border border-slate-300 rounded-md p-1.5 text-center focus:ring-2 focus:ring-blue-500 outline-none" 
                           placeholder="0 - 60"
                         />
@@ -150,9 +223,26 @@ export default function ReportCardsPage() {
                         {total > 0 ? `${total}%` : "—"}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-xs shadow-sm">
-                          <Save className="w-4 h-4" />
-                          Save Grade
+                        <button 
+                          onClick={() => handleSaveGrade(student)}
+                          disabled={student.saving}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg transition font-medium text-xs shadow-sm ${
+                            student.saved 
+                              ? "bg-green-600 text-white hover:bg-green-700"
+                              : "bg-blue-600 text-white hover:bg-blue-700"
+                          } disabled:opacity-50`}
+                        >
+                          {student.saved ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4" />
+                              Saved
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              {student.saving ? "Saving..." : "Save Grade"}
+                            </>
+                          )}
                         </button>
                       </td>
                     </tr>

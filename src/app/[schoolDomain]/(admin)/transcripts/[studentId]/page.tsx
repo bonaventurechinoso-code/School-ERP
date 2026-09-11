@@ -1,6 +1,7 @@
 import React from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { aggregateTranscripts } from "@/lib/gpa";
+import PrintButton from "../PrintButton";
 
 export default async function TranscriptPrintView({ params: paramsPromise }: { params: Promise<{ schoolDomain: string, studentId: string }> }) {
   const params = await paramsPromise;
@@ -41,17 +42,7 @@ export default async function TranscriptPrintView({ params: paramsPromise }: { p
         <a href={`/${params.schoolDomain}/transcripts`} className="text-indigo-600 hover:underline">
           ← Back to Transcripts
         </a>
-        <button 
-          className="bg-slate-800 text-white px-6 py-2 rounded shadow hover:bg-slate-900 transition"
-        >
-          Print Transcript
-        </button>
-        {/* We need a tiny client component for the print button, or just inject a script. */}
-        <script dangerouslySetInnerHTML={{__html: `
-          document.querySelector('button').addEventListener('click', function() {
-            window.print();
-          });
-        `}} />
+        <PrintButton />
       </div>
 
       {/* Official Document Header */}

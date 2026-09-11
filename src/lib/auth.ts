@@ -10,7 +10,7 @@ export interface SessionPayload {
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionToken = cookieStore.get("session")?.value;
 
   if (!sessionToken) {

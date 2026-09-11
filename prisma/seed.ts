@@ -34,8 +34,8 @@ async function main() {
   })
 
   const schoolsConfig = [
-    { name: "Demo School", subdomain: "demo", tiers: ["Day Care / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
-    { name: "Greenwood Academy", subdomain: "greenwood", tiers: ["Day Care / Nursery", "Primary School", "Secondary School"] },
+    { name: "Demo School", subdomain: "demo", tiers: ["Daycare / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
+    { name: "Greenwood Academy", subdomain: "greenwood", tiers: ["Daycare / Nursery", "Primary School", "Secondary School"] },
     { name: "Summit High School", subdomain: "summit", tiers: ["Secondary School"] },
     { name: "Riverside University", subdomain: "riverside", tiers: ["Higher Institution / University"] },
   ]
@@ -63,7 +63,7 @@ async function main() {
       })
 
       let classes: string[] = []
-      if (tierName === "Day Care / Nursery") classes = ["Day Care / Nursery", "Nursery 1", "Nursery 2"]
+      if (tierName === "Daycare / Nursery") classes = ["Daycare / Nursery", "Nursery 1", "Nursery 2"]
       else if (tierName === "Primary School") classes = ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"]
       else if (tierName === "Secondary School") classes = ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"]
       else if (tierName === "Higher Institution / University") classes = ["100 Level", "200 Level", "300 Level", "400 Level"]

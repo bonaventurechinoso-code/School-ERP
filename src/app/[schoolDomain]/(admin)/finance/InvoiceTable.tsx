@@ -188,7 +188,7 @@ export default function InvoiceTable({
                     <td className="px-6 py-4">${invoice.amountDue.toFixed(2)}</td>
                     <td className="px-6 py-4 font-semibold text-slate-700">${balance.toFixed(2)}</td>
                     <td className="px-6 py-4">{renderStatus(invoice.status)}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                       {invoice.status !== "PAID" && (
                         <button 
                           onClick={() => {
@@ -196,11 +196,72 @@ export default function InvoiceTable({
                             setPaymentData({ amountPaid: balance, method: "CASH" });
                             setErrorMsg(null);
                           }}
-                          className="px-3 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium rounded transition"
+                          className="px-3 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium rounded transition text-xs"
                         >
-                          Payment
+                          Record Payment
                         </button>
                       )}
+                      <button
+                        onClick={() => {
+                          const receiptWindow = window.open("", "_blank");
+                          if (receiptWindow) {
+                            receiptWindow.document.write(`
+                              <html>
+                                <head>
+                                  <title>Official Payment Receipt - ${invoice.student.firstName} ${invoice.student.lastName}</title>
+                                  <style>
+                                    body { font-family: system-ui, sans-serif; padding: 40px; color: #1e293b; max-width: 600px; margin: 0 auto; }
+                                    .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
+                                    .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+                                    .header p { color: #64748b; margin: 5px 0 0 0; font-size: 14px; }
+                                    .info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
+                                    .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                                    .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+                                    .table th { background: #f8fafc; font-size: 12px; text-transform: uppercase; }
+                                    .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #94a3b8; }
+                                    @media print { .print-btn { display: none; } }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="header">
+                                    <h1>${tenant.name || "INSTITUTIONAL RECEIPT"}</h1>
+                                    <p>Official Invoice & Payment Receipt</p>
+                                  </div>
+                                  <div className="info">
+                                    <div>
+                                      <strong>Student:</strong> ${invoice.student.firstName} ${invoice.student.lastName}<br/>
+                                      <strong>Invoice ID:</strong> ${invoice.id.substring(0, 8).toUpperCase()}<br/>
+                                      <strong>Status:</strong> ${invoice.status}
+                                    </div>
+                                    <div style="text-align: right;">
+                                      <strong>Date Issued:</strong> ${new Date(invoice.createdAt).toLocaleDateString()}<br/>
+                                      <strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                  <table class="table">
+                                    <thead>
+                                      <tr><th>Description</th><th style="text-align: right;">Amount</th></tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr><td>${invoice.description}</td><td style="text-align: right;">$${invoice.amountDue.toFixed(2)}</td></tr>
+                                      <tr><td><strong>Total Paid</strong></td><td style="text-align: right; color: #16a34a;"><strong>$${totalPaid.toFixed(2)}</strong></td></tr>
+                                      <tr><td><strong>Balance Remaining</strong></td><td style="text-align: right; color: #dc2626;"><strong>$${balance.toFixed(2)}</strong></td></tr>
+                                    </tbody>
+                                  </table>
+                                  <div class="footer">
+                                    <p>Thank you for your payment. Keep this document for your records.</p>
+                                    <button class="print-btn" onclick="window.print()" style="padding: 10px 20px; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">Print Receipt</button>
+                                  </div>
+                                </body>
+                              </html>
+                            `);
+                            receiptWindow.document.close();
+                          }
+                        }}
+                        className="px-3 py-1 bg-slate-800 text-white hover:bg-slate-900 font-medium rounded transition text-xs"
+                      >
+                        Print Receipt
+                      </button>
                     </td>
                   </tr>
                   {showPaymentForm === invoice.id && (
