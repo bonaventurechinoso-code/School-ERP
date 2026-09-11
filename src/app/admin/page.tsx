@@ -2,7 +2,7 @@ import { createSchool, toggleSchoolStatus } from "./actions";
 import Link from "next/link";
 import DeleteSchoolForm from "./DeleteSchoolForm";
 import { PhoneInput } from "@/components/PhoneInput";
-import { Server, Users, ShieldCheck, Power, Settings } from "lucide-react";
+import { Server, Users, ShieldCheck, Settings } from "lucide-react";
 
 const ACADEMIC_TIERS_OPTIONS = [
   { id: "DAYCARE", label: "Daycare / Nursery" },
@@ -109,9 +109,9 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* NEW TENANT FORM */}
-        <section className="p-6 md:p-8 rounded-2xl shadow-sm border xl:col-span-1 relative bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200">
+        <section className="p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-4 2xl:col-span-3 relative bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 rounded-t-2xl"></div>
           <h3 className="text-xl font-bold mb-6 tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <Settings className="w-5 h-5 text-indigo-500" />
@@ -157,22 +157,22 @@ export default async function AdminDashboardPage() {
         </section>
 
         {/* TENANTS DIRECTORY */}
-        <section className="p-6 md:p-8 rounded-2xl shadow-sm border xl:col-span-2 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col">
+        <section className="p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-8 2xl:col-span-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col">
           <h3 className="text-xl font-bold mb-6 tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <Server className="w-5 h-5 text-blue-500" />
             Registered Tenants
           </h3>
           <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-zinc-800/80 shadow-sm flex-1">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
+              <thead className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-xs">
                 <tr>
-                  <th className="px-5 py-4 font-semibold">School Name</th>
-                  <th className="px-5 py-4 font-semibold">Subdomain</th>
-                  <th className="px-5 py-4 font-semibold">Metadata Types</th>
-                  <th className="px-5 py-4 font-semibold text-center">Students</th>
-                  <th className="px-5 py-4 font-semibold text-center">Staff</th>
-                  <th className="px-5 py-4 font-semibold">Status</th>
-                  <th className="px-5 py-4 font-semibold text-right">Actions</th>
+                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider">School Name</th>
+                  <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider">Subdomain</th>
+                  <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider">Metadata Types</th>
+                  <th className="px-3 py-3.5 font-semibold uppercase tracking-wider text-center">Students</th>
+                  <th className="px-3 py-3.5 font-semibold uppercase tracking-wider text-center">Staff</th>
+                  <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider text-center">Status</th>
+                  <th className="px-4 py-3.5 font-semibold uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -185,14 +185,14 @@ export default async function AdminDashboardPage() {
                 ) : (
                   schools.map(school => (
                     <tr key={school.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors bg-white dark:bg-zinc-900 group">
-                      <td className="px-5 py-4 font-medium text-slate-900 dark:text-white">{school.name}</td>
-                      <td className="px-5 py-4">
-                        <a href={getTenantUrl(school.subdomain)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors font-medium">
+                      <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-white">{school.name}</td>
+                      <td className="px-3.5 py-3.5">
+                        <a href={getTenantUrl(school.subdomain)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors font-medium text-xs md:text-sm">
                           {school.subdomain}
                         </a>
                       </td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-wrap gap-1.5">
+                      <td className="px-3.5 py-3.5">
+                        <div className="flex flex-wrap gap-1">
                           {school.academic_tiers?.map((tier: any) => {
                             let badgeStyle = "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700";
                             let displayLabel = tier.name;
@@ -238,9 +238,9 @@ export default async function AdminDashboardPage() {
                           })}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-center font-mono text-slate-600 dark:text-zinc-400">{school.students_count || 0}</td>
-                      <td className="px-5 py-4 text-center font-mono text-slate-600 dark:text-zinc-400">{school.staff_count || 0}</td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3.5 text-center font-mono text-xs md:text-sm text-slate-600 dark:text-zinc-400">{school.students_count || 0}</td>
+                      <td className="px-3 py-3.5 text-center font-mono text-xs md:text-sm text-slate-600 dark:text-zinc-400">{school.staff_count || 0}</td>
+                      <td className="px-3.5 py-3.5 text-center">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm ${school.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'}`}>
                           {school.isActive ? (
                             <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> ACTIVE</>
@@ -249,15 +249,19 @@ export default async function AdminDashboardPage() {
                           )}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <form action={toggleSchoolStatus.bind(null, school.id, school.isActive)}>
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <form action={toggleSchoolStatus.bind(null, school.id, school.isActive)} className="inline-block">
                             <button 
                               type="submit" 
                               title={school.isActive ? "Suspend Tenant" : "Activate Tenant"}
-                              className={`p-1.5 rounded-md transition-colors focus:ring-2 outline-none ${school.isActive ? 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 focus:ring-slate-400' : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:text-emerald-400 dark:hover:bg-emerald-500/20 focus:ring-emerald-500'}`}
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm transition-all duration-150 outline-none focus:ring-2 cursor-pointer ${
+                                school.isActive 
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20 focus:ring-amber-400' 
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20 focus:ring-emerald-400'
+                              }`}
                             >
-                              <Power className="w-4 h-4" />
+                              {school.isActive ? "SUSPEND" : "ACTIVATE"}
                             </button>
                           </form>
                           <DeleteSchoolForm schoolId={school.id} />

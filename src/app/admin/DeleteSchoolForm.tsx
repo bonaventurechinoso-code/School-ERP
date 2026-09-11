@@ -1,7 +1,6 @@
 "use client";
 
 import { deleteSchool } from "./actions";
-import { Trash2 } from "lucide-react";
 
 export default function DeleteSchoolForm({ schoolId }: { schoolId: string }) {
   return (
@@ -12,13 +11,14 @@ export default function DeleteSchoolForm({ schoolId }: { schoolId: string }) {
           e.preventDefault();
         }
       }}
+      className="inline-block"
     >
       <button
         type="submit"
-        className="p-1.5 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-700 dark:hover:text-red-300 transition-colors focus:ring-2 focus:ring-red-500 outline-none"
+        className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 dark:text-rose-400 dark:border-rose-500/20 transition-all duration-150 outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer"
         title="Delete Tenant"
       >
-        <Trash2 className="w-4 h-4" />
+        DELETE
       </button>
     </form>
   );
