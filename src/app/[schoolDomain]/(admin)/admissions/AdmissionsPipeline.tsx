@@ -4,18 +4,21 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AdmissionLead, AcademicTier } from "@prisma/client";
 import { X, Mail, Phone, User, Users, CheckCircle, GraduationCap } from "lucide-react";
+import { enrollApplicantAction, updateLeadStatusAction } from "./actions";
 
 const STAGES = ["INQUIRY", "APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"];
 
-type LeadWithTier = AdmissionLead & { tier: AcademicTier; notes?: any[] };
+type LeadWithTier = AdmissionLead & { tier?: AcademicTier | null; notes?: any[] };
 
 export default function AdmissionsPipeline({
   leads,
   schoolId,
+  schoolDomain,
   tiers,
 }: {
   leads: LeadWithTier[];
   schoolId: string;
+  schoolDomain?: string;
   tiers: AcademicTier[];
 }) {
   const router = useRouter();
@@ -40,16 +43,15 @@ export default function AdmissionsPipeline({
 
     try {
       if (newStatus === "ENROLLED") {
-        const res = await fetch(`/api/v1/admissions/applications/${leadId}/enroll`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ schoolId }),
+        const res = await enrollApplicantAction({
+          leadId,
+          schoolId,
+          schoolDomain: schoolDomain || "",
         });
         
-        if (!res.ok) {
+        if (!res.success) {
           setLocalLeads(leads); // revert
-          const error = await res.json();
-          alert(`Enrollment failed: ${error.error}`);
+          alert(`Enrollment failed: ${res.error}`);
         } else {
           router.refresh();
           if (selectedLead && selectedLead.id === leadId) {
@@ -57,18 +59,16 @@ export default function AdmissionsPipeline({
           }
         }
       } else {
-        const res = await fetch(`/api/v1/admissions/applications/${leadId}/status`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: newStatus, schoolId }),
+        const res = await updateLeadStatusAction({
+          leadId,
+          status: newStatus,
+          schoolId,
+          schoolDomain: schoolDomain || "",
         });
 
-        if (!res.ok) {
+        if (!res.success) {
           setLocalLeads(leads); // revert
-          const error = await res.json();
-          alert(`Failed to update status: ${error.error || "Unknown error"}`);
+          alert(`Failed to update status: ${res.error || "Unknown error"}`);
         } else {
           router.refresh();
           if (selectedLead && selectedLead.id === leadId) {
@@ -87,16 +87,15 @@ export default function AdmissionsPipeline({
   const handleFinalizeEnrollment = async (leadId: string) => {
     setIsEnrolling(true);
     try {
-      const res = await fetch(`/api/v1/admissions/applications/${leadId}/enroll`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId }),
+      const res = await enrollApplicantAction({
+        leadId,
+        schoolId,
+        schoolDomain: schoolDomain || "",
       });
-      if (!res.ok) {
-        const error = await res.json();
-        alert(`Enrollment failed: ${error.error}`);
+      if (!res.success) {
+        alert(`Enrollment failed: ${res.error}`);
       } else {
-        alert("Enrollment finalized successfully!");
+        alert(`Applicant enrolled successfully into ${res.tierName || "designated tier"} database!`);
         router.refresh();
         setSelectedLead(null);
       }
@@ -188,7 +187,7 @@ export default function AdmissionsPipeline({
                     >
                       <h4 className="font-bold text-slate-800">{lead.applicantName}</h4>
                       <p className="text-sm text-slate-500 mt-1">Grade: {lead.targetGrade}</p>
-                      <p className="text-sm text-slate-500">Tier: {lead.tier.name}</p>
+                      <p className="text-sm text-slate-500">Tier: {lead.tier?.name || "Tier"}</p>
                       
                       {stage !== "ENROLLED" && (
                         <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
@@ -235,7 +234,7 @@ export default function AdmissionsPipeline({
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">{selectedLead.applicantName}</h2>
-                <p className="text-sm text-slate-500 mt-1">Applying for {selectedLead.targetGrade} • {selectedLead.tier.name}</p>
+                <p className="text-sm text-slate-500 mt-1">Applying for {selectedLead.targetGrade} • {selectedLead.tier?.name || "Tier"}</p>
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
@@ -254,7 +253,7 @@ export default function AdmissionsPipeline({
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                     <User className="w-4 h-4 text-blue-600" />
-                    <h3>{selectedLead.tier.name.toUpperCase().includes("UNIVERSITY") || selectedLead.tier.name.toUpperCase().includes("POLYTECHNIC") || selectedLead.tier.name.toUpperCase().includes("COLLEGE") || selectedLead.tier.name.toUpperCase().includes("HIGHER ED") ? "Applicant Details" : "Student Details"}</h3>
+                    <h3>{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Applicant Details" : "Student Details"}</h3>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-slate-600">
@@ -272,7 +271,7 @@ export default function AdmissionsPipeline({
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                     <Users className="w-4 h-4 text-purple-600" />
-                    <h3>{selectedLead.tier.name.toUpperCase().includes("UNIVERSITY") || selectedLead.tier.name.toUpperCase().includes("POLYTECHNIC") || selectedLead.tier.name.toUpperCase().includes("COLLEGE") || selectedLead.tier.name.toUpperCase().includes("HIGHER ED") ? "Sponsor / Next of Kin" : "Parent / Guardian"}</h3>
+                    <h3>{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Sponsor / Next of Kin" : "Parent / Guardian"}</h3>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-slate-600">

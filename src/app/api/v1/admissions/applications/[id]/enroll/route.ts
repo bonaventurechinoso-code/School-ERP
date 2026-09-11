@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
+import { revalidatePath } from "next/cache";
 
 export async function POST(
   req: NextRequest,
@@ -18,11 +19,10 @@ export async function POST(
       );
     }
 
-    const prisma = getTenantClient(schoolId);
-
-    // Fetch the lead
-    const lead = await prisma.admissionLead.findUnique({
+    // 1. Fetch the lead with its designated academic tier
+    const lead = await basePrisma.admissionLead.findUnique({
       where: { id },
+      include: { tier: true },
     });
 
     if (!lead) {
@@ -33,53 +33,111 @@ export async function POST(
       return NextResponse.json({ error: "Lead is already enrolled" }, { status: 400 });
     }
 
-    // Process enrollment in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create the Student record
-      const [firstName, ...lastNameParts] = lead.applicantName.split(" ");
-      const lastName = lastNameParts.join(" ") || "Unknown";
+    // 2. DYNAMIC ENROLLMENT TARGET ROUTING:
+    // Detect the applicant's designated tier and initialize that isolated tier's Prisma client
+    const targetTier = lead.tier?.name || lead.tierId;
+    const tierDb = await getPrismaClientForTier(schoolId, targetTier);
+    const isolatedTierId = await resolveTierIdForTierDb(tierDb, schoolId, {
+      id: lead.tierId,
+      name: lead.tier?.name,
+      level: lead.tier?.level,
+    });
 
-      const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
-      const studentCount = await tx.student.count();
-      const prefix = school ? school.subdomain.toUpperCase().substring(0, 3) : "SCH";
-      const year = new Date().getFullYear();
-      const seq = String(studentCount + 1).padStart(3, '0');
-      const admissionNumber = `${prefix}/${year}/${seq}`;
+    const school = await basePrisma.school.findUnique({ 
+      where: { id: schoolId },
+      select: { id: true, subdomain: true }
+    });
 
-      const newStudent = await tx.student.create({
+    const [firstName, ...lastNameParts] = (lead.applicantName || "").trim().split(" ");
+    const lastName = lastNameParts.join(" ") || "Enrolled";
+
+    // Compute unique admission number within the designated tier database
+    const studentCount = await tierDb.student.count();
+    const prefix = school ? school.subdomain.toUpperCase().substring(0, 3) : "SCH";
+    const year = new Date().getFullYear();
+    const seq = String(studentCount + 1).padStart(3, '0');
+    const admissionNumber = `${prefix}/${year}/${seq}`;
+
+    // 3. Write finalized student profile directly into the isolated tier database's Student table
+    const existingStudent = await tierDb.student.findFirst({
+      where: {
+        schoolId: lead.schoolId,
+        OR: [
+          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+          { admissionNumber },
+        ],
+      },
+    });
+
+    let newStudent;
+    if (existingStudent) {
+      newStudent = await tierDb.student.update({
+        where: { id: existingStudent.id },
+        data: {
+          status: "ENROLLED",
+          enrolledAt: new Date(),
+          tierId: isolatedTierId,
+          currentClass: lead.targetGrade || existingStudent.currentClass,
+        },
+      });
+    } else {
+      newStudent = await tierDb.student.create({
         data: {
           schoolId: lead.schoolId,
-          tierId: lead.tierId,
-          firstName,
+          tierId: isolatedTierId,
+          firstName: firstName || "Student",
           lastName,
-          email: lead.studentEmail,
-          parentName: lead.parentName,
-          parentEmail: lead.parentEmail,
-          parentPhone: lead.parentPhone,
-          currentClass: lead.targetGrade,
+          email: lead.studentEmail || null,
+          parentName: lead.parentName || null,
+          parentEmail: lead.parentEmail || null,
+          parentPhone: lead.parentPhone || lead.parentContact || null,
+          currentClass: lead.targetGrade || null,
           admissionNumber,
           status: "ENROLLED",
           enrolledAt: new Date(),
         },
       });
+    }
 
-      // 2. Update the AdmissionLead status to ENROLLED
-      const updatedLead = await tx.admissionLead.update({
-        where: { id },
-        data: {
-          status: "ENROLLED",
-          updatedAt: new Date(),
-        },
-      });
-
-      return { student: newStudent, lead: updatedLead };
+    // 4. Update the AdmissionLead status to ENROLLED in the central admissions schema
+    const updatedLead = await basePrisma.admissionLead.update({
+      where: { id },
+      data: {
+        status: "ENROLLED",
+        updatedAt: new Date(),
+      },
     });
 
-    return NextResponse.json({ success: true, data: result });
+    // 5. ROSTER DYNAMIC SYNC REFRESH:
+    // Invalidate cached views across students, admissions, and dashboard layouts
+    invalidateTierConnection();
+    try {
+      if (school?.subdomain) {
+        revalidatePath(`/${school.subdomain}/students`);
+        revalidatePath(`/${school.subdomain}/admissions`);
+        revalidatePath(`/${school.subdomain}/dashboard`);
+        revalidatePath(`/${school.subdomain}/scheduling`);
+      }
+      revalidatePath("/[schoolDomain]/(admin)/students", "page");
+      revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
+      revalidatePath("/[schoolDomain]/(admin)/dashboard", "page");
+    } catch {
+      // safe fallback
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        student: newStudent,
+        lead: updatedLead,
+        tierName: lead.tier?.name || "Default Tier",
+        databaseRouting: "isolated_tier_db",
+      },
+    });
   } catch (error: any) {
-    console.error("Error finalizing enrollment:", error);
+    console.error("Error finalizing enrollment into tier database:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: error?.message || "Internal Server Error" },
       { status: 500 }
     );
   }

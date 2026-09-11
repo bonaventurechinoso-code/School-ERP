@@ -63,9 +63,20 @@ export default async function StudentsPage({
       orderBy: { createdAt: "desc" },
       include: { tier: true },
     }),
-    tenantDb.admissionLead.findMany({
+    basePrisma.admissionLead.findMany({
+      where: {
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+        status: { not: "ENROLLED" },
+      },
       orderBy: { createdAt: "desc" },
       include: { tier: true },
+    }).catch(async () => {
+      return tenantDb.admissionLead.findMany({
+        where: { status: { not: "ENROLLED" } },
+        orderBy: { createdAt: "desc" },
+        include: { tier: true },
+      });
     }),
     tenantDb.classroom.findMany({
       orderBy: { name: "asc" },

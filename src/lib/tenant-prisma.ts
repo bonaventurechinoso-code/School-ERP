@@ -88,8 +88,23 @@ export class TenantConnectionManager {
     if (!tierIdentifier) return null;
 
     try {
-      const tierName = typeof tierIdentifier === 'string' ? tierIdentifier : tierIdentifier.tierName;
-      const tierId = typeof tierIdentifier === 'object' ? tierIdentifier.tierId : undefined;
+      let tierName = typeof tierIdentifier === 'string' ? tierIdentifier : tierIdentifier.tierName;
+      let tierId = typeof tierIdentifier === 'object' ? tierIdentifier.tierId : undefined;
+
+      // If tierIdentifier is a UUID/ID string, check if it matches an AcademicTier directly
+      if (typeof tierIdentifier === 'string' && (tierIdentifier.length > 20 || tierIdentifier.includes('-'))) {
+        try {
+          const tierById = await basePrisma.academicTier.findUnique({
+            where: { id: tierIdentifier },
+            select: { id: true, name: true, databaseUrl: true },
+          });
+          if (tierById) {
+            if (tierById.databaseUrl) return tierById.databaseUrl;
+            tierName = tierById.name;
+            tierId = tierById.id;
+          }
+        } catch {}
+      }
 
       // 1. If tierId is provided, check directly on AcademicTier
       if (tierId) {
@@ -268,6 +283,66 @@ export async function getPrismaClientForTier(tenantId: string, tier: string) {
       outerErr?.message || outerErr
     );
     return applyTenantIsolation(basePrisma, tenantId);
+  }
+}
+
+/**
+ * Invalidate cached Prisma client connections to force refresh of connection pools.
+ */
+export function invalidateTierConnection(connectionUrl?: string) {
+  if (connectionUrl) {
+    connectionPool.delete(connectionUrl);
+  } else {
+    connectionPool.clear();
+  }
+}
+
+/**
+ * Resolves or creates a valid AcademicTier record in an isolated tier database
+ * to satisfy foreign key constraints during cross-database student enrollment.
+ */
+export async function resolveTierIdForTierDb(
+  tierDb: any,
+  schoolId: string,
+  tierIdentifier: { id?: string; name?: string; level?: number | null }
+): Promise<string> {
+  try {
+    let targetTierInDb = await tierDb.academicTier.findFirst({
+      where: {
+        schoolId,
+        OR: [
+          ...(tierIdentifier.id ? [{ id: tierIdentifier.id }] : []),
+          ...(tierIdentifier.name ? [
+            { name: { equals: tierIdentifier.name, mode: 'insensitive' } },
+            { name: { contains: tierIdentifier.name, mode: 'insensitive' } },
+          ] : []),
+        ],
+      },
+    });
+
+    if (!targetTierInDb && tierIdentifier.name) {
+      try {
+        targetTierInDb = await tierDb.academicTier.create({
+          data: {
+            id: tierIdentifier.id || `${schoolId}-${tierIdentifier.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            name: tierIdentifier.name,
+            schoolId,
+            level: tierIdentifier.level ?? 1,
+          },
+        });
+      } catch {
+        targetTierInDb = await tierDb.academicTier.findFirst({ where: { schoolId } });
+      }
+    }
+
+    if (!targetTierInDb) {
+      targetTierInDb = await tierDb.academicTier.findFirst();
+    }
+
+    return targetTierInDb?.id || tierIdentifier.id || 'default-tier';
+  } catch (err: any) {
+    console.warn('[ROUTER] Failed to resolve tier ID in tier database:', err?.message || err);
+    return tierIdentifier.id || 'default-tier';
   }
 }
 

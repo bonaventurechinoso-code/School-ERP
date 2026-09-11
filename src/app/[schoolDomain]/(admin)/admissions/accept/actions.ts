@@ -1,55 +1,109 @@
 "use server";
 
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
 export async function acceptOfferAction(token: string, schoolDomain: string) {
   try {
     const school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain }
+      where: { subdomain: schoolDomain },
+      select: { id: true, subdomain: true },
     });
     if (!school) throw new Error("School not found");
 
-    const tenantDb = getTenantClient(school.id);
-    const lead = await tenantDb.admissionLead.findUnique({
-      where: { offerToken: token }
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { offerToken: token },
+      include: { tier: true },
     });
 
     if (!lead || lead.status !== "APPROVED") {
       throw new Error("Invalid or expired offer token");
     }
 
-    // Run transaction via basePrisma to bridge into Student Lifecycle
-    await basePrisma.$transaction(async (tx) => {
-      // 1. Update lead status
-      const updatedLead = await tx.admissionLead.update({
-        where: { id: lead.id, schoolId: school.id },
-        data: { status: "ENROLLED" }
-      });
-
-      // 2. Map names
-      const names = updatedLead.applicantName.split(" ");
-      const firstName = names[0];
-      const lastName = names.length > 1 ? names.slice(1).join(" ") : "Student";
-
-      // 3. Create Student profile
-      await tx.student.create({
-        data: {
-          schoolId: school.id,
-          tierId: updatedLead.tierId,
-          firstName,
-          lastName,
-          parentPhone: updatedLead.parentContact,
-          parentEmail: updatedLead.parentEmail,
-          status: "ENROLLED",
-          enrolledAt: new Date(),
-        }
-      });
+    // 1. DYNAMIC ENROLLMENT TARGET ROUTING:
+    // Resolve applicant's designated tier and route write directly to that tier's database
+    const targetTier = lead.tier?.name || lead.tierId;
+    const tierDb = await getPrismaClientForTier(school.id, targetTier);
+    const isolatedTierId = await resolveTierIdForTierDb(tierDb, school.id, {
+      id: lead.tierId,
+      name: lead.tier?.name,
+      level: lead.tier?.level,
     });
 
-    revalidatePath(`/${schoolDomain}/admissions/accept`);
+    // Map names
+    const names = (lead.applicantName || "").trim().split(" ");
+    const firstName = names[0] || "Student";
+    const lastName = names.length > 1 ? names.slice(1).join(" ") : "Enrolled";
+
+    // Compute unique admission number
+    const studentCount = await tierDb.student.count();
+    const prefix = school.subdomain.toUpperCase().substring(0, 3) || "SCH";
+    const year = new Date().getFullYear();
+    const seq = String(studentCount + 1).padStart(3, "0");
+    const admissionNumber = `${prefix}/${year}/${seq}`;
+
+    // 2. Create or update Student profile in the isolated tier database
+    const existingStudent = await tierDb.student.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+          { admissionNumber },
+        ],
+      },
+    });
+
+    if (existingStudent) {
+      await tierDb.student.update({
+        where: { id: existingStudent.id },
+        data: {
+          status: "ENROLLED",
+          enrolledAt: new Date(),
+          tierId: isolatedTierId,
+          currentClass: lead.targetGrade || existingStudent.currentClass,
+        },
+      });
+    } else {
+      await tierDb.student.create({
+        data: {
+          schoolId: school.id,
+          tierId: isolatedTierId,
+          firstName,
+          lastName,
+          email: lead.studentEmail || null,
+          parentPhone: lead.parentPhone || lead.parentContact || null,
+          parentEmail: lead.parentEmail || null,
+          parentName: lead.parentName || null,
+          currentClass: lead.targetGrade || null,
+          admissionNumber,
+          status: "ENROLLED",
+          enrolledAt: new Date(),
+        },
+      });
+    }
+
+    // 3. Update central lead status
+    await basePrisma.admissionLead.update({
+      where: { id: lead.id },
+      data: { status: "ENROLLED", updatedAt: new Date() },
+    });
+
+    // 4. Invalidate tier connection and sync cache
+    invalidateTierConnection();
+    try {
+      revalidatePath(`/${schoolDomain}/students`);
+      revalidatePath(`/${schoolDomain}/admissions`);
+      revalidatePath(`/${schoolDomain}/admissions/accept`);
+      revalidatePath(`/${schoolDomain}/dashboard`);
+      revalidatePath("/[schoolDomain]/(admin)/students", "page");
+      revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
+    } catch {
+      // safe fallback
+    }
+
     return { success: true };
   } catch (error: any) {
+    console.error("Error in acceptOfferAction:", error);
     return { error: error.message };
   }
 }
@@ -57,25 +111,25 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
 export async function declineOfferAction(token: string, schoolDomain: string) {
   try {
     const school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain }
+      where: { subdomain: schoolDomain },
     });
     if (!school) throw new Error("School not found");
 
-    const tenantDb = getTenantClient(school.id);
-    const lead = await tenantDb.admissionLead.findUnique({
-      where: { offerToken: token }
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { offerToken: token },
     });
 
     if (!lead || lead.status !== "APPROVED") {
       throw new Error("Invalid or expired offer token");
     }
 
-    await tenantDb.admissionLead.update({
+    await basePrisma.admissionLead.update({
       where: { id: lead.id },
-      data: { status: "REJECTED" } // Using REJECTED or DECLINED
+      data: { status: "REJECTED", updatedAt: new Date() },
     });
 
     revalidatePath(`/${schoolDomain}/admissions/accept`);
+    revalidatePath(`/${schoolDomain}/admissions`);
     return { success: true };
   } catch (error: any) {
     return { error: error.message };

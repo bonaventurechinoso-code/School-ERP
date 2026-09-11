@@ -35,7 +35,7 @@ export default async function AdmissionsPage({ params: paramsPromise }: { params
         </p>
       </header>
 
-      <AdmissionsPipeline leads={leads} schoolId={school.id} tiers={school.academicTiers} />
+      <AdmissionsPipeline leads={leads} schoolId={school.id} schoolDomain={params.schoolDomain} tiers={school.academicTiers} />
     </div>
   );
 }
