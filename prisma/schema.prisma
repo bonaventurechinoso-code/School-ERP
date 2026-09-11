@@ -74,6 +74,15 @@ model School {
   walletBalance     Float @default(0)
   academicTiers     AcademicTier[]
   admissionLeads    AdmissionLead[]
+
+  // Multi-Database Per Tier Architecture
+  databaseUrl          String? // Primary/fallback connection URL for this tenant
+  isMultiDbEnabled     Boolean @default(false)
+  tierDatabasesConfig  Json?   // JSON dictionary mapping active tier to connection URL e.g. { "NURSERY": "...", "PRIMARY": "..." }
+  nurseryDbUrl         String? // Explicit nursery tier database URL
+  primaryDbUrl         String? // Explicit primary tier database URL
+  secondaryDbUrl       String? // Explicit secondary tier database URL
+  tierDatabases        TenantTierDatabase[]
 }
 
 model PlatformAdmin {
@@ -159,6 +168,12 @@ model AcademicTier {
   name     String // e.g., "Daycare / Nursery", "Elementary", "High School"
   level    Int?   // Optional numeric sort order
 
+  // Dedicated Tier Database Reference
+  databaseUrl      String? // Direct connection string for this tier's dedicated database
+  databaseName     String? // Standardized database name (e.g. tenant_slug_tiername)
+  tierDatabaseId   String?
+  tierDatabase     TenantTierDatabase? @relation(fields: [tierDatabaseId], references: [id], onDelete: SetNull)
+
   students   Student[]
   courses    Course[]
   classrooms Classroom[]
@@ -169,6 +184,27 @@ model AcademicTier {
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, name])
+}
+
+// ------------------------------------------------------
+// TENANT TIER DEDICATED DATABASES
+// ------------------------------------------------------
+
+model TenantTierDatabase {
+  id            String   @id @default(uuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  tierName      String   // e.g. "DAYCARE", "PRIMARY", "SECONDARY"
+  databaseName  String   // e.g. "greenwood_primary"
+  databaseUrl   String   // Full postgres connection string
+  status        String   @default("ACTIVE") // ACTIVE, PROVISIONING, FAILED, MAINTENANCE
+  isProvisioned Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  academicTiers AcademicTier[]
+
+  @@unique([schoolId, tierName])
 }
 
 // ------------------------------------------------------
