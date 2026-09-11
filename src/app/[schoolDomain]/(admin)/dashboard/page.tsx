@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
 import { Users, BookOpen, FileText, Plus, Wallet, Calendar } from "lucide-react";
 import { getDashboardMetrics, createAdmissionLead } from "./actions";
@@ -9,6 +10,8 @@ import NewApplicationModal from "./NewApplicationModal";
 
 export default function TenantDashboard() {
   const tenant = useTenant();
+  const searchParams = useSearchParams();
+  const activeTier = searchParams.get("tier") || undefined;
 
   const [metrics, setMetrics] = useState({
     enrolledStudents: 0,
@@ -21,11 +24,11 @@ export default function TenantDashboard() {
 
   const fetchMetrics = useCallback(() => {
     if (tenant?.id) {
-      getDashboardMetrics(tenant.id).then((data) => {
+      getDashboardMetrics(tenant.id, activeTier).then((data) => {
         setMetrics(data);
       });
     }
-  }, [tenant?.id]);
+  }, [tenant?.id, activeTier]);
 
   useEffect(() => {
     fetchMetrics();

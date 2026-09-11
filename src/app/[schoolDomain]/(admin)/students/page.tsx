@@ -1,12 +1,26 @@
 import React from "react";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { cookies } from "next/headers";
+import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import StudentTable from "./StudentTable";
 
-export default async function StudentsPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+export default async function StudentsPage({ 
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
+}: { 
+  params: Promise<{ schoolDomain: string }>;
+  searchParams?: Promise<{ tier?: string }>;
+}) {
   const params = await paramsPromise;
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
+    include: {
+      academicTiers: {
+        orderBy: { level: "asc" },
+      },
+    },
   });
 
   if (!school) {
@@ -18,17 +32,45 @@ export default async function StudentsPage({ params: paramsPromise }: { params: 
     );
   }
 
-  const tenantDb = getTenantClient(school.id);
-  
-  const students = await tenantDb.student.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { tier: true },
-  });
+  // Resolve active tier from URL searchParams or cookie fallback
+  const cookieStore = await cookies();
+  const cookieTier = cookieStore.get("activeTier")?.value;
+  const requestedTierParam = searchParams?.tier;
 
-  const leads = await tenantDb.admissionLead.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { tier: true },
-  });
+  const activeTierObj = school.academicTiers.find((t) => {
+    if (requestedTierParam) {
+      return (
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
+        t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+      );
+    }
+    if (cookieTier) {
+      return (
+        t.name.toLowerCase() === cookieTier.toLowerCase() ||
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier)
+      );
+    }
+    return false;
+  }) || school.academicTiers[0];
+
+  const activeTierName = activeTierObj ? activeTierObj.name : "";
+
+  // Dynamically resolve and query the isolated database client
+  const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
+  
+  const [students, leads, classrooms] = await Promise.all([
+    tenantDb.student.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { tier: true },
+    }),
+    tenantDb.admissionLead.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { tier: true },
+    }),
+    tenantDb.classroom.findMany({
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const mappedLeads = leads.map(lead => {
     const nameParts = lead.applicantName.split(" ");
@@ -64,63 +106,74 @@ export default async function StudentsPage({ params: paramsPromise }: { params: 
 
   const allRecords = [...students, ...mappedLeads];
 
-  const academicTiers = await tenantDb.academicTier.findMany({
-    orderBy: { level: "asc" },
-  });
-
   const totalEnrolled = students.filter(s => s.status === "ENROLLED").length;
-  
   const suspendedStudents = students.filter(s => s.status === "SUSPENDED").length;
-  
-  const activeProspects = await tenantDb.admissionLead.count({
-    where: { status: "INQUIRY" }
-  });
-
-  const totalApplicants = await tenantDb.admissionLead.count({
-    where: { status: { in: ["APPLIED", "INTERVIEW", "APPROVED"] } }
-  });
-
-  const alumniCount = await tenantDb.student.count({
-    where: { status: "ALUMNI" }
-  });
+  const activeProspects = leads.filter(l => l.status === "INQUIRY").length;
+  const totalApplicants = leads.filter(l => ["APPLIED", "INTERVIEW", "APPROVED"].includes(l.status)).length;
+  const alumniCount = students.filter(s => s.status === "ALUMNI").length;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      <header>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">
-          Student Roster
-        </h2>
-        <p className="text-slate-500 mt-2 text-lg">
-          Manage all students, update statuses, and view complete records.
-        </p>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100 flex items-center gap-3">
+            <span>Student Roster</span>
+            {activeTierObj && (
+              <span className="text-xs uppercase tracking-wider px-3 py-1 rounded-full font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {activeTierObj.name}
+              </span>
+            )}
+          </h2>
+          <p className="text-slate-500 dark:text-zinc-400 mt-2 text-base md:text-lg">
+            Showing records isolated strictly within the active institution tier.
+          </p>
+        </div>
+
+        {/* Dedicated Physical DB Connection Indicator */}
+        {activeTierObj?.databaseName && (
+          <div className="flex items-center gap-2.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-semibold shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider font-bold block text-emerald-600 dark:text-emerald-400">Isolated Database</span>
+              <span className="font-mono font-bold text-xs">{activeTierObj.databaseName}</span>
+            </div>
+          </div>
+        )}
       </header>
       
       {/* Student Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-green-500">
-          <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
-          <p className="text-3xl font-black text-slate-800">{totalEnrolled}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-green-500">
+          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
+          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{totalEnrolled}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-yellow-500">
-          <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Active Prospects</h3>
-          <p className="text-3xl font-black text-slate-800">{activeProspects}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-yellow-500">
+          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Active Prospects</h3>
+          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{activeProspects}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-indigo-500">
-          <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Applicants</h3>
-          <p className="text-3xl font-black text-slate-800">{totalApplicants}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-indigo-500">
+          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Total Applicants</h3>
+          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{totalApplicants}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-red-500">
-          <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Suspended</h3>
-          <p className="text-3xl font-black text-slate-800">{suspendedStudents}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-red-500">
+          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Suspended</h3>
+          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{suspendedStudents}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-blue-500">
-          <h3 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Alumni</h3>
-          <p className="text-3xl font-black text-slate-800">{alumniCount}</p>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-blue-500">
+          <h3 className="text-slate-500 dark:text-zinc-400 font-semibold text-xs uppercase tracking-wider mb-2 truncate">Alumni</h3>
+          <p className="text-3xl font-black text-slate-800 dark:text-zinc-100">{alumniCount}</p>
         </div>
       </div>
 
-      <StudentTable students={allRecords as any} schoolId={school.id} tiers={academicTiers} />
+      <StudentTable 
+        students={allRecords as any} 
+        schoolId={school.id} 
+        tiers={school.academicTiers}
+        activeTier={activeTierName}
+        activeTierDbName={activeTierObj?.databaseName || null}
+        classrooms={classrooms}
+      />
       
     </div>
   );

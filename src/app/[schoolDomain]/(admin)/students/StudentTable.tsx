@@ -2,21 +2,30 @@
 
 import React, { useState, useTransition } from "react";
 import { Student, AcademicTier } from "@prisma/client";
+import { Layers, Database } from "lucide-react";
 import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
 
 type StudentWithTier = Student & { tier?: AcademicTier | null, isLead?: boolean };
 
+interface StudentTableProps {
+  students: StudentWithTier[];
+  schoolId: string;
+  tiers: AcademicTier[];
+  activeTier?: string;
+  activeTierDbName?: string | null;
+  classrooms?: Array<{ id: string; name: string }>;
+}
+
 export default function StudentTable({ 
   students, 
   schoolId,
-  tiers
-}: { 
-  students: StudentWithTier[], 
-  schoolId: string,
-  tiers: AcademicTier[]
-}) {
+  tiers,
+  activeTier,
+  activeTierDbName,
+  classrooms = [],
+}: StudentTableProps) {
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
 
@@ -31,6 +40,7 @@ export default function StudentTable({
     email: "", 
     status: "ENROLLED", 
     tierId: "", 
+    currentClass: "",
     parentName: "",
     parentPhone: "",
     dynamicFields: {} as Record<string, string> 
@@ -42,12 +52,17 @@ export default function StudentTable({
 
   const openCreateForm = () => {
     setEditingStudentId(null);
+    const matchingTier = tiers.find(t => 
+      activeTier && (t.name.toLowerCase() === activeTier.toLowerCase() || t.name.toLowerCase().includes(activeTier.toLowerCase()))
+    ) || (tiers.length > 0 ? tiers[0] : null);
+
     setFormData({ 
       firstName: "", 
       lastName: "", 
       email: "", 
       status: "ENROLLED", 
-      tierId: tiers.length > 0 ? tiers[0].id : "", 
+      tierId: matchingTier ? matchingTier.id : (tiers.length > 0 ? tiers[0].id : ""), 
+      currentClass: classrooms.length > 0 ? classrooms[0].name : "",
       parentName: "",
       parentPhone: "",
       dynamicFields: {} 
@@ -67,6 +82,7 @@ export default function StudentTable({
       email: student.email || "", 
       status: student.status,
       tierId: student.tierId,
+      currentClass: student.currentClass || "",
       parentName: student.parentName || "",
       parentPhone: student.parentPhone || "",
       dynamicFields: parsedFields
@@ -87,14 +103,15 @@ export default function StudentTable({
     startTransition(async () => {
       const payload = {
         ...formData,
+        currentClass: formData.currentClass || undefined,
         dynamicFields: formData.dynamicFields
       };
       
       let res;
       if (editingStudentId) {
-        res = await updateStudent(schoolId, editingStudentId, payload);
+        res = await updateStudent(schoolId, editingStudentId, payload, activeTier);
       } else {
-        res = await createStudent(schoolId, payload);
+        res = await createStudent(schoolId, payload, activeTier);
       }
       
       if (res?.error) {
@@ -109,7 +126,7 @@ export default function StudentTable({
   const handleDelete = async (studentId: string) => {
     if (confirm("Are you sure you want to delete this student? This action cannot be undone.")) {
       startTransition(async () => {
-        const res = await deleteStudent(schoolId, studentId);
+        const res = await deleteStudent(schoolId, studentId, activeTier);
         if (res?.error) {
           alert(res.error);
         }
@@ -119,7 +136,7 @@ export default function StudentTable({
 
   const handleUpdateStatus = (studentId: string, newStatus: string) => {
     startTransition(() => {
-      updateStudentStatus(schoolId, studentId, newStatus);
+      updateStudentStatus(schoolId, studentId, newStatus, activeTier);
     });
   };
 
@@ -145,7 +162,7 @@ export default function StudentTable({
     if (selectedIds.length > 0) {
       if (confirm(`Are you sure you want to graduate ${selectedIds.length} selected students?`)) {
         startTransition(async () => {
-          const res = await bulkGraduateStudents(schoolId, selectedIds);
+          const res = await bulkGraduateStudents(schoolId, selectedIds, activeTier);
           if (res?.error) alert(res.error);
           else {
             setShowBulkGraduate(false);
@@ -157,7 +174,7 @@ export default function StudentTable({
       if (!bulkClass) return;
       if (confirm(`Are you sure you want to graduate all students in ${bulkClass}?`)) {
         startTransition(async () => {
-          const res = await bulkGraduateClass(schoolId, bulkClass);
+          const res = await bulkGraduateClass(schoolId, bulkClass, activeTier);
           if (res?.error) alert(res.error);
           else setShowBulkGraduate(false);
         });
@@ -214,11 +231,35 @@ export default function StudentTable({
 
   return (
     <div className="space-y-6">
+      {/* Physical Database Isolation Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/50 dark:from-zinc-900 dark:to-zinc-900/50 rounded-xl border border-slate-200/80 dark:border-zinc-800 text-xs">
+        <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300">
+          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            <Layers className="w-3.5 h-3.5" />
+          </span>
+          <span className="font-semibold">
+            Active Tier Scope: <span className="font-bold text-slate-900 dark:text-zinc-100">{activeTier || "Default"}</span>
+          </span>
+          <span className="text-slate-400 dark:text-zinc-600">•</span>
+          <span className="text-slate-500 dark:text-zinc-400">
+            Strict Physical Separation ({filteredStudents.length} {filteredStudents.length === 1 ? 'record' : 'records'})
+          </span>
+        </div>
+
+        {activeTierDbName && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-mono text-[11px] font-semibold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <Database className="w-3 h-3 text-emerald-500" />
+            <span>DB: {activeTierDbName}</span>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <label className="text-sm font-medium text-slate-700">Filter by Status:</label>
+          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Filter by Status:</label>
           <select 
-            className="border border-slate-300 rounded-lg p-2 text-sm bg-white w-full sm:w-auto min-w-[200px]"
+            className="border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-sm bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 w-full sm:w-auto min-w-[200px]"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
@@ -233,7 +274,7 @@ export default function StudentTable({
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <button 
             onClick={() => setShowBulkGraduate(true)}
-            className="w-full sm:w-auto px-4 py-2 bg-slate-200 text-slate-700 font-medium rounded-lg shadow-sm hover:bg-slate-300 transition"
+            className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition"
           >
             {currentBulkLabel}
           </button>
@@ -250,23 +291,23 @@ export default function StudentTable({
       </div>
 
       {showForm && (
-        <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSave} className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
-            <h3 className="text-lg font-semibold text-slate-800">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-zinc-100">
               {editingStudentId ? "Edit Student" : "New Student"}
             </h3>
           </div>
           {errorMsg && (
-            <div className="md:col-span-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm font-medium">
+            <div className="md:col-span-2 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium">
               {errorMsg}
             </div>
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Academic Tier *</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Academic Tier *</label>
             <select 
               required
-              className="w-full border border-slate-300 rounded-lg p-2" 
+              className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" 
               value={formData.tierId} 
               onChange={e => {
                 setFormData({...formData, tierId: e.target.value, dynamicFields: {}});
@@ -279,10 +320,34 @@ export default function StudentTable({
             </select>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Current Class / Grade</label>
+            {classrooms && classrooms.length > 0 ? (
+              <select 
+                className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800"
+                value={formData.currentClass} 
+                onChange={e => setFormData({...formData, currentClass: e.target.value})}
+              >
+                <option value="">Select Class...</option>
+                {classrooms.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input 
+                type="text" 
+                placeholder="e.g. Primary 1 Gold"
+                className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" 
+                value={formData.currentClass} 
+                onChange={e => setFormData({...formData, currentClass: e.target.value})} 
+              />
+            )}
+          </div>
+
           {!editingStudentId && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-              <select className="w-full border border-slate-300 rounded-lg p-2" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+              <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Status</label>
+              <select className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
                 <option value="PROSPECT">Prospect</option>
                 <option value="APPLICANT">Applicant</option>
                 <option value="SCREENED">Screened</option>
@@ -295,16 +360,16 @@ export default function StudentTable({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">First Name *</label>
-            <input required type="text" className="w-full border border-slate-300 rounded-lg p-2" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">First Name *</label>
+            <input required type="text" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Last Name *</label>
-            <input required type="text" className="w-full border border-slate-300 rounded-lg p-2" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Last Name *</label>
+            <input required type="text" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <input type="email" className="w-full border border-slate-300 rounded-lg p-2" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Email</label>
+            <input type="email" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
           </div>
           
           {/* Parent & Emergency Contact (Nursery Only) */}

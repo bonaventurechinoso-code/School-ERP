@@ -1,9 +1,32 @@
 "use server";
 
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import * as jose from "jose";
+
+async function resolveDbForAction(schoolId: string, tierContext?: string, tierId?: string) {
+  let activeTier = tierContext;
+
+  if (!activeTier && tierId) {
+    try {
+      const tier = await basePrisma.academicTier.findUnique({
+        where: { id: tierId },
+        select: { name: true, databaseUrl: true },
+      });
+      if (tier?.name) activeTier = tier.name;
+    } catch {}
+  }
+
+  if (!activeTier) {
+    try {
+      const cookieStore = await cookies();
+      activeTier = cookieStore.get("activeTier")?.value;
+    } catch {}
+  }
+
+  return getPrismaClientForTier(schoolId, activeTier || "");
+}
 
 export async function createStudent(
   schoolId: string,
@@ -11,7 +34,8 @@ export async function createStudent(
     firstName: string; lastName: string; email: string; status: string; tierId: string; dynamicFields?: any;
     admissionNumber?: string; currentClass?: string; dateOfBirth?: Date; stateOfOrigin?: string;
     parentName?: string; parentOccupation?: string; parentEmail?: string; parentPhone?: string; parentWhatsApp?: string;
-  }
+  },
+  tierContext?: string
 ) {
   // RBAC GUARD
   try {
@@ -30,7 +54,7 @@ export async function createStudent(
     return { success: false, error: "HTTP 401 Unauthorized" };
   }
 
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = await resolveDbForAction(schoolId, tierContext, data.tierId);
   
   try {
     const timestampData: any = {};
@@ -86,9 +110,10 @@ export async function updateStudent(
     firstName: string; lastName: string; email: string; tierId: string; dynamicFields?: any;
     admissionNumber?: string; currentClass?: string; dateOfBirth?: Date; stateOfOrigin?: string;
     parentName?: string; parentOccupation?: string; parentEmail?: string; parentPhone?: string; parentWhatsApp?: string;
-  }
+  },
+  tierContext?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = await resolveDbForAction(schoolId, tierContext, data.tierId);
   
   try {
     await tenantDb.student.update({
@@ -119,8 +144,8 @@ export async function updateStudent(
   }
 }
 
-export async function deleteStudent(schoolId: string, studentId: string) {
-  const tenantDb = getTenantClient(schoolId);
+export async function deleteStudent(schoolId: string, studentId: string, tierContext?: string) {
+  const tenantDb = await resolveDbForAction(schoolId, tierContext);
   
   try {
     await tenantDb.student.delete({
@@ -138,9 +163,10 @@ export async function deleteStudent(schoolId: string, studentId: string) {
 export async function updateStudentStatus(
   schoolId: string,
   studentId: string,
-  newStatus: string
+  newStatus: string,
+  tierContext?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = await resolveDbForAction(schoolId, tierContext);
   
   try {
     const data: any = { status: newStatus };
@@ -181,8 +207,8 @@ export async function updateStudentStatus(
   }
 }
 
-export async function bulkGraduateClass(schoolId: string, className: string) {
-  const tenantDb = getTenantClient(schoolId);
+export async function bulkGraduateClass(schoolId: string, className: string, tierContext?: string) {
+  const tenantDb = await resolveDbForAction(schoolId, tierContext);
   try {
     const result = await tenantDb.student.updateMany({
       where: { 
@@ -199,12 +225,12 @@ export async function bulkGraduateClass(schoolId: string, className: string) {
     return { success: true, count: result.count };
   } catch (error: any) {
     console.error("[Server Action] Failed to bulk graduate class:", error);
-    return { success: false, error: error.message || "Failed to graduate class." };
+    return { success: false, error: error.message || "Failed to bulk graduate class." };
   }
 }
 
-export async function bulkGraduateStudents(schoolId: string, studentIds: string[]) {
-  const tenantDb = getTenantClient(schoolId);
+export async function bulkGraduateStudents(schoolId: string, studentIds: string[], tierContext?: string) {
+  const tenantDb = await resolveDbForAction(schoolId, tierContext);
   try {
     const result = await tenantDb.student.updateMany({
       where: { 
