@@ -1,6 +1,7 @@
 import { createSchool, toggleSchoolStatus } from "./actions";
 import Link from "next/link";
 import DeleteSchoolForm from "./DeleteSchoolForm";
+import EditSchoolModal from "./EditSchoolModal";
 import { PhoneInput } from "@/components/PhoneInput";
 import { Server, Users, ShieldCheck, Settings } from "lucide-react";
 
@@ -168,7 +169,7 @@ export default async function AdminDashboardPage() {
                 <tr>
                   <th className="px-4 py-3.5 font-semibold uppercase tracking-wider">School Name</th>
                   <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider">Subdomain</th>
-                  <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider">Metadata Types</th>
+                  <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider">Institution Type / Tier Type</th>
                   <th className="px-3 py-3.5 font-semibold uppercase tracking-wider text-center">Students</th>
                   <th className="px-3 py-3.5 font-semibold uppercase tracking-wider text-center">Staff</th>
                   <th className="px-3.5 py-3.5 font-semibold uppercase tracking-wider text-center">Status</th>
@@ -208,26 +209,30 @@ export default async function AdminDashboardPage() {
                             ) {
                               badgeStyle = "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
                               displayLabel = "Daycare / Nursery";
-                            } else if (tier.name === "PRIMARY_SECONDARY") {
+                            } else if (tier.name === "PRIMARY_SECONDARY" || upperName === "COMBINED PRIMARY & SECONDARY SCHOOL") {
                               badgeStyle = "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
-                              displayLabel = "K-12";
-                            } else if (tier.name === "COMBINED_NURSERY_PRIMARY_SECONDARY") {
+                              displayLabel = "Primary & Secondary School";
+                            } else if (tier.name === "COMBINED_NURSERY_PRIMARY_SECONDARY" || upperName === "COMBINED NURSERY, PRIMARY & SECONDARY") {
                               badgeStyle = "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20";
-                              displayLabel = "Nursery + K-12";
-                            } else if (tier.name === "UNIVERSITY" || tier.name === "POLYTECHNIC" || tier.name === "COLLEGE_OF_EDUCATION") {
+                              displayLabel = "Nursery, Primary & Secondary";
+                            } else if (upperName.includes("UNIVERSITY") || tier.name === "UNIVERSITY") {
                               badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              if (tier.name === "UNIVERSITY") displayLabel = "University";
-                              if (tier.name === "POLYTECHNIC") displayLabel = "Polytechnic";
-                              if (tier.name === "COLLEGE_OF_EDUCATION") displayLabel = "College of Ed";
+                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: University";
+                            } else if (upperName.includes("POLYTECHNIC") || tier.name === "POLYTECHNIC") {
+                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
+                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: Polytechnic";
+                            } else if (upperName.includes("COLLEGE_OF_EDUCATION") || upperName.includes("COLLEGE OF EDUCATION")) {
+                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
+                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: College of Education";
                             } else if (tier.name === "PRIMARY" || upperName === "PRIMARY SCHOOL") {
                               badgeStyle = "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20";
-                              displayLabel = "Primary";
+                              displayLabel = "Primary School";
                             } else if (tier.name === "SECONDARY" || upperName === "SECONDARY SCHOOL") {
                               badgeStyle = "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20";
-                              displayLabel = "Secondary";
-                            } else if (upperName.includes("HIGHER INSTITUTION") || upperName.includes("UNIVERSITY")) {
+                              displayLabel = "Secondary School";
+                            } else if (upperName.includes("HIGHER INSTITUTION")) {
                               badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              displayLabel = "University";
+                              displayLabel = "Higher Institution / University";
                             }
 
                             return (
@@ -251,6 +256,15 @@ export default async function AdminDashboardPage() {
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <EditSchoolModal 
+                            school={{ 
+                              id: school.id, 
+                              name: school.name, 
+                              contactPhone: school.contactPhone, 
+                              subdomain: school.subdomain,
+                              academicTiers: school.academic_tiers || []
+                            }} 
+                          />
                           <form action={toggleSchoolStatus.bind(null, school.id, school.isActive)} className="inline-block">
                             <button 
                               type="submit" 

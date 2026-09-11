@@ -129,3 +129,131 @@ export async function deleteSchool(schoolId: string) {
     console.error(error.message);
   }
 }
+
+export async function updateSchool(schoolId: string, formData: FormData) {
+  const name = formData.get("name") as string;
+  const contactPhone = formData.get("contactPhone") as string;
+
+  if (!name) {
+    console.error("School name cannot be empty.");
+    return;
+  }
+
+  try {
+    await basePrisma.school.update({
+      where: { id: schoolId },
+      data: {
+        name,
+        contactPhone: contactPhone ? contactPhone.trim() : null,
+      }
+    });
+    revalidatePath("/admin");
+  } catch (error: any) {
+    console.error("Update School Error:", error.message);
+  }
+}
+
+export async function updateSchoolWithTiers(
+  schoolId: string, 
+  data: {
+    name: string;
+    contactPhone?: string | null;
+    tiers: Array<{ id?: string; name: string }>;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const { name, contactPhone, tiers } = data;
+
+  if (!name || name.trim() === "") {
+    return { success: false, error: "School name cannot be empty." };
+  }
+
+  if (!tiers || tiers.length === 0) {
+    return { success: false, error: "At least one Institution Type / Tier is required." };
+  }
+
+  try {
+    const result = await basePrisma.$transaction(async (tx) => {
+      // 1. Update basic school info
+      await tx.school.update({
+        where: { id: schoolId },
+        data: {
+          name: name.trim(),
+          contactPhone: contactPhone ? contactPhone.trim() : null,
+        }
+      });
+
+      // 2. Fetch existing tiers for this school
+      const existingTiers = await tx.academicTier.findMany({
+        where: { schoolId },
+        include: {
+          _count: {
+            select: { students: true, admissionLeads: true }
+          }
+        }
+      });
+
+      const existingTierIds = new Set(existingTiers.map(t => t.id));
+      const submittedTierIds = new Set(tiers.filter(t => t.id).map(t => t.id as string));
+
+      // 3. Determine tiers to delete
+      const tiersToDelete = existingTiers.filter(t => !submittedTierIds.has(t.id));
+      for (const tier of tiersToDelete) {
+        if (tier._count.students > 0 || tier._count.admissionLeads > 0) {
+          throw new Error(
+            `Cannot remove tier "${tier.name}" because it has ${tier._count.students} active student(s) and ${tier._count.admissionLeads} admission lead(s). Please reassign them before removing this tier.`
+          );
+        }
+        await tx.academicTier.delete({
+          where: { id: tier.id }
+        });
+      }
+
+      // 4. Update existing tiers or create new ones
+      for (let i = 0; i < tiers.length; i++) {
+        const tier = tiers[i];
+        const trimmedName = tier.name.trim();
+        if (!trimmedName) continue;
+
+        if (tier.id && existingTierIds.has(tier.id)) {
+          // Update existing tier
+          await tx.academicTier.update({
+            where: { id: tier.id },
+            data: {
+              name: trimmedName,
+              level: i + 1,
+            }
+          });
+        } else {
+          // Check if a tier with this name already exists for this school
+          const duplicate = existingTiers.find(t => t.name.toLowerCase() === trimmedName.toLowerCase() && !tiersToDelete.some(td => td.id === t.id));
+          if (duplicate) {
+            await tx.academicTier.update({
+              where: { id: duplicate.id },
+              data: {
+                name: trimmedName,
+                level: i + 1,
+              }
+            });
+          } else {
+            // Create new tier
+            await tx.academicTier.create({
+              data: {
+                schoolId,
+                name: trimmedName,
+                level: i + 1,
+              }
+            });
+          }
+        }
+      }
+
+      return { success: true };
+    });
+
+    revalidatePath("/admin");
+    return result;
+  } catch (error: any) {
+    console.error("Update School With Tiers Error:", error.message);
+    return { success: false, error: error.message || "Failed to update school." };
+  }
+}
