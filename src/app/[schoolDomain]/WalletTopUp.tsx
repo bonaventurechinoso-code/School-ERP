@@ -23,7 +23,10 @@ export default function WalletTopUp({
   };
   const planName = planMap[tenant?.subscriptionPlan || "BASIC"] || "Basic Education Setup";
 
-  if (tenant?.userRole !== "ADMIN" && tenant?.userRole !== "BURSAR") {
+  const userRole = (tenant?.userRole || "").toUpperCase();
+  const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
+
+  if (!isAuthorizedAdmin) {
     return null;
   }
 

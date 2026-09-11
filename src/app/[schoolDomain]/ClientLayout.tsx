@@ -54,7 +54,8 @@ export default function ClientLayout({
     { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
   ];
 
-  const userRole = (tenant.userRole || "ADMIN").toUpperCase();
+  const userRole = (tenant.userRole || "").toUpperCase();
+  const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
 
   const links = (() => {
     switch (userRole) {
@@ -128,6 +129,13 @@ export default function ClientLayout({
             );
           })}
         </nav>
+
+        {/* Bottom Sidebar - Wallet Balance Container (SUPER_ADMIN & SCHOOL_ADMIN only) */}
+        {isAuthorizedAdmin && headerContent && (
+          <div className="p-3 border-t border-slate-800/60 bg-slate-900/60 mt-auto hidden md:block">
+            {headerContent}
+          </div>
+        )}
       </aside>
 
       {/* Main Content */}
@@ -153,9 +161,11 @@ export default function ClientLayout({
 
           {/* Upper top-right navigation navbar utility bar */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            <div className="w-full sm:w-auto">
-              {headerContent}
-            </div>
+            {isAuthorizedAdmin && headerContent && (
+              <div className="w-full sm:w-auto md:hidden">
+                {headerContent}
+              </div>
+            )}
             <div className="hidden md:flex border-l border-slate-200 dark:border-zinc-700 pl-3 items-center">
               <ThemeToggle />
             </div>
