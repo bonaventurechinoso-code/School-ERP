@@ -1,7 +1,10 @@
 import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
+import { getSession } from "@/lib/auth";
+import { sanitizeTierSlug, formatTierBadgeCode, isHigherEdTier } from "@/lib/tenant-tier-utils";
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -23,7 +26,7 @@ export default async function TenantStudentPortalPage({
   searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }>;
-  searchParams: Promise<{ denied?: string }>;
+  searchParams: Promise<{ denied?: string; tier?: string }>;
 }) {
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
@@ -40,7 +43,45 @@ export default async function TenantStudentPortalPage({
     return notFound();
   }
 
-  const primaryColor = (school as any).branding?.primaryColor || "#4f46e5";
+  // Resolve session and active tier context
+  const cookieStore = await cookies();
+  const cookieTier = cookieStore.get("activeTier")?.value;
+  const requestedTierParam = searchParams.tier;
+  const session = await getSession();
+  const sessionTier = session?.activeTiers?.[0];
+
+  const activeTierObj = school.academicTiers.find((t) => {
+    if (requestedTierParam) {
+      return (
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
+        t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+      );
+    }
+    if (sessionTier) {
+      return (
+        t.name.toLowerCase() === sessionTier.toLowerCase() ||
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(sessionTier)
+      );
+    }
+    if (cookieTier) {
+      return (
+        t.name.toLowerCase() === cookieTier.toLowerCase() ||
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier)
+      );
+    }
+    return false;
+  }) || school.academicTiers[0] || null;
+
+  const activeTierName = activeTierObj?.name || requestedTierParam || sessionTier || cookieTier || (school.academicTiers[0]?.name ?? "Primary School");
+  const isHigherEd = activeTierName
+    ? isHigherEdTier(activeTierName)
+    : school.academicTiers.length > 0
+      ? school.academicTiers.every((t) => isHigherEdTier(t.name))
+      : false;
+
+  const currentYear = new Date().getFullYear();
+  const tierBadgeSuffix = formatTierBadgeCode(activeTierName);
+  const studentDisplayId = `STU-${currentYear}-${tierBadgeSuffix}`;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors duration-200">
@@ -118,32 +159,47 @@ export default async function TenantStudentPortalPage({
                 Welcome to your Student Workspace
               </h2>
               <p className="text-sm text-indigo-200 max-w-xl">
-                Access your personalized class timetable, upcoming term assessments, published report cards, and attendance records.
+                Access your personalized class timetable, upcoming term assessments, published report cards & results, and attendance records.
               </p>
 
-              {/* Academic Tiers Available */}
+              {/* Academic Tiers Available with interactive selection */}
               {school.academicTiers.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 mt-4 pt-2">
                   <span className="text-xs text-indigo-300/70 font-semibold uppercase tracking-wider">Available Tiers:</span>
-                  {school.academicTiers.map((tier) => (
-                    <span 
-                      key={tier.id}
-                      className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-indigo-100 border border-white/15 backdrop-blur-xs"
-                    >
-                      {tier.name}
-                    </span>
-                  ))}
+                  {school.academicTiers.map((tier) => {
+                    const isSelected = activeTierObj?.id === tier.id || activeTierName.toLowerCase() === tier.name.toLowerCase();
+                    return (
+                      <Link 
+                        key={tier.id}
+                        href={`/${school.subdomain}/portal/student?tier=${sanitizeTierSlug(tier.name)}`}
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition ${
+                          isSelected
+                            ? "bg-white text-indigo-950 shadow-md ring-2 ring-sky-400/80 font-black"
+                            : "bg-white/10 hover:bg-white/20 text-indigo-100 border border-white/15 backdrop-blur-xs"
+                        }`}
+                      >
+                        {tier.name}
+                        {isSelected && <span className="ml-1.5 text-[10px] text-indigo-600 font-extrabold">• Active</span>}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500 text-white flex items-center justify-center font-bold text-lg">
-                <User className="w-6 h-6" />
+            {/* Light Blue Student ID Badge Component */}
+            <div className="flex items-center gap-3.5 bg-sky-500/15 border border-sky-400/25 backdrop-blur-md px-4 py-3 rounded-2xl shrink-0 shadow-xs">
+              <div className="w-12 h-12 rounded-xl bg-sky-500/80 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                <User className="w-6 h-6 text-sky-100" />
               </div>
               <div>
-                <p className="text-xs text-indigo-200 uppercase font-bold tracking-wider">Student ID</p>
-                <p className="text-sm font-black text-white">STU-2026-PRIMARY</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[11px] text-sky-200 uppercase font-bold tracking-wider">Student ID</p>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-400/20 text-sky-100 font-extrabold uppercase border border-sky-400/30">
+                    {tierBadgeSuffix}
+                  </span>
+                </div>
+                <p className="text-sm font-black text-white font-mono tracking-wide">{studentDisplayId}</p>
               </div>
             </div>
           </div>
@@ -153,7 +209,9 @@ export default async function TenantStudentPortalPage({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Enrolled Courses</span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {isHigherEd ? "Enrolled Courses" : "Enrolled Subjects"}
+              </span>
               <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">8</p>
@@ -171,11 +229,17 @@ export default async function TenantStudentPortalPage({
 
           <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Current Term GPA</span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {isHigherEd ? "Current Term GPA" : "Current Term Report Card / Result"}
+              </span>
               <Award className="w-4 h-4 text-amber-500" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">3.88</p>
-            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-1 block">First Class Standing</span>
+            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+              {isHigherEd ? "3.88" : "Grade A (88%)"}
+            </p>
+            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-1 block">
+              {isHigherEd ? "First Class Standing" : "Top Academic Standing"}
+            </span>
           </div>
 
           <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
@@ -211,26 +275,28 @@ export default async function TenantStudentPortalPage({
 
             <div className="p-4 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition group cursor-pointer">
               <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                Published Report Cards
+                Published Report Cards & Results
               </h4>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mb-3">
-                Download verified termly report cards and teacher remarks.
+                Download verified termly report cards, results, and teacher remarks.
               </p>
               <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>Download Cards</span>
+                <span>Download Cards & Results</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
 
             <div className="p-4 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition group cursor-pointer">
               <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                Transcripts & Scores
+                {isHigherEd ? "Transcripts & Scores" : "Continuous Assessments & Results"}
               </h4>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mb-3">
-                Cumulative academic performance records across completed tiers.
+                {isHigherEd 
+                  ? "Cumulative academic performance records across completed tiers."
+                  : "Continuous assessment (CA) tracking, terminal exam scores, and automated report sheets."}
               </p>
               <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>View Transcripts</span>
+                <span>{isHigherEd ? "View Transcripts" : "View Results"}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -241,3 +307,4 @@ export default async function TenantStudentPortalPage({
     </div>
   );
 }
+

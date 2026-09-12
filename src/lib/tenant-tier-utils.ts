@@ -30,3 +30,51 @@ export function generateTierDbName(subdomain: string, tierName: string): string 
   const tierSlug = sanitizeTierSlug(tierName);
   return `${cleanSubdomain}_${tierSlug}`;
 }
+
+/**
+ * Resolves an uppercase short code/identifier for badge display.
+ * e.g. "Daycare / Nursery" -> "NURSERY", "Primary School" -> "PRIMARY", "Secondary School" -> "SECONDARY"
+ */
+export function formatTierBadgeCode(tierName?: string): string {
+  if (!tierName) return "PRIMARY";
+  const upper = tierName.toUpperCase().trim();
+  if (upper.includes("DAYCARE") || upper.includes("NURSERY") || upper.includes("CRÈCHE") || upper.includes("CRECHE")) {
+    return "NURSERY";
+  }
+  if (upper.includes("PRIMARY") && upper.includes("SECONDARY")) {
+    return "K12";
+  }
+  if (upper.includes("PRIMARY") || upper.includes("ELEMENTARY") || upper.includes("BASIC")) {
+    return "PRIMARY";
+  }
+  if (upper.includes("SECONDARY") || upper.includes("HIGH SCHOOL") || upper.includes("JSS") || upper.includes("SSS")) {
+    return "SECONDARY";
+  }
+  if (upper.includes("UNIVERSITY")) {
+    return "UNIVERSITY";
+  }
+  if (upper.includes("POLYTECHNIC")) {
+    return "POLYTECHNIC";
+  }
+  if (upper.includes("COLLEGE")) {
+    return "COLLEGE";
+  }
+  
+  return tierName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12) || "PRIMARY";
+}
+
+/**
+ * Checks if a given tier name corresponds to Higher Education (collegiate) vs K-12.
+ */
+export function isHigherEdTier(tierName?: string): boolean {
+  if (!tierName) return false;
+  const upper = tierName.toUpperCase();
+  return (
+    upper.includes("UNIVERSITY") ||
+    upper.includes("POLYTECHNIC") ||
+    upper.includes("COLLEGE") ||
+    upper.includes("HIGHER ED") ||
+    upper.includes("TERTIARY")
+  );
+}
+
