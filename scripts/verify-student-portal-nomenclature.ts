@@ -108,11 +108,26 @@ async function runVerification() {
   assert(uniAssessmentAction === "View Transcripts", "Higher Ed dynamically displays 'View Transcripts'");
   assert(uniStudentId === `STU-${currentYear}-UNIVERSITY`, `Higher Ed Student ID renders 'STU-${currentYear}-UNIVERSITY'`);
 
-  // 4. Verify Banner Copy Typos
-  console.log("\n--- 4. Verifying Banner Copy Typo Correction ---");
-  const bannerCopy = "Access your personalized class timetable, upcoming term assessments, published report cards & results, and attendance records.";
+  // 4. Verify Banner Copy & Layout Simplification
+  console.log("\n--- 4. Verifying Banner Copy & Layout Simplification ---");
+  const bannerCopy = "Access your personalized class timetable, upcoming term assessments, published report cards, results, and attendance records.";
   assert(!bannerCopy.includes("publshed"), "Banner copy does NOT contain typo 'publshed'");
-  assert(bannerCopy.includes("published report cards"), "Banner copy contains correctly spelled 'published report cards'");
+  assert(bannerCopy.includes("published report cards, results,"), "Banner copy contains 'published report cards, results, and attendance records.'");
+
+  // Read actual source files to verify removal of redundant elements
+  const fs = await import("fs");
+  const path = await import("path");
+  const tenantPagePath = path.resolve(__dirname, "../src/app/[schoolDomain]/portal/student/page.tsx");
+  const fallbackPagePath = path.resolve(__dirname, "../src/app/portal/student/page.tsx");
+  
+  const tenantPageSrc = fs.readFileSync(tenantPagePath, "utf-8");
+  const fallbackPageSrc = fs.readFileSync(fallbackPagePath, "utf-8");
+
+  assert(!tenantPageSrc.includes("Active Student Enrollment"), "Tenant portal does NOT contain 'Active Student Enrollment' status embed");
+  assert(!fallbackPageSrc.includes("Active Student Enrollment"), "Fallback portal does NOT contain 'Active Student Enrollment' status embed");
+  assert(!tenantPageSrc.includes("Available Tiers:"), "Tenant portal does NOT contain 'Available Tiers:' display box");
+  assert(tenantPageSrc.includes(bannerCopy), "Tenant portal contains the cleaned description sentence");
+  assert(fallbackPageSrc.includes(bannerCopy), "Fallback portal contains the cleaned description sentence");
 
   console.log("\n==================================================================");
   console.log(`🌟 RESULTS: ${passedTests}/${totalTests} TESTS PASSED SUCCESSFULLY!`);
@@ -124,3 +139,4 @@ runVerification()
     console.error("Verification failed:", err);
     process.exit(1);
   });
+

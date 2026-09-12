@@ -92,15 +92,11 @@ export default async function StudentPortalPage({
           <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 text-xs font-bold mb-3 border border-indigo-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Active Student Enrollment</span>
-              </div>
               <h2 className="text-2xl sm:text-4xl font-black tracking-tight mb-2">
                 Welcome to your Student Workspace
               </h2>
-              <p className="text-sm text-indigo-200 max-w-xl">
-                Access your personalized class timetable, upcoming term assessments, published report cards & results, and attendance records.
+              <p className="text-sm text-indigo-200 max-w-xl leading-relaxed">
+                Access your personalized class timetable, upcoming term assessments, published report cards, results, and attendance records.
               </p>
             </div>
 

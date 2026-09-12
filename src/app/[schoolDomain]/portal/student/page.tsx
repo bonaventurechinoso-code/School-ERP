@@ -151,40 +151,12 @@ export default async function TenantStudentPortalPage({
           <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 text-xs font-bold mb-3 border border-indigo-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Active Student Enrollment • {school.name}</span>
-              </div>
               <h2 className="text-2xl sm:text-4xl font-black tracking-tight mb-2">
                 Welcome to your Student Workspace
               </h2>
-              <p className="text-sm text-indigo-200 max-w-xl">
-                Access your personalized class timetable, upcoming term assessments, published report cards & results, and attendance records.
+              <p className="text-sm text-indigo-200 max-w-xl leading-relaxed">
+                Access your personalized class timetable, upcoming term assessments, published report cards, results, and attendance records.
               </p>
-
-              {/* Academic Tiers Available with interactive selection */}
-              {school.academicTiers.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 mt-4 pt-2">
-                  <span className="text-xs text-indigo-300/70 font-semibold uppercase tracking-wider">Available Tiers:</span>
-                  {school.academicTiers.map((tier) => {
-                    const isSelected = activeTierObj?.id === tier.id || activeTierName.toLowerCase() === tier.name.toLowerCase();
-                    return (
-                      <Link 
-                        key={tier.id}
-                        href={`/${school.subdomain}/portal/student?tier=${sanitizeTierSlug(tier.name)}`}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition ${
-                          isSelected
-                            ? "bg-white text-indigo-950 shadow-md ring-2 ring-sky-400/80 font-black"
-                            : "bg-white/10 hover:bg-white/20 text-indigo-100 border border-white/15 backdrop-blur-xs"
-                        }`}
-                      >
-                        {tier.name}
-                        {isSelected && <span className="ml-1.5 text-[10px] text-indigo-600 font-extrabold">• Active</span>}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
             {/* Light Blue Student ID Badge Component */}
