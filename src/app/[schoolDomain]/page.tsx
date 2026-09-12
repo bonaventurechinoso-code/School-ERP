@@ -2,7 +2,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
-import { Building2, Phone, Mail, ArrowRight } from "lucide-react";
+import { Building2, Phone, Mail, ArrowRight, GraduationCap } from "lucide-react";
 
 export default async function PublicGuestPortalPage({
   params,
@@ -97,22 +97,33 @@ export default async function PublicGuestPortalPage({
       
       {/* Top Navigation Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex justify-between items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md shrink-0">
               <Building2 className="w-6 h-6" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">{school.name}</h1>
-              <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest">Online Admissions Portal</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">{school.name}</h1>
+              <p className="text-[11px] sm:text-xs font-semibold text-blue-600 uppercase tracking-widest truncate">Academic & Student Admissions Portal</p>
             </div>
           </div>
-          <Link 
-            href={`/${school.subdomain}/login`}
-            className="hidden md:inline-flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
-          >
-            Staff Portal <ArrowRight className="w-4 h-4" />
-          </Link>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <Link 
+              href={`/${school.subdomain}/portal/student`}
+              className="inline-flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 text-xs sm:text-sm border border-indigo-500"
+            >
+              <GraduationCap className="w-4 h-4 text-indigo-200" />
+              <span>Student Portal</span>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </Link>
+            <Link 
+              href={`/${school.subdomain}/login`}
+              className="inline-flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-xs sm:text-sm border border-slate-800"
+            >
+              <span>Staff Portal</span>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -150,6 +161,32 @@ export default async function PublicGuestPortalPage({
               >
                 Contact Us
               </a>
+            </div>
+
+            {/* Direct Gateway Badges */}
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
+              <Link 
+                href={`/${school.subdomain}/portal/student`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 transition backdrop-blur-xs font-semibold"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Student Workspace</span>
+              </Link>
+              <span className="text-slate-600 hidden sm:inline">•</span>
+              <Link 
+                href={`/${school.subdomain}/login`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/20 transition backdrop-blur-xs font-semibold"
+              >
+                <span>Staff & Faculty Sign In</span>
+              </Link>
+              <span className="text-slate-600 hidden sm:inline">•</span>
+              <Link 
+                href={`/${school.subdomain}/apply`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-400/30 transition backdrop-blur-xs font-semibold"
+              >
+                <span>New Applicant Enrollment</span>
+              </Link>
             </div>
           </div>
         </div>
@@ -201,8 +238,25 @@ export default async function PublicGuestPortalPage({
               <h2 className="text-xl font-bold text-white">{school.name}</h2>
             </div>
             <p className="text-sm text-slate-400 max-w-sm mb-6 leading-relaxed">
-              Committed to providing world-class education, shaping the minds of tomorrow, and fostering an inclusive academic community.
+              Unified institutional portal servicing student academic workspaces, staff operations, and online admissions enrollment.
             </p>
+            <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
+              <Link
+                href={`/${school.subdomain}/portal/student`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Student Portal</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+              <Link
+                href={`/${school.subdomain}/login`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 text-xs font-semibold transition-colors"
+              >
+                <span>Staff Portal</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
           </div>
 
           <div className="bg-white/5 p-8 rounded-2xl border border-white/10 backdrop-blur-sm">
@@ -236,7 +290,7 @@ export default async function PublicGuestPortalPage({
         </div>
         
         <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-slate-800 text-center text-sm text-slate-500">
-          <p>&copy; {new Date().getFullYear()} {school.name}. All rights reserved. Powered by SchoolERP.</p>
+          <p>&copy; {new Date().getFullYear()} {school.name}. All rights reserved. Unified Student, Staff & Admissions Portal • Powered by SchoolERP.</p>
         </div>
       </footer>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
 import { Lock, Mail, ArrowRight, Building2, Eye, EyeOff } from "lucide-react";
@@ -31,14 +32,21 @@ export default function TenantLoginPage() {
 
       if (res.ok) {
         // Extract validated role and schoolDomain from payload
-        const { role, schoolDomain } = data;
+        const { role, schoolDomain: targetDomain } = data;
         
-        if (!role || !schoolDomain) {
+        if (!role || !targetDomain) {
           throw new Error("Unauthorized access");
         }
 
-        // Redirection to the admin portal
-        router.push(`/${schoolDomain}/dashboard`);
+        // Role-based smart routing
+        const canonicalRole = (role || "").toUpperCase();
+        if (canonicalRole === "STUDENT") {
+          router.push(`/${targetDomain}/portal/student`);
+        } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
+          router.push(`/${targetDomain}/portal/staff`);
+        } else {
+          router.push(`/${targetDomain}/dashboard`);
+        }
       } else {
         if (res.status === 401 || res.status === 403) {
           throw new Error(data.error || "Unauthorized access");
@@ -133,6 +141,19 @@ export default function TenantLoginPage() {
             {!isSubmitting && <ArrowRight className="w-5 h-5" />}
           </button>
         </form>
+
+        <div className="mt-6 pt-6 border-t border-slate-800/80 text-center space-y-2">
+          <p className="text-slate-400 text-xs font-medium">
+            Are you an enrolled student?
+          </p>
+          <Link
+            href={`/${tenant?.subdomain || ""}/portal/student`}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+          >
+            <span>Access Student Learning Portal</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
 
         <div className="mt-8 text-center">
           <p className="text-slate-500 text-xs">

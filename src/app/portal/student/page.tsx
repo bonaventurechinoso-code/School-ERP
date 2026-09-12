@@ -6,10 +6,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export default async function StudentPortalPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ denied?: string }>;
+  searchParams: Promise<{ denied?: string; schoolDomain?: string; school?: string }>;
 }) {
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
+  const schoolParam = searchParams.schoolDomain || searchParams.school || "";
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors duration-200">
@@ -20,7 +21,14 @@ export default async function StudentPortalPage({
             <GraduationCap className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-black text-lg tracking-tight text-slate-900 dark:text-white leading-tight">Student Portal</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-black text-lg tracking-tight text-slate-900 dark:text-white leading-tight">Student Portal</h1>
+              {schoolParam && (
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 uppercase">
+                  {schoolParam}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Academic Workspace & Learning Records</p>
           </div>
         </div>

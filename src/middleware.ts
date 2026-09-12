@@ -40,6 +40,7 @@ export async function middleware(req: NextRequest) {
   // Bypass dedicated portals, public pages, and auth endpoints from administrative interception
   const isPublicOrPortalPath = 
     path.startsWith('/portal/') || 
+    path.includes('/portal/') ||
     path === '/access-denied' || 
     path.includes('/login') || 
     path.includes('/apply') || 
