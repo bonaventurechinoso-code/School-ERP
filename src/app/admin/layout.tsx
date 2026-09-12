@@ -54,17 +54,17 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 flex flex-col transition-colors duration-200">
-      <header className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
-        <h1 className="text-xl font-bold tracking-wide">Platform Super-Admin</h1>
+      <header className="bg-slate-900 text-white px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-md sticky top-0 z-30">
+        <h1 className="text-base sm:text-xl font-bold tracking-wide truncate mr-2">Platform Super-Admin</h1>
         {/* Upper top-right navigation navbar utility bar Theme Toggle */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="bg-slate-800 rounded-full border border-slate-700">
             <ThemeToggle />
           </div>
         </div>
       </header>
       
-      <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-3.5 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
         {children}
       </main>
     </div>

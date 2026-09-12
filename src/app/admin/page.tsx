@@ -25,6 +25,62 @@ const getTenantUrl = (subdomain: string) => {
   return `https://${subdomain}.schoolerp.com/dashboard`;
 };
 
+function getTierBadge(tierName: string) {
+  const upperName = (tierName || "").toUpperCase();
+  if (
+    upperName === "DAYCARE" ||
+    upperName === "NURSERY" ||
+    upperName === "DAYCARE / NURSERY" ||
+    upperName === "DAY CARE / NURSERY" ||
+    upperName === "NURSERY / EARLY CARE / DAYCARE" ||
+    upperName === "NURSERY / DAYCARE"
+  ) {
+    return {
+      style: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
+      label: "Daycare / Nursery",
+    };
+  } else if (upperName.includes("PRIMARY & SECONDARY") || upperName === "PRIMARY_SECONDARY" || upperName === "COMBINED PRIMARY & SECONDARY SCHOOL") {
+    return {
+      style: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+      label: "Primary & Secondary School",
+    };
+  } else if (upperName.includes("COMBINED") && upperName.includes("NURSERY")) {
+    return {
+      style: "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
+      label: "Nursery, Primary & Secondary",
+    };
+  } else if (upperName.includes("UNIVERSITY") || upperName === "UNIVERSITY") {
+    return {
+      style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+      label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: University",
+    };
+  } else if (upperName.includes("POLYTECHNIC") || upperName === "POLYTECHNIC") {
+    return {
+      style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+      label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: Polytechnic",
+    };
+  } else if (upperName.includes("COLLEGE")) {
+    return {
+      style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+      label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: College of Education",
+    };
+  } else if (upperName.includes("PRIMARY") || upperName === "PRIMARY SCHOOL") {
+    return {
+      style: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+      label: "Primary School",
+    };
+  } else if (upperName.includes("SECONDARY") || upperName === "SECONDARY SCHOOL") {
+    return {
+      style: "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20",
+      label: "Secondary School",
+    };
+  }
+  return {
+    style: "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700",
+    label: tierName,
+  };
+}
+
 import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function AdminDashboardPage() {
@@ -66,10 +122,10 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300">
           <div className="absolute -right-4 -bottom-4 p-4 opacity-5 group-hover:scale-110 group-hover:opacity-10 transition-all duration-500">
-            <Server className="w-32 h-32 text-indigo-600" />
+            <Server className="w-28 sm:w-32 h-28 sm:h-32 text-indigo-600" />
           </div>
           <div className="relative z-10 flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Total Tenants</h3>
@@ -77,12 +133,12 @@ export default async function AdminDashboardPage() {
               <Server className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </div>
           </div>
-          <p className="text-4xl font-black text-slate-900 dark:text-white mt-4 relative z-10">{schools.length}</p>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white mt-4 relative z-10 truncate">{schools.length}</p>
         </div>
 
-        <div className="p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+        <div className="p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300">
           <div className="absolute -right-4 -bottom-4 p-4 opacity-5 group-hover:scale-110 group-hover:opacity-10 transition-all duration-500">
-            <Users className="w-32 h-32 text-blue-600" />
+            <Users className="w-28 sm:w-32 h-28 sm:h-32 text-blue-600" />
           </div>
           <div className="relative z-10 flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Active Students</h3>
@@ -90,12 +146,12 @@ export default async function AdminDashboardPage() {
               <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
-          <p className="text-4xl font-black text-slate-900 dark:text-white mt-4 relative z-10">{totalStudents}</p>
+          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white mt-4 relative z-10 truncate">{totalStudents}</p>
         </div>
 
-        <div className="p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+        <div className="p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative overflow-hidden group hover:shadow-md transition-all duration-300 sm:col-span-2 lg:col-span-1">
           <div className="absolute -right-4 -bottom-4 p-4 opacity-5 group-hover:scale-110 group-hover:opacity-10 transition-all duration-500">
-            <ShieldCheck className="w-32 h-32 text-emerald-600" />
+            <ShieldCheck className="w-28 sm:w-32 h-28 sm:h-32 text-emerald-600" />
           </div>
           <div className="relative z-10 flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Platform Status</h3>
@@ -105,7 +161,7 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="flex items-center space-x-3 mt-4 relative z-10">
             <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.8)]"></div>
-            <p className="text-3xl font-black text-slate-900 dark:text-white">Online</p>
+            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">Online</p>
           </div>
         </div>
       </div>
@@ -158,12 +214,19 @@ export default async function AdminDashboardPage() {
         </section>
 
         {/* TENANTS DIRECTORY */}
-        <section className="p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-8 2xl:col-span-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col">
-          <h3 className="text-xl font-bold mb-6 tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <Server className="w-5 h-5 text-blue-500" />
-            Registered Tenants
-          </h3>
-          <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-zinc-800/80 shadow-sm flex-1">
+        <section className="p-4 sm:p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-8 2xl:col-span-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <h3 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              <Server className="w-5 h-5 text-blue-500" />
+              Registered Tenants
+            </h3>
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+              {schools.length} {schools.length === 1 ? 'School' : 'Schools'}
+            </span>
+          </div>
+
+          {/* DESKTOP TABLE VIEW (md+) */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-100 dark:border-zinc-800/80 shadow-sm flex-1">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-xs">
                 <tr>
@@ -195,49 +258,10 @@ export default async function AdminDashboardPage() {
                       <td className="px-3.5 py-3.5">
                         <div className="flex flex-wrap gap-1">
                           {school.academic_tiers?.map((tier: any) => {
-                            let badgeStyle = "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700";
-                            let displayLabel = tier.name;
-                            
-                            const upperName = (tier.name || "").toUpperCase();
-                            if (
-                              upperName === "DAYCARE" ||
-                              upperName === "NURSERY" ||
-                              upperName === "DAYCARE / NURSERY" ||
-                              upperName === "DAY CARE / NURSERY" ||
-                              upperName === "NURSERY / EARLY CARE / DAYCARE" ||
-                              upperName === "NURSERY / DAYCARE"
-                            ) {
-                              badgeStyle = "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
-                              displayLabel = "Daycare / Nursery";
-                            } else if (tier.name === "PRIMARY_SECONDARY" || upperName === "COMBINED PRIMARY & SECONDARY SCHOOL") {
-                              badgeStyle = "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
-                              displayLabel = "Primary & Secondary School";
-                            } else if (tier.name === "COMBINED_NURSERY_PRIMARY_SECONDARY" || upperName === "COMBINED NURSERY, PRIMARY & SECONDARY") {
-                              badgeStyle = "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20";
-                              displayLabel = "Nursery, Primary & Secondary";
-                            } else if (upperName.includes("UNIVERSITY") || tier.name === "UNIVERSITY") {
-                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: University";
-                            } else if (upperName.includes("POLYTECHNIC") || tier.name === "POLYTECHNIC") {
-                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: Polytechnic";
-                            } else if (upperName.includes("COLLEGE_OF_EDUCATION") || upperName.includes("COLLEGE OF EDUCATION")) {
-                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              displayLabel = upperName.includes("HIGHER ED") ? tier.name : "Higher Ed: College of Education";
-                            } else if (tier.name === "PRIMARY" || upperName === "PRIMARY SCHOOL") {
-                              badgeStyle = "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20";
-                              displayLabel = "Primary School";
-                            } else if (tier.name === "SECONDARY" || upperName === "SECONDARY SCHOOL") {
-                              badgeStyle = "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20";
-                              displayLabel = "Secondary School";
-                            } else if (upperName.includes("HIGHER INSTITUTION")) {
-                              badgeStyle = "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
-                              displayLabel = "Higher Institution / University";
-                            }
-
+                            const badge = getTierBadge(tier.name);
                             return (
-                              <span key={tier.id} className={`${badgeStyle} text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border shadow-sm`}>
-                                {displayLabel}
+                              <span key={tier.id} className={`${badge.style} text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border shadow-sm`}>
+                                {badge.label}
                               </span>
                             );
                           })}
@@ -286,6 +310,97 @@ export default async function AdminDashboardPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* MOBILE CARDS VIEW (< md) - Zero Features Dropped */}
+          <div className="md:hidden space-y-3.5">
+            {schools.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 dark:text-zinc-500 italic bg-slate-50 dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
+                No tenants registered yet. Use the form above to provision one.
+              </div>
+            ) : (
+              schools.map(school => (
+                <div 
+                  key={school.id} 
+                  className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3 transition-shadow hover:shadow-md"
+                >
+                  {/* Card Header: School Name & Status Badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-base truncate">
+                        {school.name}
+                      </h4>
+                      <a 
+                        href={getTenantUrl(school.subdomain)} 
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-mono inline-block mt-0.5"
+                      >
+                        {school.subdomain}.schoolerp.com
+                      </a>
+                    </div>
+                    <span className={`inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${school.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'}`}>
+                      {school.isActive ? (
+                        <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> ACTIVE</>
+                      ) : (
+                        <><span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1"></span> SUSPENDED</>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Academic Tiers */}
+                  {school.academic_tiers && school.academic_tiers.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {school.academic_tiers.map((tier: any) => {
+                        const badge = getTierBadge(tier.name);
+                        return (
+                          <span key={tier.id} className={`${badge.style} text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border shadow-sm`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Counts Grid: Students & Staff */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-950/60 border border-slate-100 dark:border-zinc-800/40">
+                      <span className="text-slate-500 dark:text-zinc-400 font-medium">Students:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-zinc-100">{school.students_count || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-950/60 border border-slate-100 dark:border-zinc-800/40">
+                      <span className="text-slate-500 dark:text-zinc-400 font-medium">Staff:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-zinc-100">{school.staff_count || 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Edit, Toggle Status, Delete */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+                    <EditSchoolModal 
+                      school={{ 
+                        id: school.id, 
+                        name: school.name, 
+                        contactPhone: school.contactPhone, 
+                        subdomain: school.subdomain,
+                        academicTiers: school.academic_tiers || []
+                      }} 
+                    />
+                    <form action={toggleSchoolStatus.bind(null, school.id, school.isActive)} className="inline-block">
+                      <button 
+                        type="submit" 
+                        title={school.isActive ? "Suspend Tenant" : "Activate Tenant"}
+                        className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border shadow-sm transition-all duration-150 outline-none focus:ring-2 cursor-pointer ${
+                          school.isActive 
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20 focus:ring-amber-400' 
+                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20 focus:ring-emerald-400'
+                        }`}
+                      >
+                        {school.isActive ? "SUSPEND" : "ACTIVATE"}
+                      </button>
+                    </form>
+                    <DeleteSchoolForm schoolId={school.id} />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </div>

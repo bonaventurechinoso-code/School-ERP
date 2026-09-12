@@ -44,34 +44,34 @@ export default function TenantDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-200">
       
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="min-w-0">
           <h2 
-            className="text-2xl md:text-3xl font-extrabold tracking-tight"
+            className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight truncate"
             style={{ color: tenant.branding.primaryColor }}
           >
             Welcome to {tenant.name}
           </h2>
-          <p className="mt-1 md:mt-2 text-sm md:text-lg text-slate-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs sm:text-sm md:text-base text-slate-500 dark:text-zinc-400">
             Administrative overview for your institution.
           </p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center w-full md:w-auto gap-2 px-4 py-3 md:py-2.5 bg-slate-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-slate-800 dark:hover:bg-white rounded-xl font-medium transition-all active:scale-95 shadow-md shadow-slate-200 dark:shadow-none"
+          className="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 bg-slate-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-slate-800 dark:hover:bg-white rounded-xl font-medium transition-all active:scale-95 shadow-xs shrink-0 cursor-pointer"
         >
-          <Plus className="w-5 h-5" />
-          <span>New Application</span>
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-xs sm:text-sm font-bold">New Application</span>
         </button>
       </header>
       
       {/* Dashboard Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         
         {/* Enrolled Students Card */}
         <Link href={`/${tenant.subdomain}/students`} className="block col-span-1 active:scale-[0.98] transition-transform">
           <div 
-            className="p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+            className="p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
             style={{ borderTopColor: tenant.branding.primaryColor || "#4f46e5" }}
           >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
@@ -82,13 +82,13 @@ export default function TenantDashboard() {
                 Pupils / Students Enrolled
               </h3>
               <div 
-                className="p-2.5 rounded-xl shadow-xs shrink-0" 
+                className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
                 style={{ backgroundColor: `${tenant.branding.primaryColor || "#4f46e5"}18`, color: tenant.branding.primaryColor || "#4f46e5" }}
               >
-                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
+                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
             </div>
-            <p className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none">
+            <p className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
               {metrics.enrolledStudents}
             </p>
             <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-3 block relative z-10">
@@ -99,7 +99,7 @@ export default function TenantDashboard() {
 
         {/* Active Staff Card */}
         <div 
-          className="col-span-1 active:scale-[0.98] transition-transform p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+          className="col-span-1 active:scale-[0.98] transition-transform p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
           style={{ borderTopColor: tenant.branding.primaryColor || "#4f46e5" }}
         >
           <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
@@ -110,13 +110,13 @@ export default function TenantDashboard() {
               Teachers & Staff
             </h3>
             <div 
-              className="p-2.5 rounded-xl shadow-xs shrink-0" 
+              className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
               style={{ backgroundColor: `${tenant.branding.primaryColor || "#4f46e5"}18`, color: tenant.branding.primaryColor || "#4f46e5" }}
             >
-              <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
-          <p className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none">
+          <p className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
             {metrics.activeStaff}
           </p>
           <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-3 block relative z-10">
@@ -127,7 +127,7 @@ export default function TenantDashboard() {
         {/* Pending Admissions Card */}
         <Link href={`/${tenant.subdomain}/admissions`} className="block col-span-1 active:scale-[0.98] transition-transform">
           <div 
-            className="p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+            className="p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
             style={{ borderTopColor: tenant.branding.primaryColor || "#4f46e5" }}
           >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
@@ -138,13 +138,13 @@ export default function TenantDashboard() {
                 Pending Admissions
               </h3>
               <div 
-                className="p-2.5 rounded-xl shadow-xs shrink-0" 
+                className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
                 style={{ backgroundColor: `${tenant.branding.primaryColor || "#4f46e5"}18`, color: tenant.branding.primaryColor || "#4f46e5" }}
               >
-                <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
             </div>
-            <p className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none">
+            <p className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
               {metrics.pendingApplications}
             </p>
             <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-3 block relative z-10">
@@ -156,7 +156,7 @@ export default function TenantDashboard() {
         {/* Termly Revenue Card */}
         {(tenant.userRole === "ADMIN" || tenant.userRole === "BURSAR") && (
           <div 
-            className="col-span-1 active:scale-[0.98] transition-transform p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+            className="col-span-1 active:scale-[0.98] transition-transform p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
             style={{ borderTopColor: tenant.branding.primaryColor || "#4f46e5" }}
           >
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
@@ -167,13 +167,13 @@ export default function TenantDashboard() {
                 Termly Revenue
               </h3>
               <div 
-                className="p-2.5 rounded-xl shadow-xs shrink-0" 
+                className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
                 style={{ backgroundColor: `${tenant.branding.primaryColor || "#4f46e5"}18`, color: tenant.branding.primaryColor || "#4f46e5" }}
               >
-                <Wallet className="w-5 h-5 sm:w-6 sm:h-6" />
+                <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
             </div>
-            <p className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none">
+            <p className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
               ₦{((metrics as any).termlyRevenue || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-3 block relative z-10">
@@ -184,7 +184,7 @@ export default function TenantDashboard() {
 
         {/* Events This Week Card */}
         <div 
-          className="col-span-1 active:scale-[0.98] transition-transform p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+          className="col-span-1 active:scale-[0.98] transition-transform p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
           style={{ borderTopColor: tenant.branding.primaryColor || "#4f46e5" }}
         >
           <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
@@ -195,13 +195,13 @@ export default function TenantDashboard() {
               Events This Week
             </h3>
             <div 
-              className="p-2.5 rounded-xl shadow-xs shrink-0" 
+              className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
               style={{ backgroundColor: `${tenant.branding.primaryColor || "#4f46e5"}18`, color: tenant.branding.primaryColor || "#4f46e5" }}
             >
-              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </div>
-          <p className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none">
+          <p className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
             8
           </p>
           <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-3 block relative z-10">

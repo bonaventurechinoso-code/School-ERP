@@ -348,23 +348,23 @@ export default function StudentTable({
           
           {/* Parent & Emergency Contact (Nursery Only) */}
           {isNursery && (
-            <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2">
-              <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">👪 Parent & Emergency Contact Information</h4>
+            <div className="md:col-span-2 border-t border-slate-150 dark:border-zinc-800 pt-4 mt-2">
+              <h4 className="text-sm font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">👪 Parent & Emergency Contact Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Guardian Full Name</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Guardian Full Name</label>
                   <input 
                     type="text" 
                     placeholder="e.g., Ike Mmadu"
-                    className="w-full border border-slate-300 rounded-lg p-2" 
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
                     value={formData.parentName} 
                     onChange={e => setFormData({...formData, parentName: e.target.value})} 
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Relationship to Child</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Relationship to Child</label>
                   <select 
-                    className="w-full border border-slate-300 rounded-lg p-2"
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
                     value={formData.dynamicFields.relationship || ""}
                     onChange={e => handleDynamicFieldChange("relationship", e.target.value)}
                   >
@@ -376,12 +376,12 @@ export default function StudentTable({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Emergency Phone Number</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Emergency Phone Number</label>
                   <input 
                     type="tel"
                     inputMode="numeric"
                     pattern="[0-9+]*"
-                    className="w-full border border-slate-300 rounded-lg p-2" 
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
                     value={formData.parentPhone} 
                     onChange={e => {
                       let val = e.target.value.replace(/[^0-9+]/g, '');
@@ -391,11 +391,11 @@ export default function StudentTable({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Authorized Pick-Up Person</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Authorized Pick-Up Person</label>
                   <input 
                     type="text" 
                     placeholder="Name of person approved to collect the child"
-                    className="w-full border border-slate-300 rounded-lg p-2" 
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
                     value={formData.dynamicFields.authorizedPickup || ""} 
                     onChange={e => handleDynamicFieldChange("authorizedPickup", e.target.value)} 
                   />
@@ -406,15 +406,15 @@ export default function StudentTable({
           
           {/* Dynamic Tier Fields */}
           {currentDynamicFields.length > 0 && (
-            <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2">
-              <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">Tier-Specific Details</h4>
+            <div className="md:col-span-2 border-t border-slate-150 dark:border-zinc-800 pt-4 mt-2">
+              <h4 className="text-sm font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">Tier-Specific Details</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {currentDynamicFields.map(field => (
                   <div key={field.key}>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{field.label}</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">{field.label}</label>
                     {field.type === "select" ? (
                       <select 
-                        className="w-full border border-slate-300 rounded-lg p-2"
+                        className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
                         value={formData.dynamicFields[field.key] || ""}
                         onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
                       >
@@ -426,7 +426,7 @@ export default function StudentTable({
                     ) : (
                       <input 
                         type="text" 
-                        className="w-full border border-slate-300 rounded-lg p-2"
+                        className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
                         value={formData.dynamicFields[field.key] || ""}
                         onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
                       />
@@ -438,21 +438,38 @@ export default function StudentTable({
           )}
 
           <div className="md:col-span-2 flex justify-end mt-2">
-            <button disabled={isPending} type="submit" className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50">
+            <button disabled={isPending} type="submit" className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-semibold rounded-xl shadow-sm transition disabled:opacity-50">
               {editingStudentId ? "Update Student" : "Save Student"}
             </button>
           </div>
         </form>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-x-auto">
+      {/* Mobile Select All & Count Bar */}
+      {filteredStudents.length > 0 && (
+        <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-slate-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input 
+              type="checkbox" 
+              className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+              checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0}
+              onChange={toggleSelectAll}
+            />
+            <span className="font-semibold">Select All ({filteredStudents.length} Students)</span>
+          </label>
+          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{selectedIds.length} selected</span>
+        </div>
+      )}
+
+      {/* DESKTOP TABLE VIEW (md+) */}
+      <div className="hidden md:block bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-x-auto">
         <table className="w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+          <thead className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-xs uppercase tracking-wider">
             <tr>
               <th className="px-6 py-4 w-12">
                 <input 
                   type="checkbox" 
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                   checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0}
                   onChange={toggleSelectAll}
                 />
@@ -465,10 +482,10 @@ export default function StudentTable({
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-lg">
+                <td colSpan={7} className="px-6 py-12 text-center text-slate-500 dark:text-zinc-500 text-base italic">
                   No students found in the roster.
                 </td>
               </tr>
@@ -476,37 +493,37 @@ export default function StudentTable({
             {filteredStudents.map((student) => (
               <tr 
                 key={student.id} 
-                className="hover:bg-slate-50 transition-colors cursor-pointer"
+                className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
                 onClick={() => setSelectedStudent(student)}
               >
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                   <input 
                     type="checkbox" 
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                     checked={selectedIds.includes(student.id)}
                     onChange={() => toggleSelect(student.id)}
                   />
                 </td>
-                <td className="px-6 py-4 font-mono text-sm text-slate-600">
+                <td className="px-6 py-4 font-mono text-sm text-slate-600 dark:text-zinc-400">
                   {student.admissionNumber || "N/A"}
                 </td>
-                <td className="px-6 py-4 font-medium text-slate-900">
+                <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
                   {student.firstName} {student.lastName}
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-6 py-4 text-slate-600 dark:text-zinc-300">
                   {student.currentClass || student.tier?.name || "—"}
                 </td>
-                <td className="px-6 py-4 text-slate-500">{student.parentName || "—"}</td>
+                <td className="px-6 py-4 text-slate-500 dark:text-zinc-400">{student.parentName || "—"}</td>
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                   <select 
                     disabled={isPending || student.isLead}
                     value={student.status}
                     onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
-                    className={`border border-slate-300 rounded-lg p-1.5 text-xs font-bold outline-none transition-colors
-                      ${student.status === "ENROLLED" ? "bg-green-100 text-green-800 border-green-200" : ""}
-                      ${["PROSPECT", "APPLICANT", "SCREENED"].includes(student.status) ? "bg-yellow-100 text-yellow-800 border-yellow-200" : ""}
-                      ${["SUSPENDED", "EXPELLED"].includes(student.status) ? "bg-red-100 text-red-800 border-red-200" : ""}
-                      ${student.status === "ALUMNI" ? "bg-blue-100 text-blue-800 border-blue-200" : ""}
+                    className={`border rounded-lg p-1.5 text-xs font-bold outline-none transition-colors cursor-pointer
+                      ${student.status === "ENROLLED" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" : ""}
+                      ${["PROSPECT", "APPLICANT", "SCREENED"].includes(student.status) ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" : ""}
+                      ${["SUSPENDED", "EXPELLED"].includes(student.status) ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20" : ""}
+                      ${student.status === "ALUMNI" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : ""}
                     `}
                   >
                     <option value="PROSPECT">Prospect</option>
@@ -520,20 +537,20 @@ export default function StudentTable({
                 </td>
                 <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                   {student.isLead ? (
-                    <span className="text-xs text-slate-400 italic">Manage in Admissions</span>
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 italic">Manage in Admissions</span>
                   ) : (
                     <>
                       <button 
                         disabled={isPending}
                         onClick={() => openEditForm(student)}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800 transition"
+                        className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition"
                       >
                         Edit
                       </button>
                       <button 
                         disabled={isPending}
                         onClick={() => handleDelete(student.id)}
-                        className="text-sm font-medium text-red-600 hover:text-red-800 transition"
+                        className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition"
                       >
                         Delete
                       </button>
@@ -546,6 +563,126 @@ export default function StudentTable({
         </table>
       </div>
 
+      {/* MOBILE CARDS VIEW (< md) - Zero Features Dropped */}
+      <div className="md:hidden space-y-3.5">
+        {filteredStudents.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 dark:text-zinc-500 italic bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+            No students found in the roster matching this filter.
+          </div>
+        ) : (
+          filteredStudents.map((student) => (
+            <div 
+              key={student.id} 
+              className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3 transition-shadow hover:shadow-md"
+            >
+              {/* Card Header: Checkbox, Name, and Status Selector */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="pt-0.5">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                      checked={selectedIds.includes(student.id)}
+                      onChange={() => toggleSelect(student.id)}
+                    />
+                  </div>
+                  <div className="min-w-0 cursor-pointer" onClick={() => setSelectedStudent(student)}>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-base truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                      {student.firstName} {student.lastName}
+                    </h4>
+                    <p className="font-mono text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                      ID: {student.admissionNumber || "Not Assigned"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status Dropdown */}
+                <div className="shrink-0">
+                  <select 
+                    disabled={isPending || student.isLead}
+                    value={student.status}
+                    onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
+                    className={`border rounded-lg px-2 py-1 text-xs font-bold outline-none transition-colors cursor-pointer
+                      ${student.status === "ENROLLED" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" : ""}
+                      ${["PROSPECT", "APPLICANT", "SCREENED"].includes(student.status) ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" : ""}
+                      ${["SUSPENDED", "EXPELLED"].includes(student.status) ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20" : ""}
+                      ${student.status === "ALUMNI" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : ""}
+                    `}
+                  >
+                    <option value="PROSPECT">Prospect</option>
+                    <option value="APPLICANT">Applicant</option>
+                    <option value="SCREENED">Screened</option>
+                    <option value="ENROLLED">Enrolled</option>
+                    <option value="SUSPENDED">Suspended</option>
+                    <option value="EXPELLED">Expelled</option>
+                    <option value="ALUMNI">Alumni</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Data Grid: Class & Guardian Info */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60 text-xs">
+                <div className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-950/60 border border-slate-100 dark:border-zinc-800/40">
+                  <span className="text-slate-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Class / Tier</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate block mt-0.5">
+                    {student.currentClass || student.tier?.name || "—"}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-950/60 border border-slate-100 dark:border-zinc-800/40">
+                  <span className="text-slate-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Guardian</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate block mt-0.5">
+                    {student.parentName || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Guardian Contact (if phone available) */}
+              {student.parentPhone && (
+                <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-1.5 pt-0.5">
+                  <span className="font-medium text-[11px]">Phone:</span>
+                  <a href={`tel:${student.parentPhone}`} className="text-indigo-600 dark:text-indigo-400 font-mono hover:underline">
+                    {student.parentPhone}
+                  </a>
+                </div>
+              )}
+
+              {/* Action Buttons Row */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+                <button 
+                  onClick={() => setSelectedStudent(student)}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                >
+                  View Profile &rarr;
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {student.isLead ? (
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 italic">Admissions Lead</span>
+                  ) : (
+                    <>
+                      <button 
+                        disabled={isPending}
+                        onClick={() => openEditForm(student)}
+                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        disabled={isPending}
+                        onClick={() => handleDelete(student.id)}
+                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {selectedStudent && (
         <StudentProfileDrawer 
           student={selectedStudent} 
@@ -554,12 +691,12 @@ export default function StudentTable({
       )}
 
       {showBulkGraduate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md animate-in zoom-in-95">
-            <h3 className="text-xl font-bold text-slate-800 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl shadow-xl w-full max-w-md border border-slate-200 dark:border-zinc-800 animate-in zoom-in-95">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
               {selectedIds.length > 0 ? bulkActionLabel : bulkActionGlobalLabel}
             </h3>
-            <p className="text-slate-500 text-sm mb-4">
+            <p className="text-slate-500 dark:text-zinc-400 text-sm mb-4">
               {selectedIds.length > 0 
                 ? `You are about to process ${selectedIds.length} selected students.` 
                 : `Process an entire class cohort of students.`}
@@ -567,9 +704,9 @@ export default function StudentTable({
             
             {selectedIds.length === 0 && (
               <>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Target Class</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Target Class</label>
                 <select 
-                  className="w-full border border-slate-300 rounded-lg p-2 mb-4"
+                  className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 mb-4 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
                   value={bulkClass}
                   onChange={e => setBulkClass(e.target.value)}
                 >
@@ -581,17 +718,17 @@ export default function StudentTable({
               </>
             )}
             
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-2 sm:gap-3 justify-end pt-2">
               <button 
                 onClick={() => setShowBulkGraduate(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50"
+                className="px-4 py-2 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 transition text-sm"
               >
                 Cancel
               </button>
               <button 
                 disabled={isPending || (selectedIds.length === 0 && !bulkClass)}
                 onClick={handleBulkGraduate}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm"
               >
                 {isPending ? "Processing..." : "Confirm Action"}
               </button>

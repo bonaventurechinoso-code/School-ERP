@@ -109,37 +109,37 @@ export default function FeeTemplatesList({
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreateTemplate} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleCreateTemplate} className="bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-4">
           {errorMsg && (
-            <div className="md:col-span-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm font-medium">
+            <div className="md:col-span-2 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-xl text-sm font-medium">
               {errorMsg}
             </div>
           )}
           {hasHigherEd && (
             <div className="md:col-span-2 flex items-center space-x-4 mb-2">
-              <label className="text-sm font-medium text-slate-700">Billing Type:</label>
-              <label className="flex items-center space-x-2 text-sm cursor-pointer">
-                <input type="radio" name="billingType" checked={formData.billingType === "FLAT"} onChange={() => setFormData({...formData, billingType: "FLAT"})} className="text-blue-600 focus:ring-blue-500" />
+              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Billing Type:</label>
+              <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
+                <input type="radio" name="billingType" checked={formData.billingType === "FLAT"} onChange={() => setFormData({...formData, billingType: "FLAT"})} className="text-indigo-600 focus:ring-indigo-500" />
                 <span>Flat Fee</span>
               </label>
-              <label className="flex items-center space-x-2 text-sm cursor-pointer">
-                <input type="radio" name="billingType" checked={formData.billingType === "PER_CREDIT"} onChange={() => setFormData({...formData, billingType: "PER_CREDIT"})} className="text-blue-600 focus:ring-blue-500" />
+              <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
+                <input type="radio" name="billingType" checked={formData.billingType === "PER_CREDIT"} onChange={() => setFormData({...formData, billingType: "PER_CREDIT"})} className="text-indigo-600 focus:ring-indigo-500" />
                 <span>Per Credit Unit</span>
               </label>
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Fee Name</label>
-            <input required type="text" placeholder="e.g. Annual Tuition" className="w-full border border-slate-300 rounded-lg p-2" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Fee Name</label>
+            <input required type="text" placeholder="e.g. Annual Tuition" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">
               {formData.billingType === "PER_CREDIT" ? "Amount Per Credit Unit ($)" : "Fixed Fee Amount ($)"}
             </label>
-            <input required type="number" step="0.01" className="w-full border border-slate-300 rounded-lg p-2" value={formData.defaultAmount || ""} onChange={e => setFormData({ ...formData, defaultAmount: parseFloat(e.target.value) })} />
+            <input required type="number" step="0.01" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" value={formData.defaultAmount || ""} onChange={e => setFormData({ ...formData, defaultAmount: parseFloat(e.target.value) })} />
           </div>
           <div className="md:col-span-2 flex justify-end">
-            <button disabled={isPending} type="submit" className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50">
+            <button disabled={isPending} type="submit" className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-semibold rounded-xl shadow-sm transition disabled:opacity-50 text-sm">
               Save Template
             </button>
           </div>
@@ -147,48 +147,48 @@ export default function FeeTemplatesList({
       )}
 
       {bulkSuccessMsg && (
-        <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded-2xl shadow-sm font-medium">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl shadow-sm font-medium text-sm">
           {bulkSuccessMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {feeTemplates.length === 0 && (
-          <div className="col-span-full p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="col-span-full p-8 text-center text-slate-500 dark:text-zinc-500 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm italic text-sm">
             No fee templates found. Create one to easily generate invoices.
           </div>
         )}
         
         {feeTemplates.map(template => (
-          <div key={template.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col relative">
-            <div className="absolute top-6 right-6">
-              <span className={`text-xs px-2 py-1 rounded-full font-bold uppercase tracking-wider ${template.billingType === 'PER_CREDIT' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700'}`}>
+          <div key={template.id} className="bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 flex flex-col relative transition-shadow hover:shadow-md">
+            <div className="absolute top-5 right-5 sm:top-6 sm:right-6">
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${template.billingType === 'PER_CREDIT' ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700'}`}>
                 {template.billingType === 'PER_CREDIT' ? 'Per Credit' : 'Flat Fee'}
               </span>
             </div>
-            <div className="flex-1 pr-20">
-              <h3 className="text-xl font-bold text-slate-800">{template.name}</h3>
-              <p className="text-2xl font-black text-slate-500 mt-2">
+            <div className="flex-1 pr-16">
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{template.name}</h3>
+              <p className="text-xl sm:text-2xl font-black text-slate-700 dark:text-zinc-300 mt-2 font-mono">
                 ${template.defaultAmount.toFixed(2)}
-                {template.billingType === 'PER_CREDIT' && <span className="text-sm font-medium text-slate-400 tracking-normal ml-1">/ credit</span>}
+                {template.billingType === 'PER_CREDIT' && <span className="text-xs font-medium text-slate-400 tracking-normal ml-1">/ credit</span>}
               </p>
             </div>
             
-            <div className="mt-6 flex gap-2">
+            <div className="mt-5 sm:mt-6 flex gap-2">
               <button 
                 onClick={() => {
                   setShowBulkForm(showBulkForm === template.id ? null : template.id);
                   setErrorMsg(null);
                   setBulkSuccessMsg(null);
                 }}
-                className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition text-sm text-center"
+                className="flex-1 px-3.5 py-2 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-semibold rounded-xl transition text-xs sm:text-sm text-center"
               >
                 Bulk Invoice
               </button>
               <button 
                 onClick={() => handleDeleteTemplate(template.id)}
                 disabled={isPending}
-                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-lg transition text-sm disabled:opacity-50"
+                className="px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-semibold rounded-xl transition text-xs sm:text-sm disabled:opacity-50"
               >
                 Delete
               </button>
@@ -196,43 +196,43 @@ export default function FeeTemplatesList({
 
             {/* Bulk Invoice Inline Form */}
             {showBulkForm === template.id && (
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <form onSubmit={(e) => handleBulkInvoice(e, template.id)} className="space-y-4">
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-zinc-800">
+                <form onSubmit={(e) => handleBulkInvoice(e, template.id)} className="space-y-3 sm:space-y-4">
                   {errorMsg && (
-                    <div className="p-2 bg-red-50 text-red-700 rounded text-xs font-medium">
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-medium">
                       {errorMsg}
                     </div>
                   )}
                   
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Due Date</label>
-                    <input required type="date" className="w-full border border-slate-300 rounded p-2 text-sm" value={bulkData.dueDate} onChange={e => setBulkData({ dueDate: e.target.value })} />
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase mb-1">Due Date</label>
+                    <input required type="date" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs sm:text-sm bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" value={bulkData.dueDate} onChange={e => setBulkData({ dueDate: e.target.value })} />
                   </div>
 
                   <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-xs font-semibold text-slate-500 uppercase">Select Students</label>
-                      <button type="button" onClick={selectAllStudents} className="text-xs text-blue-600 hover:underline">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase">Select Students</label>
+                      <button type="button" onClick={selectAllStudents} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
                         {selectedStudents.size === students.length ? "Deselect All" : "Select All"}
                       </button>
                     </div>
                     
-                    <div className="max-h-40 overflow-y-auto border border-slate-200 rounded p-2 space-y-1 bg-slate-50">
+                    <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-zinc-700 rounded-xl p-2 space-y-1 bg-slate-50 dark:bg-zinc-950/50 text-xs sm:text-sm">
                       {students.map(student => (
-                        <label key={student.id} className="flex items-center gap-2 text-sm text-slate-700 p-1 hover:bg-slate-100 rounded cursor-pointer">
+                        <label key={student.id} className="flex items-center gap-2 text-slate-700 dark:text-zinc-300 p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer">
                           <input 
                             type="checkbox" 
                             checked={selectedStudents.has(student.id)} 
                             onChange={() => toggleStudent(student.id)} 
-                            className="rounded text-blue-600"
+                            className="rounded border-slate-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500"
                           />
-                          {student.firstName} {student.lastName}
+                          <span className="truncate">{student.firstName} {student.lastName}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  <button disabled={isPending || selectedStudents.size === 0} type="submit" className="w-full px-4 py-2 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 transition disabled:opacity-50 text-sm">
+                  <button disabled={isPending || selectedStudents.size === 0} type="submit" className="w-full px-4 py-2 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 text-xs sm:text-sm shadow-sm">
                     Create {selectedStudents.size} Invoices
                   </button>
                 </form>

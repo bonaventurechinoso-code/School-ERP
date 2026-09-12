@@ -154,10 +154,100 @@ export default function AdmissionsPipeline({
     }
   };
 
+  // Mobile Active Stage State
+  const [mobileStage, setMobileStage] = useState<string>("INQUIRY");
+
   return (
-    <div className="flex-1 overflow-hidden relative flex">
-      {/* Pipeline Board */}
-      <div className="flex-1 overflow-x-auto pb-4">
+    <div className="flex-1 overflow-hidden relative flex flex-col">
+      {/* Mobile Stage Selector Tabs (lg:hidden) */}
+      <div className="lg:hidden p-3 bg-slate-100/80 dark:bg-zinc-900/80 border-b border-slate-200 dark:border-zinc-800">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+          {STAGES.map((stage) => {
+            const count = localLeads.filter((l) => (l.status || "").toUpperCase() === stage).length;
+            const isActive = mobileStage === stage;
+            return (
+              <button
+                key={stage}
+                onClick={() => setMobileStage(stage)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shrink-0 border ${
+                  isActive
+                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm"
+                    : "bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700"
+                }`}
+              >
+                <span>{stage}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                  isActive 
+                    ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900" 
+                    : "bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300"
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* MOBILE SINGLE STAGE VIEW (< lg) */}
+      <div className="lg:hidden flex-1 overflow-y-auto p-4 space-y-3">
+        {(() => {
+          const stageLeads = localLeads.filter((l) => (l.status || "").toUpperCase() === mobileStage);
+          if (stageLeads.length === 0) {
+            return (
+              <div className="p-8 text-center text-slate-400 dark:text-zinc-500 italic bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+                No applications currently in the <strong className="text-slate-600 dark:text-zinc-300 font-semibold">{mobileStage}</strong> stage.
+              </div>
+            );
+          }
+          return stageLeads.map((lead) => (
+            <div 
+              key={lead.id} 
+              onClick={() => setSelectedLead(lead)}
+              className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-zinc-800 transition-shadow hover:shadow-md cursor-pointer space-y-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-base">{lead.applicantName}</h4>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">Target Grade: <span className="font-semibold text-slate-700 dark:text-zinc-300">{lead.targetGrade}</span></p>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                  {lead.tier?.name || "Tier"}
+                </span>
+              </div>
+
+              {mobileStage !== "ENROLLED" ? (
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Stage:</span>
+                  <div className="flex items-center gap-2">
+                    <select 
+                      className="text-xs border border-slate-300 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-medium cursor-pointer"
+                      value={mobileStage}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(lead.id, e.target.value);
+                      }}
+                      disabled={isUpdating === lead.id}
+                    >
+                      {STAGES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    {isUpdating === lead.id && <span className="text-xs text-indigo-500 animate-pulse">Updating...</span>}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <CheckCircle className="w-3.5 h-3.5" /> Enrolled in Institutional Database
+                </div>
+              )}
+            </div>
+          ));
+        })()}
+      </div>
+
+      {/* DESKTOP PIPELINE BOARD (lg+) */}
+      <div className="hidden lg:block flex-1 overflow-x-auto pb-4">
         <div className="flex gap-6 min-w-max h-full min-h-[500px] p-4">
           {STAGES.map((stage) => {
             const stageLeads = localLeads.filter((l) => (l.status || "").toUpperCase() === stage);
@@ -165,13 +255,13 @@ export default function AdmissionsPipeline({
             return (
               <div 
                 key={stage} 
-                className="w-80 flex flex-col bg-slate-100 rounded-xl border border-slate-200"
+                className="w-80 flex flex-col bg-slate-100/70 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-800"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage)}
               >
-                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
-                  <h3 className="font-bold text-slate-700">{stage}</h3>
-                  <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-xs font-semibold">
+                <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center bg-slate-50 dark:bg-zinc-950 rounded-t-xl">
+                  <h3 className="font-bold text-slate-700 dark:text-zinc-200 text-sm">{stage}</h3>
+                  <span className="bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 px-2 py-0.5 rounded-full text-xs font-semibold">
                     {stageLeads.length}
                   </span>
                 </div>
@@ -183,16 +273,16 @@ export default function AdmissionsPipeline({
                       draggable={stage !== "ENROLLED"}
                       onDragStart={(e) => handleDragStart(e, lead.id)}
                       onClick={() => setSelectedLead(lead)}
-                      className={`bg-white p-4 rounded-lg shadow-sm border border-slate-200 transition-shadow ${stage !== "ENROLLED" ? "cursor-grab active:cursor-grabbing hover:shadow-md" : "opacity-70 cursor-pointer hover:shadow"}`}
+                      className={`bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-zinc-800 transition-shadow ${stage !== "ENROLLED" ? "cursor-grab active:cursor-grabbing hover:shadow-md" : "opacity-75 cursor-pointer hover:shadow"}`}
                     >
-                      <h4 className="font-bold text-slate-800">{lead.applicantName}</h4>
-                      <p className="text-sm text-slate-500 mt-1">Grade: {lead.targetGrade}</p>
-                      <p className="text-sm text-slate-500">Tier: {lead.tier?.name || "Tier"}</p>
+                      <h4 className="font-bold text-slate-800 dark:text-zinc-100 text-sm">{lead.applicantName}</h4>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">Grade: {lead.targetGrade}</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">Tier: {lead.tier?.name || "Tier"}</p>
                       
                       {stage !== "ENROLLED" && (
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex justify-between items-center">
                           <select 
-                            className="text-xs border border-slate-300 rounded p-1 bg-white"
+                            className="text-xs border border-slate-300 dark:border-zinc-700 rounded-lg p-1 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 cursor-pointer"
                             value={stage}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -205,14 +295,14 @@ export default function AdmissionsPipeline({
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
-                          {isUpdating === lead.id && <span className="text-xs text-blue-500 animate-pulse">Updating...</span>}
+                          {isUpdating === lead.id && <span className="text-xs text-indigo-500 animate-pulse">Updating...</span>}
                         </div>
                       )}
                     </div>
                   ))}
                   
                   {stageLeads.length === 0 && (
-                    <div className="text-center p-4 text-sm text-slate-400">
+                    <div className="text-center p-4 text-xs text-slate-400 dark:text-zinc-500 italic">
                       No applications in this stage
                     </div>
                   )}
@@ -223,67 +313,67 @@ export default function AdmissionsPipeline({
         </div>
       </div>
 
-      {/* Review Drawer Overlay */}
+      {/* Review Drawer Overlay (Fixed Modal on Mobile, Slide-in on Desktop) */}
       {selectedLead && (
-        <div className="absolute inset-0 z-10 flex justify-end bg-slate-900/20 backdrop-blur-sm" onClick={() => setSelectedLead(null)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={() => setSelectedLead(null)}>
           <div 
-            className="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right"
+            className="w-full max-w-lg bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col animate-in slide-in-from-right"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Drawer Header */}
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">{selectedLead.applicantName}</h2>
-                <p className="text-sm text-slate-500 mt-1">Applying for {selectedLead.targetGrade} • {selectedLead.tier?.name || "Tier"}</p>
+            <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-950">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">{selectedLead.applicantName}</h2>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5 truncate">Applying for {selectedLead.targetGrade} • {selectedLead.tier?.name || "Tier"}</p>
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
+                className="p-2 hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full text-slate-500 dark:text-zinc-400 transition-colors shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8 bg-white dark:bg-zinc-900">
               
               {/* Contact Details Side-by-Side */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {/* Student */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
-                    <User className="w-4 h-4 text-blue-600" />
-                    <h3>{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Applicant Details" : "Student Details"}</h3>
+                <div className="bg-slate-50 dark:bg-zinc-950/60 p-4 rounded-xl border border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300 font-semibold mb-3 text-sm">
+                    <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h3 className="truncate">{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Applicant Details" : "Student Details"}</h3>
                   </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Mail className="w-3.5 h-3.5" />
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-300 min-w-0">
+                      <Mail className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span className="truncate">{selectedLead.studentEmail || "No email"}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Phone className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-300 min-w-0">
+                      <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span>{selectedLead.studentPhone || "No phone"}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Parent / Sponsor */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
-                    <Users className="w-4 h-4 text-purple-600" />
-                    <h3>{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Sponsor / Next of Kin" : "Parent / Guardian"}</h3>
+                <div className="bg-slate-50 dark:bg-zinc-950/60 p-4 rounded-xl border border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300 font-semibold mb-3 text-sm">
+                    <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <h3 className="truncate">{(selectedLead.tier?.name || "").toUpperCase().includes("UNIVERSITY") || (selectedLead.tier?.name || "").toUpperCase().includes("POLYTECHNIC") || (selectedLead.tier?.name || "").toUpperCase().includes("COLLEGE") || (selectedLead.tier?.name || "").toUpperCase().includes("HIGHER ED") ? "Sponsor / Next of Kin" : "Parent / Guardian"}</h3>
                   </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <User className="w-3.5 h-3.5" />
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-300 min-w-0">
+                      <User className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span className="truncate">{selectedLead.parentName || "Unknown"}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Mail className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-300 min-w-0">
+                      <Mail className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span className="truncate">{selectedLead.parentEmail || "No email"}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Phone className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-300 min-w-0">
+                      <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span>{selectedLead.parentContact || selectedLead.parentPhone || "No phone"}</span>
                     </div>
                   </div>
@@ -292,12 +382,12 @@ export default function AdmissionsPipeline({
 
               {/* Logs / Notes Section */}
               <div>
-                <h3 className="font-semibold text-slate-800 mb-4">Activity & Logs</h3>
+                <h3 className="font-semibold text-slate-800 dark:text-zinc-200 mb-3 text-sm">Activity & Logs</h3>
                 
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col gap-2 mb-4">
+                <div className="bg-slate-50 dark:bg-zinc-950/60 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col gap-2 mb-4">
                   <textarea 
                     placeholder="Add a timestamped note..."
-                    className="w-full text-sm p-2 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                    className="w-full text-xs sm:text-sm p-2.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                     rows={3}
                     value={newLog}
                     onChange={(e) => setNewLog(e.target.value)}
@@ -306,7 +396,7 @@ export default function AdmissionsPipeline({
                     <button 
                       onClick={handleAddLog}
                       disabled={isAddingLog || !newLog.trim()}
-                      className="text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded font-medium disabled:opacity-50 transition-colors"
+                      className="text-xs bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 px-3.5 py-2 rounded-lg font-bold disabled:opacity-50 transition-colors"
                     >
                       {isAddingLog ? "Adding..." : "Add Note"}
                     </button>
@@ -316,16 +406,16 @@ export default function AdmissionsPipeline({
                 <div className="space-y-3">
                   {(() => {
                     const notes = Array.isArray(selectedLead.notes) ? selectedLead.notes : [];
-                    if (notes.length === 0) return <p className="text-sm text-slate-400 italic">No activity notes yet.</p>;
+                    if (notes.length === 0) return <p className="text-xs sm:text-sm text-slate-400 dark:text-zinc-500 italic">No activity notes yet.</p>;
                     
                     return [...notes].reverse().map((note: any) => (
-                      <div key={note.id} className="bg-white border border-slate-100 p-3 rounded-lg shadow-sm text-sm">
-                        <p className="text-slate-700">{note.content}</p>
-                        <div className="flex justify-between items-center mt-2">
-                          <p className="text-xs text-slate-400 font-medium">
+                      <div key={note.id} className="bg-white dark:bg-zinc-950/80 border border-slate-150 dark:border-zinc-800 p-3.5 rounded-xl shadow-sm text-xs sm:text-sm">
+                        <p className="text-slate-700 dark:text-zinc-300">{note.content}</p>
+                        <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+                          <p className="text-[11px] text-slate-400 dark:text-zinc-500 font-medium">
                             {new Date(note.createdAt).toLocaleString()}
                           </p>
-                          <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-medium">{note.authorName}</span>
+                          <span className="text-[10px] bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md text-slate-600 dark:text-zinc-400 font-medium">{note.authorName}</span>
                         </div>
                       </div>
                     ));
@@ -335,10 +425,10 @@ export default function AdmissionsPipeline({
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3">
+            <div className="p-4 sm:p-6 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 flex flex-col sm:flex-row gap-3">
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors"
+                className="flex-1 py-2.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors text-sm"
               >
                 Close
               </button>
@@ -347,14 +437,14 @@ export default function AdmissionsPipeline({
                 <button 
                   onClick={() => handleFinalizeEnrollment(selectedLead.id)}
                   disabled={isEnrolling}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex justify-center items-center gap-2 transition-colors disabled:opacity-70"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex justify-center items-center gap-2 transition-colors disabled:opacity-70 text-sm shadow-sm"
                 >
-                  <GraduationCap className="w-5 h-5" />
+                  <GraduationCap className="w-4 sm:w-5 h-4 sm:h-5" />
                   {isEnrolling ? "Enrolling..." : "Finalize Enrollment"}
                 </button>
               ) : (
-                <div className="flex-1 py-2.5 bg-green-50 border border-green-200 text-green-700 rounded-lg font-semibold flex justify-center items-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
+                <div className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl font-semibold flex justify-center items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 sm:w-5 h-4 sm:h-5" />
                   Enrolled
                 </div>
               )}

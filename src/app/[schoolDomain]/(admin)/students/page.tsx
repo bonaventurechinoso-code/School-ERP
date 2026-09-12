@@ -126,11 +126,11 @@ export default async function StudentsPage({
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      <header className="flex items-center justify-between">
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex flex-wrap items-center gap-2 sm:gap-3">
           <span>Student Roster</span>
           {activeTierObj && (
-            <span className="text-xs uppercase tracking-wider px-3 py-1 rounded-full font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+            <span className="text-[11px] sm:text-xs uppercase tracking-wider px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
               {activeTierObj.name}
             </span>
           )}
@@ -138,26 +138,26 @@ export default async function StudentsPage({
       </header>
       
       {/* Student Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-green-500">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Total Enrolled</h3>
-          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{totalEnrolled}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-green-500 min-w-0">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Total Enrolled</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{totalEnrolled}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-yellow-500">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Active Prospects</h3>
-          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{activeProspects}</p>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-yellow-500 min-w-0">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Active Prospects</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{activeProspects}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-indigo-500">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Total Applicants</h3>
-          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{totalApplicants}</p>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-indigo-500 min-w-0">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Total Applicants</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{totalApplicants}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-red-500">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Suspended</h3>
-          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{suspendedStudents}</p>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-red-500 min-w-0">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Suspended</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{suspendedStudents}</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-blue-500">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-xs sm:text-sm uppercase tracking-wider mb-2 truncate">Alumni</h3>
-          <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">{alumniCount}</p>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-blue-500 min-w-0 col-span-2 sm:col-span-1">
+          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Alumni</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{alumniCount}</p>
         </div>
       </div>
 

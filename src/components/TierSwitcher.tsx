@@ -103,13 +103,13 @@ export default function TierSwitcher({
                 type="button"
                 onClick={() => handleSelectTier(tier)}
                 disabled={isPending}
-                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center justify-between cursor-pointer ${getTierStyle(
+                className={`w-full text-left px-2.5 py-2 sm:py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center justify-between cursor-pointer min-h-[38px] touch-manipulation active:scale-[0.99] ${getTierStyle(
                   tier.name,
                   isActive
                 )} ${isActive ? "ring-1 ring-white/20" : "opacity-80 hover:opacity-100"}`}
               >
                 <span className="truncate">{tier.name}</span>
-                {isActive && <Check className="w-3.5 h-3.5 shrink-0" />}
+                {isActive && <Check className="w-3.5 h-3.5 shrink-0 ml-1.5" />}
               </button>
             );
           })}
@@ -120,8 +120,8 @@ export default function TierSwitcher({
 
   // Topbar Layout (Horizontal Tab / Segmented Bar)
   return (
-    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-800/60 p-1 rounded-xl border border-slate-200 dark:border-zinc-700/80 shadow-xs">
-      <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-800/60 p-1 rounded-xl border border-slate-200 dark:border-zinc-700/80 shadow-xs max-w-full overflow-hidden">
+      <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar scroll-smooth w-full">
         {tiers.map((tier) => {
           const isActive = activeTierObj.id === tier.id;
           return (
@@ -130,10 +130,10 @@ export default function TierSwitcher({
               type="button"
               onClick={() => handleSelectTier(tier)}
               disabled={isPending}
-              className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${getTierStyle(
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer touch-manipulation min-h-[34px] shrink-0 ${getTierStyle(
                 tier.name,
                 isActive
-              )} ${isActive ? "shadow-xs" : "opacity-75 hover:opacity-100"}`}
+              )} ${isActive ? "shadow-xs ring-1 ring-white/20" : "opacity-75 hover:opacity-100"}`}
               title={`Switch tier to ${tier.name}`}
             >
               {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}

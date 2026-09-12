@@ -45,19 +45,19 @@ export default async function TenantStudentPortalPage({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors duration-200">
       {/* Top Navigation */}
-      <header className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-zinc-800/80 sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-md shadow-indigo-600/20">
+      <header className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-zinc-800/80 sticky top-0 z-30 px-3.5 sm:px-8 py-3 flex items-center justify-between shadow-xs gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-md shadow-indigo-600/20 shrink-0">
             <GraduationCap className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-black text-lg tracking-tight text-slate-900 dark:text-white leading-tight">Student Portal</h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
+              <h1 className="font-black text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight truncate">Student Portal</h1>
+              <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 truncate max-w-[120px] sm:max-w-none">
                 {school.name}
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Academic Workspace & Learning Records</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">Academic Workspace & Learning Records</p>
           </div>
         </div>
 

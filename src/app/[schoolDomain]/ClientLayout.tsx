@@ -136,7 +136,7 @@ export default function ClientLayout({
 
         {/* Bottom Sidebar - Wallet Balance Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
         {isWalletAuthorized && headerContent && (
-          <div className="p-3 border-t border-slate-800/60 bg-slate-900/60 mt-auto hidden md:block">
+          <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto">
             {headerContent}
           </div>
         )}
@@ -144,35 +144,28 @@ export default function ClientLayout({
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pb-20 md:pb-0 relative">
-        <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 w-full p-4 md:p-6 shadow-sm flex-shrink-0 sticky top-0 z-10 transition-colors duration-200">
-          <div className="flex items-center justify-between w-full md:w-auto">
-            <div className="flex items-center gap-3">
-              <button
-                className="md:hidden p-2 -ml-2 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl active:scale-95 transition-all"
-                onClick={() => setIsSidebarOpen(true)}
-              >
-                <Menu className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold break-words">Administrative Desk</h1>
-              </div>
-            </div>
-            {/* Theme Toggle mobile inline */}
-            <div className="md:hidden flex items-center">
-              <ThemeToggle />
+        <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex items-center justify-between gap-3 w-full px-4 py-3 md:px-8 md:py-4 shadow-xs flex-shrink-0 sticky top-0 z-20 transition-colors duration-200">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <button
+              className="md:hidden p-2 -ml-1 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl active:scale-95 transition-all touch-manipulation flex items-center justify-center shrink-0"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open navigation drawer"
+            >
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-[11px] sm:text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold truncate">
+                Administrative Desk
+              </h1>
+              <p className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-zinc-200 truncate md:hidden">
+                {schoolName}
+              </p>
             </div>
           </div>
 
-          {/* Upper top-right navigation navbar utility bar */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            {isWalletAuthorized && headerContent && (
-              <div className="w-full sm:w-auto md:hidden">
-                {headerContent}
-              </div>
-            )}
-            <div className="hidden md:flex border-l border-slate-200 dark:border-zinc-700 pl-3 items-center">
-              <ThemeToggle />
-            </div>
+          {/* Top-right utility bar */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <ThemeToggle />
           </div>
         </header>
         <div className="p-4 md:p-8 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full">

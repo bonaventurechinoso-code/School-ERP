@@ -64,8 +64,8 @@ export default function TenantLoginPage() {
   const schoolName = tenant?.name || "Staff Portal";
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 selection:bg-blue-900">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 sm:p-10 animate-in fade-in zoom-in-95 duration-500">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-3 sm:p-4 selection:bg-blue-900">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-8 md:p-10 animate-in fade-in zoom-in-95 duration-500">
         
         <div className="text-center mb-8">
           <div 
