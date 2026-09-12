@@ -2,6 +2,70 @@
 
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { cacheAside, buildCacheKey } from "@/lib/cache";
+import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
+import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
+
+/**
+ * High-performance cursor-based fetching for Staff Directory wrapped in Smart Cache-Aside.
+ * Flat lookup times across millions of staff/teacher records.
+ */
+export async function fetchStaffPaginated(
+  schoolId: string,
+  options?: {
+    role?: string;
+    status?: string;
+    cursor?: string | null;
+    limit?: number;
+    search?: string;
+  }
+): Promise<CursorPaginationResult<any>> {
+  const role = options?.role;
+  const status = options?.status;
+  const cursor = options?.cursor;
+  const limit = options?.limit || 25;
+  const search = options?.search;
+
+  const cacheKey = buildCacheKey({
+    tenantId: schoolId,
+    table: "staff",
+    action: "paginated",
+    cursor,
+    limit,
+    filters: { role, status, search },
+  });
+
+  return cacheAside<CursorPaginationResult<any>>({
+    key: cacheKey,
+    ttlSeconds: 1800, // 30 minutes safe sliding TTL
+    fetchFn: async () => {
+      const tenantDb = getTenantClient(schoolId);
+      const whereClause: any = {
+        schoolId,
+        ...(status && status !== "ALL" ? { status } : {}),
+        ...(role && role !== "ALL" ? { role } : {}),
+      };
+
+      if (search && search.trim()) {
+        const query = search.trim();
+        whereClause.OR = [
+          { firstName: { contains: query, mode: "insensitive" } },
+          { lastName: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+        ];
+      }
+
+      return executeCursorPagination(async (args) => {
+        return tenantDb.staff.findMany({
+          ...args,
+          where: whereClause,
+          orderBy: { createdAt: "desc" },
+          include: { department: true },
+        });
+      }, { cursor, limit });
+    },
+  });
+}
 
 export async function createStaff(
   schoolId: string,
@@ -25,6 +89,9 @@ export async function createStaff(
         ...timestampData
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStaffNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/staff`, "page");
     return { success: true };
@@ -52,6 +119,9 @@ export async function updateStaff(
       }
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateStaffNamespace(schoolId);
+
     revalidatePath(`/[schoolDomain]/staff`, "page");
     return { success: true };
   } catch (error: any) {
@@ -67,6 +137,9 @@ export async function deleteStaff(schoolId: string, staffId: string) {
     await tenantDb.staff.delete({
       where: { id: staffId }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStaffNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/staff`, "page");
     return { success: true };
@@ -108,6 +181,9 @@ export async function updateStaffStatus(
       where: { id: staffId },
       data
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStaffNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/staff`, "page");
   } catch (error) {

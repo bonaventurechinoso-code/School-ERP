@@ -42,3 +42,13 @@ next-env.d.ts
 # Prisma
 # If you use a custom output directory for Prisma Client, add it here.
 # By default, Prisma Client is generated in node_modules, which is ignored.
+
+# Databases & local storage
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.dump
+*.key
+*.cert

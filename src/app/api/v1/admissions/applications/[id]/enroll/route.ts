@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
+import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
 
 export async function POST(
@@ -111,6 +112,10 @@ export async function POST(
     // 5. ROSTER DYNAMIC SYNC REFRESH:
     // Invalidate cached views across students, admissions, and dashboard layouts
     invalidateTierConnection();
+    await Promise.all([
+      invalidateStudentNamespace(schoolId, lead.tier?.name),
+      invalidateAdmissionsNamespace(schoolId),
+    ]);
     try {
       if (school?.subdomain) {
         revalidatePath(`/${school.subdomain}/students`);

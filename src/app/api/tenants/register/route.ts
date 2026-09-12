@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { basePrisma } from "@/lib/tenant-prisma";
 import { exec } from "child_process";
 import util from "util";
 
 const execAsync = util.promisify(exec);
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
-const basePrisma = globalForPrisma.prisma ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
 
 const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
 

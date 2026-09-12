@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { Student, AcademicTier } from "@prisma/client";
-import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents } from "./actions";
+import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents, fetchStudentsPaginated } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
 
@@ -10,6 +10,9 @@ type StudentWithTier = Student & { tier?: AcademicTier | null, isLead?: boolean 
 
 interface StudentTableProps {
   students: StudentWithTier[];
+  initialNextCursor?: string | null;
+  initialHasMore?: boolean;
+  leads?: StudentWithTier[];
   schoolId: string;
   tiers: AcademicTier[];
   activeTier?: string;
@@ -18,6 +21,9 @@ interface StudentTableProps {
 
 export default function StudentTable({ 
   students, 
+  initialNextCursor,
+  initialHasMore,
+  leads = [],
   schoolId,
   tiers,
   activeTier,
@@ -25,6 +31,12 @@ export default function StudentTable({
 }: StudentTableProps) {
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
+
+  const [studentList, setStudentList] = useState<StudentWithTier[]>(students);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [hasMore, setHasMore] = useState<boolean>(initialHasMore ?? false);
+  const [pageIndex, setPageIndex] = useState<number>(0);
 
   const [showForm, setShowForm] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentWithTier | null>(null);
@@ -137,7 +149,66 @@ export default function StudentTable({
     });
   };
 
-  const filteredStudents = students.filter(s => {
+  const handleFilterChange = (newStatus: string) => {
+    setFilterStatus(newStatus);
+    setCursorHistory([]);
+    setPageIndex(0);
+    startTransition(async () => {
+      const res = await fetchStudentsPaginated(schoolId, {
+        tierName: activeTier,
+        status: newStatus,
+        cursor: null,
+        limit: 25,
+      });
+      setStudentList(res.items);
+      setNextCursor(res.nextCursor);
+      setHasMore(res.hasMore);
+    });
+  };
+
+  const handleNextPage = () => {
+    if (!nextCursor || isPending) return;
+    const currentCursor = nextCursor;
+    startTransition(async () => {
+      const res = await fetchStudentsPaginated(schoolId, {
+        tierName: activeTier,
+        status: filterStatus,
+        cursor: currentCursor,
+        limit: 25,
+      });
+      setCursorHistory(prev => [...prev, currentCursor]);
+      setStudentList(res.items);
+      setNextCursor(res.nextCursor);
+      setHasMore(res.hasMore);
+      setPageIndex(prev => prev + 1);
+    });
+  };
+
+  const handlePrevPage = () => {
+    if (pageIndex === 0 || isPending) return;
+    const newHistory = [...cursorHistory];
+    newHistory.pop();
+    const targetCursor = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
+    startTransition(async () => {
+      const res = await fetchStudentsPaginated(schoolId, {
+        tierName: activeTier,
+        status: filterStatus,
+        cursor: targetCursor,
+        limit: 25,
+      });
+      setCursorHistory(newHistory);
+      setStudentList(res.items);
+      setNextCursor(res.nextCursor);
+      setHasMore(res.hasMore);
+      setPageIndex(prev => Math.max(0, prev - 1));
+    });
+  };
+
+  const combinedRecords = (filterStatus === "PROSPECT" || filterStatus === "APPLICANT")
+    ? [...studentList, ...(leads || [])]
+    : studentList;
+
+  const filteredStudents = combinedRecords.filter(s => {
     if (filterStatus !== "ALL" && s.status !== filterStatus) return false;
     if (filterStatus === "ALL" && s.status === "ALUMNI") return false;
     return true;
@@ -235,7 +306,7 @@ export default function StudentTable({
           <select 
             className="border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-sm bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 w-full sm:w-auto min-w-[200px]"
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) => handleFilterChange(e.target.value)}
           >
             <option value="ALL">All Statuses</option>
             <option value="ENROLLED">Enrolled</option>
@@ -681,6 +752,35 @@ export default function StudentTable({
             </div>
           ))
         )}
+      </div>
+
+      {/* High-Performance Cursor Pagination Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm text-sm">
+        <div className="text-slate-500 dark:text-zinc-400 font-medium">
+          Showing <span className="font-bold text-slate-800 dark:text-zinc-200">{filteredStudents.length}</span> records on Page {pageIndex + 1}
+          {isPending && <span className="ml-2 text-xs text-indigo-600 dark:text-indigo-400 font-bold animate-pulse">Scanning indexed cursor...</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pageIndex === 0 || isPending}
+            onClick={handlePrevPage}
+            className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+          >
+            &larr; Previous Page
+          </button>
+          <span className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 font-bold text-slate-600 dark:text-zinc-300">
+            Page {pageIndex + 1}
+          </span>
+          <button
+            type="button"
+            disabled={!hasMore || isPending}
+            onClick={handleNextPage}
+            className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+          >
+            Next Page &rarr;
+          </button>
+        </div>
       </div>
 
       {selectedStudent && (

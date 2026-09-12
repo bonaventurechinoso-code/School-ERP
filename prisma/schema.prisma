@@ -152,6 +152,10 @@ model Student {
   GradeRecord       GradeRecord[]
 
   @@index([schoolId, status]) // Performance index for tenant queries
+  @@index([schoolId, tierId, status, createdAt(sort: Desc)])
+  @@index([schoolId, currentClass, status])
+  @@index([schoolId, createdAt(sort: Desc)])
+  @@index([schoolId, lastName, firstName])
   @@index([tierId])
   @@unique([schoolId, admissionNumber]) // Ensure admission numbers are unique per tenant
 }
@@ -254,6 +258,9 @@ model Staff {
 
   @@unique([schoolId, email]) // Ensure unique staff emails per school
   @@index([schoolId, status])
+  @@index([schoolId, role, status])
+  @@index([schoolId, departmentId])
+  @@index([schoolId, createdAt(sort: Desc)])
 }
 
 model Department {
@@ -273,6 +280,7 @@ model Department {
 
   @@unique([schoolId, name])
   @@index([schoolId])
+  @@index([schoolId, tierId])
 }
 
 model PayrollRecord {
@@ -292,6 +300,7 @@ model PayrollRecord {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, staffId])
+  @@index([schoolId, status, payDate(sort: Desc)])
 }
 
 // ------------------------------------------------------
@@ -314,6 +323,7 @@ model Classroom {
   Timetable Timetable[]
 
   @@index([schoolId])
+  @@index([schoolId, tierId])
 }
 
 model Course {
@@ -334,6 +344,7 @@ model Course {
 
   @@unique([schoolId, code])
   @@index([schoolId])
+  @@index([schoolId, tierId])
 }
 
 // ------------------------------------------------------
@@ -355,6 +366,7 @@ model FeeTemplate {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId])
+  @@index([schoolId, createdAt(sort: Desc)])
 }
 
 model Invoice {
@@ -379,6 +391,8 @@ model Invoice {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, studentId])
+  @@index([schoolId, status, dueDate])
+  @@index([schoolId, createdAt(sort: Desc)])
   @@index([feeTemplateId])
 }
 
@@ -401,6 +415,8 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, invoiceId])
+  @@index([schoolId, paymentDate(sort: Desc)])
+  @@index([schoolId, studentId, paymentDate(sort: Desc)])
 }
 
 model Transaction {
@@ -419,6 +435,8 @@ model Transaction {
 
   @@index([schoolId, type])
   @@index([schoolId, category])
+  @@index([schoolId, type, category, createdAt(sort: Desc)])
+  @@index([schoolId, createdAt(sort: Desc)])
 }
 
 // ------------------------------------------------------
@@ -447,6 +465,9 @@ model Timetable {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, dayOfWeek])
+  @@index([schoolId, dayOfWeek, startTime])
+  @@index([schoolId, staffId, dayOfWeek])
+  @@index([schoolId, classroomId, dayOfWeek])
 }
 
 model StudentAttendance {
@@ -466,6 +487,7 @@ model StudentAttendance {
 
   @@unique([schoolId, studentId, date])
   @@index([schoolId, date])
+  @@index([schoolId, date, status])
 }
 
 model StaffAttendance {
@@ -485,6 +507,7 @@ model StaffAttendance {
 
   @@unique([schoolId, staffId, date])
   @@index([schoolId, date])
+  @@index([schoolId, date, status])
 }
 
 // ------------------------------------------------------
@@ -513,6 +536,7 @@ model GradeRecord {
 
   @@unique([schoolId, studentId, term, className, subject])
   @@index([schoolId, studentId])
+  @@index([schoolId, term, className, subject])
 }
 
 model Exam {
@@ -534,6 +558,7 @@ model Exam {
   results ExamResult[]
 
   @@index([schoolId, courseId])
+  @@index([schoolId, semester, date(sort: Desc)])
 }
 
 model ExamResult {
@@ -559,6 +584,7 @@ model ExamResult {
 
   @@unique([schoolId, examId, studentId])
   @@index([schoolId, studentId])
+  @@index([schoolId, examId, score(sort: Desc)])
 }
 
 // ------------------------------------------------------
@@ -582,6 +608,7 @@ model Notice {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, targetAudience])
+  @@index([schoolId, targetAudience, priority, createdAt(sort: Desc)])
 }
 
 model MessageLog {
@@ -598,6 +625,7 @@ model MessageLog {
   sentAt DateTime @default(now())
 
   @@index([schoolId, recipientEmail])
+  @@index([schoolId, sentAt(sort: Desc)])
 }
 
 // ------------------------------------------------------
@@ -634,6 +662,7 @@ model AdmissionLead {
   updatedAt DateTime @updatedAt
 
   @@index([schoolId, status])
+  @@index([schoolId, tierId, status, createdAt(sort: Desc)])
   @@index([tierId])
 }
 

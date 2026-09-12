@@ -1,13 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-// Global singleton to avoid connection exhaustion in Next.js dev mode
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const basePrisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
+import { basePrisma } from "@/lib/tenant-prisma";
 
 /**
  * Dynamic factory utility for schema-based multi-tenancy.

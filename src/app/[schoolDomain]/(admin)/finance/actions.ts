@@ -2,6 +2,110 @@
 
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { cacheAside, buildCacheKey } from "@/lib/cache";
+import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
+import { invalidateFinanceNamespace } from "@/lib/cache-invalidation";
+
+/**
+ * High-performance cursor-based fetching for Financial Invoices wrapped in Smart Cache-Aside.
+ * Flat lookup times across millions of invoice rows.
+ */
+export async function fetchInvoicesPaginated(
+  schoolId: string,
+  options?: {
+    status?: string;
+    studentId?: string;
+    cursor?: string | null;
+    limit?: number;
+  }
+): Promise<CursorPaginationResult<any>> {
+  const status = options?.status;
+  const studentId = options?.studentId;
+  const cursor = options?.cursor;
+  const limit = options?.limit || 25;
+
+  const cacheKey = buildCacheKey({
+    tenantId: schoolId,
+    table: "invoices",
+    action: "paginated",
+    cursor,
+    limit,
+    filters: { status, studentId },
+  });
+
+  return cacheAside<CursorPaginationResult<any>>({
+    key: cacheKey,
+    ttlSeconds: 1800, // 30 minutes safe sliding TTL
+    fetchFn: async () => {
+      const tenantDb = getTenantClient(schoolId);
+      const whereClause: any = {
+        schoolId,
+        ...(status && status !== "ALL" ? { status } : {}),
+        ...(studentId ? { studentId } : {}),
+      };
+
+      return executeCursorPagination(async (args) => {
+        return tenantDb.invoice.findMany({
+          ...args,
+          where: whereClause,
+          include: {
+            student: true,
+            payments: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+      }, { cursor, limit });
+    },
+  });
+}
+
+/**
+ * High-performance cursor-based fetching for Financial Transactions / General Ledger.
+ */
+export async function fetchTransactionsPaginated(
+  schoolId: string,
+  options?: {
+    type?: string;
+    category?: string;
+    cursor?: string | null;
+    limit?: number;
+  }
+): Promise<CursorPaginationResult<any>> {
+  const type = options?.type;
+  const category = options?.category;
+  const cursor = options?.cursor;
+  const limit = options?.limit || 25;
+
+  const cacheKey = buildCacheKey({
+    tenantId: schoolId,
+    table: "transactions",
+    action: "paginated",
+    cursor,
+    limit,
+    filters: { type, category },
+  });
+
+  return cacheAside<CursorPaginationResult<any>>({
+    key: cacheKey,
+    ttlSeconds: 1800,
+    fetchFn: async () => {
+      const tenantDb = getTenantClient(schoolId);
+      const whereClause: any = {
+        schoolId,
+        ...(type && type !== "ALL" ? { type } : {}),
+        ...(category && category !== "ALL" ? { category } : {}),
+      };
+
+      return executeCursorPagination(async (args) => {
+        return tenantDb.transaction.findMany({
+          ...args,
+          where: whereClause,
+          orderBy: { createdAt: "desc" },
+        });
+      }, { cursor, limit });
+    },
+  });
+}
 
 export async function createInvoice(
   schoolId: string,
@@ -21,6 +125,9 @@ export async function createInvoice(
         feeTemplateId: data.feeTemplateId,
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
@@ -62,6 +169,9 @@ export async function recordPayment(
       data: { status: newStatus }
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
+
     revalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
@@ -84,6 +194,10 @@ export async function createFeeTemplate(
         billingType: data.billingType || "FLAT",
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
+
     revalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
@@ -98,6 +212,10 @@ export async function deleteFeeTemplate(schoolId: string, id: string) {
     await tenantDb.feeTemplate.delete({
       where: { id }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
+
     revalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
@@ -131,6 +249,9 @@ export async function bulkCreateInvoices(
     await tenantDb.invoice.createMany({
       data: invoicesData
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true, count: invoicesData.length };

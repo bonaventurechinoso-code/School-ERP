@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
 
 export async function PATCH(
@@ -123,6 +124,10 @@ export async function PATCH(
       });
 
       invalidateTierConnection();
+      await Promise.all([
+        invalidateStudentNamespace(schoolId, lead.tier?.name),
+        invalidateAdmissionsNamespace(schoolId),
+      ]);
       try {
         if (school?.subdomain) {
           revalidatePath(`/${school.subdomain}/students`);
@@ -140,6 +145,7 @@ export async function PATCH(
         data: { status },
       });
 
+      await invalidateAdmissionsNamespace(schoolId);
       try {
         if (school?.subdomain) {
           revalidatePath(`/${school.subdomain}/admissions`);

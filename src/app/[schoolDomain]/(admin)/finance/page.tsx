@@ -1,6 +1,7 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import FinanceDashboard from "./FinanceDashboard";
+import { fetchInvoicesPaginated, fetchTransactionsPaginated } from "./actions";
 
 export default async function FinancePage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
   const params = await paramsPromise;
@@ -20,35 +21,46 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
 
   const tenantDb = getTenantClient(school.id);
   
-  const students = await tenantDb.student.findMany({
-    orderBy: { firstName: "asc" },
-  });
+  // High-performance cursor pagination and database aggregations for flat query speeds
+  const [
+    invoicesResult,
+    transactionsResult,
+    students,
+    feeTemplates,
+    invoicedAggregate,
+    paidAggregate,
+    expensesAggregate,
+  ] = await Promise.all([
+    fetchInvoicesPaginated(school.id, { limit: 25 }),
+    fetchTransactionsPaginated(school.id, { limit: 25 }),
+    tenantDb.student.findMany({
+      where: { schoolId: school.id },
+      select: { id: true, firstName: true, lastName: true, admissionNumber: true },
+      take: 100,
+      orderBy: { firstName: "asc" },
+    }),
+    tenantDb.feeTemplate.findMany({
+      where: { schoolId: school.id },
+      orderBy: { createdAt: "desc" },
+    }),
+    tenantDb.invoice.aggregate({
+      where: { schoolId: school.id },
+      _sum: { amountDue: true },
+    }).catch(() => ({ _sum: { amountDue: 0 } })),
+    tenantDb.payment.aggregate({
+      where: { schoolId: school.id },
+      _sum: { amountPaid: true },
+    }).catch(() => ({ _sum: { amountPaid: 0 } })),
+    tenantDb.transaction.aggregate({
+      where: { schoolId: school.id, type: "EXPENSE" },
+      _sum: { amount: true },
+    }).catch(() => ({ _sum: { amount: 0 } })),
+  ]);
 
-  const feeTemplates = await tenantDb.feeTemplate.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  const invoices = await tenantDb.invoice.findMany({
-    include: {
-      student: true,
-      payments: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const transactions = await tenantDb.transaction.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  // Calculate high level metrics
-  const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.amountDue, 0);
-  const totalPaid = invoices.reduce((sum, inv) => {
-    return sum + inv.payments.reduce((pSum, p) => pSum + p.amountPaid, 0);
-  }, 0);
+  const totalInvoiced = invoicedAggregate._sum.amountDue || 0;
+  const totalPaid = paidAggregate._sum.amountPaid || 0;
   const outstandingBalance = totalInvoiced - totalPaid;
-  const totalExpenses = transactions
-    .filter(t => t.type === 'EXPENSE')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = expensesAggregate._sum.amount || 0;
 
   const hasHigherEd = school.academicTiers.some(t => 
     t.name.toLowerCase().includes("higher ed") || 
@@ -64,23 +76,34 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
           Fee Tracking & Finance
         </h2>
         <p className="text-slate-500 mt-2 text-lg">
-          Manage invoices, record payments, and track student balances.
+          Manage invoices, record payments, and track institutional cash flow.
         </p>
       </header>
 
-      <FinanceDashboard 
-        hasHigherEd={hasHigherEd}
-        invoices={invoices}
-        students={students}
-        feeTemplates={feeTemplates}
-        transactions={transactions}
-        schoolId={school.id}
-        totalInvoiced={totalInvoiced}
-        totalPaid={totalPaid}
-        totalExpenses={totalExpenses}
-        outstandingBalance={outstandingBalance}
-      />
-      
+      <Suspense fallback={
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 animate-pulse space-y-4">
+          <div className="h-8 bg-slate-100 dark:bg-zinc-800 rounded-lg w-1/4"></div>
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-14 bg-slate-50 dark:bg-zinc-800/50 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      }>
+        <FinanceDashboard 
+          hasHigherEd={hasHigherEd}
+          invoices={invoicesResult.items}
+          students={students as any}
+          feeTemplates={feeTemplates}
+          transactions={transactionsResult.items}
+          schoolId={school.id}
+          totalInvoiced={totalInvoiced}
+          totalPaid={totalPaid}
+          totalExpenses={totalExpenses}
+          outstandingBalance={outstandingBalance}
+        />
+      </Suspense>
+
     </div>
   );
 }

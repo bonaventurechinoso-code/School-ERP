@@ -1,8 +1,9 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { cookies } from "next/headers";
 import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import StudentTable from "./StudentTable";
+import { fetchStudentsPaginated } from "./actions";
 
 export default async function StudentsPage({ 
   params: paramsPromise,
@@ -58,11 +59,41 @@ export default async function StudentsPage({
   // Dynamically resolve and query the isolated database client
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [students, leads, classrooms] = await Promise.all([
-    tenantDb.student.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { tier: true },
+  // High-performance cursor pagination and indexed counts (scalable to millions of records)
+  const [
+    studentsPagination,
+    totalEnrolled,
+    suspendedStudents,
+    alumniCount,
+    leads,
+    classrooms,
+  ] = await Promise.all([
+    fetchStudentsPaginated(school.id, {
+      tierName: activeTierName,
+      tierId: activeTierObj?.id,
+      limit: 25,
     }),
+    tenantDb.student.count({
+      where: {
+        schoolId: school.id,
+        status: "ENROLLED",
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
+    }).catch(() => 0),
+    tenantDb.student.count({
+      where: {
+        schoolId: school.id,
+        status: "SUSPENDED",
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
+    }).catch(() => 0),
+    tenantDb.student.count({
+      where: {
+        schoolId: school.id,
+        status: "ALUMNI",
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
+    }).catch(() => 0),
     basePrisma.admissionLead.findMany({
       where: {
         schoolId: school.id,
@@ -70,17 +101,19 @@ export default async function StudentsPage({
         status: { not: "ENROLLED" },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
       include: { tier: true },
     }).catch(async () => {
       return tenantDb.admissionLead.findMany({
         where: { status: { not: "ENROLLED" } },
         orderBy: { createdAt: "desc" },
+        take: 50,
         include: { tier: true },
-      });
+      }).catch(() => []);
     }),
     tenantDb.classroom.findMany({
       orderBy: { name: "asc" },
-    }),
+    }).catch(() => []),
   ]);
 
   const mappedLeads = leads.map(lead => {
@@ -115,13 +148,8 @@ export default async function StudentsPage({
     };
   });
 
-  const allRecords = [...students, ...mappedLeads];
-
-  const totalEnrolled = students.filter(s => s.status === "ENROLLED").length;
-  const suspendedStudents = students.filter(s => s.status === "SUSPENDED").length;
   const activeProspects = leads.filter(l => l.status === "INQUIRY").length;
   const totalApplicants = leads.filter(l => ["APPLIED", "INTERVIEW", "APPROVED"].includes(l.status)).length;
-  const alumniCount = students.filter(s => s.status === "ALUMNI").length;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -161,13 +189,27 @@ export default async function StudentsPage({
         </div>
       </div>
 
-      <StudentTable 
-        students={allRecords as any} 
-        schoolId={school.id} 
-        tiers={school.academicTiers}
-        activeTier={activeTierName}
-        classrooms={classrooms}
-      />
+      <Suspense fallback={
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 animate-pulse space-y-4">
+          <div className="h-8 bg-slate-100 dark:bg-zinc-800 rounded-lg w-1/4"></div>
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-12 bg-slate-50 dark:bg-zinc-800/50 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      }>
+        <StudentTable 
+          students={studentsPagination.items as any}
+          initialNextCursor={studentsPagination.nextCursor}
+          initialHasMore={studentsPagination.hasMore}
+          leads={mappedLeads as any}
+          schoolId={school.id} 
+          tiers={school.academicTiers}
+          activeTier={activeTierName}
+          classrooms={classrooms}
+        />
+      </Suspense>
       
     </div>
   );

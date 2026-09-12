@@ -1,18 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 
 // Global singleton to avoid connection exhaustion in Next.js dev mode
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-  clientPool: Map<string, PrismaClient> | undefined;
-};
+declare global {
+  // eslint-disable-next-line no-var
+  var __prismaBaseClient: PrismaClient | undefined;
+  // eslint-disable-next-line no-var
+  var __prismaTierConnectionPool: Map<string, PrismaClient> | undefined;
+}
 
-export const basePrisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = basePrisma;
+export const basePrisma: PrismaClient = (globalThis as any).__prismaBaseClient || new PrismaClient();
+(globalThis as any).__prismaBaseClient = basePrisma;
 
 // In-memory pool for tier-specific database connections
-const connectionPool: Map<string, PrismaClient> = globalForPrisma.clientPool ?? new Map();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.clientPool = connectionPool;
+const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTierConnectionPool || new Map();
+(globalThis as any).__prismaTierConnectionPool = connectionPool;
 
 /**
  * Standard models requiring schoolId isolation

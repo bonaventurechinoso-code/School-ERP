@@ -3,6 +3,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
 import { getSession } from "@/lib/auth";
+import { getCachedSchool } from "@/lib/cache";
 export default async function TenantLayout({
   children,
   params,
@@ -11,7 +12,6 @@ export default async function TenantLayout({
   params: Promise<{ schoolDomain: string }>;
 }) {
   const { schoolDomain } = await params;
-  let school = null;
   const reservedKeywords = ["choice", "register", "admin", "api", "www", "app"];
   
   if (reservedKeywords.includes(schoolDomain.toLowerCase())) {
@@ -44,13 +44,17 @@ export default async function TenantLayout({
     );
   }
 
+  let school = null;
+  let session = null;
+
   try {
-    school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain },
-      include: { academicTiers: true },
-    });
+    // Parallelize Redis cache metadata pre-fetch and user session authentication
+    [school, session] = await Promise.all([
+      getCachedSchool(schoolDomain),
+      getSession(),
+    ]);
   } catch (error) {
-    console.error("Tenant DB fetch error:", error);
+    console.error("Tenant metadata / session fetch error:", error);
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
@@ -108,7 +112,6 @@ export default async function TenantLayout({
     },
   };
 
-  const session = await getSession();
   if (session) {
     tenantData.userRole = session.role;
     tenantData.session = session;

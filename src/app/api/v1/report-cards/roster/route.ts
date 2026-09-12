@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import * as jose from "jose";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { getTenantClient } from "@/lib/tenant-prisma";
+import { cacheAside, buildCacheKey } from "@/lib/cache";
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,38 +30,52 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing required query parameters: term, className, subject" }, { status: 400 });
     }
 
-    const tenantDb = getTenantClient(tenantId);
-
-    // Fetch enrolled students matching className or all enrolled students if className is broad
-    const students = await tenantDb.student.findMany({
-      where: {
-        status: { in: ["ENROLLED", "ACTIVE"] },
-        ...(className ? { currentClass: className } : {})
-      },
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    const cacheKey = buildCacheKey({
+      tenantId,
+      table: "grades",
+      action: "roster",
+      filters: { term, className, subject },
     });
 
-    // Fetch existing grade records for this tenant, term, class, subject
-    const gradeRecords = await tenantDb.gradeRecord.findMany({
-      where: {
-        schoolId: tenantId,
-        term,
-        className,
-        subject,
+    const roster = await cacheAside({
+      key: cacheKey,
+      ttlSeconds: 1800, // 30 minutes safe sliding TTL
+      fetchFn: async () => {
+        const tenantDb = getTenantClient(tenantId);
+
+        // Fetch enrolled students matching className or all enrolled students if className is broad
+        const students = await tenantDb.student.findMany({
+          where: {
+            schoolId: tenantId,
+            status: { in: ["ENROLLED", "ACTIVE"] },
+            ...(className ? { currentClass: className } : {})
+          },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        });
+
+        // Fetch existing grade records for this tenant, term, class, subject
+        const gradeRecords = await tenantDb.gradeRecord.findMany({
+          where: {
+            schoolId: tenantId,
+            term,
+            className,
+            subject,
+          },
+        });
+
+        const gradeMap = new Map(gradeRecords.map(g => [g.studentId, g]));
+
+        return students.map(student => {
+          const existing = gradeMap.get(student.id);
+          return {
+            id: student.id,
+            name: `${student.lastName}, ${student.firstName}`,
+            ca1: existing ? String(existing.ca1) : "",
+            ca2: existing ? String(existing.ca2) : "",
+            exam: existing ? String(existing.exam) : "",
+          };
+        });
       },
-    });
-
-    const gradeMap = new Map(gradeRecords.map(g => [g.studentId, g]));
-
-    const roster = students.map(student => {
-      const existing = gradeMap.get(student.id);
-      return {
-        id: student.id,
-        name: `${student.lastName}, ${student.firstName}`,
-        ca1: existing ? String(existing.ca1) : "",
-        ca2: existing ? String(existing.ca2) : "",
-        exam: existing ? String(existing.exam) : "",
-      };
     });
 
     return NextResponse.json({ success: true, roster });

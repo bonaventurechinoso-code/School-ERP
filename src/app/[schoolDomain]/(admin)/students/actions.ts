@@ -4,8 +4,11 @@ import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenan
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import * as jose from "jose";
+import { cacheAside, buildCacheKey } from "@/lib/cache";
+import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
+import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 
-async function resolveDbForAction(schoolId: string, tierContext?: string, tierId?: string) {
+export async function resolveDbForAction(schoolId: string, tierContext?: string, tierId?: string) {
   let activeTier = tierContext;
 
   if (!activeTier && tierId) {
@@ -26,6 +29,71 @@ async function resolveDbForAction(schoolId: string, tierContext?: string, tierId
   }
 
   return getPrismaClientForTier(schoolId, activeTier || "");
+}
+
+/**
+ * High-performance cursor-based fetching for Student Roster wrapped in Smart Cache-Aside.
+ * Flat O(log N) lookup time even with millions of student records.
+ */
+export async function fetchStudentsPaginated(
+  schoolId: string,
+  options?: {
+    tierName?: string;
+    tierId?: string;
+    status?: string;
+    cursor?: string | null;
+    limit?: number;
+    search?: string;
+  }
+): Promise<CursorPaginationResult<any>> {
+  const activeTier = options?.tierName || "all";
+  const status = options?.status;
+  const cursor = options?.cursor;
+  const limit = options?.limit || 25;
+  const search = options?.search;
+
+  const cacheKey = buildCacheKey({
+    tenantId: schoolId,
+    tierName: activeTier,
+    table: "students",
+    action: "paginated",
+    cursor,
+    limit,
+    filters: { status, search, tierId: options?.tierId },
+  });
+
+  return cacheAside<CursorPaginationResult<any>>({
+    key: cacheKey,
+    ttlSeconds: 1800, // 30 minutes safe sliding TTL
+    fetchFn: async () => {
+      const tenantDb = await resolveDbForAction(schoolId, options?.tierName, options?.tierId);
+
+      const whereClause: any = {
+        schoolId,
+        ...(status && status !== "ALL" ? { status } : {}),
+        ...(options?.tierId ? { tierId: options.tierId } : {}),
+      };
+
+      if (search && search.trim()) {
+        const query = search.trim();
+        whereClause.OR = [
+          { firstName: { contains: query, mode: "insensitive" } },
+          { lastName: { contains: query, mode: "insensitive" } },
+          { admissionNumber: { contains: query, mode: "insensitive" } },
+          { currentClass: { contains: query, mode: "insensitive" } },
+        ];
+      }
+
+      return executeCursorPagination(async (args) => {
+        return tenantDb.student.findMany({
+          ...args,
+          where: whereClause,
+          orderBy: { createdAt: "desc" },
+          include: { tier: true },
+        });
+      }, { cursor, limit });
+    },
+  });
 }
 
 export async function createStudent(
@@ -95,6 +163,9 @@ export async function createStudent(
       }
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
+
     revalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true };
   } catch (error: any) {
@@ -136,6 +207,9 @@ export async function updateStudent(
       }
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
+
     revalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true };
   } catch (error: any) {
@@ -151,6 +225,9 @@ export async function deleteStudent(schoolId: string, studentId: string, tierCon
     await tenantDb.student.delete({
       where: { id: studentId }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
 
     revalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true };
@@ -200,6 +277,9 @@ export async function updateStudentStatus(
       data
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
+
     revalidatePath(`/[schoolDomain]/students`, "page");
   } catch (error) {
     console.error("[Server Action] Failed to update student status:", error);
@@ -220,6 +300,9 @@ export async function bulkGraduateClass(schoolId: string, className: string, tie
         alumniAt: new Date()
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
 
     revalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true, count: result.count };
@@ -242,6 +325,9 @@ export async function bulkGraduateStudents(schoolId: string, studentIds: string[
         alumniAt: new Date()
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateStudentNamespace(schoolId, tierContext);
 
     revalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true, count: result.count };

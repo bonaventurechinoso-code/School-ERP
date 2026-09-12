@@ -1,6 +1,7 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import StaffTable from "./StaffTable";
+import { fetchStaffPaginated } from "./actions";
 
 export default async function StaffPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
   const params = await paramsPromise;
@@ -20,14 +21,20 @@ export default async function StaffPage({ params: paramsPromise }: { params: Pro
 
   const tenantDb = getTenantClient(school.id);
   
-  const staffList = await tenantDb.staff.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  const totalActive = staffList.filter(s => s.status === "ACTIVE").length;
-  const totalOnboarding = staffList.filter(s => s.status === "ONBOARDING").length;
-  const teachersCount = staffList.filter(s => s.role === "TEACHER" && s.status === "ACTIVE").length;
-  const adminsCount = staffList.filter(s => s.role === "ADMIN" && s.status === "ACTIVE").length;
+  // High-performance cursor pagination and indexed counts
+  const [
+    staffPagination,
+    totalActive,
+    totalOnboarding,
+    teachersCount,
+    adminsCount,
+  ] = await Promise.all([
+    fetchStaffPaginated(school.id, { limit: 25 }),
+    tenantDb.staff.count({ where: { schoolId: school.id, status: "ACTIVE" } }).catch(() => 0),
+    tenantDb.staff.count({ where: { schoolId: school.id, status: "ONBOARDING" } }).catch(() => 0),
+    tenantDb.staff.count({ where: { schoolId: school.id, role: "TEACHER", status: "ACTIVE" } }).catch(() => 0),
+    tenantDb.staff.count({ where: { schoolId: school.id, role: "ADMIN", status: "ACTIVE" } }).catch(() => 0),
+  ]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -61,7 +68,23 @@ export default async function StaffPage({ params: paramsPromise }: { params: Pro
         </div>
       </div>
       
-      <StaffTable staffList={staffList} schoolId={school.id} />
+      <Suspense fallback={
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 animate-pulse space-y-4">
+          <div className="h-8 bg-slate-100 rounded-lg w-1/4"></div>
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-12 bg-slate-50 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      }>
+        <StaffTable 
+          staffList={staffPagination.items} 
+          initialNextCursor={staffPagination.nextCursor}
+          initialHasMore={staffPagination.hasMore}
+          schoolId={school.id} 
+        />
+      </Suspense>
       
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 
 export async function createExam(
   schoolId: string,
@@ -28,6 +29,9 @@ export async function createExam(
       }
     });
 
+    // Write-Through Cache Invalidation
+    await invalidateGradingNamespace(schoolId);
+
     revalidatePath(`/[schoolDomain]/exams`, "page");
     return { success: true };
   } catch (error: any) {
@@ -43,6 +47,9 @@ export async function deleteExam(schoolId: string, id: string) {
     await tenantDb.exam.delete({
       where: { id }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateGradingNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/exams`, "page");
     return { success: true };
@@ -94,6 +101,9 @@ export async function upsertExamResult(
         remarks
       }
     });
+
+    // Write-Through Cache Invalidation
+    await invalidateGradingNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/exams`, "page");
     return { success: true };
