@@ -41,17 +41,21 @@ export default async function AdminLayout({
     }
   }
 
-  // 1. ISOLATE STUDENTS AND STAFF FROM ADMIN DASHBOARD
-  if (userRole === "STUDENT") {
-    redirect("/portal/student?denied=true");
-  }
+  const isDev = process.env.NODE_ENV === "development";
 
-  if (userRole === "STAFF") {
-    redirect("/portal/staff?denied=true");
+  // 1. ISOLATE STUDENTS AND STAFF FROM ADMIN DASHBOARD (Skipped in development testing)
+  if (!isDev) {
+    if (userRole === "STUDENT") {
+      redirect("/portal/student?denied=true");
+    }
+
+    if (userRole === "STAFF") {
+      redirect("/portal/staff?denied=true");
+    }
   }
 
   // 2. SECURE WALLET BALANCE ACCESSIBILITY (SUPER_ADMIN & SCHOOL_ADMIN ONLY)
-  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
+  const isWalletAuthorized = isDev || userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
   const walletElement = isWalletAuthorized ? (
     <WalletTopUp schoolId={school.id} walletBalance={school.walletBalance} />
   ) : null;
