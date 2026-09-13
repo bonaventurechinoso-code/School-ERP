@@ -41,6 +41,7 @@ export async function fetchStudentsPaginated(
     tierName?: string;
     tierId?: string;
     status?: string;
+    className?: string;
     cursor?: string | null;
     limit?: number;
     search?: string;
@@ -48,6 +49,7 @@ export async function fetchStudentsPaginated(
 ): Promise<CursorPaginationResult<any>> {
   const activeTier = options?.tierName || "all";
   const status = options?.status;
+  const className = options?.className;
   const cursor = options?.cursor;
   const limit = options?.limit || 25;
   const search = options?.search;
@@ -59,7 +61,7 @@ export async function fetchStudentsPaginated(
     action: "paginated",
     cursor,
     limit,
-    filters: { status, search, tierId: options?.tierId },
+    filters: { status, className, search, tierId: options?.tierId },
   });
 
   return cacheAside<CursorPaginationResult<any>>({
@@ -68,21 +70,56 @@ export async function fetchStudentsPaginated(
     fetchFn: async () => {
       const tenantDb = await resolveDbForAction(schoolId, options?.tierName, options?.tierId);
 
-      const whereClause: any = {
-        schoolId,
-        ...(status && status !== "ALL" ? { status } : {}),
-        ...(options?.tierId ? { tierId: options.tierId } : {}),
-      };
+      const andConditions: any[] = [
+        { schoolId },
+        ...(status && status !== "ALL" ? [{ status }] : []),
+        ...(options?.tierId ? [{ tierId: options.tierId }] : []),
+      ];
+
+      if (className && className !== "ALL") {
+        const cName = className.trim();
+        const altClass1 = cName.toLowerCase().startsWith("class ")
+          ? cName.replace(/class\s+/i, "Primary ")
+          : cName.toLowerCase().startsWith("primary ")
+          ? cName.replace(/primary\s+/i, "Class ")
+          : null;
+        const altClass2 = cName.toLowerCase().startsWith("class ")
+          ? cName.replace(/class\s+/i, "Basic ")
+          : null;
+
+        andConditions.push({
+          OR: [
+            { currentClass: { equals: cName, mode: "insensitive" } },
+            { currentClass: { startsWith: cName, mode: "insensitive" } },
+            ...(altClass1
+              ? [
+                  { currentClass: { equals: altClass1, mode: "insensitive" } },
+                  { currentClass: { startsWith: altClass1, mode: "insensitive" } },
+                ]
+              : []),
+            ...(altClass2
+              ? [
+                  { currentClass: { equals: altClass2, mode: "insensitive" } },
+                  { currentClass: { startsWith: altClass2, mode: "insensitive" } },
+                ]
+              : []),
+          ],
+        });
+      }
 
       if (search && search.trim()) {
         const query = search.trim();
-        whereClause.OR = [
-          { firstName: { contains: query, mode: "insensitive" } },
-          { lastName: { contains: query, mode: "insensitive" } },
-          { admissionNumber: { contains: query, mode: "insensitive" } },
-          { currentClass: { contains: query, mode: "insensitive" } },
-        ];
+        andConditions.push({
+          OR: [
+            { firstName: { contains: query, mode: "insensitive" } },
+            { lastName: { contains: query, mode: "insensitive" } },
+            { admissionNumber: { contains: query, mode: "insensitive" } },
+            { currentClass: { contains: query, mode: "insensitive" } },
+          ],
+        });
       }
+
+      const whereClause = andConditions.length > 1 ? { AND: andConditions } : andConditions[0] || { schoolId };
 
       return executeCursorPagination(async (args) => {
         return tenantDb.student.findMany({

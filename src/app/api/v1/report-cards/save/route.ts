@@ -98,6 +98,26 @@ export async function POST(req: Request) {
       }
     });
 
+    // Dynamic Multi-Database Routing: Save to AcademicRecord in dedicated tier DB
+    try {
+      const { saveAcademicRecord } = await import("@/lib/report-card-service");
+      await saveAcademicRecord({
+        schoolId: tenantId,
+        studentId,
+        subject,
+        term,
+        academicYear: body.academicYear || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
+        className,
+        numericalScores: {
+          test1: numCa1,
+          test2: numCa2,
+          finalExam: numExam,
+        },
+      });
+    } catch (saveErr) {
+      console.warn("[API save] Error syncing to AcademicRecord in tier DB:", saveErr);
+    }
+
     return NextResponse.json({ 
       success: true, 
       message: "Saved Successfully", 

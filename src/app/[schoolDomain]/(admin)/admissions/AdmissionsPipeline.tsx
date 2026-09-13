@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AdmissionLead, AcademicTier } from "@prisma/client";
-import { X, Mail, Phone, User, Users, CheckCircle, GraduationCap } from "lucide-react";
+import { X, Mail, Phone, User, Users, CheckCircle, GraduationCap, FileCheck, FileText, Image as ImageIcon, Copy, ExternalLink } from "lucide-react";
 import { enrollApplicantAction, updateLeadStatusAction } from "./actions";
 
 const STAGES = ["INQUIRY", "APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"];
@@ -376,6 +376,139 @@ export default function AdmissionsPipeline({
                       <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                       <span>{selectedLead.parentContact || selectedLead.parentPhone || "No phone"}</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Uploaded Credential Documents Section */}
+              <div className="bg-slate-50 dark:bg-zinc-950/60 p-4 rounded-xl border border-slate-150 dark:border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-semibold text-sm">
+                    <FileCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Uploaded Credential Documents</span>
+                  </div>
+                  {(selectedLead as any).uploadToken && (
+                    <button
+                      onClick={() => {
+                        const link = `${window.location.origin}/${schoolDomain || "udoka"}/admissions/upload/${selectedLead.id}?token=${(selectedLead as any).uploadToken}`;
+                        navigator.clipboard.writeText(link);
+                        alert("Secure upload portal link copied to clipboard!");
+                      }}
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Upload Link</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* 1. Passport Photo */}
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {(selectedLead as any).passportPhotoUrl ? (
+                        <img
+                          src={(selectedLead as any).passportPhotoUrl}
+                          alt="Passport"
+                          className="w-8 h-8 rounded-md object-cover border border-slate-200"
+                        />
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-slate-400 shrink-0" />
+                      )}
+                      <div className="truncate">
+                        <p className="font-bold text-slate-800 dark:text-zinc-200 truncate">Passport Photo</p>
+                        <span className={`text-[10px] font-bold ${
+                          (selectedLead as any).passportPhotoUrl ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {(selectedLead as any).passportPhotoUrl ? "Uploaded" : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+                    {(selectedLead as any).passportPhotoUrl && (
+                      <a
+                        href={(selectedLead as any).passportPhotoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:underline shrink-0 ml-2"
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+
+                  {/* 2. Academic Results */}
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
+                      <div className="truncate">
+                        <p className="font-bold text-slate-800 dark:text-zinc-200 truncate">Academic Results</p>
+                        <span className={`text-[10px] font-bold ${
+                          (selectedLead as any).academicResultsUrl ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {(selectedLead as any).academicResultsUrl ? "Uploaded" : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+                    {(selectedLead as any).academicResultsUrl && (
+                      <a
+                        href={(selectedLead as any).academicResultsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:underline shrink-0 ml-2"
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+
+                  {/* 3. Birth Certificate */}
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                      <div className="truncate">
+                        <p className="font-bold text-slate-800 dark:text-zinc-200 truncate">Birth Certificate</p>
+                        <span className={`text-[10px] font-bold ${
+                          (selectedLead as any).birthCertificateUrl ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {(selectedLead as any).birthCertificateUrl ? "Uploaded" : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+                    {(selectedLead as any).birthCertificateUrl && (
+                      <a
+                        href={(selectedLead as any).birthCertificateUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:underline shrink-0 ml-2"
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+
+                  {/* 4. Medical Records */}
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="w-5 h-5 text-purple-500 shrink-0" />
+                      <div className="truncate">
+                        <p className="font-bold text-slate-800 dark:text-zinc-200 truncate">Medical Records</p>
+                        <span className={`text-[10px] font-bold ${
+                          (selectedLead as any).medicalRecordsUrl ? "text-emerald-600" : "text-slate-400"
+                        }`}>
+                          {(selectedLead as any).medicalRecordsUrl ? "Uploaded" : "Not Provided"}
+                        </span>
+                      </div>
+                    </div>
+                    {(selectedLead as any).medicalRecordsUrl && (
+                      <a
+                        href={(selectedLead as any).medicalRecordsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:underline shrink-0 ml-2"
+                      >
+                        View
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

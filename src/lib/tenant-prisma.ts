@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { triggerInquiryNotification } from './admissions-events';
 
 // Global singleton to avoid connection exhaustion in Next.js dev mode
 declare global {
@@ -6,10 +7,39 @@ declare global {
   var __prismaBaseClient: PrismaClient | undefined;
   // eslint-disable-next-line no-var
   var __prismaTierConnectionPool: Map<string, PrismaClient> | undefined;
+  // eslint-disable-next-line no-var
+  var __admissionsPrismaMiddlewareAttached: boolean | undefined;
 }
 
 export const basePrisma: PrismaClient = (globalThis as any).__prismaBaseClient || new PrismaClient();
 (globalThis as any).__prismaBaseClient = basePrisma;
+
+// Attach Prisma middleware to base client for automated inquiry email triggers
+if (!(globalThis as any).__admissionsPrismaMiddlewareAttached && typeof (basePrisma as any).$use === 'function') {
+  (globalThis as any).__admissionsPrismaMiddlewareAttached = true;
+  (basePrisma as any).$use(async (params: any, next: any) => {
+    const result = await next(params);
+    if (params.model === 'AdmissionLead') {
+      if (params.action === 'create' && (result?.status === 'INQUIRY' || !result?.status)) {
+        triggerInquiryNotification({
+          leadId: result.id,
+          schoolId: result.schoolId,
+          lead: result,
+        });
+      } else if ((params.action === 'update' || params.action === 'upsert') && result?.status === 'INQUIRY') {
+        const isSettingInquiry = (params.args as any)?.data?.status === 'INQUIRY';
+        if (isSettingInquiry) {
+          triggerInquiryNotification({
+            leadId: result.id,
+            schoolId: result.schoolId,
+            lead: result,
+          });
+        }
+      }
+    }
+    return result;
+  });
+}
 
 // In-memory pool for tier-specific database connections
 const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTierConnectionPool || new Map();
@@ -21,7 +51,8 @@ const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTi
 const TENANT_MODELS = [
   'Student', 'Staff', 'Classroom', 'Course', 'FeeTemplate', 
   'Invoice', 'Payment', 'Timetable', 'StudentAttendance', 
-  'StaffAttendance', 'Exam', 'ExamResult', 'Notice', 'MessageLog', 
+  'StaffAttendance', 'Exam', 'ExamResult', 'GradeRecord',
+  'AcademicRecord', 'ReportCard', 'Notice', 'MessageLog', 
   'AcademicTier', 'Department', 'PayrollRecord', 'Transaction', 
   'AdmissionLead', 'TenantTierDatabase'
 ];
@@ -51,7 +82,43 @@ export function applyTenantIsolation(client: PrismaClient, schoolId: string) {
               }
             }
           }
-          return query(args);
+          
+          const result = await query(args);
+
+          // Automated trigger for AdmissionLead mutations entering INQUIRY stage
+          if (model === 'AdmissionLead') {
+            const resAny = result as any;
+            if (operation === 'create' || operation === 'createMany') {
+              if (Array.isArray(resAny)) {
+                for (const item of resAny) {
+                  if (item?.id && (item?.status === 'INQUIRY' || !item?.status)) {
+                    triggerInquiryNotification({
+                      leadId: item.id,
+                      schoolId: item.schoolId || schoolId,
+                      lead: item,
+                    });
+                  }
+                }
+              } else if (resAny?.id && (resAny.status === 'INQUIRY' || !resAny.status)) {
+                triggerInquiryNotification({
+                  leadId: resAny.id,
+                  schoolId: resAny.schoolId || schoolId,
+                  lead: resAny,
+                });
+              }
+            } else if (operation === 'update' || operation === 'upsert') {
+              const isSettingInquiry = (args as any)?.data?.status === 'INQUIRY';
+              if (resAny?.id && isSettingInquiry && resAny.status === 'INQUIRY') {
+                triggerInquiryNotification({
+                  leadId: resAny.id,
+                  schoolId: resAny.schoolId || schoolId,
+                  lead: resAny,
+                });
+              }
+            }
+          }
+
+          return result;
         },
       },
     },

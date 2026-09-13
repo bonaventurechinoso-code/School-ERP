@@ -39,7 +39,7 @@ export default async function StaffPortalPage({
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-6">
-        
+
         {/* Access Denied Interception Notice */}
         {isAccessDenied && (
           <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">

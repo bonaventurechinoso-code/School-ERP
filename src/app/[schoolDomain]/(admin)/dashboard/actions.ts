@@ -4,6 +4,7 @@ import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { cookies } from "next/headers";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
+import { triggerInquiryNotification } from "@/lib/admissions-events";
 
 /**
  * 1. Modular Fetcher: Enrolled Students Count (Student Roster)
@@ -265,7 +266,7 @@ export async function createAdmissionLead(
   tierContext?: string
 ) {
   // Leads reside in central admissions schema (basePrisma)
-  await basePrisma.admissionLead.create({
+  const newLead = await basePrisma.admissionLead.create({
     data: {
       schoolId,
       ...data,
@@ -275,4 +276,13 @@ export async function createAdmissionLead(
 
   // Write-Through Cache Invalidation
   await invalidateAdmissionsNamespace(schoolId);
+
+  // Trigger automated inquiry acknowledgment email
+  triggerInquiryNotification({
+    leadId: newLead.id,
+    schoolId,
+    lead: newLead,
+  });
+
+  return newLead;
 }

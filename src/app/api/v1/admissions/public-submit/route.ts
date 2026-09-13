@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { triggerInquiryNotification } from "@/lib/admissions-events";
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest) {
         source: "Website",
         status: "INQUIRY", // Force explicitly to INQUIRY
       }
+    });
+
+    // Trigger initial inquiry email automation
+    triggerInquiryNotification({
+      leadId: newLead.id,
+      schoolId: school.id,
+      lead: newLead,
+      school,
     });
 
     return NextResponse.json({ success: true, lead: newLead });

@@ -66,6 +66,8 @@ model School {
   Exam              Exam[]
   ExamResult        ExamResult[]
   GradeRecord       GradeRecord[]
+  academicRecords   AcademicRecord[]
+  reportCards       ReportCard[]
   Notice            Notice[]
   MessageLog        MessageLog[]
   departments       Department[]
@@ -150,6 +152,8 @@ model Student {
   StudentAttendance StudentAttendance[]
   ExamResult        ExamResult[]
   GradeRecord       GradeRecord[]
+  academicRecords   AcademicRecord[]
+  reportCards       ReportCard[]
 
   @@index([schoolId, status]) // Performance index for tenant queries
   @@index([schoolId, tierId, status, createdAt(sort: Desc)])
@@ -539,6 +543,93 @@ model GradeRecord {
   @@index([schoolId, term, className, subject])
 }
 
+model AcademicRecord {
+  id           String   @id @default(uuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  subject      String
+  term         String
+  academicYear String
+  className    String?
+
+  // Primary / Secondary Continuous Assessment & Exam Marks
+  test1        Float?   @default(0)
+  test2        Float?   @default(0)
+  midTerm      Float?   @default(0)
+  finalExam    Float?   @default(0)
+  totalScore   Float?   @default(0)
+  gradeLetter  String?
+  isPassed     Boolean? @default(true)
+
+  // Daycare / Nursery Descriptive & Narrative Skills
+  assessmentType    String?  @default("NUMERICAL") // "NUMERICAL" or "NARRATIVE"
+  narrativeRating   String?  // e.g. "EXCELLENT", "DEVELOPING", "NEEDS_IMPROVEMENT"
+  skillsEvaluation  Json?    // Detailed skills evaluation array/map
+  narrativeFeedback String?  // Qualitative observations
+
+  teacherRemarks String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([schoolId, studentId, subject, term, academicYear])
+  @@index([schoolId, studentId])
+  @@index([schoolId, term, academicYear])
+  @@index([schoolId, className, term, academicYear])
+  @@index([schoolId, subject, term, academicYear])
+}
+
+model ReportCard {
+  id                   String    @id @default(uuid())
+  schoolId             String
+  school               School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId            String
+  student              Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  term                 String
+  academicYear         String
+  className            String
+  tier                 String?   // "PRIMARY", "SECONDARY", "NURSERY"
+
+  // Primary / Secondary Summary Snapshot Metrics
+  totalScore           Float     @default(0)
+  averageScore         Float     @default(0)
+  gradeLetter          String?
+  gpa                  Float?
+  classPosition        Int?
+  totalStudentsInClass Int?
+  totalSubjects        Int       @default(0)
+  passedSubjects       Int       @default(0)
+  failedSubjects       Int       @default(0)
+
+  // Daycare / Nursery Developmental Snapshot
+  narrativeSummary      String?
+  developmentIndicators Json?
+
+  // Administrative Remarks
+  teacherRemarks       String?
+  principalRemarks     String?
+  nextTermBegins       DateTime?
+
+  // Status & Record Freeze
+  status                 String    @default("DRAFT") // DRAFT, COMPILED, FINALIZED, PUBLISHED
+  publishedAt            DateTime?
+  academicRecordSnapshot Json?
+
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([schoolId, studentId, term, academicYear])
+  @@index([schoolId, studentId])
+  @@index([schoolId, className, term, academicYear])
+  @@index([schoolId, term, academicYear, classPosition])
+}
+
 model Exam {
   id       String @id @default(uuid())
   schoolId String
@@ -656,6 +747,15 @@ model AdmissionLead {
   offerToken        String?  @unique
   offerExpiresAt    DateTime?
   
+  // Secure Upload Credentials Portal Fields
+  uploadToken       String?  @unique
+  uploadExpiresAt   DateTime?
+  passportPhotoUrl    String?
+  academicResultsUrl  String?
+  birthCertificateUrl String?
+  medicalRecordsUrl   String?
+  documents           Json?  @default("{}")
+
   notes             AdmissionNote[]
 
   createdAt DateTime @default(now())

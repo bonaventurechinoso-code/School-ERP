@@ -7,18 +7,26 @@ export const config = {
     /*
      * Match all request paths except for the ones starting with:
      * - api (API routes)
+     * - admin (SaaS Master Platform routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files (e.g. images, fonts)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|admin|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const path = url.pathname;
+
+  // 1. MASTER SAAS CONTROLLER SHORT-CIRCUIT:
+  // Instantly recognize platform owner routes (/admin, /admin/*).
+  // Completely skip tenant detection and database lookups, and open master SaaS dashboard directly.
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    return NextResponse.next();
+  }
 
   // Get hostname from headers (e.g., 'johnali.schoolerp.com', 'localhost:3000', '10.60.230.247:3000')
   const hostname = req.headers.get('host') || '';
@@ -38,12 +46,12 @@ export async function middleware(req: NextRequest) {
   }
 
   // Bypass dedicated portals, public pages, and auth endpoints from administrative interception
-  const isPublicOrPortalPath = 
-    path.startsWith('/portal/') || 
+  const isPublicOrPortalPath =
+    path.startsWith('/portal/') ||
     path.includes('/portal/') ||
-    path === '/access-denied' || 
-    path.includes('/login') || 
-    path.includes('/apply') || 
+    path === '/access-denied' ||
+    path.includes('/login') ||
+    path.includes('/apply') ||
     path.startsWith('/register');
 
   if (isPublicOrPortalPath) {
@@ -63,23 +71,22 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // --- Auth Check & RBAC Protection for Administrative Routes ---
-  const isAdminConsole = path === '/admin' || path.startsWith('/admin/');
+  // --- Auth Check & RBAC Protection for Tenant Administrative Routes ---
   const tenantAdminSegments = [
     '/dashboard', '/finance', '/hr', '/portal-settings',
     '/admissions', '/staff', '/students', '/scheduling',
     '/exams', '/transcripts', '/report-cards', '/communications'
   ];
   const isTenantAdminPath = tenantAdminSegments.some(segment => path.includes(segment));
-  const isAdministrativePath = isAdminConsole || isTenantAdminPath;
 
-  if (isAdministrativePath) {
+  if (isTenantAdminPath) {
     const sessionToken = req.cookies.get('session')?.value;
     const isDev = process.env.NODE_ENV === 'development';
 
     if (!sessionToken) {
-      // Redirect to login if no session token
-      const loginUrl = new URL(isAdminConsole ? '/login' : '/login', req.url);
+      // Redirect to tenant login or SaaS Master portal
+      const targetPath = subdomain ? `/${subdomain}/login` : '/admin';
+      const loginUrl = new URL(targetPath, req.url);
       if (subdomain && (isIPAddress || isLocalhost)) {
         loginUrl.searchParams.set('mockTenant', subdomain);
       }
@@ -111,16 +118,6 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(staffPortalUrl);
       }
 
-      // 3. SUPER ADMIN CONSOLE (/admin) PROTECTION
-      // Allow both SUPER_ADMIN and SCHOOL_ADMIN for smooth local testing across the entire system
-      const allowedSuperAdminRoles = ['SUPER_ADMIN', 'ADMIN', 'SCHOOL_ADMIN'];
-      if (isAdminConsole && !isDev && !allowedSuperAdminRoles.includes(rawRole)) {
-        const deniedUrl = new URL('/access-denied', req.url);
-        deniedUrl.searchParams.set('role', rawRole);
-        deniedUrl.searchParams.set('message', 'Platform Super-Admin console is restricted to Super-Administrators.');
-        return NextResponse.redirect(deniedUrl);
-      }
-
       // 4. TEACHER Role: Block Finance, HR, Portal Settings, Admissions, Staff
       if (!isDev && role === 'TEACHER') {
         if (path.includes('/finance') || path.includes('/hr') || path.includes('/portal-settings') || path.includes('/admissions') || path.includes('/staff')) {
@@ -146,7 +143,8 @@ export async function middleware(req: NextRequest) {
       // 6. SUPER_ADMIN / SCHOOL_ADMIN / ADMIN: Unrestricted access across administrative modules
     } catch (err) {
       // Token is invalid or expired
-      const loginUrl = new URL('/login', req.url);
+      const targetPath = subdomain ? `/${subdomain}/login` : '/admin';
+      const loginUrl = new URL(targetPath, req.url);
       if (subdomain && (isIPAddress || isLocalhost)) {
         loginUrl.searchParams.set('mockTenant', subdomain);
       }

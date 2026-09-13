@@ -28,7 +28,7 @@ export default function LandingPage() {
 
             {/* Center: Navigation Dropdown */}
             <nav className="hidden md:flex space-x-8">
-              <div 
+              <div
                 className="relative"
                 onMouseEnter={() => setIsSolutionsOpen(true)}
                 onMouseLeave={() => setIsSolutionsOpen(false)}
@@ -36,7 +36,7 @@ export default function LandingPage() {
                 <button className="flex items-center gap-1 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors h-20">
                   Institutional Solutions <ChevronDown className="h-4 w-4" />
                 </button>
-                
+
                 {isSolutionsOpen && (
                   <div className="absolute top-20 left-1/2 -translate-x-1/2 w-80 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="p-2">
@@ -90,7 +90,7 @@ export default function LandingPage() {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-6">
-              <Link href="/admin" className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors hidden sm:block">
+              <Link href="/admin/dashboard" className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors hidden sm:block">
                 Client Portal Login
               </Link>
               <ThemeToggle />
@@ -106,28 +106,28 @@ export default function LandingPage() {
       <section className="relative pt-24 pb-32 overflow-hidden bg-slate-900">
         {/* Background Image Integration */}
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <Image 
-            src="/assets/images/hero-graduation.jpg" 
+          <Image
+            src="/assets/images/hero-graduation.jpg"
             alt="Students graduating and celebrating"
             fill
             className="object-cover"
             priority
           />
         </div>
-        
+
         {/* Dark overlay layer */}
         <div className="absolute inset-0 bg-slate-950/70 z-10 pointer-events-none"></div>
-        
+
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-100/10 dark:bg-blue-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-100/10 dark:bg-purple-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
-        
+
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/50 border border-blue-400/50 text-blue-300 text-xs font-bold uppercase tracking-wider mb-8 backdrop-blur-sm shadow-sm">
             <span className="flex h-2 w-2 rounded-full bg-blue-400"></span>
             Version 2.0 Now Live
           </div>
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-8 leading-tight drop-shadow-lg">
-            The Unified Engine for <br className="hidden md:block"/>
+            The Unified Engine for <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
               Modern Education
             </span>
@@ -185,33 +185,30 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Transparent, Tiered Pricing</h2>
             <p className="text-slate-500 dark:text-slate-400 mt-4 max-w-2xl mx-auto">Select the perfect infrastructure tier tailored to your institution&apos;s specific operational needs and academic level.</p>
-            
+
             {/* Billing Toggle Tabs */}
             <div className="flex items-center justify-center mt-8 p-1.5 bg-slate-100 dark:bg-zinc-800/60 rounded-xl inline-flex mx-auto border border-slate-200 dark:border-zinc-700/50">
-              <button 
+              <button
                 onClick={() => setIsAnnual(false)}
-                className={`relative px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
-                  !isAnnual 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
+                className={`relative px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${!isAnnual
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
                 Monthly
               </button>
-              <button 
+              <button
                 onClick={() => setIsAnnual(true)}
-                className={`relative flex items-center gap-2 px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
-                  isAnnual 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
+                className={`relative flex items-center gap-2 px-8 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${isAnnual
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
-                Annually 
-                <span className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
-                  isAnnual 
-                    ? 'bg-white/20 text-white' 
+                Annually
+                <span className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${isAnnual
+                    ? 'bg-white/20 text-white'
                     : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-                }`}>
+                  }`}>
                   Save 20%
                 </span>
               </button>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
 
@@ -144,6 +145,16 @@ export async function PATCH(
         where: { id },
         data: { status },
       });
+
+      if (status === "INQUIRY") {
+        triggerInquiryNotification({
+          leadId: id,
+          schoolId,
+          lead: updatedLead,
+          school,
+          force: true,
+        });
+      }
 
       await invalidateAdmissionsNamespace(schoolId);
       try {

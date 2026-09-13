@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
 import { Student, AcademicTier } from "@prisma/client";
 import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents, fetchStudentsPaginated } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
@@ -17,6 +17,104 @@ interface StudentTableProps {
   tiers: AcademicTier[];
   activeTier?: string;
   classrooms?: Array<{ id: string; name: string }>;
+}
+
+export function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
+  if (!targetClass || targetClass === "ALL") return true;
+  if (!studentClass) return false;
+  const sNorm = studentClass.trim().toLowerCase();
+  const tNorm = targetClass.trim().toLowerCase();
+  if (sNorm === tNorm) return true;
+
+  // Word boundary or prefix match (e.g., "Class 1" matches "Class 1 Gold", "Class 1A", but not "Class 10")
+  const escaped = tNorm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|\\b)${escaped}(\\b|[^0-9]|$)`, "i");
+  if (pattern.test(sNorm)) return true;
+
+  // Check aliases like Class 1 <-> Primary 1 <-> Basic 1
+  const tClassNum = tNorm.match(/\d+/)?.[0];
+  const sClassNum = sNorm.match(/\d+/)?.[0];
+  if (tClassNum && sClassNum && tClassNum === sClassNum) {
+    if (
+      (tNorm.includes("class") || tNorm.includes("primary") || tNorm.includes("basic")) &&
+      (sNorm.includes("class") || sNorm.includes("primary") || sNorm.includes("basic"))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function getClassOptionsForTier(
+  activeTierName?: string,
+  tiersList: AcademicTier[] = [],
+  classroomsList: Array<{ id: string; name: string }> = []
+): string[] {
+  let tierIdentifier = (activeTierName || "").trim().toLowerCase();
+
+  // If activeTierName matches a tier ID or name in tiersList, use that tier's name
+  const matchingTier = tiersList.find(
+    (t) => t.id === activeTierName || t.name.toLowerCase() === activeTierName?.toLowerCase()
+  );
+  if (matchingTier) {
+    tierIdentifier = matchingTier.name.toLowerCase();
+  } else if ((!tierIdentifier || tierIdentifier === "all") && tiersList.length > 0) {
+    tierIdentifier = tiersList[0].name.toLowerCase();
+  }
+
+  // 1. Daycare / Nursery
+  if (
+    tierIdentifier.includes("nursery") ||
+    tierIdentifier.includes("daycare") ||
+    tierIdentifier.includes("creche") ||
+    tierIdentifier.includes("early") ||
+    tierIdentifier.includes("preschool") ||
+    tierIdentifier.includes("kindergarten")
+  ) {
+    return ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"];
+  }
+
+  // 2. Primary School
+  if (
+    tierIdentifier.includes("primary") ||
+    tierIdentifier.includes("elementary") ||
+    tierIdentifier.includes("basic")
+  ) {
+    return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"];
+  }
+
+  // 3. Secondary School
+  if (
+    tierIdentifier.includes("secondary") ||
+    tierIdentifier.includes("high") ||
+    tierIdentifier.includes("junior") ||
+    tierIdentifier.includes("senior") ||
+    tierIdentifier.includes("jss") ||
+    tierIdentifier.includes("sss") ||
+    tierIdentifier.includes("college")
+  ) {
+    return ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"];
+  }
+
+  // If tierIdentifier is "all" and multiple tiers exist, aggregate across tiers
+  if (tierIdentifier === "all" && tiersList.length > 1) {
+    const combined: string[] = [];
+    tiersList.forEach((t) => {
+      const opts = getClassOptionsForTier(t.name, [], []);
+      opts.forEach((o) => {
+        if (!combined.includes(o)) combined.push(o);
+      });
+    });
+    if (combined.length > 0) return combined;
+  }
+
+  // Fallback: If classrooms provided, use their unique names; otherwise default to Primary classes
+  if (classroomsList && classroomsList.length > 0) {
+    return Array.from(new Set(classroomsList.map((c) => c.name)));
+  }
+
+  return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"];
 }
 
 export default function StudentTable({ 
@@ -56,7 +154,12 @@ export default function StudentTable({
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
-  const [filterStatus, setFilterStatus] = useState<string>("ENROLLED");
+  const [filterClass, setFilterClass] = useState<string>("ALL");
+  const classOptions = getClassOptionsForTier(activeTier, tiers, classrooms);
+
+  useEffect(() => {
+    setFilterClass("ALL");
+  }, [activeTier]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const openCreateForm = () => {
@@ -149,14 +252,14 @@ export default function StudentTable({
     });
   };
 
-  const handleFilterChange = (newStatus: string) => {
-    setFilterStatus(newStatus);
+  const handleClassFilterChange = (newClass: string) => {
+    setFilterClass(newClass);
     setCursorHistory([]);
     setPageIndex(0);
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
-        status: newStatus,
+        className: newClass !== "ALL" ? newClass : undefined,
         cursor: null,
         limit: 25,
       });
@@ -172,7 +275,7 @@ export default function StudentTable({
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
-        status: filterStatus,
+        className: filterClass !== "ALL" ? filterClass : undefined,
         cursor: currentCursor,
         limit: 25,
       });
@@ -192,7 +295,7 @@ export default function StudentTable({
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
-        status: filterStatus,
+        className: filterClass !== "ALL" ? filterClass : undefined,
         cursor: targetCursor,
         limit: 25,
       });
@@ -204,13 +307,10 @@ export default function StudentTable({
     });
   };
 
-  const combinedRecords = (filterStatus === "PROSPECT" || filterStatus === "APPLICANT")
-    ? [...studentList, ...(leads || [])]
-    : studentList;
+  const combinedRecords = [...studentList, ...(leads || [])];
 
   const filteredStudents = combinedRecords.filter(s => {
-    if (filterStatus !== "ALL" && s.status !== filterStatus) return false;
-    if (filterStatus === "ALL" && s.status === "ALUMNI") return false;
+    if (filterClass !== "ALL" && !matchesClass(s.currentClass, filterClass)) return false;
     return true;
   });
 
@@ -286,14 +386,7 @@ export default function StudentTable({
   const isNursery = selectedTier && (selectedTier.name.toLowerCase().includes("daycare") || selectedTier.name.toLowerCase().includes("nursery") || selectedTier.name.toLowerCase().includes("early care"));
 
   let bulkActionLabel = "Graduate Selected";
-  let bulkActionGlobalLabel = "Graduate Class";
-  if (filterStatus === "PROSPECT" || filterStatus === "APPLICANT") {
-    bulkActionLabel = "Approve Selected Applications";
-    bulkActionGlobalLabel = "Approve Applications";
-  } else if (filterStatus === "SUSPENDED") {
-    bulkActionLabel = "Reinstate Selected Students";
-    bulkActionGlobalLabel = "Reinstate Students";
-  }
+  let bulkActionGlobalLabel = filterClass !== "ALL" ? `Graduate ${filterClass}` : "Graduate Class";
 
   const currentBulkLabel = selectedIds.length > 0 ? `${bulkActionLabel} (${selectedIds.length})` : bulkActionGlobalLabel;
 
@@ -302,23 +395,27 @@ export default function StudentTable({
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Filter by Status:</label>
+          <label htmlFor="filter-by-class" className="text-sm font-medium text-slate-700 dark:text-zinc-300">Filter by Class:</label>
           <select 
+            id="filter-by-class"
             className="border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-sm bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 w-full sm:w-auto min-w-[200px]"
-            value={filterStatus}
-            onChange={(e) => handleFilterChange(e.target.value)}
+            value={filterClass}
+            onChange={(e) => handleClassFilterChange(e.target.value)}
           >
-            <option value="ALL">All Statuses</option>
-            <option value="ENROLLED">Enrolled</option>
-            <option value="PROSPECT">Prospect</option>
-            <option value="APPLICANT">Applicant</option>
-            <option value="SUSPENDED">Suspended</option>
-            <option value="ALUMNI">Alumni</option>
+            <option value="ALL">All Classes</option>
+            {classOptions.map((cls) => (
+              <option key={cls} value={cls}>
+                {cls}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <button 
-            onClick={() => setShowBulkGraduate(true)}
+            onClick={() => {
+              if (filterClass !== "ALL") setBulkClass(filterClass);
+              setShowBulkGraduate(true);
+            }}
             className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition"
           >
             {currentBulkLabel}
@@ -811,8 +908,8 @@ export default function StudentTable({
                   onChange={e => setBulkClass(e.target.value)}
                 >
                   <option value="" disabled>Select a Class</option>
-                  {Array.from(new Set(students.map(s => s.currentClass).filter(Boolean))).map(c => (
-                    <option key={c as string} value={c as string}>{c as string}</option>
+                  {classOptions.map(c => (
+                    <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
               </>

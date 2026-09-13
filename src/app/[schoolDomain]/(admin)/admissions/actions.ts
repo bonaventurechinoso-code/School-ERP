@@ -3,6 +3,7 @@
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { triggerInquiryNotification } from "@/lib/admissions-events";
 
 export type AdmissionActionResult = {
   success: boolean;
@@ -188,6 +189,17 @@ export async function updateLeadStatusAction(payload: {
         where: { id: leadId },
         data: { status },
       });
+
+      if (status === "INQUIRY") {
+        const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
+        triggerInquiryNotification({
+          leadId,
+          schoolId,
+          lead: updatedLead,
+          school,
+          force: true,
+        });
+      }
     }
 
     const domain = schoolDomain;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { revalidatePath } from "next/cache";
 
 export async function PATCH(
@@ -131,10 +132,20 @@ export async function PATCH(
         // safe fallback
       }
     } else {
-      await basePrisma.admissionLead.update({
+      const updatedLead = await basePrisma.admissionLead.update({
         where: { id: resolvedParams.id },
         data: { status }
       });
+
+      if (status === "INQUIRY") {
+        triggerInquiryNotification({
+          leadId: resolvedParams.id,
+          schoolId,
+          lead: updatedLead,
+          school,
+          force: true,
+        });
+      }
     }
 
     return NextResponse.json({ success: true });

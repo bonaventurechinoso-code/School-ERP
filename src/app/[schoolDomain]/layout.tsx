@@ -13,7 +13,7 @@ export default async function TenantLayout({
 }) {
   const { schoolDomain } = await params;
   const reservedKeywords = ["choice", "register", "admin", "api", "www", "app"];
-  
+
   if (reservedKeywords.includes(schoolDomain.toLowerCase())) {
     if (schoolDomain.toLowerCase() === "choice") {
       return (
@@ -76,9 +76,9 @@ export default async function TenantLayout({
     );
   }
 
-  const isHigherEd = school.academicTiers.some(tier => 
-    tier.name.toUpperCase().includes("UNIVERSITY") || 
-    tier.name.toUpperCase().includes("POLYTECHNIC") || 
+  const isHigherEd = school.academicTiers.some(tier =>
+    tier.name.toUpperCase().includes("UNIVERSITY") ||
+    tier.name.toUpperCase().includes("POLYTECHNIC") ||
     tier.name.toUpperCase().includes("COLLEGE") ||
     tier.name.toUpperCase().includes("HIGHER ED")
   );
@@ -89,7 +89,7 @@ export default async function TenantLayout({
     const tierNames = school.academicTiers.map(t => t.name.toUpperCase());
     const hasPrimary = tierNames.some(t => t.includes("PRIMARY"));
     const hasSecondary = tierNames.some(t => t.includes("SECONDARY") || t.includes("HIGH SCHOOL"));
-    
+
     if (tierNames.some(t => t.includes("UNIVERSITY"))) preciseTier = "UNIVERSITY";
     else if (tierNames.some(t => t.includes("POLYTECHNIC"))) preciseTier = "POLYTECHNIC";
     else if (tierNames.some(t => t.includes("COLLEGE"))) preciseTier = "COLLEGE_OF_EDUCATION";

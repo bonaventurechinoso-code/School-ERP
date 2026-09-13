@@ -54,3 +54,6 @@ next-env.d.ts
 *.dump
 *.key
 *.cert
+
+# Uploads
+public/uploads/
