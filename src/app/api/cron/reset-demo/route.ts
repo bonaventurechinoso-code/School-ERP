@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resetDemoDatabase, startDemoResetCron } from "@/lib/cron-reset";
+import { executeDemoCleanup, startDemoCleanupCron } from "@/lib/cron-demo-cleanup";
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized cron trigger." }, { status: 401 });
     }
 
-    const result = await resetDemoDatabase();
+    const result = await executeDemoCleanup();
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("[CRON_RESET_DEMO_API_ERROR]:", error);
@@ -23,10 +23,10 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    // Also start the recurring scheduler if not already active
-    startDemoResetCron(3);
+    // Start recurring scheduler if not already active
+    startDemoCleanupCron();
 
-    const result = await resetDemoDatabase();
+    const result = await executeDemoCleanup();
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("[CRON_RESET_DEMO_API_ERROR]:", error);
