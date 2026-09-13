@@ -50,6 +50,11 @@ model School {
   subscriptionStartedAt DateTime           @default(now())
   subscriptionExpiresAt DateTime?
 
+  // Trial Lifecycle & Governance Details
+  trialStartDate        DateTime?          @default(now())
+  trialEndDate          DateTime?
+  isBanned              Boolean            @default(false)
+
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")
 

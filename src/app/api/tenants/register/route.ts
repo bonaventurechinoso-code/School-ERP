@@ -69,6 +69,9 @@ export async function POST(request: Request) {
               subdomain: tenantSubdomain,
               contactPhone,
               isActive: true,
+              isBanned: false,
+              trialStartDate: new Date(),
+              trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
             },
           });
           
@@ -108,6 +111,9 @@ export async function POST(request: Request) {
       });
     }
 
+    const now = new Date();
+    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
     const newSchool = await basePrisma.$transaction(async (tx) => {
       // Phase A: Create baseline Tenant management record
       // 1. Create School
@@ -117,6 +123,9 @@ export async function POST(request: Request) {
           subdomain: formattedSubdomain,
           contactPhone,
           isActive: true,
+          isBanned: false,
+          trialStartDate: now,
+          trialEndDate: fourteenDaysOut,
         },
       });
 

@@ -1,0 +1,310 @@
+import { NextResponse } from "next/server";
+import { basePrisma } from "@/lib/tenant-prisma";
+import * as jose from "jose";
+import { getDefaultPermissionsForRole } from "@/lib/auth";
+
+const SANDBOX_SUBDOMAIN = "trial-sandbox";
+const SANDBOX_SCHOOL_NAME = "Trial Sandbox Academy";
+const SANDBOX_ADMIN_EMAIL = "trial.admin@schoolerp.local";
+
+/**
+ * Idempotently provisions or retrieves the isolated trial sandbox tenant.
+ * Safely seeds baseline school metadata, academic tiers, administration staff,
+ * and sample classrooms/students completely isolated from the main SaaS administration layer.
+ */
+async function provisionOrGetTrialSandbox() {
+  // 1. Check if sandbox school already exists
+  let school = await basePrisma.school.findUnique({
+    where: { subdomain: SANDBOX_SUBDOMAIN },
+    include: {
+      academicTiers: true,
+      staff: true,
+      classrooms: true,
+      students: true,
+    },
+  });
+
+  if (!school) {
+    const now = new Date();
+    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    // Create the isolated trial sandbox tenant
+    school = await basePrisma.school.create({
+      data: {
+        name: SANDBOX_SCHOOL_NAME,
+        subdomain: SANDBOX_SUBDOMAIN,
+        isActive: true,
+        isBanned: false,
+        trialStartDate: now,
+        trialEndDate: fourteenDaysOut,
+        isPublicPortalEnabled: true,
+        welcomeGreeting: "Welcome to your Trial Sandbox! Explore administrative workflows safely in this isolated environment.",
+        academicTiers: {
+          create: [
+            { name: "Primary School", level: 1 },
+            { name: "Secondary School", level: 2 },
+          ],
+        },
+        departments: {
+          create: [
+            { name: "Academic Administration" },
+          ],
+        },
+      },
+      include: {
+        academicTiers: true,
+        staff: true,
+        classrooms: true,
+        students: true,
+      },
+    });
+  }
+
+  if (school && !school.trialEndDate) {
+    const now = new Date();
+    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    school = await basePrisma.school.update({
+      where: { id: school.id },
+      data: {
+        trialStartDate: school.trialStartDate || now,
+        trialEndDate: fourteenDaysOut,
+        isBanned: school.isBanned ?? false,
+      },
+      include: {
+        academicTiers: true,
+        staff: true,
+        classrooms: true,
+        students: true,
+      },
+    });
+  }
+
+  // 2. Ensure academic tiers exist
+  let tiers = school.academicTiers;
+  if (tiers.length === 0) {
+    await basePrisma.academicTier.createMany({
+      data: [
+        { schoolId: school.id, name: "Primary School", level: 1 },
+        { schoolId: school.id, name: "Secondary School", level: 2 },
+      ],
+    });
+    tiers = await basePrisma.academicTier.findMany({
+      where: { schoolId: school.id },
+      orderBy: { level: "asc" },
+    });
+  }
+
+  const primaryTier = tiers.find(t => t.name.includes("Primary")) || tiers[0];
+  const secondaryTier = tiers.find(t => t.name.includes("Secondary")) || tiers[tiers.length - 1];
+
+  // 3. Ensure administration department exists
+  let dept = await basePrisma.department.findFirst({
+    where: { schoolId: school.id },
+  });
+  if (!dept) {
+    dept = await basePrisma.department.create({
+      data: {
+        schoolId: school.id,
+        name: "Academic Administration",
+      },
+    });
+  }
+
+  // 4. Ensure admin staff exists for the trial session
+  let adminStaff = await basePrisma.staff.findFirst({
+    where: { schoolId: school.id, role: "ADMIN" },
+  });
+  if (!adminStaff) {
+    adminStaff = await basePrisma.staff.create({
+      data: {
+        schoolId: school.id,
+        firstName: "Trial",
+        lastName: "Administrator",
+        email: SANDBOX_ADMIN_EMAIL,
+        role: "ADMIN",
+        status: "ACTIVE",
+        departmentId: dept.id,
+        password: "",
+      },
+    });
+  }
+
+  // 5. Ensure sample classrooms exist
+  if (school.classrooms.length === 0) {
+    const classData = [
+      { name: "Primary 1", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
+      { name: "Primary 5", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
+      { name: "JSS 1", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
+      { name: "SSS 3", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
+    ];
+    for (const c of classData) {
+      await basePrisma.classroom.create({ data: c });
+    }
+  }
+
+  // 6. Ensure sample students exist so the dashboard has rich data to explore
+  if (school.students.length === 0) {
+    const sampleStudents = [
+      { firstName: "Amina", lastName: "Bello", currentClass: "Primary 1", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/001" },
+      { firstName: "Emeka", lastName: "Okafor", currentClass: "Primary 5", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/002" },
+      { firstName: "Chioma", lastName: "Adeyemi", currentClass: "JSS 1", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/001" },
+      { firstName: "Tunde", lastName: "Danjuma", currentClass: "SSS 3", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/002" },
+    ];
+
+    for (const s of sampleStudents) {
+      await basePrisma.student.create({
+        data: {
+          schoolId: school.id,
+          tierId: s.tierId,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          currentClass: s.currentClass,
+          admissionNumber: s.admissionNumber,
+          status: "ENROLLED",
+          parentName: `Mr/Mrs ${s.lastName}`,
+          parentEmail: `parent.${s.lastName.toLowerCase()}@example.com`,
+          parentPhone: "+2348012345678",
+        },
+      });
+    }
+  }
+
+  return {
+    school,
+    adminStaff,
+    tierNames: tiers.map(t => t.name),
+  };
+}
+
+/**
+ * Creates an authenticated session JWT scoped strictly to the trial sandbox tenant.
+ */
+async function generateTrialSessionToken(
+  staffId: string,
+  staffEmail: string,
+  schoolId: string,
+  schoolDomain: string,
+  schoolName: string,
+  activeTiers: string[]
+): Promise<string> {
+  const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+  const secret = new TextEncoder().encode(jwtSecret);
+
+  return new jose.SignJWT({
+    userId: staffId,
+    email: staffEmail,
+    tenantId: schoolId,
+    schoolDomain: schoolDomain,
+    tenantName: schoolName,
+    role: "SCHOOL_ADMIN",
+    activeTiers: activeTiers,
+    permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("24h")
+    .sign(secret);
+}
+
+/**
+ * GET handler: Directly navigated when public users click "Start Free Trial".
+ * Provisions the sandbox, sets the tenant admin session, and redirects to the isolated dashboard.
+ */
+export async function GET(req: Request) {
+  try {
+    const { school, adminStaff, tierNames } = await provisionOrGetTrialSandbox();
+
+    const sessionToken = await generateTrialSessionToken(
+      adminStaff.id,
+      adminStaff.email,
+      school.id,
+      school.subdomain,
+      school.name,
+      tierNames
+    );
+
+    // Target route for local development uses ?mockTenant= to align with middleware tenant resolution
+    const redirectPath = `/dashboard?mockTenant=${SANDBOX_SUBDOMAIN}`;
+    const redirectUrl = new URL(redirectPath, req.url);
+
+    const response = NextResponse.redirect(redirectUrl);
+
+    // Attach trial session and active tier cookies
+    response.cookies.set("session", sessionToken, {
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24, // 24 hours
+    });
+
+    response.cookies.set("activeTier", tierNames[0] || "Primary School", {
+      path: "/",
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+    });
+
+    return response;
+  } catch (error: any) {
+    console.error("[TRIAL_SANDBOX_PROVISIONING_ERROR]:", error);
+    return NextResponse.json(
+      { error: "Failed to initialize trial sandbox environment.", details: error?.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST handler: Supports programmatic API invocation if called from asynchronous client workflows.
+ */
+export async function POST(req: Request) {
+  try {
+    const { school, adminStaff, tierNames } = await provisionOrGetTrialSandbox();
+
+    const sessionToken = await generateTrialSessionToken(
+      adminStaff.id,
+      adminStaff.email,
+      school.id,
+      school.subdomain,
+      school.name,
+      tierNames
+    );
+
+    const redirectPath = `/dashboard?mockTenant=${SANDBOX_SUBDOMAIN}`;
+
+    const response = NextResponse.json({
+      success: true,
+      message: "Trial sandbox environment initialized successfully.",
+      tenant: {
+        id: school.id,
+        name: school.name,
+        subdomain: school.subdomain,
+      },
+      redirectUrl: redirectPath,
+    });
+
+    response.cookies.set("session", sessionToken, {
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+    });
+
+    response.cookies.set("activeTier", tierNames[0] || "Primary School", {
+      path: "/",
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+    });
+
+    return response;
+  } catch (error: any) {
+    console.error("[TRIAL_SANDBOX_PROVISIONING_ERROR]:", error);
+    return NextResponse.json(
+      { error: "Failed to initialize trial sandbox environment.", details: error?.message },
+      { status: 500 }
+    );
+  }
+}
