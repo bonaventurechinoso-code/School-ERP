@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { basePrisma } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import * as jose from "jose";
 import { cookies } from "next/headers";
@@ -138,17 +138,38 @@ export async function POST(req: Request) {
 
     // C. Check Student (STUDENT)
     if (!resolvedRole) {
-      const student = await basePrisma.student.findFirst({
+      let student = await basePrisma.student.findFirst({
         where: {
           email: email,
           schoolId: tenant.id,
         },
       });
 
-      // If student matched by email & standard default password
-      if (student && password === "Password123") {
-        resolvedRole = "STUDENT";
-        authenticatedUserId = student.id;
+      if (!student && tenant.databaseUrl) {
+        try {
+          const tenantDb = await getTenantClient(tenant.id);
+          student = await tenantDb.student.findFirst({
+            where: {
+              email: email,
+              schoolId: tenant.id,
+            },
+          });
+        } catch {}
+      }
+
+      if (student) {
+        if (student.status === "SUSPENDED" || (student.dynamicFields as any)?.portalAccessDisabled) {
+          return NextResponse.json(
+            { error: "Your student portal account has been suspended. Please contact the school administration." },
+            { status: 403 }
+          );
+        }
+
+        // If student matched by email & standard default password
+        if (password === "Password123") {
+          resolvedRole = "STUDENT";
+          authenticatedUserId = student.id;
+        }
       }
     }
 

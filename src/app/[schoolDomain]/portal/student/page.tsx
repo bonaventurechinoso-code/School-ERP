@@ -79,6 +79,17 @@ export default async function TenantStudentPortalPage({
       ? school.academicTiers.every((t) => isHigherEdTier(t.name))
       : false;
 
+  let isSuspendedStudent = false;
+  if (session?.userId && session?.role === "STUDENT") {
+    const stu = await basePrisma.student.findUnique({
+      where: { id: session.userId },
+      select: { status: true, dynamicFields: true },
+    });
+    if (stu?.status === "SUSPENDED" || (stu?.dynamicFields as any)?.portalAccessDisabled) {
+      isSuspendedStudent = true;
+    }
+  }
+
   const currentYear = new Date().getFullYear();
   const tierBadgeSuffix = formatTierBadgeCode(activeTierName);
   const studentDisplayId = `STU-${currentYear}-${tierBadgeSuffix}`;
@@ -141,6 +152,28 @@ export default async function TenantStudentPortalPage({
               </div>
               <p className="text-xs sm:text-sm text-red-800/90 dark:text-red-300/90 mt-1 font-medium leading-relaxed">
                 Administrative dashboards and settings are strictly reserved for school administrators and supervisors. Your request was securely routed here to your dedicated student workspace for <strong>{school.name}</strong>.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Account Suspended Interception Notice */}
+        {isSuspendedStudent && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-50 to-red-50 dark:from-rose-950/40 dark:to-red-950/20 border border-rose-200/90 dark:border-rose-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider">
+                  Account Suspended • Access Inactive
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-200 dark:bg-rose-900 font-extrabold text-rose-800 dark:text-rose-200">
+                  SUSPENDED
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-rose-800/90 dark:text-rose-300/90 mt-1 font-medium leading-relaxed">
+                Your student portal account has been placed on suspension by school administration. Course registrations, grade sheets, and interactive services have been temporarily deactivated for your profile. Please contact the registrar or administrative office.
               </p>
             </div>
           </div>

@@ -28,6 +28,10 @@ export async function invalidateStudentNamespace(schoolId: string, tierName?: st
   const sanitizedTier = tierName ? tierName.toLowerCase().replace(/[^a-z0-9_-]/g, "") : "*";
   await Promise.all([
     invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:table:students:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:students:enrolled*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:students:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:tier:*:students:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:*students*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:dashboard:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:transcripts:*`),
   ]);

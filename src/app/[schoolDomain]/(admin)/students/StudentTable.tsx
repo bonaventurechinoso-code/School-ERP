@@ -2,21 +2,42 @@
 
 import React, { useState, useTransition, useEffect } from "react";
 import { Student, AcademicTier } from "@prisma/client";
-import { createStudent, updateStudent, deleteStudent, updateStudentStatus, bulkGraduateClass, bulkGraduateStudents, fetchStudentsPaginated } from "./actions";
+import { 
+  createStudent, 
+  updateStudent, 
+  deleteStudent, 
+  updateStudentStatus, 
+  bulkGraduateClass, 
+  bulkGraduateStudents, 
+  fetchStudentsPaginated,
+  fetchStudentMetrics,
+  toggleStudentSuspension,
+  graduateTierCohort,
+  executeTermEndPromotionAction
+} from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
+import { User, X, GraduationCap, ShieldAlert } from "lucide-react";
 
-type StudentWithTier = Student & { tier?: AcademicTier | null, isLead?: boolean };
+type StudentWithTier = Student & { tier?: AcademicTier | null };
+
+export interface StudentMetricsData {
+  totalEnrolled: number;
+  suspendedStudents: number;
+  alumniCount: number;
+  activeProspects: number;
+  totalApplicants: number;
+}
 
 interface StudentTableProps {
   students: StudentWithTier[];
   initialNextCursor?: string | null;
   initialHasMore?: boolean;
-  leads?: StudentWithTier[];
   schoolId: string;
   tiers: AcademicTier[];
   activeTier?: string;
   classrooms?: Array<{ id: string; name: string }>;
+  initialMetrics?: StudentMetricsData;
 }
 
 export function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
@@ -117,15 +138,33 @@ export function getClassOptionsForTier(
   return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"];
 }
 
+export function getGraduatingClassForTier(
+  activeTierName?: string,
+  tiersList: AcademicTier[] = [],
+  classroomsList: Array<{ id: string; name: string }> = []
+): { primaryClass: string; aliases: string[] } {
+  const options = getClassOptionsForTier(activeTierName, tiersList, classroomsList);
+  const highest = options[options.length - 1] || "Class 6";
+
+  const aliases: string[] = [highest];
+  if (highest.toLowerCase().startsWith("class ")) {
+    aliases.push(highest.replace(/class\s+/i, "Primary "));
+    aliases.push(highest.replace(/class\s+/i, "Basic "));
+  } else if (highest.toLowerCase().startsWith("primary ")) {
+    aliases.push(highest.replace(/primary\s+/i, "Class "));
+  }
+  return { primaryClass: highest, aliases };
+}
+
 export default function StudentTable({ 
   students, 
   initialNextCursor,
   initialHasMore,
-  leads = [],
   schoolId,
   tiers,
   activeTier,
   classrooms = [],
+  initialMetrics,
 }: StudentTableProps) {
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
@@ -141,6 +180,8 @@ export default function StudentTable({
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [showBulkGraduate, setShowBulkGraduate] = useState(false);
   const [bulkClass, setBulkClass] = useState("");
+  const [repeatingStudentIds, setRepeatingStudentIds] = useState<string[]>([]);
+  const [repeaterSearch, setRepeaterSearch] = useState("");
   const [formData, setFormData] = useState({ 
     firstName: "", 
     lastName: "", 
@@ -148,14 +189,50 @@ export default function StudentTable({
     status: "ENROLLED", 
     tierId: "", 
     currentClass: "",
+    admissionNumber: "",
+    dateOfBirth: "",
+    stateOfOrigin: "",
     parentName: "",
     parentPhone: "",
-    dynamicFields: {} as Record<string, string> 
+    parentEmail: "",
+    dynamicFields: {} as Record<string, any> 
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const [filterClass, setFilterClass] = useState<string>("ALL");
   const classOptions = getClassOptionsForTier(activeTier, tiers, classrooms);
+  const graduatingInfo = getGraduatingClassForTier(activeTier, tiers, classrooms);
+  const targetGraduatingClass = bulkClass || (filterClass !== "ALL" ? filterClass : graduatingInfo.primaryClass);
+
+  const [metrics, setMetrics] = useState<StudentMetricsData>(
+    initialMetrics || {
+      totalEnrolled: students.filter((s) => s.status === "ENROLLED").length,
+      suspendedStudents: students.filter((s) => s.status === "SUSPENDED").length,
+      alumniCount: students.filter((s) => s.status === "ALUMNI").length,
+      activeProspects: 0,
+      totalApplicants: 0,
+    }
+  );
+
+  const refreshMetrics = async () => {
+    try {
+      const res = await fetchStudentMetrics(schoolId, activeTier);
+      if (res.success) {
+        setMetrics((prev) => ({
+          ...prev,
+          totalEnrolled: res.totalEnrolled,
+          suspendedStudents: res.suspendedStudents,
+          alumniCount: res.alumniCount,
+        }));
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (initialMetrics) {
+      setMetrics(initialMetrics);
+    }
+  }, [initialMetrics]);
 
   useEffect(() => {
     setFilterClass("ALL");
@@ -168,15 +245,21 @@ export default function StudentTable({
       activeTier && (t.name.toLowerCase() === activeTier.toLowerCase() || t.name.toLowerCase().includes(activeTier.toLowerCase()))
     ) || (tiers.length > 0 ? tiers[0] : null);
 
+    const initialTierClasses = getClassOptionsForTier(matchingTier?.name, tiers, classrooms);
+
     setFormData({ 
       firstName: "", 
       lastName: "", 
       email: "", 
       status: "ENROLLED", 
       tierId: matchingTier ? matchingTier.id : (tiers.length > 0 ? tiers[0].id : ""), 
-      currentClass: classrooms.length > 0 ? classrooms[0].name : "",
+      currentClass: initialTierClasses[0] || (classrooms.length > 0 ? classrooms[0].name : ""),
+      admissionNumber: "",
+      dateOfBirth: "",
+      stateOfOrigin: "",
       parentName: "",
       parentPhone: "",
+      parentEmail: "",
       dynamicFields: {} 
     });
     setShowForm(true);
@@ -195,8 +278,12 @@ export default function StudentTable({
       status: student.status,
       tierId: student.tierId,
       currentClass: student.currentClass || "",
+      admissionNumber: student.admissionNumber || "",
+      dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split("T")[0] : "",
+      stateOfOrigin: student.stateOfOrigin || "",
       parentName: student.parentName || "",
       parentPhone: student.parentPhone || "",
+      parentEmail: (student as any).parentEmail || "",
       dynamicFields: parsedFields
     });
     setShowForm(true);
@@ -215,7 +302,11 @@ export default function StudentTable({
     startTransition(async () => {
       const payload = {
         ...formData,
+        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth) : undefined,
         currentClass: formData.currentClass || undefined,
+        admissionNumber: formData.admissionNumber || undefined,
+        stateOfOrigin: formData.stateOfOrigin || undefined,
+        parentEmail: formData.parentEmail || undefined,
         dynamicFields: formData.dynamicFields
       };
       
@@ -230,7 +321,32 @@ export default function StudentTable({
         setErrorMsg(res.error);
       } else {
         setShowForm(false);
+        if (editingStudentId) {
+          const chosenTier = tiers.find(t => t.id === formData.tierId);
+          setStudentList(prev => prev.map(s => {
+            if (s.id === editingStudentId) {
+              return {
+                ...s,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                currentClass: formData.currentClass,
+                tierId: formData.tierId,
+                tier: chosenTier || s.tier,
+                status: formData.status,
+                admissionNumber: formData.admissionNumber,
+                stateOfOrigin: formData.stateOfOrigin,
+                dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth) : null,
+                parentName: formData.parentName,
+                parentPhone: formData.parentPhone,
+                dynamicFields: formData.dynamicFields
+              };
+            }
+            return s;
+          }));
+        }
         setEditingStudentId(null);
+        await refreshMetrics();
       }
     });
   };
@@ -241,14 +357,50 @@ export default function StudentTable({
         const res = await deleteStudent(schoolId, studentId, activeTier);
         if (res?.error) {
           alert(res.error);
+        } else {
+          setStudentList(prev => prev.filter(s => s.id !== studentId));
+          await refreshMetrics();
         }
       });
     }
   };
 
   const handleUpdateStatus = (studentId: string, newStatus: string) => {
-    startTransition(() => {
-      updateStudentStatus(schoolId, studentId, newStatus, activeTier);
+    setStudentList(prev => prev.map(s => s.id === studentId ? { ...s, status: newStatus } : s));
+    startTransition(async () => {
+      await updateStudentStatus(schoolId, studentId, newStatus, activeTier);
+      await refreshMetrics();
+    });
+  };
+
+  const handleToggleSuspend = async (student: StudentWithTier) => {
+    const isCurrentlySuspended = student.status === "SUSPENDED";
+    const confirmPrompt = isCurrentlySuspended
+      ? `Reinstate ${student.firstName} ${student.lastName}? This will restore their active status and re-enable portal credentials.`
+      : `Are you sure you want to suspend ${student.firstName} ${student.lastName}? This will deactivate their portal login credentials and flag them as SUSPENDED.`;
+
+    if (!confirm(confirmPrompt)) return;
+
+    const optimisticStatus = isCurrentlySuspended ? "ENROLLED" : "SUSPENDED";
+    setStudentList((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, status: optimisticStatus } : s))
+    );
+
+    setMetrics((prev) => ({
+      ...prev,
+      totalEnrolled: isCurrentlySuspended ? prev.totalEnrolled + 1 : Math.max(0, prev.totalEnrolled - 1),
+      suspendedStudents: isCurrentlySuspended ? Math.max(0, prev.suspendedStudents - 1) : prev.suspendedStudents + 1,
+    }));
+
+    startTransition(async () => {
+      const res = await toggleStudentSuspension(schoolId, student.id, activeTier);
+      if (res?.error) {
+        alert(res.error);
+        setStudentList((prev) =>
+          prev.map((s) => (s.id === student.id ? { ...s, status: student.status } : s))
+        );
+      }
+      await refreshMetrics();
     });
   };
 
@@ -259,6 +411,7 @@ export default function StudentTable({
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
+        status: "ENROLLED",
         className: newClass !== "ALL" ? newClass : undefined,
         cursor: null,
         limit: 25,
@@ -275,6 +428,7 @@ export default function StudentTable({
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
+        status: "ENROLLED",
         className: filterClass !== "ALL" ? filterClass : undefined,
         cursor: currentCursor,
         limit: 25,
@@ -295,6 +449,7 @@ export default function StudentTable({
     startTransition(async () => {
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
+        status: "ENROLLED",
         className: filterClass !== "ALL" ? filterClass : undefined,
         cursor: targetCursor,
         limit: 25,
@@ -307,9 +462,7 @@ export default function StudentTable({
     });
   };
 
-  const combinedRecords = [...studentList, ...(leads || [])];
-
-  const filteredStudents = combinedRecords.filter(s => {
+  const filteredStudents = studentList.filter(s => {
     if (filterClass !== "ALL" && !matchesClass(s.currentClass, filterClass)) return false;
     return true;
   });
@@ -328,26 +481,80 @@ export default function StudentTable({
 
   const handleBulkGraduate = async () => {
     if (selectedIds.length > 0) {
-      if (confirm(`Are you sure you want to graduate ${selectedIds.length} selected students?`)) {
+      if (confirm(`Are you sure you want to graduate ${selectedIds.length} selected students to Alumni?`)) {
         startTransition(async () => {
           const res = await bulkGraduateStudents(schoolId, selectedIds, activeTier);
           if (res?.error) alert(res.error);
           else {
-            setShowBulkGraduate(false);
+            setStudentList((prev) =>
+              prev.map((s) => (selectedIds.includes(s.id) ? { ...s, status: "ALUMNI", alumniAt: new Date() } : s))
+            );
             setSelectedIds([]);
+            setShowBulkGraduate(false);
+            await refreshMetrics();
           }
         });
       }
     } else {
-      if (!bulkClass) return;
-      if (confirm(`Are you sure you want to graduate all students in ${bulkClass}?`)) {
+      if (confirm(`Are you sure you want to graduate all active (Enrolled) students in ${targetGraduatingClass}? This will safely transition them to 'Alumni'.`)) {
         startTransition(async () => {
-          const res = await bulkGraduateClass(schoolId, bulkClass, activeTier);
-          if (res?.error) alert(res.error);
-          else setShowBulkGraduate(false);
+          const res = await graduateTierCohort(schoolId, activeTier, targetGraduatingClass);
+          if (!res.success) {
+            alert(res.error || "Failed to graduate cohort.");
+          } else {
+            setStudentList((prev) =>
+              prev.map((s) => {
+                if (matchesClass(s.currentClass, targetGraduatingClass) && s.status === "ENROLLED") {
+                  return { ...s, status: "ALUMNI", alumniAt: new Date() };
+                }
+                return s;
+              })
+            );
+            setShowBulkGraduate(false);
+            await refreshMetrics();
+            alert(`Successfully graduated ${res.count} student(s) in ${targetGraduatingClass} to Alumni.`);
+          }
         });
       }
     }
+  };
+
+  const handleExecuteTermEndPromotion = async () => {
+    startTransition(async () => {
+      const res = await executeTermEndPromotionAction(schoolId, {
+        tierName: activeTier,
+        repeatingStudentIds,
+      });
+
+      if (!res.success) {
+        alert(res.error || "Failed to execute term-end promotion.");
+      } else {
+        const freshList = await fetchStudentsPaginated(schoolId, {
+          tierName: activeTier,
+          status: "ENROLLED",
+          className: filterClass !== "ALL" ? filterClass : undefined,
+          limit: 25,
+        });
+        setStudentList(freshList.items);
+        setNextCursor(freshList.nextCursor);
+        setHasMore(freshList.hasMore);
+        setShowBulkGraduate(false);
+        setRepeatingStudentIds([]);
+        await refreshMetrics();
+
+        const summaryLines = (res.summary || [])
+          .map((s) => `  • ${s.fromClass} ➔ ${s.toClass}: ${s.count} student(s)`)
+          .join("\n");
+
+        alert(
+          `🎉 Term-End Processing Completed Successfully!\n\n` +
+          `• Total Promoted: ${res.promotedCount} student(s)\n` +
+          `• Graduated to Alumni: ${res.graduatedCount} student(s)\n` +
+          `• Repeating Current Grade: ${res.repeatedCount} student(s)\n\n` +
+          (summaryLines ? `Progression Summary:\n${summaryLines}` : "")
+        );
+      }
+    });
   };
 
   // Dynamic field definitions based on Tier keywords
@@ -383,15 +590,50 @@ export default function StudentTable({
   const currentDynamicFields = getDynamicFieldsForTier(formData.tierId);
 
   const selectedTier = tiers.find(t => t.id === formData.tierId);
-  const isNursery = selectedTier && (selectedTier.name.toLowerCase().includes("daycare") || selectedTier.name.toLowerCase().includes("nursery") || selectedTier.name.toLowerCase().includes("early care"));
+  const formClassOptions = getClassOptionsForTier(selectedTier?.name, tiers, classrooms);
 
   let bulkActionLabel = "Graduate Selected";
-  let bulkActionGlobalLabel = filterClass !== "ALL" ? `Graduate ${filterClass}` : "Graduate Class";
+  let bulkActionGlobalLabel = "Graduate Class / Term-End Processing";
 
   const currentBulkLabel = selectedIds.length > 0 ? `${bulkActionLabel} (${selectedIds.length})` : bulkActionGlobalLabel;
 
+  const getLadderForTier = (tierName?: string) => {
+    const t = (tierName || "").toLowerCase();
+    if (t.includes("secondary") || t.includes("high") || t.includes("senior") || t.includes("college")) {
+      return ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3", "Alumni (Class Slot Cleared)"];
+    }
+    if (t.includes("nursery") || t.includes("daycare") || t.includes("creche") || t.includes("early")) {
+      return ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2", "Alumni (Class Slot Cleared)"];
+    }
+    return ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6", "Alumni (Class Slot Cleared)"];
+  };
+
   return (
     <div className="space-y-6">
+
+      {/* Dynamic Metric Overview Blocks */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-emerald-500 min-w-0 transition-all hover:shadow-md">
+          <h3 className="text-slate-700 dark:text-zinc-300 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 truncate">Total Enrolled</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{metrics.totalEnrolled}</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-amber-500 min-w-0 transition-all hover:shadow-md">
+          <h3 className="text-slate-700 dark:text-zinc-300 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 truncate">Active Prospects</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{metrics.activeProspects}</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-indigo-500 min-w-0 transition-all hover:shadow-md">
+          <h3 className="text-slate-700 dark:text-zinc-300 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 truncate">Total Applicants</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{metrics.totalApplicants}</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-rose-500 min-w-0 transition-all hover:shadow-md">
+          <h3 className="text-slate-700 dark:text-zinc-300 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 truncate">Suspended</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{metrics.suspendedStudents}</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-blue-500 min-w-0 col-span-2 sm:col-span-1 transition-all hover:shadow-md">
+          <h3 className="text-slate-700 dark:text-zinc-300 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 truncate">Alumni</h3>
+          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{metrics.alumniCount}</p>
+        </div>
+      </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
@@ -414,11 +656,13 @@ export default function StudentTable({
           <button 
             onClick={() => {
               if (filterClass !== "ALL") setBulkClass(filterClass);
+              else setBulkClass(graduatingInfo.primaryClass);
               setShowBulkGraduate(true);
             }}
-            className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition"
+            className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center justify-center gap-2"
           >
-            {currentBulkLabel}
+            <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>{currentBulkLabel}</span>
           </button>
           {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
             <button 
@@ -426,191 +670,286 @@ export default function StudentTable({
               className="w-full sm:w-auto px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
               style={{ backgroundColor: tenant.branding.primaryColor }}
             >
-              {showForm ? "Cancel" : "Add Student"}
+              Add Student
             </button>
           )}
         </div>
       </div>
 
+      {/* Slide-Over Administrative Side Panel for Edit / Create */}
       {showForm && (
-        <form onSubmit={handleSave} className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-zinc-100">
-              {editingStudentId ? "Edit Student" : "New Student"}
-            </h3>
-          </div>
-          {errorMsg && (
-            <div className="md:col-span-2 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium">
-              {errorMsg}
-            </div>
-          )}
-          
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Academic Tier *</label>
-            <select 
-              required
-              className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" 
-              value={formData.tierId} 
-              onChange={e => {
-                setFormData({...formData, tierId: e.target.value, dynamicFields: {}});
-              }}
-            >
-              <option value="" disabled>Select a Tier</option>
-              {tiers.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Current Class / Grade</label>
-            {classrooms && classrooms.length > 0 ? (
-              <select 
-                className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800"
-                value={formData.currentClass} 
-                onChange={e => setFormData({...formData, currentClass: e.target.value})}
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm animate-in fade-in" onClick={() => setShowForm(false)}>
+          <div 
+            className="w-full max-w-2xl bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-100 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Header */}
+            <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-950">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shrink-0">
+                  <User className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                    {editingStudentId ? "Edit Student Bio-Data & Tier" : "Enroll New Student"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 truncate">
+                    {editingStudentId ? `${formData.firstName} ${formData.lastName} • ${formData.admissionNumber || "No ID"}` : "Register student into the active roster"}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowForm(false)}
+                className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition"
               >
-                <option value="">Select Class...</option>
-                {classrooms.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input 
-                type="text" 
-                placeholder="e.g. Primary 1 Gold"
-                className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" 
-                value={formData.currentClass} 
-                onChange={e => setFormData({...formData, currentClass: e.target.value})} 
-              />
-            )}
-          </div>
-
-          {!editingStudentId && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Status</label>
-              <select className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
-                <option value="PROSPECT">Prospect</option>
-                <option value="APPLICANT">Applicant</option>
-                <option value="SCREENED">Screened</option>
-                <option value="ENROLLED">Enrolled</option>
-                <option value="SUSPENDED">Suspended</option>
-                <option value="EXPELLED">Expelled</option>
-                <option value="ALUMNI">Alumni</option>
-              </select>
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">First Name *</label>
-            <input required type="text" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Last Name *</label>
-            <input required type="text" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Email</label>
-            <input type="email" className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-          </div>
-          
-          {/* Parent & Emergency Contact (Nursery Only) */}
-          {isNursery && (
-            <div className="md:col-span-2 border-t border-slate-150 dark:border-zinc-800 pt-4 mt-2">
-              <h4 className="text-sm font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">👪 Parent & Emergency Contact Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Guardian Full Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g., Ike Mmadu"
-                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
-                    value={formData.parentName} 
-                    onChange={e => setFormData({...formData, parentName: e.target.value})} 
-                  />
+            {/* Drawer Form Body (Scrollable) */}
+            <form id="student-edit-form" onSubmit={handleSave} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-xl text-sm font-medium border border-red-200 dark:border-red-900">
+                  {errorMsg}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Relationship to Child</label>
-                  <select 
-                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                    value={formData.dynamicFields.relationship || ""}
-                    onChange={e => handleDynamicFieldChange("relationship", e.target.value)}
-                  >
-                    <option value="">Select...</option>
-                    <option value="Mother">Mother</option>
-                    <option value="Father">Father</option>
-                    <option value="Legal Guardian">Legal Guardian</option>
-                    <option value="Other">Other</option>
-                  </select>
+              )}
+
+              {/* 1. Academic Placement & Tier */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
+                  <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                    Academic Placement & Tier
+                  </h4>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Emergency Phone Number</label>
-                  <input 
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9+]*"
-                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
-                    value={formData.parentPhone} 
-                    onChange={e => {
-                      let val = e.target.value.replace(/[^0-9+]/g, '');
-                      if (val.length > 14) val = val.slice(0, 14);
-                      setFormData({...formData, parentPhone: val});
-                    }} 
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Authorized Pick-Up Person</label>
-                  <input 
-                    type="text" 
-                    placeholder="Name of person approved to collect the child"
-                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" 
-                    value={formData.dynamicFields.authorizedPickup || ""} 
-                    onChange={e => handleDynamicFieldChange("authorizedPickup", e.target.value)} 
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Dynamic Tier Fields */}
-          {currentDynamicFields.length > 0 && (
-            <div className="md:col-span-2 border-t border-slate-150 dark:border-zinc-800 pt-4 mt-2">
-              <h4 className="text-sm font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">Tier-Specific Details</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {currentDynamicFields.map(field => (
-                  <div key={field.key}>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">{field.label}</label>
-                    {field.type === "select" ? (
-                      <select 
-                        className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                        value={formData.dynamicFields[field.key] || ""}
-                        onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
-                      >
-                        <option value="">Select...</option>
-                        {field.options?.map(o => (
-                          <option key={o} value={o}>{o}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input 
-                        type="text" 
-                        className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                        value={formData.dynamicFields[field.key] || ""}
-                        onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
-                      />
-                    )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Assigned Academic Tier *</label>
+                    <select 
+                      required
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.tierId} 
+                      onChange={e => {
+                        const newTierId = e.target.value;
+                        const newTier = tiers.find(t => t.id === newTierId);
+                        const newTierClasses = getClassOptionsForTier(newTier?.name, tiers, classrooms);
+                        setFormData({
+                          ...formData, 
+                          tierId: newTierId, 
+                          currentClass: newTierClasses[0] || "",
+                          dynamicFields: {}
+                        });
+                      }}
+                    >
+                      <option value="" disabled>Select a Tier</option>
+                      {tiers.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          <div className="md:col-span-2 flex justify-end mt-2">
-            <button disabled={isPending} type="submit" className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-semibold rounded-xl shadow-sm transition disabled:opacity-50">
-              {editingStudentId ? "Update Student" : "Save Student"}
-            </button>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Classroom / Grade *</label>
+                    <select 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.currentClass} 
+                      onChange={e => setFormData({...formData, currentClass: e.target.value})}
+                    >
+                      <option value="">Select Class...</option>
+                      {formClassOptions.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Lifecycle Status</label>
+                    <select 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.status} 
+                      onChange={e => setFormData({...formData, status: e.target.value})}
+                    >
+                      <option value="ENROLLED">Enrolled (Active)</option>
+                      <option value="PROSPECT">Prospect</option>
+                      <option value="APPLICANT">Applicant</option>
+                      <option value="SCREENED">Screened</option>
+                      <option value="SUSPENDED">Suspended (Portal Deactivated)</option>
+                      <option value="EXPELLED">Expelled</option>
+                      <option value="ALUMNI">Alumni (Graduated)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Student Bio-Data */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
+                  <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                    Student Bio-Data
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">First Name *</label>
+                    <input 
+                      required 
+                      type="text" 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.firstName} 
+                      onChange={e => setFormData({...formData, firstName: e.target.value})} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Last Name *</label>
+                    <input 
+                      required 
+                      type="text" 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.lastName} 
+                      onChange={e => setFormData({...formData, lastName: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Student Email</label>
+                    <input 
+                      type="email" 
+                      placeholder="student@school.org"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.email} 
+                      onChange={e => setFormData({...formData, email: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Admission Number</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g., ADM-2026-001"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.admissionNumber} 
+                      onChange={e => setFormData({...formData, admissionNumber: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Date of Birth</label>
+                    <input 
+                      type="date" 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.dateOfBirth} 
+                      onChange={e => setFormData({...formData, dateOfBirth: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">State / Region of Origin</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Lagos, Anambra, Ontario"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.stateOfOrigin} 
+                      onChange={e => setFormData({...formData, stateOfOrigin: e.target.value})} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Guardian Profile */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                    👪 Guardian Profile & Contact
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Guardian Full Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g., Ike Mmadu"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.parentName} 
+                      onChange={e => setFormData({...formData, parentName: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Guardian Phone</label>
+                    <input 
+                      type="tel"
+                      placeholder="+234..."
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.parentPhone} 
+                      onChange={e => setFormData({...formData, parentPhone: e.target.value})} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Tier-Specific Dynamic Fields */}
+              {currentDynamicFields.length > 0 && (
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                      ⚙️ Tier-Specific Details
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {currentDynamicFields.map(field => (
+                      <div key={field.key}>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">{field.label}</label>
+                        {field.type === "select" ? (
+                          <select 
+                            className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                            value={formData.dynamicFields[field.key] || ""}
+                            onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
+                          >
+                            <option value="">Select...</option>
+                            {field.options?.map(o => (
+                              <option key={o} value={o}>{o}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input 
+                            type="text" 
+                            className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                            value={formData.dynamicFields[field.key] || ""}
+                            onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </form>
+
+            {/* Sticky Drawer Footer */}
+            <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 flex items-center justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-sm font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button 
+                form="student-edit-form"
+                disabled={isPending}
+                type="submit"
+                className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-600/20 disabled:opacity-50 transition flex items-center gap-2"
+              >
+                {isPending ? "Saving Changes..." : editingStudentId ? "Update Student" : "Save Student"}
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
       )}
 
       {/* Mobile Select All & Count Bar */}
@@ -684,19 +1023,15 @@ export default function StudentTable({
                 <td className="px-6 py-4 text-slate-500 dark:text-zinc-400">{student.parentName || "—"}</td>
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                   <select 
-                    disabled={isPending || student.isLead}
+                    disabled={isPending}
                     value={student.status}
                     onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
                     className={`border rounded-lg p-1.5 text-xs font-bold outline-none transition-colors cursor-pointer
                       ${student.status === "ENROLLED" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" : ""}
-                      ${["PROSPECT", "APPLICANT", "SCREENED"].includes(student.status) ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" : ""}
                       ${["SUSPENDED", "EXPELLED"].includes(student.status) ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20" : ""}
                       ${student.status === "ALUMNI" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : ""}
                     `}
                   >
-                    <option value="PROSPECT">Prospect</option>
-                    <option value="APPLICANT">Applicant</option>
-                    <option value="SCREENED">Screened</option>
                     <option value="ENROLLED">Enrolled</option>
                     <option value="SUSPENDED">Suspended</option>
                     <option value="EXPELLED">Expelled</option>
@@ -704,26 +1039,34 @@ export default function StudentTable({
                   </select>
                 </td>
                 <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
-                  {student.isLead ? (
-                    <span className="text-xs text-slate-400 dark:text-zinc-500 italic">Manage in Admissions</span>
-                  ) : (
-                    <>
-                      <button 
-                        disabled={isPending}
-                        onClick={() => openEditForm(student)}
-                        className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        disabled={isPending}
-                        onClick={() => handleDelete(student.id)}
-                        className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                  <div className="inline-flex items-center gap-1.5">
+                    <button 
+                      disabled={isPending}
+                      onClick={() => openEditForm(student)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/60 transition"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      disabled={isPending}
+                      onClick={() => handleToggleSuspend(student)}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${
+                        student.status === "SUSPENDED"
+                          ? "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                          : "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      {student.status === "SUSPENDED" ? "Reinstate" : "Suspend"}
+                    </button>
+                    <button 
+                      disabled={isPending}
+                      onClick={() => handleDelete(student.id)}
+                      className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                      title="Delete Student"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -767,19 +1110,15 @@ export default function StudentTable({
                 {/* Status Dropdown */}
                 <div className="shrink-0">
                   <select 
-                    disabled={isPending || student.isLead}
+                    disabled={isPending}
                     value={student.status}
                     onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
                     className={`border rounded-lg px-2 py-1 text-xs font-bold outline-none transition-colors cursor-pointer
                       ${student.status === "ENROLLED" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" : ""}
-                      ${["PROSPECT", "APPLICANT", "SCREENED"].includes(student.status) ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" : ""}
                       ${["SUSPENDED", "EXPELLED"].includes(student.status) ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20" : ""}
                       ${student.status === "ALUMNI" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : ""}
                     `}
                   >
-                    <option value="PROSPECT">Prospect</option>
-                    <option value="APPLICANT">Applicant</option>
-                    <option value="SCREENED">Screened</option>
                     <option value="ENROLLED">Enrolled</option>
                     <option value="SUSPENDED">Suspended</option>
                     <option value="EXPELLED">Expelled</option>
@@ -823,27 +1162,32 @@ export default function StudentTable({
                   View Profile &rarr;
                 </button>
 
-                <div className="flex items-center gap-2">
-                  {student.isLead ? (
-                    <span className="text-xs text-slate-400 dark:text-zinc-500 italic">Admissions Lead</span>
-                  ) : (
-                    <>
-                      <button 
-                        disabled={isPending}
-                        onClick={() => openEditForm(student)}
-                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        disabled={isPending}
-                        onClick={() => handleDelete(student.id)}
-                        className="px-2.5 py-1 text-xs font-medium rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    disabled={isPending}
+                    onClick={() => openEditForm(student)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/60 transition"
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    disabled={isPending}
+                    onClick={() => handleToggleSuspend(student)}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${
+                      student.status === "SUSPENDED"
+                        ? "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {student.status === "SUSPENDED" ? "Reinstate" : "Suspend"}
+                  </button>
+                  <button 
+                    disabled={isPending}
+                    onClick={() => handleDelete(student.id)}
+                    className="px-2.5 py-1 text-xs font-medium rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             </div>
@@ -888,46 +1232,140 @@ export default function StudentTable({
       )}
 
       {showBulkGraduate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl shadow-xl w-full max-w-md border border-slate-200 dark:border-zinc-800 animate-in zoom-in-95">
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              {selectedIds.length > 0 ? bulkActionLabel : bulkActionGlobalLabel}
-            </h3>
-            <p className="text-slate-500 dark:text-zinc-400 text-sm mb-4">
-              {selectedIds.length > 0 
-                ? `You are about to process ${selectedIds.length} selected students.` 
-                : `Process an entire class cohort of students.`}
-            </p>
-            
-            {selectedIds.length === 0 && (
-              <>
-                <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Target Class</label>
-                <select 
-                  className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 mb-4 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                  value={bulkClass}
-                  onChange={e => setBulkClass(e.target.value)}
-                >
-                  <option value="" disabled>Select a Class</option>
-                  {classOptions.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 dark:border-zinc-800 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  {selectedIds.length > 0 ? bulkActionLabel : "Graduate Class / Term-End Processing"}
+                </h3>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
+                  {activeTier || "Primary School"}
+                </span>
+              </div>
+            </div>
+
+            {selectedIds.length > 0 ? (
+              <p className="text-slate-600 dark:text-zinc-300 text-sm mb-4 leading-relaxed">
+                You are about to graduate {selectedIds.length} selected student(s) to 'Alumni'.
+              </p>
+            ) : (
+              <div className="space-y-4 mb-4">
+                {/* Clear Warning Banner */}
+                <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+                  <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-200 leading-snug">
+                    This action will mass-promote all eligible students in the current tier to the next class grade. This cannot be undone.
+                  </p>
+                </div>
+
+                {/* Progression Ladder View */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+                    Tier Promotion Progression
+                  </label>
+                  <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700/60 text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                    {getLadderForTier(activeTier).map((step, idx, arr) => (
+                      <React.Fragment key={step}>
+                        <span className={idx === arr.length - 1 ? "text-indigo-600 dark:text-indigo-400 font-bold" : ""}>
+                          {step}
+                        </span>
+                        {idx < arr.length - 1 && <span className="text-slate-400">&rarr;</span>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Academic Exceptions (Failures/Repeats) */}
+                <div className="space-y-2 border-t border-slate-100 dark:border-zinc-800 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                      Academic Exceptions (Repeating Students)
+                    </label>
+                    {repeatingStudentIds.length > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                        {repeatingStudentIds.length} flagged to repeat
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Flag any students repeating their current class to exempt them from being promoted:
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="Search student by name or class..."
+                    value={repeaterSearch}
+                    onChange={(e) => setRepeaterSearch(e.target.value)}
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
+                  />
+                  <div className="max-h-36 overflow-y-auto border border-slate-200 dark:border-zinc-700 rounded-lg p-2 space-y-1.5 bg-slate-50/50 dark:bg-zinc-950/40">
+                    {studentList
+                      .filter((s) => s.status === "ENROLLED")
+                      .filter((s) =>
+                        repeaterSearch
+                          ? `${s.firstName} ${s.lastName} ${s.currentClass || ""}`.toLowerCase().includes(repeaterSearch.toLowerCase())
+                          : true
+                      )
+                      .map((student) => {
+                        const isChecked = repeatingStudentIds.includes(student.id);
+                        return (
+                          <label
+                            key={student.id}
+                            className={`flex items-center justify-between p-1.5 rounded-md text-xs cursor-pointer transition ${
+                              isChecked
+                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 font-semibold"
+                                : "hover:bg-slate-100 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setRepeatingStudentIds((prev) =>
+                                    prev.includes(student.id) ? prev.filter((id) => id !== student.id) : [...prev, student.id]
+                                  );
+                                }}
+                                className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                              />
+                              <span className="truncate">{student.firstName} {student.lastName}</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-400 shrink-0">
+                              {student.currentClass || "—"}
+                            </span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
             )}
-            
-            <div className="flex gap-2 sm:gap-3 justify-end pt-2">
+
+            <div className="flex gap-2 sm:gap-3 justify-end pt-2 border-t border-slate-100 dark:border-zinc-800">
               <button 
-                onClick={() => setShowBulkGraduate(false)}
-                className="px-4 py-2 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 transition text-sm"
+                type="button"
+                onClick={() => {
+                  setShowBulkGraduate(false);
+                  setRepeatingStudentIds([]);
+                  setRepeaterSearch("");
+                }}
+                className="px-4 py-2 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-zinc-800 transition text-sm"
               >
                 Cancel
               </button>
               <button 
-                disabled={isPending || (selectedIds.length === 0 && !bulkClass)}
-                onClick={handleBulkGraduate}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 transition text-sm"
+                disabled={isPending}
+                onClick={selectedIds.length > 0 ? handleBulkGraduate : handleExecuteTermEndPromotion}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20 disabled:opacity-50 transition text-sm flex items-center gap-2"
               >
-                {isPending ? "Processing..." : "Confirm Action"}
+                {isPending 
+                  ? "Processing..." 
+                  : selectedIds.length > 0 
+                  ? "Confirm Graduation" 
+                  : "Execute Term-End Promotion"}
               </button>
             </div>
           </div>

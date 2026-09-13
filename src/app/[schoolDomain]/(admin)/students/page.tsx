@@ -65,12 +65,14 @@ export default async function StudentsPage({
     totalEnrolled,
     suspendedStudents,
     alumniCount,
-    leads,
+    activeProspects,
+    totalApplicants,
     classrooms,
   ] = await Promise.all([
     fetchStudentsPaginated(school.id, {
       tierName: activeTierName,
       tierId: activeTierObj?.id,
+      status: "ENROLLED",
       limit: 25,
     }),
     tenantDb.student.count({
@@ -94,62 +96,24 @@ export default async function StudentsPage({
         ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
       },
     }).catch(() => 0),
-    basePrisma.admissionLead.findMany({
+    basePrisma.admissionLead.count({
       where: {
         schoolId: school.id,
         ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
-        status: { not: "ENROLLED" },
+        status: "INQUIRY",
       },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: { tier: true },
-    }).catch(async () => {
-      return tenantDb.admissionLead.findMany({
-        where: { status: { not: "ENROLLED" } },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        include: { tier: true },
-      }).catch(() => []);
-    }),
+    }).catch(() => 0),
+    basePrisma.admissionLead.count({
+      where: {
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+        status: { in: ["APPLIED", "INTERVIEW", "APPROVED"] },
+      },
+    }).catch(() => 0),
     tenantDb.classroom.findMany({
       orderBy: { name: "asc" },
     }).catch(() => []),
   ]);
-
-  const mappedLeads = leads.map(lead => {
-    const nameParts = lead.applicantName.split(" ");
-    let mappedStatus = "PROSPECT";
-    if (["APPLIED", "INTERVIEW", "APPROVED"].includes(lead.status)) {
-      mappedStatus = "APPLICANT";
-    }
-    
-    return {
-      id: lead.id,
-      schoolId: lead.schoolId,
-      tierId: lead.tierId,
-      tier: lead.tier,
-      firstName: nameParts[0] || "Unknown",
-      lastName: nameParts.slice(1).join(" ") || "",
-      email: null,
-      status: mappedStatus,
-      dynamicFields: {},
-      admissionNumber: `APP/${new Date(lead.createdAt).getFullYear()}/${lead.id.substring(0,4).toUpperCase()}`,
-      currentClass: lead.targetGrade,
-      dateOfBirth: null,
-      stateOfOrigin: null,
-      parentName: lead.parentName,
-      parentOccupation: null,
-      parentEmail: null,
-      parentPhone: lead.parentContact,
-      parentWhatsApp: null,
-      createdAt: lead.createdAt,
-      updatedAt: lead.updatedAt,
-      isLead: true,
-    };
-  });
-
-  const activeProspects = leads.filter(l => l.status === "INQUIRY").length;
-  const totalApplicants = leads.filter(l => ["APPLIED", "INTERVIEW", "APPROVED"].includes(l.status)).length;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -165,30 +129,6 @@ export default async function StudentsPage({
         </h2>
       </header>
       
-      {/* Student Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-green-500 min-w-0">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Total Enrolled</h3>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{totalEnrolled}</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-yellow-500 min-w-0">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Active Prospects</h3>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{activeProspects}</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-indigo-500 min-w-0">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Total Applicants</h3>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{totalApplicants}</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-red-500 min-w-0">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Suspended</h3>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{suspendedStudents}</p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 border-t-4 border-t-blue-500 min-w-0 col-span-2 sm:col-span-1">
-          <h3 className="text-slate-800 dark:text-zinc-200 font-extrabold text-[11px] sm:text-xs md:text-sm uppercase tracking-wider mb-1.5 truncate">Alumni</h3>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none truncate">{alumniCount}</p>
-        </div>
-      </div>
-
       <Suspense fallback={
         <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 animate-pulse space-y-4">
           <div className="h-8 bg-slate-100 dark:bg-zinc-800 rounded-lg w-1/4"></div>
@@ -203,11 +143,17 @@ export default async function StudentsPage({
           students={studentsPagination.items as any}
           initialNextCursor={studentsPagination.nextCursor}
           initialHasMore={studentsPagination.hasMore}
-          leads={mappedLeads as any}
           schoolId={school.id} 
           tiers={school.academicTiers}
           activeTier={activeTierName}
           classrooms={classrooms}
+          initialMetrics={{
+            totalEnrolled,
+            suspendedStudents,
+            alumniCount,
+            activeProspects,
+            totalApplicants,
+          }}
         />
       </Suspense>
       
