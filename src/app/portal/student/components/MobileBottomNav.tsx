@@ -25,7 +25,7 @@ export function MobileBottomNav({ activeTab, setActiveTab, tierConfig }: MobileB
     >
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isActive = activeTab === item.id;
+        const isActive = activeTab === item.id || (item.id === "FINANCE" && activeTab === "TRANSACTIONS");
         return (
           <button
             key={item.id}

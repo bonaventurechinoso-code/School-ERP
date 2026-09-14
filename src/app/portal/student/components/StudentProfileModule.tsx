@@ -29,15 +29,17 @@ interface StudentProfileModuleProps {
   student: StudentProfileData;
   tierConfig: TierPresentationConfig;
   showFullBioGrid?: boolean;
+  onNavigateToProfile?: () => void;
 }
 
 export function StudentProfileModule({ 
   student, 
   tierConfig, 
-  showFullBioGrid = false 
+  showFullBioGrid = false,
+  onNavigateToProfile
 }: StudentProfileModuleProps) {
   const [copiedId, setCopiedId] = useState(false);
-  const [bioDrawerOpen, setBioDrawerOpen] = useState(false);
+  const [bioModalOpen, setBioModalOpen] = useState(false);
 
   const isHigherEd = tierConfig.category === "HIGHER_ED";
   const isSecondary = tierConfig.category === "SECONDARY";
@@ -145,55 +147,96 @@ export function StudentProfileModule({
 
   return (
     <div className="space-y-6 w-full">
-      {/* 1. Profile Header Card: Clean SaaS White Card with Color Accent Banner */}
-      <div className="bg-gradient-to-r from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-zinc-900 dark:to-zinc-900 rounded-xl p-5 sm:p-6 shadow-sm shadow-slate-200/60 dark:shadow-none border border-slate-200/80 dark:border-zinc-800 relative overflow-hidden transition-all before:absolute before:top-0 before:inset-x-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:to-purple-600">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Avatar Profile Image Layout */}
-            <div className="relative shrink-0">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-indigo-600/20">
-                {student.firstName.charAt(0)}{student.lastName.charAt(0)}
-              </div>
-              <span className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-emerald-500 text-white ring-2 ring-white dark:ring-zinc-900 shadow-xs" title="Enrolled & Active">
-                <ShieldCheck className="w-3.5 h-3.5" />
-              </span>
+      {/* 1. Overview Mode: Clean Identity Quick-Bar (Eliminates redundant name, class, tier & ID repetitions) */}
+      {!showFullBioGrid ? (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 sm:p-5 shadow-sm shadow-slate-200/60 dark:shadow-none border border-slate-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+              <User className="w-5 h-5" />
             </div>
-
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white">
-                  {student.fullName}
-                </h2>
-                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
-                  {student.status}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Student Identity Profile
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                  Enrolled & Active
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-zinc-300">
-                {student.currentClass}
-              </p>
-              <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5">
-                Academic Tier: <strong className="text-slate-700 dark:text-zinc-300 font-semibold">{tierConfig.tierName}</strong>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                Official institutional bio data and emergency guardian records
               </p>
             </div>
           </div>
 
-          {/* Student ID & Slide-Over Action */}
-          <div className="w-full sm:w-auto flex flex-wrap sm:flex-col items-start sm:items-end justify-between gap-2.5 p-3.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 shadow-2xs">
-            <div className="text-left sm:text-right">
-              <div className="flex items-center gap-1.5 sm:justify-end">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500">
-                  {isHigherEd ? "Matriculation / Login ID" : "Student Login ID"}
-                </span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-extrabold">
-                  {tierConfig.badgeCode}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => setBioModalOpen(true)}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Bio Records</span>
+            </button>
+            {onNavigateToProfile && (
+              <button
+                onClick={onNavigateToProfile}
+                type="button"
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-semibold border border-slate-200/80 dark:border-zinc-700 transition"
+              >
+                <span>Full Profile</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Dedicated Profile Tab: Full Header Banner */
+        <div className="bg-gradient-to-r from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-zinc-900 dark:to-zinc-900 rounded-xl p-5 sm:p-6 shadow-sm shadow-slate-200/60 dark:shadow-none border border-slate-200/80 dark:border-zinc-800 relative overflow-hidden transition-all before:absolute before:top-0 before:inset-x-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:to-purple-600">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center font-black text-xl shadow-md shadow-indigo-600/20">
+                  {student.firstName.charAt(0)}{student.lastName.charAt(0)}
+                </div>
+                <span className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-emerald-500 text-white ring-2 ring-white dark:ring-zinc-900 shadow-xs" title="Enrolled & Active">
+                  <ShieldCheck className="w-3.5 h-3.5" />
                 </span>
               </div>
-              <p className="text-sm font-black font-mono text-slate-900 dark:text-white tracking-wide mt-0.5 whitespace-nowrap">
-                {student.admissionNumber}
-              </p>
+
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                    {student.fullName}
+                  </h2>
+                  <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                    {student.status}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-zinc-300">
+                  {student.currentClass}
+                </p>
+                <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5">
+                  Academic Tier: <strong className="text-slate-700 dark:text-zinc-300 font-semibold">{tierConfig.tierName}</strong>
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="w-full sm:w-auto flex flex-wrap sm:flex-col items-start sm:items-end justify-between gap-2.5 p-3.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 shadow-2xs">
+              <div className="text-left sm:text-right">
+                <div className="flex items-center gap-1.5 sm:justify-end">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500">
+                    {isHigherEd ? "Matriculation / Login ID" : "Student Login ID"}
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-extrabold">
+                    {tierConfig.badgeCode}
+                  </span>
+                </div>
+                <p className="text-sm font-black font-mono text-slate-900 dark:text-white tracking-wide mt-0.5 whitespace-nowrap">
+                  {student.admissionNumber}
+                </p>
+              </div>
+
               <button
                 onClick={handleCopyId}
                 type="button"
@@ -211,56 +254,38 @@ export function StudentProfileModule({
                   </>
                 )}
               </button>
-
-              {!showFullBioGrid && (
-                <button
-                  onClick={() => setBioDrawerOpen(true)}
-                  type="button"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition shrink-0"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Bio Records</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 2. When in Dedicated Profile Tab: Render Full Bio Data directly */}
       {showFullBioGrid && renderBioDetails()}
 
-      {/* 3. Slide-Over Drawer Container for Structural Database Bio Records (Overview mode) */}
-      {!showFullBioGrid && bioDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end animate-in fade-in duration-200">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs transition-opacity"
-            onClick={() => setBioDrawerOpen(false)}
-          />
-
-          {/* Slide-over Drawer Panel */}
-          <div className="relative w-full max-w-lg bg-slate-50 dark:bg-zinc-950 shadow-2xl h-full overflow-y-auto z-10 p-5 sm:p-6 space-y-5 animate-in slide-in-from-right duration-300">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-zinc-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold">
+      {/* 3. Clean View Modal Dialog for Official Student Bio Records */}
+      {!showFullBioGrid && bioModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-200/80 dark:border-zinc-800 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black">
                   <User className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    Student Structural Bio Records
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Official Student Bio Records
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Isolated database identity details
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Verified institutional registry records & guardian contacts
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setBioDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-zinc-800 transition"
+                onClick={() => setBioModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -269,11 +294,34 @@ export function StudentProfileModule({
             <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 text-xs text-indigo-700 dark:text-indigo-300 space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
                 <Info className="w-4 h-4" />
-                <span>Tenant Identity Records</span>
+                <span>Registry Notice</span>
               </div>
               <p className="text-[11px] leading-relaxed">
                 Bio-data updates and legal name modifications require official verification from the school registrar.
               </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setBioModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+              >
+                Close
+              </button>
+              {onNavigateToProfile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBioModalOpen(false);
+                    onNavigateToProfile();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition"
+                >
+                  <span>Open Dedicated Profile Page</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, GraduationCap, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users } from "lucide-react";
+import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -13,96 +13,135 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 font-sans selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-300">
       {/* Navigation Header */}
-      <header className="sticky top-0 z-50 w-full bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 shadow-sm transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            {/* Left: Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-950 border border-slate-800/80 shadow-xs flex items-center justify-center shrink-0">
+      <header className="sticky top-0 z-50 w-full h-20 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200/40 dark:border-slate-800/40 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+          <div className="flex justify-between items-center h-full">
+            {/* Left: Brand Logo */}
+            <Link href="/" className="flex items-center gap-3 group focus:outline-none shrink-0">
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-slate-900 to-indigo-950 dark:from-slate-950 dark:to-indigo-950 border border-slate-700/50 dark:border-slate-800 shadow-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
                 <Image
                   src="/img/business-logo.png"
                   alt="School ERP Logo"
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-contain"
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-contain p-1"
                   priority
                 />
               </div>
-              <span className="font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100">
+              <span className="font-black text-xl tracking-tight text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
                 School ERP
               </span>
-            </div>
+            </Link>
 
-            {/* Center: Navigation Dropdown */}
-            <nav className="hidden md:flex space-x-8">
+            {/* Center: Navigation Links */}
+            <nav className="hidden md:flex items-center gap-1 lg:gap-2 h-full">
               <div
-                className="relative"
+                className="relative h-full flex items-center"
                 onMouseEnter={() => setIsSolutionsOpen(true)}
                 onMouseLeave={() => setIsSolutionsOpen(false)}
               >
-                <button className="flex items-center gap-1 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors h-20">
-                  Institutional Solutions <ChevronDown className="h-4 w-4" />
+                <button 
+                  type="button"
+                  onClick={() => setIsSolutionsOpen(!isSolutionsOpen)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs lg:text-sm font-semibold tracking-wide transition-colors duration-200 ${
+                    isSolutionsOpen
+                      ? "text-blue-600 dark:text-blue-400 bg-slate-100/90 dark:bg-slate-800/80 shadow-xs"
+                      : "text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <span>Institutional Solutions</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isSolutionsOpen ? "rotate-180 text-blue-600 dark:text-blue-400" : "text-slate-400"}`} />
                 </button>
 
                 {isSolutionsOpen && (
-                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-80 bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="p-2">
-                      <Link href="#daycare" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
-                        <div className="bg-orange-100 dark:bg-orange-900/30 p-2 rounded-lg text-orange-600 dark:text-orange-400">
-                          <Baby className="h-5 w-5" />
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 pt-1 w-80 z-50">
+                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/50 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 p-2 space-y-1">
+                      <Link 
+                        href="#daycare" 
+                        onClick={() => setIsSolutionsOpen(false)}
+                        className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-orange-100/80 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Baby className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Daycare & Nursery</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Early childhood management tailored for care</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Daycare & Nursery</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Early childhood management tailored for care</p>
                         </div>
                       </Link>
-                      <Link href="#primary" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
-                        <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-400">
-                          <Building className="h-5 w-5" />
+
+                      <Link 
+                        href="#primary" 
+                        onClick={() => setIsSolutionsOpen(false)}
+                        className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-blue-100/80 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Building className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Primary Schools</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Complete lifecycle management for Nigerian primary schools.</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Primary Schools</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Complete lifecycle management for primary schools</p>
                         </div>
                       </Link>
-                      <Link href="#secondary" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
-                        <div className="bg-teal-100 dark:bg-teal-900/30 p-2 rounded-lg text-teal-600 dark:text-teal-400">
-                          <Building className="h-5 w-5" />
+
+                      <Link 
+                        href="#secondary" 
+                        onClick={() => setIsSolutionsOpen(false)}
+                        className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-emerald-100/80 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Building className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Secondary Schools</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Streamlined academics for junior and senior secondary education.</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Secondary Schools</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Streamlined academics for junior and senior secondary</p>
                         </div>
                       </Link>
-                      <Link href="#higher-ed" className="flex items-start gap-4 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800 rounded-xl transition-colors">
-                        <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400">
-                          <Globe className="h-5 w-5" />
+
+                      <Link 
+                        href="#higher-ed" 
+                        onClick={() => setIsSolutionsOpen(false)}
+                        className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-purple-100/80 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Globe className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Higher Education</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Advanced ERP for colleges and universities</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Higher Education</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Advanced ERP for collegiate faculties and universities</p>
                         </div>
                       </Link>
                     </div>
                   </div>
                 )}
               </div>
-              <Link href="#features" className="flex items-center text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors h-20">
+
+              <Link 
+                href="#features" 
+                className="px-3.5 py-2 rounded-xl text-xs lg:text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 transition-colors duration-200"
+              >
                 Platform Features
               </Link>
-              <Link href="#pricing" className="flex items-center text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors h-20">
+
+              <Link 
+                href="#pricing" 
+                className="px-3.5 py-2 rounded-xl text-xs lg:text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 transition-colors duration-200"
+              >
                 Pricing
               </Link>
             </nav>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-6">
-              <Link href="/admin/dashboard" className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors hidden sm:block">
-                Client Portal Login
-              </Link>
-              <ThemeToggle />
-              <Link href="/register" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm transition-all shadow-sm shadow-blue-200 dark:shadow-blue-900/50 hover:shadow-md hover:shadow-blue-300 dark:hover:shadow-blue-900 flex items-center gap-2">
-                Onboard Institution <ArrowRight className="h-4 w-4" />
+            <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+              <div className="flex items-center shrink-0">
+                <ThemeToggle />
+              </div>
+              <Link 
+                href="/register" 
+                className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-600 to-blue-600 hover:from-indigo-500 hover:via-indigo-600 hover:to-blue-500 shadow-md shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/35 border border-indigo-400/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              >
+                <span>Onboard Institution</span>
+                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
               </Link>
             </div>
           </div>

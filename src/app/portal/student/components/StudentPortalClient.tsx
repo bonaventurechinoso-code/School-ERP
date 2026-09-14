@@ -10,6 +10,7 @@ import { getTierPresentationConfig, INSTITUTIONAL_TIER_PRESETS } from "../tier-c
 import { StudentProfileModule } from "./StudentProfileModule";
 import { CommunicationsModule } from "./CommunicationsModule";
 import { FeesFinanceModule } from "./FeesFinanceModule";
+import { TransactionHistoryModule } from "./TransactionHistoryModule";
 import { NavigationSidebar } from "./NavigationSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -24,13 +25,13 @@ import {
   Clock, 
   ArrowRight, 
   ShieldAlert, 
-  Database,
   Layers,
   ChevronDown,
   ChevronRight,
   User,
   CreditCard,
-  Megaphone
+  Megaphone,
+  Receipt
 } from "lucide-react";
 
 interface StudentPortalClientProps {
@@ -38,7 +39,7 @@ interface StudentPortalClientProps {
 }
 
 export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE">("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<"OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE" | "TRANSACTIONS">("OVERVIEW");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTier, setActiveTier] = useState<string>(initialData.tierConfig.tierName);
 
@@ -191,15 +192,6 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                 <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-500/15 rounded-full blur-2xl pointer-events-none" />
                 
                 <div className="space-y-2 relative z-10">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-indigo-300 bg-indigo-500/20 border border-indigo-400/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-xs">
-                      {currentTierConfig.audienceFocus} Workspace
-                    </span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400/60" />
-                    <span className="text-xs font-semibold text-indigo-200">
-                      {student.currentClass}
-                    </span>
-                  </div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
                     Welcome back, {student.firstName}!
                   </h2>
@@ -318,6 +310,7 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                   <StudentProfileModule
                     student={student}
                     tierConfig={currentTierConfig}
+                    onNavigateToProfile={() => setActiveTab("PROFILE")}
                   />
 
                   {/* Module 2 Embedded */}
@@ -334,31 +327,9 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                     tierConfig={currentTierConfig}
                     schoolId={school.id}
                     studentLoginId={student.admissionNumber}
+                    isOverview={true}
+                    onViewTransactionHistory={() => setActiveTab("TRANSACTIONS")}
                   />
-
-                  {/* Isolated Database Architecture Callout (Modern ERP Tech Architecture Card) */}
-                  <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-50/60 via-white to-white dark:from-emerald-950/20 dark:via-zinc-900 dark:to-zinc-900 shadow-sm border border-emerald-200/80 dark:border-emerald-900/40 space-y-3 relative overflow-hidden">
-                    <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
-                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider">
-                      <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                        <Database className="w-3.5 h-3.5" />
-                      </div>
-                      <span>PostgreSQL Tenant Isolation</span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
-                      Academic records and financial ledgers route securely to
-                      <strong className="text-slate-800 dark:text-zinc-200 block mt-1 font-mono text-[11px] bg-emerald-50/80 dark:bg-zinc-800 p-2 rounded-lg border border-emerald-100 dark:border-zinc-700 break-all">
-                        {school.isolatedDbStatus.databaseName}
-                      </strong>
-                    </p>
-                    <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500">
-                      <span>Connection</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Verified Active
-                      </span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -393,6 +364,20 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                 tierConfig={currentTierConfig}
                 schoolId={school.id}
                 studentLoginId={student.admissionNumber}
+                onViewTransactionHistory={() => setActiveTab("TRANSACTIONS")}
+              />
+            </div>
+          )}
+
+          {/* TAB 5: TRANSACTION HISTORY MODULE */}
+          {activeTab === "TRANSACTIONS" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <TransactionHistoryModule
+                finance={finance}
+                tierConfig={currentTierConfig}
+                schoolId={school.id}
+                studentLoginId={student.admissionNumber}
+                onBack={() => setActiveTab("OVERVIEW")}
               />
             </div>
           )}
