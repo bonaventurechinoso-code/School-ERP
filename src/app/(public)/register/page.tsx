@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useNumericInput } from "@/hooks/useNumericInput";
@@ -96,6 +97,16 @@ export default function RegisterTenantPage() {
         
         {/* Header */}
         <div className="bg-slate-900 px-5 py-5 md:px-8 md:py-6 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <Image
+              src="/img/business-logo.png"
+              alt="School ERP"
+              width={24}
+              height={24}
+              className="w-6 h-6 object-contain rounded-md"
+            />
+            <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+          </div>
           <h1 className="text-2xl font-bold">Register Your School</h1>
           <p className="text-slate-400 mt-1">
             Step {step} of 2: {step === 1 ? "Institutional Identity" : "Academic Tier Allocation"}

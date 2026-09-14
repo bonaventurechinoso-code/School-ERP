@@ -17,12 +17,19 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Left: Logo */}
-            <div className="flex items-center gap-2">
-              <div className="bg-blue-600 p-2 rounded-xl">
-                <GraduationCap className="h-6 w-6 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-950 border border-slate-800/80 shadow-xs flex items-center justify-center shrink-0">
+                <Image
+                  src="/img/business-logo.png"
+                  alt="School ERP Logo"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-contain"
+                  priority
+                />
               </div>
               <span className="font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100">
-                Next-Gen School ERP
+                School ERP
               </span>
             </div>
 
@@ -283,12 +290,97 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-blue-600/10 mix-blend-overlay"></div>
         <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
           <h2 className="text-4xl font-extrabold text-white mb-6">Ready to Transform Your Institution?</h2>
-          <p className="text-slate-300 text-lg mb-10">Join hundreds of schools globally that have upgraded to Next-Gen School ERP.</p>
+          <p className="text-slate-300 text-lg mb-10">Join hundreds of schools globally that have upgraded to School ERP.</p>
           <Link href="/register" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)]">
             Create Institutional Portal <ArrowRight className="h-5 w-5" />
           </Link>
         </div>
       </section>
+
+      {/* Main Public Page Footer Layout */}
+      <footer className="bg-slate-950 text-slate-400 border-t border-slate-800 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+            {/* Column 1: Brand & Tagline */}
+            <div className="md:col-span-1 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                  <Image
+                    src="/img/business-logo.png"
+                    alt="School ERP Logo"
+                    width={36}
+                    height={36}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <span className="font-extrabold text-xl tracking-tight text-white">
+                  School ERP
+                </span>
+              </div>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                The enterprise-grade, multi-tenant operating system powering nurseries, primary schools, secondary colleges, and universities with database-isolated architecture.
+              </p>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>All System Services Operational</span>
+              </div>
+            </div>
+
+            {/* Column 2: Solutions */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Tier Solutions</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="#daycare" className="hover:text-blue-400 transition-colors">Daycare & Nursery</Link></li>
+                <li><Link href="#primary" className="hover:text-blue-400 transition-colors">Primary Education</Link></li>
+                <li><Link href="#secondary" className="hover:text-blue-400 transition-colors">Secondary & High Schools</Link></li>
+                <li><Link href="#higher-ed" className="hover:text-blue-400 transition-colors">Universities & Colleges</Link></li>
+                <li><Link href="/register" className="hover:text-blue-400 transition-colors">Multi-Tier Integration</Link></li>
+              </ul>
+            </div>
+
+            {/* Column 3: Platform Portals */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Platform Gateways</h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="/demo/login" className="hover:text-blue-400 transition-colors">Demo School Environment</Link></li>
+                <li><Link href="/portal/student" className="hover:text-blue-400 transition-colors">Student Learning Portal</Link></li>
+                <li><Link href="/portal/staff" className="hover:text-blue-400 transition-colors">Staff & Faculty Portal</Link></li>
+                <li><Link href="/admin" className="hover:text-blue-400 transition-colors">Super-Admin Console</Link></li>
+                <li><Link href="/register" className="hover:text-blue-400 transition-colors">Institutional Onboarding</Link></li>
+              </ul>
+            </div>
+
+            {/* Column 4: Architecture & Trust */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Security & Trust</h4>
+              <ul className="space-y-2 text-sm">
+                <li className="text-slate-400">Database-per-Tenant Isolation</li>
+                <li className="text-slate-400">Dual-Key RBAC Enforcement</li>
+                <li className="text-slate-400">Redis L1/L2 Caching Pipeline</li>
+                <li className="text-slate-400">Automated Sandbox Cleanup</li>
+                <li className="text-slate-400">Automated Term-End Promotions</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="mt-12 pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                <Image
+                  src="/img/business-logo.png"
+                  alt="School ERP Logo"
+                  width={20}
+                  height={20}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <p>© {new Date().getFullYear()} School ERP. All rights reserved.</p>
+            </div>
+            <p>Unified Enterprise Academic Infrastructure</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

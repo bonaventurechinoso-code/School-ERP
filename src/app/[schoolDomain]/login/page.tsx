@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
@@ -68,6 +69,16 @@ export default function TenantLoginPage() {
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-8 md:p-10 animate-in fade-in zoom-in-95 duration-500">
         
         <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Image
+              src="/img/business-logo.png"
+              alt="School ERP"
+              width={28}
+              height={28}
+              className="w-7 h-7 rounded-lg object-contain"
+            />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">School ERP Platform</span>
+          </div>
           <div 
             className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm"
             style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
@@ -157,7 +168,7 @@ export default function TenantLoginPage() {
 
         <div className="mt-8 text-center">
           <p className="text-slate-500 text-xs">
-            Protected by Next-Gen ERP Security layer.
+            Protected by School ERP Security layer.
           </p>
         </div>
       </div>

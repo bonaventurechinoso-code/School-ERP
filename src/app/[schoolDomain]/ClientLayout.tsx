@@ -103,8 +103,23 @@ export default function ClientLayout({
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
       >
-        <div className="p-6 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50">
-          <span className="truncate bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{schoolName.toUpperCase()}</span>
+        <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50">
+          <div className="flex items-center gap-3 min-w-0">
+            {tenant?.branding?.logoUrl ? (
+              <img
+                src={tenant.branding.logoUrl}
+                alt={schoolName}
+                className="w-9 h-9 rounded-xl object-contain border border-slate-800 shadow-sm shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
+                <GraduationCap className="w-5 h-5 text-white" />
+              </div>
+            )}
+            <span className="truncate text-base font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
+              {schoolName.toUpperCase()}
+            </span>
+          </div>
           <button className="md:hidden p-2 -mr-2 rounded-lg hover:bg-slate-800 active:scale-95 transition-all" onClick={() => setIsSidebarOpen(false)}>
             <X className="w-5 h-5 text-slate-400" />
           </button>
@@ -168,9 +183,26 @@ export default function ClientLayout({
             <ThemeToggle />
           </div>
         </header>
-        <div className="p-4 md:p-8 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full">
+        <div className="p-4 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full">
           {children}
         </div>
+
+        {/* Tenant Dashboard Footer */}
+        <footer className="mt-auto border-t border-slate-200/60 dark:border-zinc-800/60 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xs py-4 px-4 md:px-8 pb-24 sm:pb-4 transition-colors duration-200">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-zinc-400 sm:pr-56 md:pr-64">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
+              <span>Powered by </span>
+              <img
+                src="/img/business-logo.png"
+                alt="BonaVee ICT"
+                className="h-5 w-5 inline-block align-middle object-contain rounded-xs shadow-xs"
+              />
+            </div>
+            <div className="text-center sm:text-right shrink-0">
+              <span>© {new Date().getFullYear()} School ERP Platform. All rights reserved.</span>
+            </div>
+          </div>
+        </footer>
       </main>
 
       {/* Mobile Bottom Navigation */}

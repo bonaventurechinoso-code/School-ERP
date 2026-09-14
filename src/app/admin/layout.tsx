@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import Image from "next/image";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
@@ -40,7 +41,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 flex flex-col transition-colors duration-200">
         <header className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
-          <h1 className="text-xl font-bold tracking-wide">Platform Super-Admin</h1>
+          <div className="flex items-center gap-3">
+            <Image
+              src="/img/business-logo.png"
+              alt="School ERP"
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-lg object-contain"
+            />
+            <h1 className="text-xl font-bold tracking-wide">Platform Super-Admin</h1>
+          </div>
           <div className="bg-slate-800 rounded-full border border-slate-700">
             <ThemeToggle />
           </div>
@@ -59,7 +69,20 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 flex flex-col transition-colors duration-200">
       <header className="bg-slate-900 text-white px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between shadow-md sticky top-0 z-30">
-        <h1 className="text-base sm:text-xl font-bold tracking-wide truncate mr-2">Platform Super-Admin</h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <Image
+            src="/img/business-logo.png"
+            alt="School ERP"
+            width={32}
+            height={32}
+            className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-xs"
+            priority
+          />
+          <div>
+            <span className="block text-[10px] uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+            <h1 className="text-base sm:text-lg font-bold tracking-tight truncate leading-tight">Platform Super-Admin</h1>
+          </div>
+        </div>
         {/* Upper top-right navigation navbar utility bar Theme Toggle */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="bg-slate-800 rounded-full border border-slate-700">
@@ -71,6 +94,27 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <main className="flex-1 p-3.5 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
         {children}
       </main>
+
+      {/* Admin Platform Footer */}
+      <footer className="mt-auto border-t border-slate-200 dark:border-zinc-800/80 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xs py-4 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-zinc-400">
+          <div className="flex items-center gap-2">
+            <Image
+              src="/img/business-logo.png"
+              alt="School ERP"
+              width={20}
+              height={20}
+              className="w-5 h-5 rounded-md object-contain"
+            />
+            <span className="font-semibold text-slate-800 dark:text-zinc-200">School ERP Master Console</span>
+            <span>•</span>
+            <span>Powered by <strong className="text-slate-800 dark:text-zinc-100 font-semibold">BonaVee ICT</strong></span>
+          </div>
+          <div>
+            <span>© {new Date().getFullYear()} BonaVee ICT. All rights reserved.</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

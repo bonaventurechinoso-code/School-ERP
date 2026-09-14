@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import { basePrisma } from "./tenant-prisma";
 import {
   invalidateStudentNamespace,
@@ -10,7 +10,7 @@ import {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __demoCleanupCronTask: cron.ScheduledTask | undefined;
+  var __demoCleanupCronTask: ScheduledTask | undefined;
   // eslint-disable-next-line no-var
   var __demoCleanupIsRunning: boolean | undefined;
 }
