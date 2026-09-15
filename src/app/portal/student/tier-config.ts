@@ -209,15 +209,21 @@ export function sanitizeStudentAdmissionId(rawId: string, className?: string, ba
   if (!rawId) return rawId;
   const targetBadge = badgeCode || formatClassAlignedBadgeCode(className);
   
-  // If student is in Early Childhood but ID has SECONDARY prefix, fix it
-  if (targetBadge === "NURSERY" && rawId.includes("/SECONDARY-")) {
-    return rawId.replace("/SECONDARY-", "/NURSERY-");
+  // If student is in Early Childhood but ID has SECONDARY or PRIMARY prefix, fix it
+  if (targetBadge === "NURSERY") {
+    if (rawId.includes("/SECONDARY-")) return rawId.replace("/SECONDARY-", "/NURSERY-");
+    if (rawId.includes("/SEC/")) return rawId.replace("/SEC/", "/NUR/");
+    if (rawId.includes("/PRI/")) return rawId.replace("/PRI/", "/NUR/");
   }
-  if (targetBadge === "PRIMARY" && rawId.includes("/SECONDARY-")) {
-    return rawId.replace("/SECONDARY-", "/PRIMARY-");
+  if (targetBadge === "PRIMARY") {
+    if (rawId.includes("/SECONDARY-")) return rawId.replace("/SECONDARY-", "/PRIMARY-");
+    if (rawId.includes("/SEC/")) return rawId.replace("/SEC/", "/PRI/");
+    if (rawId.includes("/NUR/")) return rawId.replace("/NUR/", "/PRI/");
   }
-  if (targetBadge === "SECONDARY" && rawId.includes("/NURSERY-")) {
-    return rawId.replace("/NURSERY-", "/SECONDARY-");
+  if (targetBadge === "SECONDARY") {
+    if (rawId.includes("/NURSERY-")) return rawId.replace("/NURSERY-", "/SECONDARY-");
+    if (rawId.includes("/NUR/")) return rawId.replace("/NUR/", "/SEC/");
+    if (rawId.includes("/PRI/")) return rawId.replace("/PRI/", "/SEC/");
   }
   
   return rawId;
