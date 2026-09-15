@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -14,24 +15,41 @@ const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (m
 async function main() {
   console.log("Seeding database with Nigerian mock data...")
 
-  // Clean the database
-  await prisma.admissionLead.deleteMany()
-  await prisma.examResult.deleteMany()
-  await prisma.exam.deleteMany()
-  await prisma.student.deleteMany()
-  await prisma.course.deleteMany()
-  await prisma.classroom.deleteMany()
-  await prisma.academicTier.deleteMany()
-  await prisma.school.deleteMany()
-  await prisma.platformAdmin.deleteMany()
+  const defaultPasswordHash = await bcrypt.hash("Password123", 10)
 
-  // Seed Platform Admin
+  // Clean the database
+  await prisma.session.deleteMany().catch(() => {})
+  await prisma.admissionNote.deleteMany().catch(() => {})
+  await prisma.admissionLead.deleteMany().catch(() => {})
+  await prisma.examResult.deleteMany().catch(() => {})
+  await prisma.exam.deleteMany().catch(() => {})
+  await prisma.studentAttendance.deleteMany().catch(() => {})
+  await prisma.staffAttendance.deleteMany().catch(() => {})
+  await prisma.invoice.deleteMany().catch(() => {})
+  await prisma.payment.deleteMany().catch(() => {})
+  await prisma.student.deleteMany().catch(() => {})
+  await prisma.staff.deleteMany().catch(() => {})
+  await prisma.classroom.deleteMany().catch(() => {})
+  await prisma.course.deleteMany().catch(() => {})
+  await prisma.academicTier.deleteMany().catch(() => {})
+  await prisma.school.deleteMany().catch(() => {})
+  await prisma.platformAdmin.deleteMany().catch(() => {})
+
+  // Seed Platform Admins
   await prisma.platformAdmin.create({
     data: {
       email: "admin@schoolerp.com",
-      password: "hashed_password_placeholder", // Typically use bcrypt here
+      password: defaultPasswordHash,
     },
   })
+
+  await prisma.platformAdmin.create({
+    data: {
+      email: "superadmin@platform.com",
+      password: defaultPasswordHash,
+    },
+  })
+
 
   const schoolsConfig = [
     { name: "Demo School", subdomain: "demo", tiers: ["Daycare / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
@@ -50,10 +68,84 @@ async function main() {
     })
     console.log(`Created School: ${school.name}`)
 
+    // Seed Authentic Staff Members with Nigerian Roles
+    const isUni = s.tiers.includes("Higher Institution / University")
+    const schoolStaff = [
+      {
+        firstName: isUni ? "Prof. Babatunde" : "Mrs. Folake",
+        lastName: "Adeyemi",
+        email: `principal@${s.subdomain}.edu.ng`,
+        role: isUni ? "Vice Chancellor" : "Principal",
+        status: "ACTIVE",
+        baseSalary: 450000,
+      },
+      {
+        firstName: "Mr. Emeka",
+        lastName: "Okafor",
+        email: `bursar@${s.subdomain}.edu.ng`,
+        role: "Bursar",
+        status: "ACTIVE",
+        baseSalary: 350000,
+      },
+      {
+        firstName: "Mrs. Ngozi",
+        lastName: "Eze",
+        email: `headmaster@${s.subdomain}.edu.ng`,
+        role: "Headmaster",
+        status: "ACTIVE",
+        baseSalary: 320000,
+      },
+      {
+        firstName: "Mr. Ayodeji",
+        lastName: "Balogun",
+        email: `teacher@${s.subdomain}.edu.ng`,
+        role: "Class Teacher",
+        status: "ACTIVE",
+        baseSalary: 220000,
+      },
+    ]
+
+    if (isUni) {
+      schoolStaff.push(
+        {
+          firstName: "Dr. Kelechi",
+          lastName: "Nwosu",
+          email: `professor@${s.subdomain}.edu.ng`,
+          role: "Professor",
+          status: "ACTIVE",
+          baseSalary: 550000,
+        },
+        {
+          firstName: "Dr. Amina",
+          lastName: "Ibrahim",
+          email: `lecturer@${s.subdomain}.edu.ng`,
+          role: "Lecturer",
+          status: "ACTIVE",
+          baseSalary: 380000,
+        }
+      )
+    }
+
+    for (const staffMember of schoolStaff) {
+      await prisma.staff.create({
+        data: {
+          schoolId: school.id,
+          firstName: staffMember.firstName,
+          lastName: staffMember.lastName,
+          email: staffMember.email,
+          password: defaultPasswordHash,
+          role: staffMember.role,
+          status: staffMember.status,
+          baseSalary: staffMember.baseSalary,
+        },
+      })
+    }
+
     let studentCount = 1
 
     for (let tIndex = 0; tIndex < s.tiers.length; tIndex++) {
       const tierName = s.tiers[tIndex]
+
       const tier = await prisma.academicTier.create({
         data: {
           name: tierName,
