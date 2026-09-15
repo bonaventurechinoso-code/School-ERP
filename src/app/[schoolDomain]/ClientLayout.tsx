@@ -7,6 +7,7 @@ import AIChatWidget from "@/components/AIChatWidget";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
+import { checkRouteAuthorization, isAdminExecutive } from "@/lib/permissions";
 import TierSwitcher from "@/components/TierSwitcher";
 
 export interface ClientLayoutTier {
@@ -24,7 +25,7 @@ export default function ClientLayout({
   currentTier,
 }: {
   schoolName: string;
-  headerContent: React.ReactNode;
+  headerContent?: React.ReactNode;
   children: React.ReactNode;
   tiers?: ClientLayoutTier[];
   currentTier?: string | null;
@@ -57,29 +58,15 @@ export default function ClientLayout({
 
   const sessionData = useSession();
   const userRole = (sessionData.role || tenant.userRole || "").trim().toUpperCase();
-  const isAuthorizedAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ADMIN"].includes(userRole);
-  // Strict evaluation: only SUPER_ADMIN or SCHOOL_ADMIN are allowed to view/top up wallet balance
-  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
+  const staffRole = sessionData.staffRole;
+  const isAuthorizedAdmin = isAdminExecutive(userRole, staffRole);
+  // Strict evaluation: only Executive Leadership or Super Admin can view/top up wallet
+  const isWalletAuthorized = isAuthorizedAdmin;
 
-  const links = (() => {
-    switch (userRole) {
-      case "TEACHER":
-        return allLinks.filter(link =>
-          ["Dashboard", "Students", "Timetable", "Assessments", "Report Cards", "Academic Records"].includes(link.label)
-        );
-      case "BURSAR":
-        return allLinks.filter(link =>
-          ["Dashboard", "Students", "Finance", "Communications"].includes(link.label)
-        );
-      case "STUDENT":
-        return allLinks.filter(link =>
-          ["Dashboard", "Timetable", "Academic Records"].includes(link.label)
-        );
-      case "ADMIN":
-      default:
-        return allLinks;
-    }
-  })();
+  const links = allLinks.filter((link) => {
+    const auth = checkRouteAuthorization(link.href, userRole, staffRole);
+    return auth.allowed;
+  });
 
   const mobileNavLinks = [
     { label: "Home", href: `/${schoolDomain}/dashboard`, icon: Home },

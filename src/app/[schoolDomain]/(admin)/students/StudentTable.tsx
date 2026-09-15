@@ -1280,7 +1280,7 @@ export default function StudentTable({
 
             {selectedIds.length > 0 ? (
               <p className="text-slate-600 dark:text-zinc-300 text-sm mb-4 leading-relaxed">
-                You are about to graduate {selectedIds.length} selected student(s) to 'Alumni'.
+                You are about to graduate {selectedIds.length} selected student(s) to &apos;Alumni&apos;.
               </p>
             ) : (
               <div className="space-y-4 mb-4">

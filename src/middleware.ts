@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { checkRouteAuthorization, getDevMockRoleConfig } from '@/lib/permissions';
 
 export const config = {
   matcher: [
@@ -133,8 +134,10 @@ export async function middleware(req: NextRequest) {
   if (isTenantAdminPath) {
     const sessionToken = req.cookies.get('session')?.value;
     const isDev = process.env.NODE_ENV === 'development';
+    const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
+    const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
 
-    if (!sessionToken) {
+    if (!sessionToken && !mockRoleConfig) {
       // Redirect to tenant login or access-denied
       const targetPath = subdomain ? `/${subdomain}/login` : '/access-denied';
       const loginUrl = new URL(targetPath, req.url);
@@ -145,10 +148,30 @@ export async function middleware(req: NextRequest) {
     }
 
     try {
-      // Verify JWT
-      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-      const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jwtVerify(sessionToken, secret);
+      let payload: any = null;
+
+      if (sessionToken) {
+        try {
+          const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+          const secret = new TextEncoder().encode(jwtSecret);
+          const verified = await jwtVerify(sessionToken, secret);
+          payload = verified.payload;
+        } catch (tokenErr) {
+          if (!mockRoleConfig) throw tokenErr;
+        }
+      }
+
+      // If no valid session token exists but Flexible Local Dev Mode is active, synthesize mock session profile
+      if (!payload && mockRoleConfig) {
+        payload = {
+          userId: 'dev-mock-user',
+          email: `mock-${mockRoleConfig.staffRole.toLowerCase().replace(/[^a-z0-9]/g, '')}@school.edu`,
+          role: mockRoleConfig.role,
+          staffRole: mockRoleConfig.staffRole,
+          tenantId: 'mock-dev-tenant',
+          schoolDomain: subdomain || 'greenwood',
+        };
+      }
 
       // Resolve effective tenant context
       let effectiveSubdomain = subdomain;
@@ -184,48 +207,39 @@ export async function middleware(req: NextRequest) {
         }
       }
 
-      // --- Strict Role Isolation Matrix ---
-      const rawRole = ((payload.role as string) || '').toUpperCase();
-      // In development mode, automatically treat active session with master SUPER_ADMIN privileges
-      const role = isDev ? 'SUPER_ADMIN' : rawRole;
+      // --- Strict Role-Based Access Control (RBAC) Matrix ---
+      const rawRole = (payload.role as string) || '';
+      const staffRole = (payload.staffRole as string) || '';
 
-      // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE DASHBOARDS
-      if (!isDev && role === 'STUDENT') {
-        const studentPortalUrl = new URL('/portal/student', req.url);
-        studentPortalUrl.searchParams.set('denied', 'true');
-        return NextResponse.redirect(studentPortalUrl);
-      }
+      const authResult = checkRouteAuthorization(path, rawRole, staffRole);
 
-      // 2. ISOLATE STAFF FROM ADMINISTRATIVE DASHBOARDS
-      if (!isDev && role === 'STAFF') {
-        const staffPortalUrl = new URL('/portal/staff', req.url);
-        staffPortalUrl.searchParams.set('denied', 'true');
-        return NextResponse.redirect(staffPortalUrl);
-      }
-
-      // 4. TEACHER Role: Block Finance, HR, Portal Settings, Admissions, Staff
-      if (!isDev && role === 'TEACHER') {
-        if (path.includes('/finance') || path.includes('/hr') || path.includes('/portal-settings') || path.includes('/admissions') || path.includes('/staff')) {
-          const dashUrl = new URL(`/${subdomain || 'app'}/dashboard`, req.url);
-          if (subdomain && (isIPAddress || isLocalhost)) {
-            dashUrl.searchParams.set('mockTenant', subdomain);
-          }
-          return NextResponse.redirect(dashUrl);
+      if (!authResult.allowed) {
+        // 1. If student attempted to access administrative area, direct to student portal with notice
+        if (authResult.category === 'STUDENT') {
+          const studentPortalUrl = new URL('/portal/student', req.url);
+          studentPortalUrl.searchParams.set('denied', 'true');
+          return NextResponse.redirect(studentPortalUrl);
         }
-      }
 
-      // 5. BURSAR Role: Block HR, Portal Settings, Scheduling, Exams, Transcripts, Admissions, Staff
-      if (!isDev && role === 'BURSAR') {
-        if (path.includes('/hr') || path.includes('/portal-settings') || path.includes('/scheduling') || path.includes('/exams') || path.includes('/transcripts') || path.includes('/admissions') || path.includes('/staff')) {
-          const dashUrl = new URL(`/${subdomain || 'app'}/dashboard`, req.url);
-          if (subdomain && (isIPAddress || isLocalhost)) {
-            dashUrl.searchParams.set('mockTenant', subdomain);
-          }
-          return NextResponse.redirect(dashUrl);
+        // 2. Direct all other unauthorized access attempts gracefully to /access-denied
+        const deniedUrl = new URL('/access-denied', req.url);
+        deniedUrl.searchParams.set('role', authResult.effectiveRoleName);
+        deniedUrl.searchParams.set(
+          'message',
+          authResult.reason || 'You do not have permission to view this administrative workspace.'
+        );
+        if (subdomain && (isIPAddress || isLocalhost)) {
+          deniedUrl.searchParams.set('mockTenant', subdomain);
         }
+        return NextResponse.redirect(deniedUrl);
       }
 
-      // 6. SUPER_ADMIN / SCHOOL_ADMIN / ADMIN / TENANT_ADMIN: Unrestricted access across administrative modules
+      // Inject cryptographically verified session claims into downstream request headers
+      req.headers.set('x-user-id', (payload.userId as string) || '');
+      req.headers.set('x-user-role', rawRole);
+      req.headers.set('x-staff-role', staffRole);
+      req.headers.set('x-tenant-id', (payload.tenantId as string) || '');
+      req.headers.set('x-session-token', (payload.sessionToken as string) || (payload.jti as string) || '');
     } catch (err) {
       // Token is invalid or expired
       const targetPath = subdomain ? `/${subdomain}/login` : '/access-denied';

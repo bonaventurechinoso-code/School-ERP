@@ -32,11 +32,15 @@ export default function StaffTable({
   const paramTier = searchParams.get("tier");
 
   // Dynamically resolve active tier category from URL query param, tenant context, or institution type
+  const tenantActiveTier = (tenant as any)?.activeTier;
+  const tenantPreciseTier = tenant.preciseTier;
+  const tenantType = tenant.institutionType;
+
   const tierCategory: StaffTierCategory = useMemo(() => {
     return resolveStaffTierCategory(
-      paramTier || (tenant as any)?.activeTier || tenant.preciseTier || (tenant.institutionType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
+      paramTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
     );
-  }, [paramTier, (tenant as any)?.activeTier, tenant.preciseTier, tenant.institutionType]);
+  }, [paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
   const activeRolesList = useMemo(() => getRolesForTier(tierCategory), [tierCategory]);
   const defaultRole = useMemo(() => getDefaultRoleForTier(tierCategory), [tierCategory]);

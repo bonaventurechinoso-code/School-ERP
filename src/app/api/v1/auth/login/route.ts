@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import * as jose from "jose";
 import { cookies } from "next/headers";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
+import { createDatabaseSession, SESSION_MAX_AGE_SECONDS } from "@/lib/session-manager";
 
 export async function POST(req: Request) {
   try {
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
         const adminId = platformAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
 
-        const sessionToken = await new jose.SignJWT({
+        await createDatabaseSession({
           userId: adminId,
           email: normalizedEmail,
           tenantId: "global-saas",
@@ -58,19 +59,8 @@ export async function POST(req: Request) {
           role: "SUPER_ADMIN",
           activeTiers: ["Central Platform"],
           permissions: permissions,
-        })
-          .setProtectedHeader({ alg })
-          .setIssuedAt()
-          .setExpirationTime("12h")
-          .sign(secret);
-
-        const cookieStore = await cookies();
-        cookieStore.set("session", sessionToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          path: "/",
-          maxAge: 60 * 60 * 12,
+          ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
+          userAgent: req.headers.get("user-agent"),
         });
 
         return NextResponse.json({
@@ -79,6 +69,7 @@ export async function POST(req: Request) {
           schoolDomain: "admin",
           redirectUrl: "/admin",
           permissions,
+          maxAge: SESSION_MAX_AGE_SECONDS,
         });
       } else if (platformAdmin && !schoolDomain) {
         return NextResponse.json({ error: "Invalid Super-Admin credentials." }, { status: 401 });
@@ -105,14 +96,21 @@ export async function POST(req: Request) {
         const activeTiers = tenant.academicTiers.map(t => t.name);
 
         let devRole: UserRole | null = null;
+        let devStaffRole: string | undefined = undefined;
         let devUserId = "";
 
         if ((email === "staff@school.edu" || email === "admin@school.edu") && password === "Password123") {
           devRole = "SCHOOL_ADMIN";
+          devStaffRole = "Principal";
           devUserId = "test-admin-123";
-        } else if ((email === "teacher@school.edu" || email === "bursar@school.edu") && password === "Password123") {
+        } else if (email === "teacher@school.edu" && password === "Password123") {
           devRole = "STAFF";
-          devUserId = email.includes("teacher") ? "test-teacher-456" : "test-bursar-789";
+          devStaffRole = "Class Teacher";
+          devUserId = "test-teacher-456";
+        } else if (email === "bursar@school.edu" && password === "Password123") {
+          devRole = "STAFF";
+          devStaffRole = "School Bursar";
+          devUserId = "test-bursar-789";
         } else if (email === "student@school.edu" && password === "Password123") {
           devRole = "STUDENT";
           devUserId = "test-student-999";
@@ -121,36 +119,28 @@ export async function POST(req: Request) {
         if (devRole) {
           const permissions = getDefaultPermissionsForRole(devRole);
 
-          const sessionToken = await new jose.SignJWT({
+          await createDatabaseSession({
             userId: devUserId,
             email: email,
             tenantId: tenant.id,
             schoolDomain: tenant.subdomain,
             tenantName: tenant.name,
             role: devRole,
+            staffRole: devStaffRole,
             activeTiers: activeTiers,
             permissions: permissions,
-          })
-            .setProtectedHeader({ alg })
-            .setIssuedAt()
-            .setExpirationTime("12h")
-            .sign(secret);
-
-          const cookieStore = await cookies();
-          cookieStore.set("session", sessionToken, {
-            httpOnly: true,
-            secure: false,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 60 * 60 * 12,
+            ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
+            userAgent: req.headers.get("user-agent"),
           });
 
           return NextResponse.json({ 
             success: true, 
             role: devRole, 
+            staffRole: devStaffRole,
             schoolDomain: tenant.subdomain,
             activeTiers,
             permissions,
+            maxAge: SESSION_MAX_AGE_SECONDS,
           });
         }
       }
@@ -172,6 +162,7 @@ export async function POST(req: Request) {
 
     const activeTiers = tenant.academicTiers.map(t => t.name);
     let resolvedRole: UserRole | null = null;
+    let resolvedStaffRole: string | undefined = undefined;
     let authenticatedUserId = "";
     let authenticatedEmail = email;
 
@@ -188,6 +179,7 @@ export async function POST(req: Request) {
         const isPasswordValid = await bcrypt.compare(password, staff.password);
         if (isPasswordValid) {
           resolvedRole = normalizeRole(staff.role);
+          resolvedStaffRole = staff.role;
           authenticatedUserId = staff.id;
         }
       }
@@ -237,38 +229,29 @@ export async function POST(req: Request) {
     // 2. FETCH ROLE PERMISSIONS
     const permissions = getDefaultPermissionsForRole(resolvedRole);
 
-    // 3. SECURE JWT SESSION GENERATION WITH EXPANDED CLAIMS
-    const sessionToken = await new jose.SignJWT({
+    // 3. PERSIST SERVER-CONTROLLED DATABASE SESSION (30-min idle limit + cryptographic binding)
+    await createDatabaseSession({
       userId: authenticatedUserId,
       email: authenticatedEmail,
       tenantId: tenant.id,
       schoolDomain: tenant.subdomain,
       tenantName: tenant.name,
       role: resolvedRole,
+      staffRole: resolvedStaffRole,
       activeTiers: activeTiers,
       permissions: permissions,
-    })
-      .setProtectedHeader({ alg })
-      .setIssuedAt()
-      .setExpirationTime("12h")
-      .sign(secret);
-
-    // Bake into HTTP-only secure cookie
-    const cookieStore = await cookies();
-    cookieStore.set("session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 12, // 12 hours
+      ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
+      userAgent: req.headers.get("user-agent"),
     });
 
     return NextResponse.json({ 
       success: true, 
       role: resolvedRole, 
+      staffRole: resolvedStaffRole,
       schoolDomain: tenant.subdomain,
       activeTiers,
       permissions,
+      maxAge: SESSION_MAX_AGE_SECONDS,
     });
 
   } catch (error: any) {

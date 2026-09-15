@@ -2,6 +2,7 @@ import React, { Suspense } from "react";
 import { cookies } from "next/headers";
 import { getCachedSchool } from "@/lib/cache";
 import { getSession } from "@/lib/auth";
+import { isFinanceRole } from "@/lib/permissions";
 import {
   StudentRosterCard,
   StaffStatusCard,
@@ -65,9 +66,8 @@ export default async function TenantDashboard({
 
   const primaryColor = "#0f172a";
   const userRole = session?.role?.toUpperCase() || "";
-  const isFinanceAuthorized =
-    process.env.NODE_ENV === "development" ||
-    ["ADMIN", "BURSAR", "SUPER_ADMIN", "SCHOOL_ADMIN"].includes(userRole);
+  const staffRole = session?.staffRole || "";
+  const isFinanceAuthorized = isFinanceRole(userRole, staffRole);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-200">

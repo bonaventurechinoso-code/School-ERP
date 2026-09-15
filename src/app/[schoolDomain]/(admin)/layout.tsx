@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { getCachedSchool } from "@/lib/cache";
+import { isAdminExecutive, getDevMockRoleConfig } from "@/lib/permissions";
 import ClientLayout from "../ClientLayout";
 import WalletTopUp from "../WalletTopUp";
 
@@ -28,32 +29,36 @@ export default async function AdminLayout({
   const sessionToken = cookieStore.get("session")?.value;
 
   let userRole = "";
+  let staffRole = "";
   if (sessionToken) {
     try {
       const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
       const secret = new TextEncoder().encode(jwtSecret);
       const { payload } = await jwtVerify(sessionToken, secret);
       userRole = ((payload.role as string) || "").toUpperCase();
+      staffRole = (payload.staffRole as string) || "";
     } catch (err) {
       console.error("[AdminLayout] Invalid session token:", err);
     }
   }
 
   const isDev = process.env.NODE_ENV === "development";
-
-  // 1. ISOLATE STUDENTS AND STAFF FROM ADMIN DASHBOARD (Skipped in development testing)
-  if (!isDev) {
-    if (userRole === "STUDENT") {
-      redirect("/portal/student?denied=true");
-    }
-
-    if (userRole === "STAFF") {
-      redirect("/portal/staff?denied=true");
+  const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
+  if (!userRole && isDev && devMockRoleSetting) {
+    const mock = getDevMockRoleConfig(devMockRoleSetting);
+    if (mock) {
+      userRole = mock.role.toUpperCase();
+      staffRole = mock.staffRole;
     }
   }
 
-  // 2. SECURE WALLET BALANCE ACCESSIBILITY (SUPER_ADMIN & SCHOOL_ADMIN ONLY)
-  const isWalletAuthorized = isDev || userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
+  // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES
+  if (userRole === "STUDENT") {
+    redirect("/portal/student?denied=true");
+  }
+
+  // 2. SECURE WALLET BALANCE ACCESSIBILITY (EXECUTIVE LEADERSHIP ONLY)
+  const isWalletAuthorized = isAdminExecutive(userRole, staffRole);
   const walletElement = isWalletAuthorized ? (
     <WalletTopUp schoolId={school.id} walletBalance={school.walletBalance} />
   ) : null;

@@ -379,11 +379,15 @@ function ReportCardsContent() {
   const paramTier = searchParams.get("tier");
 
   // Inherit active tier key directly from global sidebar selection (URL search param, cookie/tenant context, or institution type)
+  const tenantActiveTier = (tenant as any)?.activeTier;
+  const tenantPreciseTier = tenant.preciseTier;
+  const tenantType = tenant.institutionType;
+
   const activeTierKey: TierKey = useMemo(() => {
     return resolveAcademicTierKey(
-      paramTier || (tenant as any)?.activeTier || tenant.preciseTier || (tenant.institutionType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY")
+      paramTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY")
     );
-  }, [paramTier, (tenant as any)?.activeTier, tenant.preciseTier, tenant.institutionType]);
+  }, [paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
   const academicTier = activeTierKey;
   const [term, setTerm] = useState("");

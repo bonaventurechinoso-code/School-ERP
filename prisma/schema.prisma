@@ -783,3 +783,32 @@ model AdmissionNote {
 
   @@index([studentLeadId])
 }
+
+// ------------------------------------------------------
+// SERVER-CONTROLLED DATABASE SESSIONS
+// ------------------------------------------------------
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  email        String?
+  tenantId     String?
+  schoolDomain String?
+  role         String
+  staffRole    String?
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  isRevoked    Boolean  @default(false)
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([tenantId])
+  @@index([expiresAt])
+}
+

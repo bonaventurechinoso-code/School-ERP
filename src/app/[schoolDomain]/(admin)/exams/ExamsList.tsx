@@ -83,11 +83,15 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
   const tenant = useTenant();
   const paramTier = searchParams.get("tier");
 
+  const tenantActiveTier = (tenant as any)?.activeTier;
+  const tenantPreciseTier = tenant.preciseTier;
+  const tenantType = tenant.institutionType;
+
   const tierCategory: StaffTierCategory = useMemo(() => {
     return resolveStaffTierCategory(
-      paramTier || (tenant as any)?.activeTier || tenant.preciseTier || (tenant.institutionType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
+      paramTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
     );
-  }, [paramTier, (tenant as any)?.activeTier, tenant.preciseTier, tenant.institutionType]);
+  }, [paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
   const isHigherEd = tierCategory === "TERTIARY" || tenant.institutionType === "HIGHER_ED";
   const subjectLabel = isHigherEd ? "Course" : "Subject";

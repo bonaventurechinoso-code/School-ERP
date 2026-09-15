@@ -8,6 +8,7 @@ export interface SessionPayload {
   email?: string;
   tenantId: string;
   role: UserRole | string;
+  staffRole?: string;
   schoolDomain: string;
   tenantName?: string;
   activeTiers: string[];
@@ -66,7 +67,39 @@ export function getDefaultPermissionsForRole(role: UserRole): string[] {
   }
 }
 
+import { validateDatabaseSession, requireServerAuth } from "./session-manager";
+import { getDevMockRoleConfig } from "./permissions";
+
+export { requireServerAuth };
+
 export async function getSession(): Promise<SessionPayload | null> {
+  // 1. Authoritative database-backed session validation (Secure Production Mode)
+  const dbSession = await validateDatabaseSession();
+  if (dbSession) {
+    return dbSession;
+  }
+
+  // 2. Flexible Local Dev Mode Mocking (via NEXT_PUBLIC_DEV_MOCK_ROLE)
+  const isDev = process.env.NODE_ENV === "development";
+  const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
+  if (isDev && devMockRoleSetting) {
+    const mock = getDevMockRoleConfig(devMockRoleSetting);
+    if (mock) {
+      return {
+        userId: "dev-mock-user-id",
+        email: `mock-${mock.staffRole.toLowerCase().replace(/[^a-z0-9]/g, "")}@school.edu`,
+        tenantId: "mock-dev-tenant",
+        schoolDomain: "greenwood",
+        tenantName: "Greenwood Academy",
+        role: mock.role,
+        staffRole: mock.staffRole,
+        activeTiers: ["Primary School", "Secondary School"],
+        permissions: getDefaultPermissionsForRole(mock.role as any),
+      };
+    }
+  }
+
+  // 3. Fallback stateless token verification (for dev tests or transient tokens)
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("session")?.value;
 
