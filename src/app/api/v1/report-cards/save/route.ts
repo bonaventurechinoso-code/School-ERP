@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Bad Request: CA2 score must be between 0 and 20." }, { status: 400 });
     }
     if (numExam < 0 || numExam > 60) {
-      return NextResponse.json({ error: "Bad Request: Terminal Exam score must be between 0 and 60." }, { status: 400 });
+      return NextResponse.json({ error: "Bad Request: Termly Exam score must be between 0 and 60." }, { status: 400 });
     }
 
     // 3. Calculation & DB Commit

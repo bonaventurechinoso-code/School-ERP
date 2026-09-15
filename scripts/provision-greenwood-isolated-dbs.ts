@@ -191,7 +191,7 @@ async function provision() {
             schoolId: school.id,
             courseId: course.id,
             name: "First Term Examination",
-            semester: "Term 1",
+            semester: "1st Term",
             date: new Date(),
             maxScore: 100,
           },

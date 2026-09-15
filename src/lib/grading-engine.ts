@@ -25,7 +25,7 @@ export interface NumericalAssessmentInput {
   test1?: number | null; // e.g. Continuous Assessment 1 (Max 15 - 20)
   test2?: number | null; // e.g. Continuous Assessment 2 (Max 15 - 20)
   midTerm?: number | null; // e.g. Mid-Term Exam (Max 10 - 20)
-  finalExam?: number | null; // e.g. Terminal Exam (Max 50 - 60)
+  finalExam?: number | null; // e.g. Termly Exam (Max 50 - 60)
   passThreshold?: number; // Default 50%
 }
 
