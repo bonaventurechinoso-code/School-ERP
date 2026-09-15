@@ -413,8 +413,8 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
         ) : (
           examList.map((exam) => (
             <div key={exam.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-              <div className="font-bold text-slate-800 dark:text-white text-lg">
-                {exam.name === "Terminal Assessment" ? "Termly Assessment" : exam.name}
+              <div className="font-bold text-slate-800 dark:text-white text-lg capitalize">
+                {(exam.name === "Terminal Assessment" ? "Termly Assessment" : exam.name).replace(/\b\w/g, (char: string) => char.toUpperCase())}
               </div>
               <div className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-3">
                 {exam.course?.name || "General Course"} &bull; {exam.semester}
