@@ -456,10 +456,20 @@ function ReportCardsContent() {
   const [className, setClassName] = useState("");
   const [subject, setSubject] = useState("");
   const [seniorStream, setSeniorStream] = useState<SeniorStreamKey>("ALL");
+  const [isGenerated, setIsGenerated] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [roster, setRoster] = useState<StudentScore[]>([]);
-  const hasFilters = Boolean(term && className && subject);
+
+  // Flexible normalized filter completeness check (handles string casing and whitespace cleanly)
+  const isFilterActive = useMemo(() => {
+    const hasTerm = Boolean(term && String(term).trim().length > 0);
+    const hasClass = Boolean(className && String(className).trim().length > 0);
+    const hasSubject = Boolean(subject && String(subject).trim().length > 0);
+    return hasTerm && hasClass && hasSubject;
+  }, [term, className, subject]);
+
+  const hasFilters = Boolean(isGenerated || isFilterActive);
 
   // Critical Logic Binding: When the global sidebar 'Academic Tier' updates,
   // automatically reset class, subject, and term selections so they don't carry over into the new tier
@@ -473,6 +483,7 @@ function ReportCardsContent() {
       setTerm("");
       setSeniorStream("ALL");
       setRoster([]);
+      setIsGenerated(false);
     }
   }, [activeTierKey]);
 
@@ -557,27 +568,22 @@ function ReportCardsContent() {
   const handleClassChange = (newClass: string) => {
     setClassName(newClass);
     setSubject(""); // Immediately clears previous subject value
+    setIsGenerated(false);
   };
 
   // Handle Senior Secondary sub-stream toggle
   const handleStreamChange = (stream: SeniorStreamKey) => {
     setSeniorStream(stream);
     setSubject(""); // Immediately clears previous subject
+    setIsGenerated(false);
   };
 
-  // Ensure subject is reset if it doesn't belong to the newly computed subject array
+  // Fetch roster when all three required filters (term, class, subject) are selected or generation is requested
   useEffect(() => {
-    if (subject && !activeSubjects.includes(subject)) {
-      setSubject("");
-    }
-  }, [activeSubjects, subject]);
-
-  // Fetch roster when all three required filters (term, class, subject) are selected
-  useEffect(() => {
-    if (hasFilters) {
+    if (isFilterActive && hasFilters) {
       setIsLoading(true);
       fetch(
-        `/api/v1/report-cards/roster?term=${encodeURIComponent(term)}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}&schoolId=${encodeURIComponent(tenant.id || "")}`
+        `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject).trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -587,10 +593,29 @@ function ReportCardsContent() {
         })
         .catch((err) => console.error("Failed to load roster", err))
         .finally(() => setIsLoading(false));
-    } else {
+    } else if (!isFilterActive) {
       setRoster([]);
+      setIsGenerated(false);
     }
-  }, [term, className, subject, hasFilters, tenant.id]);
+  }, [term, className, subject, isFilterActive, hasFilters, tenant.id]);
+
+  // Explicit Action: Generate Report Sheets / Cards
+  const handleGenerateReportSheets = () => {
+    if (!isFilterActive) return;
+    setIsGenerated(true);
+    setIsLoading(true);
+    fetch(
+      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject).trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.roster) {
+          setRoster(data.roster);
+        }
+      })
+      .catch((err) => console.error("Failed to load roster", err))
+      .finally(() => setIsLoading(false));
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -916,7 +941,13 @@ function ReportCardsContent() {
 
             <select 
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSubject(val);
+                if (val && term && className) {
+                  setIsGenerated(true);
+                }
+              }}
               disabled={!className}
               className={`w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium ${
                 !className ? "bg-slate-50 cursor-not-allowed opacity-70" : ""
@@ -984,6 +1015,34 @@ function ReportCardsContent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Explicit Action Button: Generate Report Sheets / Cards */}
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isFilterActive ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+            <span>
+              {isFilterActive
+                ? `Ready to generate: ${className} • ${term} • ${subject}`
+                : "Select Term, Class, and Subject above to populate class roster"}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            id="generate-report-sheets-btn"
+            onClick={handleGenerateReportSheets}
+            disabled={!isFilterActive}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer"
+          >
+            <span>
+              {isTertiaryTier
+                ? "Generate Course Result Sheets →"
+                : academicTier === "SECONDARY"
+                ? "Generate Report Sheets →"
+                : "Generate Report Cards →"}
+            </span>
+          </button>
         </div>
       </div>
 
