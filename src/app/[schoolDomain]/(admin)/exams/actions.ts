@@ -46,7 +46,7 @@ export async function createExam(
       resolvedCourseId = newCourse.id;
     }
 
-    await tenantDb.exam.create({
+    const createdExam = await tenantDb.exam.create({
       data: {
         schoolId,
         courseId: resolvedCourseId,
@@ -54,14 +54,18 @@ export async function createExam(
         semester: data.semester,
         date: examDate,
         maxScore: data.maxScore,
-      }
+      },
+      include: {
+        course: { include: { tier: true } },
+      },
     });
 
     // Write-Through Cache Invalidation
     await invalidateGradingNamespace(schoolId);
 
     revalidatePath(`/[schoolDomain]/exams`, "page");
-    return { success: true };
+    return { success: true, exam: createdExam };
+
   } catch (error: any) {
     console.error("[Server Action] Failed to create exam:", error);
     return { success: false, error: error.message || "Failed to create exam." };
