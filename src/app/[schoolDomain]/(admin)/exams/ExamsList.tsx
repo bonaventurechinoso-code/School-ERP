@@ -258,7 +258,7 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
     <div className="space-y-6">
       {/* Header & Toggle Button */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h3 className="text-xl font-bold text-slate-800 w-full text-center sm:text-left">Scheduled Exams</h3>
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white w-full text-center sm:text-left">Scheduled Exams</h3>
         <button
           onClick={() => {
             setShowForm(!showForm);
@@ -306,25 +306,25 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
 
       {/* New Exam Creation Form */}
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in duration-200">
+        <form onSubmit={handleCreate} className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in duration-200">
           <div className="col-span-full">
-            <h4 className="font-semibold text-slate-700">New Exam / Assessment Details</h4>
-            <p className="text-xs text-slate-500 mt-0.5">Capture scheduling criteria and grade allocation parameters.</p>
+            <h4 className="font-semibold text-slate-800 dark:text-slate-100">New Exam / Assessment Details</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Capture scheduling criteria and grade allocation parameters.</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{subjectLabel}</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{subjectLabel}</label>
             <select
               required
-              className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 bg-white"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 dark:text-white bg-white dark:bg-slate-800 transition-colors"
               value={formData.courseId}
               onChange={(e) => setFormData({ ...formData, courseId: e.target.value })}
             >
-              <option value="" disabled>
+              <option value="" disabled className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
                 Select {subjectLabel}...
               </option>
               {activeSubjectsList.map((s) => (
-                <option key={s} value={s}>
+                <option key={s} value={s} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
                   {s}
                 </option>
               ))}
@@ -332,27 +332,27 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Exam Name</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Exam Name</label>
             <input
               required
               type="text"
               placeholder="e.g., Midterm Assessment"
-              className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 dark:text-white bg-white dark:bg-slate-800 placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{termLabel}</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{termLabel}</label>
             <select
               required
-              className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 bg-white"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 dark:text-white bg-white dark:bg-slate-800 transition-colors"
               value={formData.semester}
               onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
             >
               {sessionOptions.map((t) => (
-                <option key={t} value={t}>
+                <option key={t} value={t} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
                   {t}
                 </option>
               ))}
@@ -360,24 +360,24 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label>
             <input
               required
               type="date"
-              className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 dark:text-white bg-white dark:bg-slate-800 [color-scheme:light] dark:[color-scheme:dark] transition-colors"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Max Score</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Max Score</label>
             <input
               required
               type="number"
               min="1"
               max="1000"
-              className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 dark:text-white bg-white dark:bg-slate-800 placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
               value={formData.maxScore}
               onChange={(e) => setFormData({ ...formData, maxScore: Number(e.target.value) })}
             />
@@ -387,14 +387,14 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 transition text-sm font-medium"
+              className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition text-sm font-medium cursor-pointer"
             >
               Cancel
             </button>
             <button
               disabled={isPending}
               type="submit"
-              className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50 font-medium text-sm shadow-sm cursor-pointer"
+              className="px-6 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg transition disabled:opacity-50 font-medium text-sm shadow-sm cursor-pointer"
             >
               {isPending ? "Saving Exam..." : "Save Exam"}
             </button>
@@ -405,33 +405,36 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
       {/* Scheduled Exams List Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {examList.length === 0 ? (
-          <div className="col-span-full py-12 text-center bg-slate-50 border border-slate-200 rounded-2xl">
-            <Calendar className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-            <p className="text-slate-600 font-semibold text-base">No exams scheduled yet</p>
-            <p className="text-slate-400 text-sm mt-1">Click &quot;Schedule Exam&quot; above to create your first assessment.</p>
+          <div className="col-span-full py-12 text-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl">
+            <Calendar className="w-10 h-10 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
+            <p className="text-slate-600 dark:text-slate-300 font-semibold text-base">No exams scheduled yet</p>
+            <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Click &quot;Schedule Exam&quot; above to create your first assessment.</p>
           </div>
         ) : (
           examList.map((exam) => (
-            <div key={exam.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative group hover:border-slate-300 transition-all">
-              <div className="font-bold text-slate-800 text-lg">{exam.name}</div>
-              <div className="text-slate-500 text-sm font-medium mb-3">
+            <div key={exam.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+              <div className="font-bold text-slate-800 dark:text-white text-lg">
+                {exam.name === "Terminal Assessment" ? "Termly Assessment" : exam.name}
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-3">
                 {exam.course?.name || "General Course"} &bull; {exam.semester}
               </div>
 
-              <div className="flex justify-between items-center text-xs font-semibold text-slate-600 border-t border-slate-100 pt-3">
+              <div className="flex justify-between items-center text-xs font-semibold text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-3">
                 <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                   {new Date(exam.date).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                   })}
                 </span>
-                <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-md text-slate-700">
+                <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-slate-700 dark:text-slate-300">
                   <Award className="w-3.5 h-3.5 text-blue-500" />
                   Max: {exam.maxScore} pts
                 </span>
               </div>
+
 
               <button
                 onClick={() => handleDelete(exam.id)}

@@ -192,7 +192,7 @@ async function main() {
           data: {
             schoolId: school.id,
             courseId: course.id,
-            name: "Terminal Assessment",
+            name: "Termly Assessment",
             semester: "First Term",
             date: new Date(),
             maxScore: 100
