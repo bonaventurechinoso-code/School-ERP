@@ -69,8 +69,10 @@ export function getDefaultPermissionsForRole(role: UserRole): string[] {
 
 import { validateDatabaseSession, requireServerAuth } from "./session-manager";
 import { getDevMockRoleConfig } from "./permissions";
+import { getServerSession } from "next-auth";
+import { authOptions } from "./nextauth-config";
 
-export { requireServerAuth };
+export { requireServerAuth, authOptions };
 
 export async function getSession(): Promise<SessionPayload | null> {
   // 1. Authoritative database-backed session validation (Secure Production Mode)
@@ -99,7 +101,29 @@ export async function getSession(): Promise<SessionPayload | null> {
     }
   }
 
-  // 3. Fallback stateless token verification (for dev tests or transient tokens)
+  // 3. NextAuth.js active session resolution (Credentials & Google OAuth)
+  try {
+    const nextAuthSession = await getServerSession(authOptions);
+    if (nextAuthSession?.user) {
+      const u = nextAuthSession.user as any;
+      return {
+        userId: u.userId || u.id,
+        email: u.email || undefined,
+        tenantId: u.tenantId || "global-saas",
+        schoolDomain: u.schoolDomain || "admin",
+        tenantName: u.tenantName || undefined,
+        role: (u.role as UserRole) || "STAFF",
+        staffRole: u.staffRole || undefined,
+        activeTiers: u.activeTiers || [],
+        permissions: u.permissions || getDefaultPermissionsForRole((u.role as UserRole) || "STAFF"),
+        dbSessionId: u.dbSessionId,
+      };
+    }
+  } catch {
+    // Graceful fallback if invoked in environment without NextAuth headers
+  }
+
+  // 4. Fallback stateless token verification (for dev tests or transient tokens)
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("session")?.value;
 
@@ -117,3 +141,4 @@ export async function getSession(): Promise<SessionPayload | null> {
     return null;
   }
 }
+
