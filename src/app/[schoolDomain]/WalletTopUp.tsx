@@ -17,7 +17,7 @@ export default function WalletTopUp({
   const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
   const tenant = useTenant();
-  const { role } = useSession();
+  const { role, isWalletAuthorized } = useSession();
 
   const planMap: Record<string, string> = {
     BASIC: "Basic Education Setup",
@@ -25,10 +25,6 @@ export default function WalletTopUp({
     ENTERPRISE: "Enterprise Higher Ed",
   };
   const planName = planMap[tenant?.subscriptionPlan || "BASIC"] || "Basic Education Setup";
-
-  const userRole = (role || tenant?.userRole || "").trim().toUpperCase();
-  // Strictly enforce only SUPER_ADMIN or SCHOOL_ADMIN can view and top up wallet
-  const isWalletAuthorized = userRole === "SUPER_ADMIN" || userRole === "SCHOOL_ADMIN";
 
   if (!isWalletAuthorized) {
     return null;
