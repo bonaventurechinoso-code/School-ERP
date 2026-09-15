@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, ArrowLeft, Home, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 interface AccessDeniedFallbackProps {
   title?: string;
@@ -24,6 +25,14 @@ export default function AccessDeniedFallback({
   const isStudent = role?.toUpperCase() === "STUDENT";
   const resolvedPortalUrl = portalUrl || (isStudent ? "/portal/student" : "/");
   const resolvedPortalLabel = portalLabel || (isStudent ? "Return to Student Portal" : "Return to Home");
+
+  const handleSwitchAccount = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {}
+    document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+    await signOut({ callbackUrl: "/login" });
+  };
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-4">
@@ -70,10 +79,7 @@ export default function AccessDeniedFallback({
             <span>{resolvedPortalLabel}</span>
           </Link>
           <button
-            onClick={() => {
-              document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-              window.location.href = "/login";
-            }}
+            onClick={handleSwitchAccount}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 font-semibold text-sm transition cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
@@ -84,3 +90,4 @@ export default function AccessDeniedFallback({
     </div>
   );
 }
+
