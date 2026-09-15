@@ -38,23 +38,23 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <header>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
           Assessments
         </h2>
-        <p className="text-slate-500 mt-2 text-lg">
+        <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
           Schedule assessments and manage student grades.
         </p>
       </header>
       
       {/* Tabs */}
-      <div className="border-b border-slate-200">
+      <div className="border-b border-slate-200 dark:border-slate-800">
         <nav className="-mb-px flex space-x-8">
           <a
             href={`/${params.schoolDomain}/exams?tab=exams`}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === "exams"
-                ? "border-slate-800 text-slate-800"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
             Scheduled Exams
@@ -63,8 +63,8 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
             href={`/${params.schoolDomain}/exams?tab=grading`}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === "grading"
-                ? "border-slate-800 text-slate-800"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
             Grading Roster
