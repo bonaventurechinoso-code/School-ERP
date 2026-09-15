@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { provisionTierDatabases } from "@/lib/tenant-db-provisioner";
+import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 
 const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION', 'COMBINED_NURSERY_PRIMARY_SECONDARY'];
 
@@ -123,10 +124,14 @@ export async function createSchool(formData: FormData) {
 
 export async function toggleSchoolStatus(schoolId: string, currentStatus: boolean) {
   try {
-    await basePrisma.school.update({
+    const school = await basePrisma.school.update({
       where: { id: schoolId },
-      data: { isActive: !currentStatus }
+      data: { isActive: !currentStatus },
+      select: { subdomain: true }
     });
+    if (school?.subdomain) {
+      await invalidateTenantMetadata(school.subdomain);
+    }
     revalidatePath("/admin");
   } catch (error: any) {
     console.error(error.message);
@@ -135,6 +140,13 @@ export async function toggleSchoolStatus(schoolId: string, currentStatus: boolea
 
 export async function deleteSchool(schoolId: string) {
   try {
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { subdomain: true }
+    });
+    if (school?.subdomain) {
+      await invalidateTenantMetadata(school.subdomain);
+    }
     await basePrisma.school.delete({
       where: { id: schoolId }
     });
@@ -154,13 +166,17 @@ export async function updateSchool(schoolId: string, formData: FormData) {
   }
 
   try {
-    await basePrisma.school.update({
+    const school = await basePrisma.school.update({
       where: { id: schoolId },
       data: {
         name,
         contactPhone: contactPhone ? contactPhone.trim() : null,
-      }
+      },
+      select: { subdomain: true }
     });
+    if (school?.subdomain) {
+      await invalidateTenantMetadata(school.subdomain);
+    }
     revalidatePath("/admin");
   } catch (error: any) {
     console.error("Update School Error:", error.message);
@@ -268,12 +284,15 @@ export async function updateSchoolWithTiers(
       return { success: true, simulated: false };
     });
 
-    // Trigger automated tier database provisioning for the updated tier list
+    // Trigger automated tier database provisioning for the updated tier list and purge metadata cache
     const tierNames = normalizedTiers.map(t => t.name);
     basePrisma.school.findUnique({
       where: { id: schoolId },
       select: { subdomain: true }
     }).then(schoolRecord => {
+      if (schoolRecord?.subdomain) {
+        invalidateTenantMetadata(schoolRecord.subdomain).catch(() => {});
+      }
       if (schoolRecord?.subdomain && tierNames.length > 0) {
         provisionTierDatabases({
           schoolId,
