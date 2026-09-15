@@ -209,10 +209,23 @@ const TIER_CLASSES_MAP: Record<TierKey, string[]> = {
   ],
 };
 
-function resolveAcademicTierKey(tierName?: string | null): TierKey {
-  if (!tierName) return "PRIMARY";
+function resolveAcademicTierKey(tierName?: string | null, institutionType?: string | null): TierKey {
+  if (!tierName) return institutionType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY";
   const normalized = tierName.toUpperCase().replace(/[-_]/g, " ").trim();
 
+  // 1. Check Secondary first to prevent accidental substring collisions
+  if (
+    normalized.includes("SECONDARY") ||
+    normalized.includes("HIGH SCHOOL") ||
+    normalized.includes("JSS") ||
+    normalized.includes("SSS") ||
+    normalized === "SS" ||
+    normalized.startsWith("SS ")
+  ) {
+    return "SECONDARY";
+  }
+
+  // 2. Early Childhood / Nursery
   if (
     normalized.includes("NURSERY") ||
     normalized.includes("DAYCARE") ||
@@ -226,6 +239,21 @@ function resolveAcademicTierKey(tierName?: string | null): TierKey {
     return "NURSERY";
   }
 
+  // 3. Primary
+  if (
+    normalized.includes("PRIMARY") ||
+    normalized.includes("BASIC") ||
+    normalized.includes("ELEMENTARY")
+  ) {
+    return "PRIMARY";
+  }
+
+  // If tenant is K12, default any unmapped value to SECONDARY or PRIMARY, never tertiary
+  if (institutionType === "K12") {
+    return "SECONDARY";
+  }
+
+  // 4. College of Education
   if (
     normalized.includes("COLLEGE OF EDUCATION") ||
     normalized.includes("COLLEGE") ||
@@ -235,15 +263,16 @@ function resolveAcademicTierKey(tierName?: string | null): TierKey {
     return "COLLEGE_OF_EDUCATION";
   }
 
+  // 5. Polytechnic (use word boundary regex so 'SECONDARY' never matches)
   if (
     normalized.includes("POLYTECHNIC") ||
     normalized === "POLY" ||
-    normalized.includes("ND") ||
-    normalized.includes("HND")
+    /\b(ND|HND)\b/.test(normalized)
   ) {
     return "POLYTECHNIC";
   }
 
+  // 6. University
   if (
     normalized.includes("UNIVERSITY") ||
     normalized === "UNI" ||
@@ -255,28 +284,10 @@ function resolveAcademicTierKey(tierName?: string | null): TierKey {
   }
 
   if (
-    normalized.includes("SECONDARY") ||
-    normalized.includes("HIGH SCHOOL") ||
-    normalized.includes("JSS") ||
-    normalized.includes("SSS") ||
-    normalized.includes("SS")
-  ) {
-    return "SECONDARY";
-  }
-
-  if (
-    normalized.includes("PRIMARY") ||
-    normalized.includes("BASIC") ||
-    normalized.includes("ELEMENTARY")
-  ) {
-    return "PRIMARY";
-  }
-
-  if (
     normalized.includes("HIGHER") ||
     normalized.includes("TERTIARY")
   ) {
-    return "UNIVERSITY";
+    return "HIGHER_ED";
   }
 
   return "PRIMARY";
@@ -378,16 +389,25 @@ function ReportCardsContent() {
   const searchParams = useSearchParams();
   const paramTier = searchParams.get("tier");
 
-  // Inherit active tier key directly from global sidebar selection (URL search param, cookie/tenant context, or institution type)
+  // Inherit active tier key directly from global sidebar selection (URL search param, cookie, tenant context, or institution type)
+  const cookieTier = typeof document !== "undefined"
+    ? document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("activeTier="))
+        ?.split("=")[1]
+    : null;
+  const decodedCookieTier = cookieTier ? decodeURIComponent(cookieTier) : null;
+
   const tenantActiveTier = (tenant as any)?.activeTier;
   const tenantPreciseTier = tenant.preciseTier;
   const tenantType = tenant.institutionType;
 
   const activeTierKey: TierKey = useMemo(() => {
     return resolveAcademicTierKey(
-      paramTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY")
+      paramTier || decodedCookieTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY"),
+      tenantType
     );
-  }, [paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
+  }, [paramTier, decodedCookieTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
   const academicTier = activeTierKey;
   const [term, setTerm] = useState("");
@@ -594,7 +614,7 @@ function ReportCardsContent() {
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 min-h-screen pb-12">
       <header>
         <h2 className="text-3xl font-extrabold tracking-tight" style={{ color: tenant.branding?.primaryColor || "#0f172a" }}>
-          Termly Report Cards
+          {academicTier === "SECONDARY" ? "Termly Report Sheets" : "Termly Report Cards"}
         </h2>
         <p className="mt-2 text-lg text-slate-500">
           Continuous Assessment (CA) tracking, termly exam scores, and automated report sheet generation.
@@ -616,7 +636,6 @@ function ReportCardsContent() {
               {academicTier === "PRIMARY" && "9-Year Basic Education (Primary)"}
               {academicTier === "SECONDARY" && "Secondary Education (Junior & Senior)"}
               {academicTier === "COLLEGE_OF_EDUCATION" && "College of Education (Tertiary NCE)"}
-              {academicTier === "POLYTECHNIC" && "Polytechnic (Tertiary ND/HND)"}
               {academicTier === "UNIVERSITY" && "University (Undergraduate & Postgraduate)"}
               {academicTier === "HIGHER_ED" && "Tertiary / Higher Education Module"}
             </span>
@@ -639,14 +658,14 @@ function ReportCardsContent() {
               <option value="">{isTertiaryTier ? "-- Choose Semester --" : "-- Choose Term --"}</option>
               {isTertiaryTier ? (
                 <>
-                  <option value="First Semester">First Semester</option>
-                  <option value="Second Semester">Second Semester</option>
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
                 </>
               ) : (
                 <>
-                  <option value="First Term">First Term</option>
-                  <option value="Second Term">Second Term</option>
-                  <option value="Third Term">Third Term</option>
+                  <option value="1st Term">1st Term</option>
+                  <option value="2nd Term">2nd Term</option>
+                  <option value="3rd Term">3rd Term</option>
                 </>
               )}
             </select>
