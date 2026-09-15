@@ -21,11 +21,11 @@ export default async function TranscriptsDashboard({ params: paramsPromise }: { 
     ["PRIMARY", "SECONDARY", "NURSERY", "HIGH SCHOOL", "DAYCARE"].some(t => tier.name.toUpperCase().includes(t))
   );
 
-  const headerTitle = isBasicEd ? "Terminal Report Cards" : "Student Transcripts";
+  const headerTitle = isBasicEd ? "Termly Report Cards" : "Student Transcripts";
   const headerSubtitle = isBasicEd 
-    ? "Continuous Assessment (CA) tracking, terminal exam scores, and automated report sheet generation." 
+    ? "Continuous Assessment (CA) tracking, termly exam scores, and automated report sheet generation." 
     : "Cumulative GPA tracking and official record generation.";
-  const colHeader = isBasicEd ? "Terminal Average (%)" : "Cumulative GPA";
+  const colHeader = isBasicEd ? "Termly Average (%)" : "Cumulative GPA";
   const linkPath = isBasicEd ? "report-cards" : "transcripts";
   const linkLabel = isBasicEd ? "View Report Card" : "View Transcript";
 

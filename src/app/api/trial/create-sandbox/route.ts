@@ -41,8 +41,12 @@ async function provisionOrGetTrialSandbox() {
         welcomeGreeting: "Welcome to your Trial Sandbox! Explore administrative workflows safely in this isolated environment.",
         academicTiers: {
           create: [
-            { name: "Primary School", level: 1 },
-            { name: "Secondary School", level: 2 },
+            { name: "Daycare / Nursery", level: 1 },
+            { name: "Primary School", level: 2 },
+            { name: "Secondary School", level: 3 },
+            { name: "College of Education", level: 4 },
+            { name: "Polytechnic", level: 5 },
+            { name: "University", level: 6 },
           ],
         },
         departments: {
@@ -79,15 +83,32 @@ async function provisionOrGetTrialSandbox() {
     });
   }
 
-  // 2. Ensure academic tiers exist
+  // 2. Ensure all 6 academic tiers exist
+  const completeTrialTiers = [
+    { name: "Daycare / Nursery", level: 1 },
+    { name: "Primary School", level: 2 },
+    { name: "Secondary School", level: 3 },
+    { name: "College of Education", level: 4 },
+    { name: "Polytechnic", level: 5 },
+    { name: "University", level: 6 },
+  ];
+
   let tiers = school.academicTiers;
-  if (tiers.length === 0) {
-    await basePrisma.academicTier.createMany({
-      data: [
-        { schoolId: school.id, name: "Primary School", level: 1 },
-        { schoolId: school.id, name: "Secondary School", level: 2 },
-      ],
-    });
+  if (tiers.length < completeTrialTiers.length) {
+    for (const t of completeTrialTiers) {
+      const exists = tiers.some(
+        (existing) => existing.name.toLowerCase() === t.name.toLowerCase()
+      );
+      if (!exists) {
+        await basePrisma.academicTier.create({
+          data: {
+            schoolId: school.id,
+            name: t.name,
+            level: t.level,
+          },
+        });
+      }
+    }
     tiers = await basePrisma.academicTier.findMany({
       where: { schoolId: school.id },
       orderBy: { level: "asc" },

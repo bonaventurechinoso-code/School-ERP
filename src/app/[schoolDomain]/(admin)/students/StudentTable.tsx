@@ -93,7 +93,7 @@ export function getClassOptionsForTier(
     tierIdentifier.includes("preschool") ||
     tierIdentifier.includes("kindergarten")
   ) {
-    return ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"];
+    return ["Creche", "Nursery 1", "Nursery 2", "Nursery 3", "Pre-School / Kindergarten"];
   }
 
   // 2. Primary School
@@ -102,10 +102,40 @@ export function getClassOptionsForTier(
     tierIdentifier.includes("elementary") ||
     tierIdentifier.includes("basic")
   ) {
-    return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"];
+    return ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"];
   }
 
-  // 3. Secondary School
+  // 3. College of Education (Checked before 'college' substring in secondary)
+  if (
+    tierIdentifier.includes("college of education") ||
+    tierIdentifier.includes("nce") ||
+    tierIdentifier.includes("teacher")
+  ) {
+    return ["NCE 1", "NCE 2", "NCE 3"];
+  }
+
+  // 4. Polytechnic
+  if (
+    tierIdentifier.includes("polytechnic") ||
+    tierIdentifier.includes("poly") ||
+    tierIdentifier.includes("nd ") ||
+    tierIdentifier.includes("hnd")
+  ) {
+    return ["ND 1", "ND 2", "HND 1", "HND 2"];
+  }
+
+  // 5. University
+  if (
+    tierIdentifier.includes("university") ||
+    tierIdentifier.includes("undergraduate") ||
+    tierIdentifier.includes("postgraduate") ||
+    tierIdentifier.includes("degree") ||
+    tierIdentifier.includes("uni")
+  ) {
+    return ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level"];
+  }
+
+  // 6. Secondary School
   if (
     tierIdentifier.includes("secondary") ||
     tierIdentifier.includes("high") ||
@@ -115,7 +145,7 @@ export function getClassOptionsForTier(
     tierIdentifier.includes("sss") ||
     tierIdentifier.includes("college")
   ) {
-    return ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"];
+    return ["JSS 1", "JSS 2", "JSS 3", "SS 1", "SS 2", "SS 3"];
   }
 
   // If tierIdentifier is "all" and multiple tiers exist, aggregate across tiers

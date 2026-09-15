@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { cookies } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
@@ -76,14 +77,17 @@ export default async function TenantLayout({
     );
   }
 
-  const isHigherEd = school.academicTiers.some(tier =>
+  const cookieStore = await cookies();
+  const activeTierCookie = cookieStore.get("activeTier")?.value;
+
+  let isHigherEd = school.academicTiers.some(tier =>
     tier.name.toUpperCase().includes("UNIVERSITY") ||
     tier.name.toUpperCase().includes("POLYTECHNIC") ||
     tier.name.toUpperCase().includes("COLLEGE") ||
     tier.name.toUpperCase().includes("HIGHER ED")
   );
 
-  // Resolve precise tier based on academicTiers
+  // Resolve baseline precise tier from school's academic tiers
   let preciseTier = "K12_GENERIC";
   if (school.academicTiers.length > 0) {
     const tierNames = school.academicTiers.map(t => t.name.toUpperCase());
@@ -100,12 +104,37 @@ export default async function TenantLayout({
     else if (tierNames.some(t => t.includes("NURSERY") || t.includes("DAYCARE") || t.includes("EARLY CARE"))) preciseTier = "NURSERY";
   }
 
+  // If user selected an active tier in the switcher, dynamically reflect it in the tenant state
+  if (activeTierCookie) {
+    const activeUpper = activeTierCookie.toUpperCase();
+    if (activeUpper.includes("UNIVERSITY")) {
+      preciseTier = "UNIVERSITY";
+      isHigherEd = true;
+    } else if (activeUpper.includes("POLYTECHNIC")) {
+      preciseTier = "POLYTECHNIC";
+      isHigherEd = true;
+    } else if (activeUpper.includes("COLLEGE")) {
+      preciseTier = "COLLEGE_OF_EDUCATION";
+      isHigherEd = true;
+    } else if (activeUpper.includes("SECONDARY")) {
+      preciseTier = "SECONDARY";
+      isHigherEd = false;
+    } else if (activeUpper.includes("PRIMARY")) {
+      preciseTier = "PRIMARY";
+      isHigherEd = false;
+    } else if (activeUpper.includes("NURSERY") || activeUpper.includes("DAYCARE") || activeUpper.includes("CRECHE")) {
+      preciseTier = "NURSERY";
+      isHigherEd = false;
+    }
+  }
+
   const tenantData: any = {
     id: school.id,
     name: school.name,
     subdomain: school.subdomain,
     institutionType: isHigherEd ? "HIGHER_ED" : "K12",
     preciseTier: preciseTier,
+    activeTier: activeTierCookie || (school.academicTiers[0]?.name ?? "Primary School"),
     subscriptionPlan: school.subscriptionPlan,
     branding: {
       primaryColor: "#0f172a", // Defaulting to slate-900
