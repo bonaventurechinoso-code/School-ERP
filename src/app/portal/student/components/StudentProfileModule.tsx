@@ -426,7 +426,7 @@ export function StudentProfileModule({
                   Academic Rank & Assessment Breakdown
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Continuous Assessment (CA1, CA2) and Terminal Examination Performance
+                  Continuous Assessment (CA1, CA2) and Termly Examination Performance
                 </p>
               </div>
             </div>

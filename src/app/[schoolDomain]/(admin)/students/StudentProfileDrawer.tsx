@@ -163,7 +163,7 @@ export default function StudentProfileDrawer({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-white text-base sm:text-lg">Academic Tracking</h3>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-300 mt-1">This module is connected to the Examinations framework. Terminal assessments, term registration, and assigned class teachers will appear here.</p>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-300 mt-1">This module is connected to the Examinations framework. Termly assessments, term registration, and assigned class teachers will appear here.</p>
                 </div>
               </div>
 
@@ -181,7 +181,7 @@ export default function StudentProfileDrawer({
               </div>
               
               <div className="p-4 border border-slate-200 dark:border-zinc-800 rounded-xl text-center text-slate-500 dark:text-zinc-500 text-xs sm:text-sm italic bg-slate-50/30 dark:bg-zinc-950/30">
-                Terminal examination assessments have not been published for this term yet.
+                Termly examination assessments have not been published for this term yet.
               </div>
             </div>
           )}

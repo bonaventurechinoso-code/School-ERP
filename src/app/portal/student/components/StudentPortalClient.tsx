@@ -199,7 +199,7 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                     {isEarlyChildhood
                       ? "Review daily care logs, developmental milestones, attendance, and termly tuition & feeding invoices."
                       : isSecondary
-                      ? "Track continuous assessments (CA1/CA2), terminal reports, class standings, and academic announcements."
+                      ? "Track continuous assessments (CA1/CA2), termly reports, class standings, and academic announcements."
                       : "Monitor collegiate course credit unit loading, faculty dues, semester GPA tracking, and senate bulletins."}
                   </p>
                 </div>
