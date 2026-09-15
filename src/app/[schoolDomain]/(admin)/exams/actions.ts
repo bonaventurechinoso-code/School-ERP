@@ -18,10 +18,38 @@ export async function createExam(
   
   try {
     const examDate = new Date(data.date);
+    let resolvedCourseId = data.courseId;
+
+    // Resolve or automatically link course by ID or name
+    const existingCourse = await tenantDb.course.findFirst({
+      where: {
+        schoolId,
+        OR: [
+          { id: data.courseId },
+          { name: data.courseId }
+        ]
+      }
+    });
+
+    if (existingCourse) {
+      resolvedCourseId = existingCourse.id;
+    } else if (data.courseId) {
+      // Create course record so foreign key constraint succeeds seamlessly
+      const cleanCode = data.courseId.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + Math.floor(100 + Math.random() * 900);
+      const newCourse = await tenantDb.course.create({
+        data: {
+          schoolId,
+          name: data.courseId,
+          code: cleanCode,
+        }
+      });
+      resolvedCourseId = newCourse.id;
+    }
+
     await tenantDb.exam.create({
       data: {
         schoolId,
-        courseId: data.courseId,
+        courseId: resolvedCourseId,
         name: data.name,
         semester: data.semester,
         date: examDate,

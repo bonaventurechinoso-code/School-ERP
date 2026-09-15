@@ -47,7 +47,7 @@ export default function ClientLayout({
     { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
     { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
     { label: "Timetable", href: `/${schoolDomain}/scheduling`, icon: Calendar },
-    { label: "Assessments & Terms", href: `/${schoolDomain}/exams`, icon: GraduationCap },
+    { label: "Assessments", href: `/${schoolDomain}/exams`, icon: GraduationCap },
     { label: "Report Cards", href: `/${schoolDomain}/report-cards`, icon: FileSpreadsheet },
     { label: "Academic Records", href: `/${schoolDomain}/transcripts`, icon: BookOpen },
     { label: "Communications", href: `/${schoolDomain}/communications`, icon: MessageSquare },
@@ -65,7 +65,7 @@ export default function ClientLayout({
     switch (userRole) {
       case "TEACHER":
         return allLinks.filter(link =>
-          ["Dashboard", "Students", "Timetable", "Assessments & Terms", "Report Cards", "Academic Records"].includes(link.label)
+          ["Dashboard", "Students", "Timetable", "Assessments", "Report Cards", "Academic Records"].includes(link.label)
         );
       case "BURSAR":
         return allLinks.filter(link =>

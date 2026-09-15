@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { useTenant } from "@/lib/tenant-context";
+import { resolveStaffTierCategory, StaffTierCategory } from "@/lib/staff-roles-config";
 import { createExam, deleteExam } from "./actions";
 
 type ExamsListProps = {
@@ -9,16 +12,128 @@ type ExamsListProps = {
   courses: any[];
 };
 
+export const SCHOOL_TERMS: readonly string[] = [
+  "1st Term",
+  "2nd Term",
+  "3rd Term",
+];
+
+export const HIGHER_ED_SEMESTERS: readonly string[] = [
+  "1st Semester",
+  "2nd Semester",
+];
+
+// Authentic Nigerian Educational Subjects by Tier
+export const NURSERY_SUBJECTS: readonly string[] = [
+  "Numeracy / Cognitive Development",
+  "Literacy / Phonics",
+  "Rhymes & Poetry",
+  "Social Norms / Habits",
+  "Sensory Play & Creative Arts",
+  "Health Habits",
+];
+
+export const PRIMARY_SUBJECTS: readonly string[] = [
+  "Mathematics",
+  "English Studies",
+  "Basic Science & Technology",
+  "Social Studies",
+  "Civic Education / National Values",
+  "Agricultural Science",
+  "Home Economics",
+  "Cultural & Creative Arts (CCA)",
+  "Computer Studies / ICT",
+  "Nigerian History",
+  "Nigerian Language (Yoruba/Igbo/Hausa)",
+];
+
+export const SECONDARY_SUBJECTS: readonly string[] = [
+  "General Mathematics",
+  "English Language",
+  "Civic Education",
+  "Biology",
+  "Chemistry",
+  "Physics",
+  "Further Mathematics",
+  "Agricultural Science",
+  "Economics",
+  "Government",
+  "Literature-in-English",
+  "Financial Accounting",
+  "Commerce",
+  "Data Processing / Marketing",
+  "Geography",
+];
+
+export const HIGHER_ED_COURSES: readonly string[] = [
+  "GST 111 - Use of English",
+  "GST 112 - Philosophy & Logic",
+  "GST 113 - Nigerian Peoples & Culture",
+  "GST 211 - Entrepreneurship & Innovation",
+  "MTH 101 - Elementary Mathematics",
+  "CHM 101 - General Chemistry",
+  "PHY 101 - General Physics",
+  "COS 101 - Introduction to Computer Science",
+];
+
 export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) {
   const [isPending, startTransition] = useTransition();
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    courseId: courses[0]?.id || "",
+  const searchParams = useSearchParams();
+  const tenant = useTenant();
+  const paramTier = searchParams.get("tier");
+
+  const tierCategory: StaffTierCategory = useMemo(() => {
+    return resolveStaffTierCategory(
+      paramTier || (tenant as any)?.activeTier || tenant.preciseTier || (tenant.institutionType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
+    );
+  }, [paramTier, (tenant as any)?.activeTier, tenant.preciseTier, tenant.institutionType]);
+
+  const isHigherEd = tierCategory === "TERTIARY" || tenant.institutionType === "HIGHER_ED";
+  const subjectLabel = isHigherEd ? "Course" : "Subject";
+  const termLabel = isHigherEd ? "Semester" : "Term";
+  const sessionOptions: readonly string[] = isHigherEd ? HIGHER_ED_SEMESTERS : SCHOOL_TERMS;
+
+  const activeSubjectsList: readonly string[] = useMemo(() => {
+    switch (tierCategory) {
+      case "NURSERY":
+        return NURSERY_SUBJECTS;
+      case "PRIMARY":
+        return PRIMARY_SUBJECTS;
+      case "SECONDARY":
+        return SECONDARY_SUBJECTS;
+      case "TERTIARY":
+        return HIGHER_ED_COURSES;
+      default:
+        return PRIMARY_SUBJECTS;
+    }
+  }, [tierCategory]);
+
+  const [formData, setFormData] = useState<{
+    courseId: string;
+    name: string;
+    semester: string;
+    date: string;
+    maxScore: number;
+  }>({
+    courseId: activeSubjectsList[0] || "",
     name: "",
-    semester: "Fall 2026",
+    semester: sessionOptions[0],
     date: new Date().toISOString().split("T")[0],
     maxScore: 100
   });
+
+  useEffect(() => {
+    if (!sessionOptions.includes(formData.semester)) {
+      setFormData(prev => ({ ...prev, semester: sessionOptions[0] }));
+    }
+  }, [sessionOptions, formData.semester]);
+
+  useEffect(() => {
+    if (!activeSubjectsList.includes(formData.courseId)) {
+      setFormData(prev => ({ ...prev, courseId: activeSubjectsList[0] || "" }));
+    }
+  }, [activeSubjectsList, formData.courseId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +141,12 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
       const res = await createExam(schoolId, formData);
       if (res?.success) {
         setShowForm(false);
-        setFormData({ ...formData, name: "" });
+        setFormData({ 
+          ...formData, 
+          name: "", 
+          courseId: activeSubjectsList[0] || "",
+          semester: sessionOptions[0] 
+        });
       } else {
         alert(res?.error);
       }
@@ -57,14 +177,21 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
       {showForm && (
         <form onSubmit={handleCreate} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="col-span-full">
-            <h4 className="font-semibold text-slate-700">New Exam</h4>
+            <h4 className="font-semibold text-slate-700">Assessments</h4>
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Subject / Course</label>
-            <select required className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})}>
-              <option value="">Select Subject...</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <label className="block text-sm font-medium text-slate-700 mb-1">{subjectLabel}</label>
+            <select 
+              required 
+              className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+              value={formData.courseId} 
+              onChange={e => setFormData({...formData, courseId: e.target.value})}
+            >
+              <option value="" disabled>Select {subjectLabel}...</option>
+              {activeSubjectsList.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -72,11 +199,16 @@ export default function ExamsList({ schoolId, exams, courses }: ExamsListProps) 
             <input required type="text" placeholder="e.g., Midterm" className="w-full border border-slate-300 rounded-lg p-2" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Semester</label>
-            <select required className="w-full border border-slate-300 rounded-lg p-2" value={formData.semester} onChange={e => setFormData({...formData, semester: e.target.value})}>
-              <option value="Fall 2026">Fall 2026</option>
-              <option value="Spring 2027">Spring 2027</option>
-              <option value="Fall 2027">Fall 2027</option>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{termLabel}</label>
+            <select 
+              required 
+              className="w-full border border-slate-300 rounded-lg p-2" 
+              value={formData.semester} 
+              onChange={e => setFormData({...formData, semester: e.target.value})}
+            >
+              {sessionOptions.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
           </div>
           <div>

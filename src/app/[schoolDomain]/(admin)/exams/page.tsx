@@ -39,7 +39,7 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
       
       <header>
         <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">
-          Exams & Grading
+          Assessments
         </h2>
         <p className="text-slate-500 mt-2 text-lg">
           Schedule assessments and manage student grades.
