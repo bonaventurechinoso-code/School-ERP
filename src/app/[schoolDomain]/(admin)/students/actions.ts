@@ -7,6 +7,7 @@ import * as jose from "jose";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -223,10 +224,11 @@ export async function createStudent(
     if (!finalAdmissionNumber) {
       const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
       const studentCount = await tenantDb.student.count();
-      const prefix = school ? school.subdomain.toUpperCase() : "SCH";
-      const year = new Date().getFullYear();
-      const seq = String(studentCount + 1).padStart(3, '0');
-      finalAdmissionNumber = `${prefix}/${year}/${seq}`;
+      finalAdmissionNumber = generateAdmissionNumber({
+        schoolSubdomain: school?.subdomain,
+        currentClass: data.currentClass,
+        studentSequence: studentCount + 1,
+      });
     }
 
     await tenantDb.student.create({

@@ -4,6 +4,8 @@ import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTi
 import { revalidatePath } from "next/cache";
 import { sendAdmissionOfferEmail } from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
+import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
+import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 
 export type AdmissionActionResult = {
   success: boolean;
@@ -56,12 +58,14 @@ export async function enrollApplicantAction(payload: {
     const [firstName, ...lastNameParts] = (lead.applicantName || "").trim().split(" ");
     const lastName = lastNameParts.join(" ") || "Enrolled";
 
-    // Generate isolated tier admission number
+    // Generate isolated tier admission number with authentic tier code (e.g. GW/SEC/2026/001)
     const studentCount = await tierDb.student.count();
-    const prefix = school ? school.subdomain.toUpperCase().substring(0, 3) : "SCH";
-    const year = new Date().getFullYear();
-    const seq = String(studentCount + 1).padStart(3, "0");
-    const admissionNumber = `${prefix}/${year}/${seq}`;
+    const admissionNumber = generateAdmissionNumber({
+      schoolSubdomain: school?.subdomain,
+      tierName: lead.tier?.name,
+      currentClass: lead.targetGrade,
+      studentSequence: studentCount + 1,
+    });
 
     // 3. Write student profile directly into the isolated tier database's Student table
     const existingStudent = await tierDb.student.findFirst({
@@ -113,9 +117,13 @@ export async function enrollApplicantAction(payload: {
       },
     });
 
-    // 5. ROSTER DYNAMIC SYNC REFRESH:
-    // Invalidate cached query instances and revalidate relevant routes
+    // 5. ROSTER DYNAMIC SYNC REFRESH & CACHE PURGE:
+    // Invalidate cached query instances and purge Redis cache namespaces
     invalidateTierConnection();
+    await Promise.all([
+      invalidateAdmissionsNamespace(schoolId),
+      invalidateStudentNamespace(schoolId, targetTier),
+    ]);
 
     const domain = schoolDomain || school?.subdomain;
     try {
@@ -201,6 +209,8 @@ export async function updateLeadStatusAction(payload: {
         });
       }
     }
+
+    await invalidateAdmissionsNamespace(schoolId);
 
     const domain = schoolDomain;
     try {

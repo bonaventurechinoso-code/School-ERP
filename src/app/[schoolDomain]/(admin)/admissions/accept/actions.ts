@@ -2,6 +2,8 @@
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
+import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 
 export async function acceptOfferAction(token: string, schoolDomain: string) {
   try {
@@ -35,12 +37,14 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
     const firstName = names[0] || "Student";
     const lastName = names.length > 1 ? names.slice(1).join(" ") : "Enrolled";
 
-    // Compute unique admission number
+    // Compute unique admission number with authentic tier code (e.g. GW/SEC/2026/001)
     const studentCount = await tierDb.student.count();
-    const prefix = school.subdomain.toUpperCase().substring(0, 3) || "SCH";
-    const year = new Date().getFullYear();
-    const seq = String(studentCount + 1).padStart(3, "0");
-    const admissionNumber = `${prefix}/${year}/${seq}`;
+    const admissionNumber = generateAdmissionNumber({
+      schoolSubdomain: school.subdomain,
+      tierName: lead.tier?.name,
+      currentClass: lead.targetGrade,
+      studentSequence: studentCount + 1,
+    });
 
     // 2. Create or update Student profile in the isolated tier database
     const existingStudent = await tierDb.student.findFirst({
@@ -90,6 +94,11 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
 
     // 4. Invalidate tier connection and sync cache
     invalidateTierConnection();
+    await Promise.all([
+      invalidateAdmissionsNamespace(school.id),
+      invalidateStudentNamespace(school.id, targetTier),
+    ]);
+
     try {
       revalidatePath(`/${schoolDomain}/students`);
       revalidatePath(`/${schoolDomain}/admissions`);
@@ -127,6 +136,8 @@ export async function declineOfferAction(token: string, schoolDomain: string) {
       where: { id: lead.id },
       data: { status: "REJECTED", updatedAt: new Date() },
     });
+
+    await invalidateAdmissionsNamespace(school.id);
 
     revalidatePath(`/${schoolDomain}/admissions/accept`);
     revalidatePath(`/${schoolDomain}/admissions`);

@@ -279,7 +279,7 @@ export default function AdmissionsPipeline({
                       <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">Grade: {lead.targetGrade}</p>
                       <p className="text-xs text-slate-500 dark:text-zinc-400">Tier: {lead.tier?.name || "Tier"}</p>
                       
-                      {stage !== "ENROLLED" && (
+                      {stage !== "ENROLLED" ? (
                         <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex justify-between items-center">
                           <select 
                             className="text-xs border border-slate-300 dark:border-zinc-700 rounded-lg p-1 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 cursor-pointer"
@@ -296,6 +296,10 @@ export default function AdmissionsPipeline({
                             ))}
                           </select>
                           {isUpdating === lead.id && <span className="text-xs text-indigo-500 animate-pulse">Updating...</span>}
+                        </div>
+                      ) : (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                          <CheckCircle className="w-3.5 h-3.5 shrink-0" /> Enrolled in Institutional Database
                         </div>
                       )}
                     </div>
