@@ -148,6 +148,14 @@ function getOrdinalSuffix(rank: number): string {
   return `${rank}th`;
 }
 
+interface ScoreEntry {
+  firstCa: string;
+  secondCa: string;
+  exam: string;
+  ca1?: string;
+  ca2?: string;
+}
+
 export default function GradingRoster({
   schoolId,
   exams,
@@ -283,7 +291,6 @@ export default function GradingRoster({
       if (status !== "ENROLLED" && status !== "ACTIVE") return false;
 
       // b) Strict Academic Tier Isolation:
-      // If student has tier relation or name, verify it matches activeTierCode
       const studentTierName = student.tier?.name;
       if (studentTierName) {
         const studentTierCode = formatTierBadgeCode(studentTierName);
@@ -297,7 +304,6 @@ export default function GradingRoster({
       }
 
       // c) Strict Class Isolation:
-      // When JSS 1 is selected, student must be enrolled in JSS 1. Completely exclude Nursery, Daycare, JSS 2, etc.
       if (!matchesClass(student.currentClass, selectedClass)) {
         return false;
       }
@@ -306,13 +312,47 @@ export default function GradingRoster({
     });
   }, [students, activeTierCode, selectedClass]);
 
-  // 6. Track row input states per student for real-time calculation
-  const [scores, setScores] = useState<Record<string, { ca1: string; ca2: string; exam: string }>>({});
+  // 6. Assign Permanent, Stable Registration Numbers (Never shifts with rank positions)
+  const studentsWithRegNo = useMemo(() => {
+    const classCode =
+      selectedClass
+        .replace(/Primary\s*/i, "PRI")
+        .replace(/Basic\s*/i, "PRI")
+        .replace(/SSS\s*/i, "SS")
+        .replace(/Grade\s*/i, "G")
+        .replace(/\s+/g, "")
+        .toUpperCase() || "JSS1";
 
-  // Reset/sync score calculations whenever Class, Exam, or Student set changes
-  useEffect(() => {
-    const initialScores: Record<string, { ca1: string; ca2: string; exam: string }> = {};
-    filteredStudents.forEach((student) => {
+    const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || "GW";
+
+    // Stable deterministic sort by student admissionNumber or ID
+    const stableList = [...filteredStudents].sort((a, b) => {
+      if (a.admissionNumber && b.admissionNumber) {
+        return a.admissionNumber.localeCompare(b.admissionNumber);
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+    return stableList.map((student, stableIndex) => {
+      const regSequence = String(stableIndex + 1).padStart(3, "0");
+      const regNo =
+        student.admissionNumber && student.admissionNumber.includes(`/${classCode}/`)
+          ? student.admissionNumber
+          : `${schoolPrefix}/2026/${classCode}/${regSequence}`;
+
+      return {
+        ...student,
+        regNo,
+      };
+    });
+  }, [filteredStudents, selectedClass, tenant?.subdomain]);
+
+  // Helper to calculate initial scores & totals synchronously for SSR & hydration
+  const computeInitialState = () => {
+    const initScores: Record<string, ScoreEntry> = {};
+    const initTotals: Record<string, number> = {};
+
+    studentsWithRegNo.forEach((student) => {
       const res = examResults.find(
         (r) => r.examId === selectedExamId && r.studentId === student.id
       );
@@ -321,16 +361,51 @@ export default function GradingRoster({
         (res.ca1Score != null || res.ca2Score != null || res.examScore != null) &&
         (res.ca1Score > 0 || res.ca2Score > 0 || res.examScore > 0 || (res.score != null && res.score > 0));
 
-      initialScores[student.id] = {
-        ca1: hasScores && res?.ca1Score != null ? String(res.ca1Score) : "",
-        ca2: hasScores && res?.ca2Score != null ? String(res.ca2Score) : "",
-        exam: hasScores && res?.examScore != null ? String(res.examScore) : "",
-      };
-    });
-    setScores(initialScores);
-  }, [selectedExamId, selectedClass, examResults, filteredStudents]);
+      const firstCa = hasScores && res?.ca1Score != null ? String(res.ca1Score) : "";
+      const secondCa = hasScores && res?.ca2Score != null ? String(res.ca2Score) : "";
+      const exam = hasScores && res?.examScore != null ? String(res.examScore) : "";
 
-  const getStudentScores = (studentId: string, result: any) => {
+      initScores[student.regNo] = {
+        firstCa,
+        secondCa,
+        exam,
+        ca1: firstCa,
+        ca2: secondCa,
+      };
+
+      if (hasScores) {
+        let ca1 = res.ca1Score != null ? res.ca1Score : 0;
+        let ca2 = res.ca2Score != null ? res.ca2Score : 0;
+        let examScore = res.examScore != null ? res.examScore : 0;
+        if (ca1 > 15) ca1 = 15;
+        if (ca2 > 15) ca2 = 15;
+        if (examScore > 70) examScore = 70;
+        const total = res.score > 0 ? res.score : Math.round((ca1 + ca2 + examScore) * 10) / 10;
+        initTotals[student.regNo] = total;
+      } else {
+        initTotals[student.regNo] = -1; // Un-submitted / absent
+      }
+    });
+
+    return { initScores, initTotals };
+  };
+
+  // 7. Input State strictly keyed by student.regNo
+  const [scores, setScores] = useState<Record<string, ScoreEntry>>(() => computeInitialState().initScores);
+  const [committedTotals, setCommittedTotals] = useState<Record<string, number>>(() => computeInitialState().initTotals);
+  const [activeInputKey, setActiveInputKey] = useState<string | null>(null);
+
+  // Sync scores state explicitly keyed by student.regNo when selectedExamId or class changes
+  useEffect(() => {
+    const { initScores, initTotals } = computeInitialState();
+    setScores(initScores);
+    setCommittedTotals(initTotals);
+  }, [selectedExamId, selectedClass, examResults, studentsWithRegNo]);
+
+  const getStudentScores = (regNo: string, studentId: string, result: any): ScoreEntry => {
+    if (scores[regNo]) {
+      return scores[regNo];
+    }
     if (scores[studentId]) {
       return scores[studentId];
     }
@@ -339,34 +414,53 @@ export default function GradingRoster({
       (result.ca1Score != null || result.ca2Score != null || result.examScore != null) &&
       (result.ca1Score > 0 || result.ca2Score > 0 || result.examScore > 0 || (result.score != null && result.score > 0));
 
+    const firstCa = hasScores && result?.ca1Score != null ? String(result.ca1Score) : "";
+    const secondCa = hasScores && result?.ca2Score != null ? String(result.ca2Score) : "";
+    const exam = hasScores && result?.examScore != null ? String(result.examScore) : "";
+
     return {
-      ca1: hasScores && result?.ca1Score != null ? String(result.ca1Score) : "",
-      ca2: hasScores && result?.ca2Score != null ? String(result.ca2Score) : "",
-      exam: hasScores && result?.examScore != null ? String(result.examScore) : "",
+      firstCa,
+      secondCa,
+      exam,
+      ca1: firstCa,
+      ca2: secondCa,
     };
   };
 
-  const handleInputChange = (studentId: string, field: "ca1" | "ca2" | "exam", value: string, result: any) => {
-    const current = getStudentScores(studentId, result);
+  // Explicitly keyed update handler bound directly to student.regNo
+  const handleInputChange = (
+    regNo: string,
+    field: "firstCa" | "secondCa" | "exam",
+    value: string,
+    studentId: string,
+    result: any
+  ) => {
+    const current = getStudentScores(regNo, studentId, result);
     setScores((prev) => ({
       ...prev,
-      [studentId]: {
+      [regNo]: {
         ...current,
         [field]: value,
+        ca1: field === "firstCa" ? value : current.firstCa,
+        ca2: field === "secondCa" ? value : current.secondCa,
       },
     }));
   };
 
-  const handleSaveResult = (studentId: string, result: any) => {
+  const handleSaveResult = (regNo: string, student: any, result: any) => {
     if (!selectedExam) return;
 
-    const studentScores = getStudentScores(studentId, result);
-    const ca1Str = studentScores.ca1.trim();
-    const ca2Str = studentScores.ca2.trim();
-    const examStr = studentScores.exam.trim();
+    const studentScores = getStudentScores(regNo, student.id, result);
+    const ca1Str = (studentScores.firstCa || "").trim();
+    const ca2Str = (studentScores.secondCa || "").trim();
+    const examStr = (studentScores.exam || "").trim();
 
     // Do NOT calculate or save if row is completely empty
     if (ca1Str === "" && ca2Str === "" && examStr === "") {
+      setCommittedTotals((prev) => ({
+        ...prev,
+        [regNo]: -1,
+      }));
       return;
     }
 
@@ -393,11 +487,17 @@ export default function GradingRoster({
     const percentage = Math.min((totalScore / 100) * 100, 100);
     const letterGrade = calculatePercentageToLetter(percentage, isHigherEd);
 
+    // Commit new total into finished dataset
+    setCommittedTotals((prev) => ({
+      ...prev,
+      [regNo]: totalScore,
+    }));
+
     startTransition(() => {
       upsertExamResult(
         schoolId,
         selectedExamId,
-        studentId,
+        student.id,
         totalScore,
         ca1Str !== "" ? ca1 : undefined,
         ca2Str !== "" ? ca2 : undefined,
@@ -408,65 +508,94 @@ export default function GradingRoster({
     });
   };
 
-  // 7. Enforce Dynamic Sorting by Class Position (Rank from 1st to Last)
-  const sortedStudents = useMemo(() => {
-    const mapped = filteredStudents.map((student) => {
-      const result = currentExamResults.get(student.id);
-      const studentScores = getStudentScores(student.id, result);
-      const ca1Str = studentScores.ca1.trim();
-      const ca2Str = studentScores.ca2.trim();
-      const examStr = studentScores.exam.trim();
-
-      const isEmptyRow = ca1Str === "" && ca2Str === "" && examStr === "";
-
-      let ca1 = ca1Str !== "" ? parseFloat(ca1Str) : 0;
-      let ca2 = ca2Str !== "" ? parseFloat(ca2Str) : 0;
-      let exam = examStr !== "" ? parseFloat(examStr) : 0;
-
-      if (isNaN(ca1)) ca1 = 0;
-      if (isNaN(ca2)) ca2 = 0;
-      if (isNaN(exam)) exam = 0;
-
-      if (ca1 > 15) ca1 = 15;
-      if (ca2 > 15) ca2 = 15;
-      if (exam > 70) exam = 70;
-
-      const totalScore = isEmptyRow ? -1 : Math.round((ca1 + ca2 + exam) * 10) / 10;
-
+  // 8. Dynamic Ranking calculation based on the finished total dataset
+  const rankMap = useMemo(() => {
+    const list = studentsWithRegNo.map((s) => {
+      const score = committedTotals[s.regNo] ?? -1;
       return {
-        student,
-        result,
-        studentScores,
-        isEmptyRow,
-        ca1,
-        ca2,
-        exam,
-        totalScore,
+        regNo: s.regNo,
+        totalScore: score,
+        name: `${s.lastName} ${s.firstName}`.toLowerCase(),
       };
     });
 
-    // Sort descending based on calculated total score
-    // Student with highest total score sits at the very top (1st position), ranking down to lowest
-    mapped.sort((a, b) => {
+    list.sort((a, b) => {
       if (b.totalScore !== a.totalScore) {
         return b.totalScore - a.totalScore;
       }
-      const nameA = `${a.student.lastName} ${a.student.firstName}`.toLowerCase();
-      const nameB = `${b.student.lastName} ${b.student.firstName}`.toLowerCase();
+      return a.name.localeCompare(b.name);
+    });
+
+    const ranks: Record<string, number> = {};
+    let currentRank = 1;
+    list.forEach((item) => {
+      if (item.totalScore >= 0) {
+        ranks[item.regNo] = currentRank;
+        currentRank++;
+      } else {
+        ranks[item.regNo] = 0; // Unranked / empty
+      }
+    });
+
+    return ranks;
+  }, [studentsWithRegNo, committedTotals]);
+
+  // 9. Stable Display Order: Protected from shuffling while user is actively typing in a cell
+  const [displayOrder, setDisplayOrder] = useState<string[]>(() => {
+    const { initTotals } = computeInitialState();
+    const sorted = [...studentsWithRegNo].sort((a, b) => {
+      const scoreA = initTotals[a.regNo] ?? -1;
+      const scoreB = initTotals[b.regNo] ?? -1;
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+      const nameA = `${a.lastName} ${a.firstName}`.toLowerCase();
+      const nameB = `${b.lastName} ${b.firstName}`.toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    return sorted.map((s) => s.regNo);
+  });
+
+  useEffect(() => {
+    // If the teacher is actively typing inside an active column cell, do NOT shuffle visible rows
+    if (activeInputKey !== null) return;
+
+    const sorted = [...studentsWithRegNo].sort((a, b) => {
+      const scoreA = committedTotals[a.regNo] ?? -1;
+      const scoreB = committedTotals[b.regNo] ?? -1;
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+      const nameA = `${a.lastName} ${a.firstName}`.toLowerCase();
+      const nameB = `${b.lastName} ${b.firstName}`.toLowerCase();
       return nameA.localeCompare(nameB);
     });
 
-    return mapped;
-  }, [filteredStudents, scores, currentExamResults, selectedExamId]);
+    setDisplayOrder(sorted.map((s) => s.regNo));
+  }, [studentsWithRegNo, committedTotals, activeInputKey]);
 
-  // 8. Isolated Class Average Total calculation (strictly for selected class)
-  const gradedScores = sortedStudents
-    .filter((s) => !s.isEmptyRow && s.totalScore >= 0)
-    .map((s) => s.totalScore);
+  // Map displayOrder back to student records
+  const orderedStudents = useMemo(() => {
+    const map = new Map(studentsWithRegNo.map((s) => [s.regNo, s]));
+    const list: typeof studentsWithRegNo = [];
+    displayOrder.forEach((regNo) => {
+      const s = map.get(regNo);
+      if (s) list.push(s);
+    });
+    // Add any student missing from displayOrder
+    studentsWithRegNo.forEach((s) => {
+      if (!displayOrder.includes(s.regNo)) {
+        list.push(s);
+      }
+    });
+    return list;
+  }, [studentsWithRegNo, displayOrder]);
 
+  // 10. Isolated Class Average Total calculation (strictly for finished scores in selected class)
+  const evaluatedScores = Object.values(committedTotals).filter((val) => val >= 0);
   const classAverage =
-    gradedScores.length > 0
-      ? (gradedScores.reduce((sum, val) => sum + val, 0) / gradedScores.length).toFixed(1)
+    evaluatedScores.length > 0
+      ? (evaluatedScores.reduce((sum, val) => sum + val, 0) / evaluatedScores.length).toFixed(1)
       : null;
 
   return (
@@ -527,7 +656,7 @@ export default function GradingRoster({
               Class Average Total ({selectedClass})
             </div>
             <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
-              Based on {gradedScores.length} evaluated student{gradedScores.length === 1 ? "" : "s"}
+              Based on {evaluatedScores.length} evaluated student{evaluatedScores.length === 1 ? "" : "s"}
             </div>
           </div>
           <div className="text-indigo-900 dark:text-indigo-200 font-extrabold text-2xl">
@@ -540,7 +669,7 @@ export default function GradingRoster({
         <div className="p-8 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 border-dashed">
           No exam selected. Please schedule an exam first.
         </div>
-      ) : sortedStudents.length === 0 ? (
+      ) : orderedStudents.length === 0 ? (
         <div className="p-12 text-center text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <p className="font-semibold text-base text-slate-700 dark:text-slate-200">
             No students found in {selectedClass}
@@ -564,32 +693,33 @@ export default function GradingRoster({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {sortedStudents.map((item, index) => {
-                const { student, result, studentScores, isEmptyRow, totalScore } = item;
-                const position = index + 1;
+              {orderedStudents.map((student) => {
+                const result = currentExamResults.get(student.id);
+                const studentScores = getStudentScores(student.regNo, student.id, result);
+                const ca1Str = (studentScores.firstCa || "").trim();
+                const ca2Str = (studentScores.secondCa || "").trim();
+                const examStr = (studentScores.exam || "").trim();
 
-                // Format the standard student registration code matching active academic tier and profile
-                const studentClass = student.currentClass || selectedClass || "JSS 1";
-                const classCode =
-                  studentClass
-                    .replace(/Primary\s*/i, "PRI")
-                    .replace(/Basic\s*/i, "PRI")
-                    .replace(/SSS\s*/i, "SS")
-                    .replace(/Grade\s*/i, "G")
-                    .replace(/\s+/g, "")
-                    .toUpperCase() || "JSS1";
-
-                const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || "GW";
-                const regSequence = String(position).padStart(3, "0");
-                const studentRegNo =
-                  student.admissionNumber && student.admissionNumber.includes(`/${classCode}/`)
-                    ? student.admissionNumber
-                    : `${schoolPrefix}/2026/${classCode}/${regSequence}`;
+                const isEmptyRow = ca1Str === "" && ca2Str === "" && examStr === "";
+                const position = rankMap[student.regNo] || 0;
 
                 let totalDisplay: string = "—";
                 let gradeDisplay: string = "—";
 
-                if (!isEmptyRow && totalScore >= 0) {
+                if (!isEmptyRow) {
+                  let ca1 = ca1Str !== "" ? parseFloat(ca1Str) : 0;
+                  let ca2 = ca2Str !== "" ? parseFloat(ca2Str) : 0;
+                  let exam = examStr !== "" ? parseFloat(examStr) : 0;
+
+                  if (isNaN(ca1)) ca1 = 0;
+                  if (isNaN(ca2)) ca2 = 0;
+                  if (isNaN(exam)) exam = 0;
+
+                  if (ca1 > 15) ca1 = 15;
+                  if (ca2 > 15) ca2 = 15;
+                  if (exam > 70) exam = 70;
+
+                  const totalScore = Math.round((ca1 + ca2 + exam) * 10) / 10;
                   totalDisplay = String(totalScore);
 
                   const tierName = selectedExam.course?.tier?.name || activeTierDisplay;
@@ -603,7 +733,7 @@ export default function GradingRoster({
                 }
 
                 return (
-                  <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                  <tr key={student.regNo} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
                       <div className="flex items-center gap-2.5">
                         <span
@@ -614,11 +744,13 @@ export default function GradingRoster({
                               ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600"
                               : position === 3
                               ? "bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                              : position > 3
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                              : "bg-slate-50 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700"
                           }`}
-                          title={`Position in ${selectedClass}: ${getOrdinalSuffix(position)}`}
+                          title={position > 0 ? `Position in ${selectedClass}: ${getOrdinalSuffix(position)}` : "Unranked / Absent"}
                         >
-                          {getOrdinalSuffix(position)}
+                          {position > 0 ? getOrdinalSuffix(position) : "—"}
                         </span>
                         <span className="font-semibold text-slate-900 dark:text-white">
                           {student.lastName}, {student.firstName}
@@ -626,46 +758,61 @@ export default function GradingRoster({
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-300 select-none">
-                      {studentRegNo}
+                      {student.regNo}
                     </td>
                     <td className="px-6 py-4">
                       <input
+                        id={`input-${student.regNo}-ca1`}
                         type="number"
                         min="0"
                         max="15"
                         step="0.5"
                         disabled={isPending}
-                        value={studentScores.ca1}
-                        onChange={(e) => handleInputChange(student.id, "ca1", e.target.value, result)}
-                        onBlur={() => handleSaveResult(student.id, result)}
+                        value={studentScores.firstCa}
+                        onFocus={() => setActiveInputKey(student.regNo)}
+                        onChange={(e) => handleInputChange(student.regNo, "firstCa", e.target.value, student.id, result)}
+                        onBlur={() => {
+                          setActiveInputKey(null);
+                          handleSaveResult(student.regNo, student, result);
+                        }}
                         className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                         placeholder="—"
                       />
                     </td>
                     <td className="px-6 py-4">
                       <input
+                        id={`input-${student.regNo}-ca2`}
                         type="number"
                         min="0"
                         max="15"
                         step="0.5"
                         disabled={isPending}
-                        value={studentScores.ca2}
-                        onChange={(e) => handleInputChange(student.id, "ca2", e.target.value, result)}
-                        onBlur={() => handleSaveResult(student.id, result)}
+                        value={studentScores.secondCa}
+                        onFocus={() => setActiveInputKey(student.regNo)}
+                        onChange={(e) => handleInputChange(student.regNo, "secondCa", e.target.value, student.id, result)}
+                        onBlur={() => {
+                          setActiveInputKey(null);
+                          handleSaveResult(student.regNo, student, result);
+                        }}
                         className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                         placeholder="—"
                       />
                     </td>
                     <td className="px-6 py-4">
                       <input
+                        id={`input-${student.regNo}-exam`}
                         type="number"
                         min="0"
                         max="70"
                         step="0.5"
                         disabled={isPending}
                         value={studentScores.exam}
-                        onChange={(e) => handleInputChange(student.id, "exam", e.target.value, result)}
-                        onBlur={() => handleSaveResult(student.id, result)}
+                        onFocus={() => setActiveInputKey(student.regNo)}
+                        onChange={(e) => handleInputChange(student.regNo, "exam", e.target.value, student.id, result)}
+                        onBlur={() => {
+                          setActiveInputKey(null);
+                          handleSaveResult(student.regNo, student, result);
+                        }}
                         className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                         placeholder="—"
                       />
