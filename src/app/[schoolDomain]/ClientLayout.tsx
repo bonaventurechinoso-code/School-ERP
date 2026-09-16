@@ -1,21 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, usePathname } from "next/navigation";
-import { Menu, X, Home, Users, CreditCard, Settings, UserPlus, Briefcase, Calendar, GraduationCap, FileSpreadsheet, BookOpen, MessageSquare, Building2 } from "lucide-react";
+import { Menu, Home, Users, CreditCard, UserPlus, Briefcase } from "lucide-react";
 import AIChatWidget from "@/components/AIChatWidget";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
-import { checkRouteAuthorization, isAdminExecutive } from "@/lib/permissions";
-import TierSwitcher from "@/components/TierSwitcher";
+import { checkRouteAuthorization } from "@/lib/permissions";
+import Sidebar, { SidebarTier } from "@/components/Sidebar";
 
-export interface ClientLayoutTier {
-  id: string;
-  name: string;
-  databaseName?: string | null;
-  databaseUrl?: string | null;
-}
+export type { SidebarTier as ClientLayoutTier };
 
 export default function ClientLayout({
   schoolName,
@@ -27,7 +22,7 @@ export default function ClientLayout({
   schoolName: string;
   headerContent?: React.ReactNode;
   children: React.ReactNode;
-  tiers?: ClientLayoutTier[];
+  tiers?: SidebarTier[];
   currentTier?: string | null;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -35,46 +30,30 @@ export default function ClientLayout({
   const pathname = usePathname();
   const schoolDomain = params.schoolDomain as string;
 
-  // Use tenant context for dynamic nomenclature resolving
   const tenant = useTenant();
-  const isHigherEd = tenant.institutionType === "HIGHER_ED";
+  const { role: sessionRole, staffRole, loading } = useSession();
 
-  const isPrimary = tenant.preciseTier === "PRIMARY";
+  const effectiveRole = useMemo(() => {
+    return (sessionRole || tenant?.userRole || "").trim().toUpperCase();
+  }, [sessionRole, tenant?.userRole]);
 
-  const allLinks = [
-    { label: "Dashboard", href: `/${schoolDomain}/dashboard`, icon: Home },
-    { label: "Public Portal Settings", href: `/${schoolDomain}/portal-settings`, icon: Settings },
-    { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
-    { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
-    { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
-    { label: "Timetable", href: `/${schoolDomain}/scheduling`, icon: Calendar },
-    { label: "Assessments", href: `/${schoolDomain}/exams`, icon: GraduationCap },
-    { label: "Report Cards", href: `/${schoolDomain}/report-cards`, icon: FileSpreadsheet },
-    { label: "Academic Records", href: `/${schoolDomain}/transcripts`, icon: BookOpen },
-    { label: "Communications", href: `/${schoolDomain}/communications`, icon: MessageSquare },
-    { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
-    { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
-  ];
+  // Mobile Bottom Navigation Links (reactively filtered)
+  const mobileNavLinks = useMemo(() => {
+    if (!effectiveRole) return [];
 
-  const sessionData = useSession();
-  const userRole = (sessionData.role || tenant.userRole || "").trim().toUpperCase();
-  const staffRole = sessionData.staffRole;
-  const isAuthorizedAdmin = isAdminExecutive(userRole, staffRole);
-  // Strict evaluation: only Executive Leadership or Super Admin can view/top up wallet
-  const isWalletAuthorized = isAuthorizedAdmin;
+    const candidates = [
+      { label: "Home", href: `/${schoolDomain}/dashboard`, icon: Home },
+      { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
+      { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
+      { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
+      { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
+    ];
 
-  const links = allLinks.filter((link) => {
-    const auth = checkRouteAuthorization(link.href, userRole, staffRole);
-    return auth.allowed;
-  });
-
-  const mobileNavLinks = [
-    { label: "Home", href: `/${schoolDomain}/dashboard`, icon: Home },
-    { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
-    { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
-    { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
-    { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
-  ].filter(nav => links.some(link => link.href === nav.href));
+    return candidates.filter((item) => {
+      const auth = checkRouteAuthorization(item.href, effectiveRole, staffRole);
+      return auth.allowed;
+    });
+  }, [effectiveRole, staffRole, schoolDomain]);
 
   return (
     <div className="flex flex-1 h-full w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950">
@@ -86,63 +65,16 @@ export default function ClientLayout({
         />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
-      >
-        <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50">
-          <div className="flex items-center gap-3 min-w-0">
-            {tenant?.branding?.logoUrl ? (
-              <img
-                src={tenant.branding.logoUrl}
-                alt={schoolName}
-                className="w-9 h-9 rounded-xl object-contain border border-slate-800 shadow-sm shrink-0"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-                <GraduationCap className="w-5 h-5 text-white" />
-              </div>
-            )}
-            <span className="truncate text-base font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
-              {schoolName.toUpperCase()}
-            </span>
-          </div>
-          <button className="md:hidden p-2 -mr-2 rounded-lg hover:bg-slate-800 active:scale-95 transition-all" onClick={() => setIsSidebarOpen(false)}>
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
-        </div>
-
-        {/* Sidebar Tier Switcher (for Multi-Tier Tenants) */}
-        {tiers && tiers.length > 0 && (
-          <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40">
-            <TierSwitcher tiers={tiers} currentTier={currentTier} schoolDomain={schoolDomain} variant="sidebar" />
-          </div>
-        )}
-
-        <nav className="flex-1 px-3 py-6 flex flex-col gap-1 overflow-y-auto">
-          {links.map((link) => {
-            const isActive = pathname?.startsWith(link.href);
-            return (
-              <a
-                key={link.href}
-                href={link.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 active:scale-95 ${isActive ? 'bg-indigo-600/10 text-indigo-400 font-medium' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}`}
-                onClick={() => setIsSidebarOpen(false)}
-              >
-                {link.icon && <link.icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />}
-                <span>{link.label}</span>
-              </a>
-            );
-          })}
-        </nav>
-
-        {/* Bottom Sidebar - Wallet Balance Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
-        {isWalletAuthorized && headerContent && (
-          <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto">
-            {headerContent}
-          </div>
-        )}
-      </aside>
+      {/* Reactive Multi-Tenant Sidebar with Loading Guard & Skeleton */}
+      <Sidebar
+        schoolName={schoolName}
+        schoolDomain={schoolDomain}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        tiers={tiers}
+        currentTier={currentTier}
+        headerContent={headerContent}
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pb-20 md:pb-0 relative">
@@ -170,6 +102,7 @@ export default function ClientLayout({
             <ThemeToggle />
           </div>
         </header>
+
         <div className="p-4 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full">
           {children}
         </div>
@@ -201,10 +134,22 @@ export default function ClientLayout({
               <a
                 key={link.href}
                 href={link.href}
-                className={`flex flex-col flex-1 items-center justify-center p-2 rounded-xl min-w-[72px] transition-all active:scale-95 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                className={`flex flex-col flex-1 items-center justify-center p-2 rounded-xl min-w-[72px] transition-all active:scale-95 ${
+                  isActive
+                    ? "text-indigo-600 dark:text-indigo-400"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
               >
-                {link.icon && <link.icon className={`w-6 h-6 mb-1 flex-shrink-0 ${isActive ? 'fill-indigo-600/20 dark:fill-indigo-400/20' : ''}`} />}
-                <span className="text-[10px] font-semibold tracking-wide truncate max-w-full">{link.label}</span>
+                {link.icon && (
+                  <link.icon
+                    className={`w-6 h-6 mb-1 flex-shrink-0 ${
+                      isActive ? "fill-indigo-600/20 dark:fill-indigo-400/20" : ""
+                    }`}
+                  />
+                )}
+                <span className="text-[10px] font-semibold tracking-wide truncate max-w-full">
+                  {link.label}
+                </span>
               </a>
             );
           })}

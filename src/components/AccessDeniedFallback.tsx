@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ShieldAlert, ArrowLeft, Home, LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 
+import { persistStoredSession } from "@/lib/session-context";
+
 interface AccessDeniedFallbackProps {
   title?: string;
   message?: string;
@@ -30,6 +32,7 @@ export default function AccessDeniedFallback({
     try {
       await fetch("/api/v1/auth/logout", { method: "POST" });
     } catch {}
+    persistStoredSession(null);
     document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
     await signOut({ callbackUrl: "/login" });
   };

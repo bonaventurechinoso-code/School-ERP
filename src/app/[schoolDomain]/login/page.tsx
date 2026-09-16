@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
 import { Lock, Mail, ArrowRight, Building2, Eye, EyeOff } from "lucide-react";
 import { signIn } from "next-auth/react";
+import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
 
 export default function TenantLoginPage() {
 
@@ -40,6 +41,24 @@ export default function TenantLoginPage() {
         if (!role || !targetDomain) {
           throw new Error("Unauthorized access");
         }
+
+        // Persist session payload to sessionStorage & localStorage for instant reactive hydration
+        const sessionPayload = {
+          userId: data.userId || `user-${(role || "staff").toLowerCase()}`,
+          email: email.trim().toLowerCase(),
+          tenantId: tenant.id,
+          schoolDomain: targetDomain,
+          tenantName: tenant.name,
+          role: data.role,
+          staffRole: data.staffRole,
+          activeTiers: data.activeTiers || [],
+          permissions: data.permissions || [],
+        };
+        persistStoredSession(sessionPayload);
+        window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
+
+        // Invalidate Next.js client router cache so layouts re-read cookies
+        router.refresh();
 
         // Role-based smart routing
         const canonicalRole = (role || "").toUpperCase();

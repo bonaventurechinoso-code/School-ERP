@@ -20,6 +20,7 @@ import {
   Loader2,
   Layers,
 } from "lucide-react";
+import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
 
 /**
  * SMART AUTO-ROUTING ASSURANCE:
@@ -71,12 +72,47 @@ function UniversalLoginPageContent() {
         setErrorMsg("Invalid credentials. Please verify your email and password.");
         setIsSubmitting(false);
       } else if (res?.ok) {
-        // SMART AUTO-ROUTING:
+        // SMART AUTO-ROUTING & INSTANT REACTIVE HYDRATION:
         // Query active session to resolve authenticated tenant, role, and operational tier desk
-        const sessionRes = await fetch("/api/auth/session");
-        const sessionData = await sessionRes.json();
-        const user = sessionData?.user;
+        let sessionPayload: any = null;
+        try {
+          const v1SessionRes = await fetch("/api/v1/auth/session");
+          if (v1SessionRes.ok) {
+            const v1Data = await v1SessionRes.json();
+            if (v1Data.authenticated && v1Data.session) {
+              sessionPayload = v1Data.session;
+            }
+          }
+        } catch {}
 
+        if (!sessionPayload) {
+          const sessionRes = await fetch("/api/auth/session");
+          const sessionData = await sessionRes.json();
+          const user = sessionData?.user;
+          if (user) {
+            sessionPayload = {
+              userId: user.id || user.userId,
+              email: user.email,
+              tenantId: user.tenantId,
+              schoolDomain: user.schoolDomain,
+              tenantName: user.tenantName,
+              role: user.role,
+              staffRole: user.staffRole,
+              activeTiers: user.activeTiers || [],
+              permissions: user.permissions || [],
+            };
+          }
+        }
+
+        if (sessionPayload) {
+          persistStoredSession(sessionPayload);
+          window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
+        }
+
+        // Invalidate Next.js router cache to ensure server components reflect the newly set session cookie
+        router.refresh();
+
+        const user = sessionPayload;
         if (user?.role === "SUPER_ADMIN") {
           router.push("/admin");
         } else if (user?.role === "STUDENT") {
