@@ -404,24 +404,24 @@ function getOrdinalSuffix(rank: number): string {
 }
 
 function getGradeInfo(score: number): { grade: string; badgeClass: string } {
-  if (score >= 75) return { grade: "A1", badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300" };
-  if (score >= 70) return { grade: "B2", badgeClass: "bg-teal-100 text-teal-800 border-teal-300" };
-  if (score >= 65) return { grade: "B3", badgeClass: "bg-blue-100 text-blue-800 border-blue-300" };
-  if (score >= 60) return { grade: "C4", badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-300" };
-  if (score >= 55) return { grade: "C5", badgeClass: "bg-sky-100 text-sky-800 border-sky-300" };
-  if (score >= 50) return { grade: "C6", badgeClass: "bg-cyan-100 text-cyan-800 border-cyan-300" };
-  if (score >= 45) return { grade: "D7", badgeClass: "bg-amber-100 text-amber-800 border-amber-300" };
-  if (score >= 40) return { grade: "E8", badgeClass: "bg-orange-100 text-orange-800 border-orange-300" };
-  return { grade: "F9", badgeClass: "bg-rose-100 text-rose-800 border-rose-300" };
+  if (score >= 75) return { grade: "A1", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
+  if (score >= 70) return { grade: "B2", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
+  if (score >= 65) return { grade: "B3", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
+  if (score >= 60) return { grade: "C4", badgeClass: "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700" };
+  if (score >= 55) return { grade: "C5", badgeClass: "bg-sky-100 dark:bg-sky-950/50 text-sky-800 dark:text-sky-300 border-sky-300 dark:border-sky-700" };
+  if (score >= 50) return { grade: "C6", badgeClass: "bg-cyan-100 dark:bg-cyan-950/50 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700" };
+  if (score >= 45) return { grade: "D7", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
+  if (score >= 40) return { grade: "E8", badgeClass: "bg-orange-100 dark:bg-orange-950/50 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-700" };
+  return { grade: "F9", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
 }
 
 function getPositionBadge(rank: number): { text: string; badgeClass: string } {
-  if (rank <= 0) return { text: "—", badgeClass: "bg-slate-100 text-slate-400 border-slate-200" };
+  if (rank <= 0) return { text: "—", badgeClass: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 border-dashed" };
   const str = getOrdinalSuffix(rank);
-  if (rank === 1) return { text: str, badgeClass: "bg-amber-100 text-amber-900 border-amber-300 font-extrabold shadow-2xs" };
-  if (rank === 2) return { text: str, badgeClass: "bg-slate-200 text-slate-800 border-slate-300 font-bold" };
-  if (rank === 3) return { text: str, badgeClass: "bg-orange-100 text-orange-800 border-orange-200 font-bold" };
-  return { text: str, badgeClass: "bg-slate-100 text-slate-700 border-slate-200 font-medium" };
+  if (rank === 1) return { text: str, badgeClass: "bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700 font-extrabold shadow-2xs" };
+  if (rank === 2) return { text: str, badgeClass: "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-600 font-bold" };
+  if (rank === 3) return { text: str, badgeClass: "bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-700 font-bold" };
+  return { text: str, badgeClass: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 font-medium" };
 }
 
 function ReportCardsContent() {
@@ -622,13 +622,13 @@ function ReportCardsContent() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "info" } | null>(null);
 
-  // Compute positions across the class roster based on total score descending
+  // Compute positions across the class roster based on strictly descending calculated total score
   const rankedRoster = useMemo(() => {
     const withTotals = roster.map((s) => {
-      const ca1Num = Number(s.ca1) || 0;
-      const ca2Num = Number(s.ca2) || 0;
-      const examNum = Number(s.exam) || 0;
-      const total = ca1Num + ca2Num + examNum;
+      const ca1Num = s.ca1 !== "" && !isNaN(parseFloat(s.ca1)) ? parseFloat(s.ca1) : 0;
+      const ca2Num = s.ca2 !== "" && !isNaN(parseFloat(s.ca2)) ? parseFloat(s.ca2) : 0;
+      const examNum = s.exam !== "" && !isNaN(parseFloat(s.exam)) ? parseFloat(s.exam) : 0;
+      const total = Math.round((ca1Num + ca2Num + examNum) * 10) / 10;
       const hasScores = Boolean(s.ca1 !== "" || s.ca2 !== "" || s.exam !== "");
       const isCompiled = (s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0;
       return {
@@ -642,8 +642,15 @@ function ReportCardsContent() {
       };
     });
 
-    // Standard competitive ranking descending by total score
-    const sorted = [...withTotals].sort((a, b) => b.total - a.total);
+    // Dynamic strictly descending numerical order based entirely on CALCULATED TOTAL SCORE
+    // The highest score percentage must always be assigned 1st Position under all circumstances
+    const sorted = [...withTotals].sort((a, b) => {
+      if (b.total !== a.total) {
+        return b.total - a.total; // strictly descending numerical order
+      }
+      return a.name.localeCompare(b.name);
+    });
+
     const rankMap = new Map<string, number>();
 
     let currentRank = 1;
@@ -654,7 +661,8 @@ function ReportCardsContent() {
       rankMap.set(item.id, item.total > 0 ? currentRank : 0);
     });
 
-    return withTotals.map((student) => {
+    // Return the sorted active class dataset so highest scores render first
+    return sorted.map((student) => {
       const rank = rankMap.get(student.id) || 0;
       return {
         ...student,
@@ -1133,10 +1141,10 @@ function ReportCardsContent() {
           )}
 
           {/* Automated Compiled Class Data Grid Table */}
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold text-xs uppercase tracking-wider">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Position in Class</th>
                     <th className="px-6 py-4">Student Name</th>
@@ -1151,7 +1159,7 @@ function ReportCardsContent() {
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredRoster.map((student) => {
                     const pos = getPositionBadge(student.rank);
                     const grade = getGradeInfo(student.total);
@@ -1164,7 +1172,7 @@ function ReportCardsContent() {
                       .toUpperCase() || "ST";
 
                     return (
-                      <tr key={student.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={student.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                         {/* Position in Class */}
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center justify-center min-w-[42px] px-2.5 py-1 rounded-full text-xs border ${pos.badgeClass}`}>
@@ -1175,11 +1183,11 @@ function ReportCardsContent() {
                         {/* Student Name */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
                               {initials}
                             </div>
                             <div>
-                              <span className="font-semibold text-slate-900 block">{student.name}</span>
+                              <span className="font-semibold text-slate-900 dark:text-white block">{student.name}</span>
                               {student.error && (
                                 <span className="block text-xs text-red-500 mt-0.5">{student.error}</span>
                               )}
@@ -1189,7 +1197,7 @@ function ReportCardsContent() {
 
                         {/* Admission Number */}
                         <td className="px-6 py-4">
-                          <span className="inline-block font-mono text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                          <span className="inline-block font-mono text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
                             {student.admissionNumber || "—"}
                           </span>
                         </td>
@@ -1199,10 +1207,10 @@ function ReportCardsContent() {
                           <input 
                             type="number" 
                             max="20" 
-                            min="0"
+                            min="0" 
                             value={student.ca1}
                             onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
-                            className="w-20 border border-slate-300 rounded-lg p-1.5 text-center text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
                             placeholder="0 - 20"
                           />
                         </td>
@@ -1212,10 +1220,10 @@ function ReportCardsContent() {
                           <input 
                             type="number" 
                             max="20" 
-                            min="0"
+                            min="0" 
                             value={student.ca2}
                             onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
-                            className="w-20 border border-slate-300 rounded-lg p-1.5 text-center text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
                             placeholder="0 - 20"
                           />
                         </td>
@@ -1225,10 +1233,10 @@ function ReportCardsContent() {
                           <input 
                             type="number" 
                             max="60" 
-                            min="0"
+                            min="0" 
                             value={student.exam}
                             onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
-                            className="w-20 border border-slate-300 rounded-lg p-1.5 text-center text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition" 
+                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
                             placeholder="0 - 60"
                           />
                         </td>
@@ -1236,7 +1244,7 @@ function ReportCardsContent() {
                         {/* Calculated Total Score */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-base text-slate-900">
+                            <span className="font-extrabold text-base text-slate-900 dark:text-white">
                               {student.total > 0 ? `${student.total}%` : "—"}
                             </span>
                             {student.total > 0 && (
