@@ -1,14 +1,27 @@
 import React from "react";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { cookies } from "next/headers";
+import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import ExamsList from "./ExamsList";
 import GradingRoster from "./GradingRoster";
 
-export default async function ExamsPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ schoolDomain: string }>, searchParams: Promise<{ tab?: string }> }) {
+export default async function ExamsPage({ 
+  params: paramsPromise, 
+  searchParams: searchParamsPromise 
+}: { 
+  params: Promise<{ schoolDomain: string }>; 
+  searchParams: Promise<{ tab?: string; tier?: string; class?: string }>; 
+}) {
   const params = await paramsPromise;
   const searchParams = await searchParamsPromise;
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
+    include: {
+      academicTiers: {
+        orderBy: { level: "asc" },
+      },
+    },
   });
 
   if (!school) {
@@ -20,16 +33,58 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
     );
   }
 
-  const tenantDb = getTenantClient(school.id);
+  // Resolve active tier from URL searchParams or cookie fallback
+  const cookieStore = await cookies();
+  const cookieTier = cookieStore.get("activeTier")?.value;
+  const requestedTierParam = searchParams.tier;
+
+  const activeTierObj = school.academicTiers.find((t) => {
+    if (requestedTierParam) {
+      return (
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
+        t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+      );
+    }
+    if (cookieTier) {
+      return (
+        t.name.toLowerCase() === cookieTier.toLowerCase() ||
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier)
+      );
+    }
+    return false;
+  }) || school.academicTiers[0];
+
+  const activeTierName = activeTierObj ? activeTierObj.name : "";
+  const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
   const [courses, exams, students, examResults] = await Promise.all([
-    tenantDb.course.findMany(),
+    tenantDb.course.findMany({
+      where: {
+        schoolId: school.id,
+      },
+      include: { tier: true },
+    }),
     tenantDb.exam.findMany({
+      where: {
+        schoolId: school.id,
+      },
       include: { course: { include: { tier: true } } },
       orderBy: { date: 'asc' }
     }),
-    tenantDb.student.findMany(),
-    tenantDb.examResult.findMany()
+    tenantDb.student.findMany({
+      where: {
+        schoolId: school.id,
+        status: { in: ["ENROLLED", "ACTIVE"] },
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
+      include: { tier: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
+    }),
+    tenantDb.examResult.findMany({
+      where: {
+        schoolId: school.id,
+      }
+    })
   ]);
 
   const activeTab = searchParams.tab || "exams";
@@ -85,6 +140,8 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
             exams={exams} 
             students={students} 
             examResults={examResults}
+            academicTiers={school.academicTiers}
+            activeTierName={activeTierName}
           />
         )}
       </div>
@@ -92,3 +149,4 @@ export default async function ExamsPage({ params: paramsPromise, searchParams: s
     </div>
   );
 }
+
