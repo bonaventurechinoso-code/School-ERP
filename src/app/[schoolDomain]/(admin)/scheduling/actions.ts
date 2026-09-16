@@ -3,6 +3,14 @@
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
+function safeRevalidatePath(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful no-op when executed outside HTTP request context (e.g. testing)
+  }
+}
+
 // --- TIMETABLE ACTIONS ---
 
 export async function createTimetableEntry(
@@ -58,7 +66,7 @@ export async function createTimetableEntry(
       }
     });
 
-    revalidatePath(`/[schoolDomain]/scheduling`, "page");
+    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to create timetable entry:", error);
@@ -74,7 +82,7 @@ export async function deleteTimetableEntry(schoolId: string, id: string) {
       where: { id }
     });
 
-    revalidatePath(`/[schoolDomain]/scheduling`, "page");
+    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to delete timetable entry:", error);
@@ -117,7 +125,7 @@ export async function markStudentAttendance(
       }
     });
 
-    revalidatePath(`/[schoolDomain]/scheduling`, "page");
+    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to mark student attendance:", error);
@@ -158,7 +166,7 @@ export async function markStaffAttendance(
       }
     });
 
-    revalidatePath(`/[schoolDomain]/scheduling`, "page");
+    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to mark staff attendance:", error);

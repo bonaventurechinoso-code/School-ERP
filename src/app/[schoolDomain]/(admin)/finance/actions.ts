@@ -2,6 +2,14 @@
 
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+
+function safeRevalidatePath(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful no-op when executed outside HTTP request context (e.g. testing)
+  }
+}
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateFinanceNamespace } from "@/lib/cache-invalidation";
@@ -129,7 +137,7 @@ export async function createInvoice(
     // Write-Through Cache Invalidation
     await invalidateFinanceNamespace(schoolId);
 
-    revalidatePath(`/[schoolDomain]/finance`, "page");
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to create invoice:", error);
@@ -144,10 +152,13 @@ export async function recordPayment(
   const tenantDb = getTenantClient(schoolId);
   
   try {
-    const invoice = await tenantDb.invoice.findUnique({ where: { id: data.invoiceId } });
+    const invoice = await tenantDb.invoice.findUnique({ 
+      where: { id: data.invoiceId },
+      include: { student: true }
+    });
     if (!invoice) throw new Error("Invoice not found");
 
-    // Create payment
+    // 1. Create payment entry
     await tenantDb.payment.create({
       data: {
         schoolId,
@@ -158,7 +169,7 @@ export async function recordPayment(
       }
     });
 
-    // Check if fully paid
+    // 2. Check if fully paid
     const payments = await tenantDb.payment.findMany({ where: { invoiceId: data.invoiceId } });
     const totalPaid = payments.reduce((sum, p) => sum + p.amountPaid, 0);
 
@@ -169,10 +180,23 @@ export async function recordPayment(
       data: { status: newStatus }
     });
 
+    // 3. Automatically record INCOME in the General Ledger
+    const studentName = invoice.student ? `${invoice.student.firstName} ${invoice.student.lastName}` : "Student";
+    await tenantDb.transaction.create({
+      data: {
+        schoolId,
+        type: "INCOME",
+        category: "TUITION",
+        amount: data.amountPaid,
+        description: `Tuition payment received from ${studentName} for Inv #${data.invoiceId.slice(0, 8).toUpperCase()} via ${data.method}`,
+        referenceId: data.invoiceId,
+      }
+    });
+
     // Write-Through Cache Invalidation
     await invalidateFinanceNamespace(schoolId);
 
-    revalidatePath(`/[schoolDomain]/finance`, "page");
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to record payment:", error);
@@ -198,7 +222,7 @@ export async function createFeeTemplate(
     // Write-Through Cache Invalidation
     await invalidateFinanceNamespace(schoolId);
 
-    revalidatePath(`/[schoolDomain]/finance`, "page");
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to create fee template:", error);
@@ -216,7 +240,7 @@ export async function deleteFeeTemplate(schoolId: string, id: string) {
     // Write-Through Cache Invalidation
     await invalidateFinanceNamespace(schoolId);
 
-    revalidatePath(`/[schoolDomain]/finance`, "page");
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to delete fee template:", error);
@@ -253,7 +277,7 @@ export async function bulkCreateInvoices(
     // Write-Through Cache Invalidation
     await invalidateFinanceNamespace(schoolId);
 
-    revalidatePath(`/[schoolDomain]/finance`, "page");
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
     return { success: true, count: invoicesData.length };
   } catch (error: any) {
     console.error("[Server Action] Failed to bulk create invoices:", error);

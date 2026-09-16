@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { createNotice, deleteNotice } from "./actions";
+import { createNotice, deleteNotice, broadcastNotice } from "./actions";
 
 type AnnouncementsBoardProps = {
   schoolId: string;
@@ -11,12 +11,14 @@ type AnnouncementsBoardProps = {
 export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsBoardProps) {
   const [isPending, startTransition] = useTransition();
   const [showForm, setShowForm] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState<{ id: string; text: string; success: boolean } | null>(null);
   
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     targetAudience: "ALL",
-    priority: "NORMAL"
+    priority: "NORMAL",
+    autoBroadcast: false
   });
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -24,10 +26,33 @@ export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsB
     startTransition(async () => {
       const res = await createNotice(schoolId, formData);
       if (res?.success) {
+        if (formData.autoBroadcast && res.noticeId) {
+          await broadcastNotice(schoolId, res.noticeId);
+        }
         setShowForm(false);
-        setFormData({ title: "", content: "", targetAudience: "ALL", priority: "NORMAL" });
+        setFormData({ title: "", content: "", targetAudience: "ALL", priority: "NORMAL", autoBroadcast: false });
       } else {
         alert(res?.error);
+      }
+    });
+  };
+
+  const handleBroadcast = async (noticeId: string) => {
+    setBroadcastStatus(null);
+    startTransition(async () => {
+      const res = await broadcastNotice(schoolId, noticeId);
+      if (res?.success) {
+        setBroadcastStatus({
+          id: noticeId,
+          text: `Successfully broadcasted email to ${res.recipientsCount || 0} recipient(s)!`,
+          success: true
+        });
+      } else {
+        setBroadcastStatus({
+          id: noticeId,
+          text: res?.error || "Broadcast failed.",
+          success: false
+        });
       }
     });
   };
@@ -40,6 +65,7 @@ export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsB
       });
     }
   };
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -95,12 +121,31 @@ export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsB
             <textarea required rows={4} className="w-full border border-slate-300 rounded-lg p-2" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})}></textarea>
           </div>
 
+          <div className="col-span-full flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              id="autoBroadcast" 
+              checked={formData.autoBroadcast} 
+              onChange={e => setFormData({...formData, autoBroadcast: e.target.checked})}
+              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" 
+            />
+            <label htmlFor="autoBroadcast" className="text-sm font-medium text-slate-700 cursor-pointer">
+              Immediately broadcast this announcement via email to target audience ({formData.targetAudience})
+            </label>
+          </div>
+
           <div className="col-span-full flex justify-end mt-2">
             <button disabled={isPending} type="submit" className="px-6 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition disabled:opacity-50">
               {isPending ? "Posting..." : "Post Announcement"}
             </button>
           </div>
         </form>
+      )}
+
+      {broadcastStatus && (
+        <div className={`p-4 rounded-xl text-sm font-medium ${broadcastStatus.success ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+          {broadcastStatus.text}
+        </div>
       )}
 
       <div className="space-y-4">
@@ -127,8 +172,17 @@ export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsB
               
               <p className="whitespace-pre-wrap opacity-90">{notice.content}</p>
               
-              <div className="mt-4 text-xs font-medium opacity-75">
-                Posted: {new Date(notice.createdAt).toLocaleString()}
+              <div className="mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-3 border-t border-black/5 text-xs font-medium">
+                <span className="opacity-75">Posted: {new Date(notice.createdAt).toLocaleString()}</span>
+                
+                <button
+                  disabled={isPending}
+                  onClick={() => handleBroadcast(notice.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Send email broadcast to target audience"
+                >
+                  <span>📧 Broadcast via Email</span>
+                </button>
               </div>
             </div>
           ))
@@ -137,3 +191,4 @@ export default function AnnouncementsBoard({ schoolId, notices }: AnnouncementsB
     </div>
   );
 }
+

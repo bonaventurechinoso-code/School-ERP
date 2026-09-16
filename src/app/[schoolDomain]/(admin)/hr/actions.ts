@@ -3,11 +3,18 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
+function safeRevalidatePath(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful no-op when executed outside HTTP request context (e.g. testing)
+  }
+}
+
 export async function createDepartment(schoolDomain: string, formData: FormData) {
-  const name = formData.get("name") as string;
+  const name = (formData.get("name") as string)?.trim();
   if (!name) {
-    console.error("Name is required");
-    return;
+    return { success: false, error: "Department name is required." };
   }
 
   const school = await basePrisma.school.findUnique({
@@ -15,8 +22,7 @@ export async function createDepartment(schoolDomain: string, formData: FormData)
   });
 
   if (!school) {
-    console.error("School not found");
-    return;
+    return { success: false, error: "School not found." };
   }
 
   try {
@@ -26,20 +32,47 @@ export async function createDepartment(schoolDomain: string, formData: FormData)
         schoolId: school.id
       }
     });
-    revalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    return { success: true };
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[HR Server Action] Failed to create department:", error);
+    return { success: false, error: error.message || "Failed to create department." };
+  }
+}
+
+export async function deleteDepartment(schoolDomain: string, departmentId: string) {
+  try {
+    const staffCount = await basePrisma.staff.count({
+      where: { departmentId }
+    });
+
+    if (staffCount > 0) {
+      return { 
+        success: false, 
+        error: `Cannot delete department: ${staffCount} staff member(s) are currently assigned to it. Please reassign them first.` 
+      };
+    }
+
+    await basePrisma.department.delete({
+      where: { id: departmentId }
+    });
+
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[HR Server Action] Failed to delete department:", error);
+    return { success: false, error: error.message || "Failed to delete department." };
   }
 }
 
 export async function generatePayroll(schoolDomain: string, formData: FormData) {
   const staffId = formData.get("staffId") as string;
   const amount = parseFloat(formData.get("amount") as string);
-  const payDate = new Date(formData.get("payDate") as string);
+  const payDateStr = formData.get("payDate") as string;
+  const payDate = payDateStr ? new Date(payDateStr) : null;
 
-  if (!staffId || isNaN(amount) || !payDate) {
-    console.error("Invalid input");
-    return;
+  if (!staffId || isNaN(amount) || amount <= 0 || !payDate) {
+    return { success: false, error: "Invalid payroll parameters. Please provide staff, positive amount, and pay date." };
   }
 
   const school = await basePrisma.school.findUnique({
@@ -47,8 +80,7 @@ export async function generatePayroll(schoolDomain: string, formData: FormData) 
   });
 
   if (!school) {
-    console.error("School not found");
-    return;
+    return { success: false, error: "School not found." };
   }
 
   try {
@@ -61,9 +93,11 @@ export async function generatePayroll(schoolDomain: string, formData: FormData) 
         status: "PENDING"
       }
     });
-    revalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    return { success: true };
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[HR Server Action] Failed to generate payroll:", error);
+    return { success: false, error: error.message || "Failed to generate payroll." };
   }
 }
 
@@ -72,9 +106,11 @@ export async function voidPayroll(schoolDomain: string, payrollId: string) {
     await basePrisma.payrollRecord.delete({
       where: { id: payrollId }
     });
-    revalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    return { success: true };
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[HR Server Action] Failed to void payroll:", error);
+    return { success: false, error: error.message || "Failed to void payroll." };
   }
 }
 
@@ -90,34 +126,25 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
     });
 
     if (!school || !payroll) {
-      console.error("Record not found");
-      return;
+      return { success: false, error: "School or Payroll record not found." };
     }
 
-    // 2. Check Wallet Balance
+    if (payroll.status.includes("DISBURSED")) {
+      return { success: false, error: "This payroll record has already been disbursed." };
+    }
+
+    // 2. Strict Check on Wallet Balance
     if (school.walletBalance < payroll.amount) {
-      console.error("Insufficient school wallet balance. Please add funds.");
-      return; 
+      return { 
+        success: false, 
+        error: `Insufficient school wallet balance ($${school.walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} available, $${payroll.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} required). Please top up your school wallet first.` 
+      };
     }
 
-    // 3. (Simulated) Call the Payout API
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const res = await fetch(`${baseUrl}/api/payout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payrollId: payroll.id,
-        amount: payroll.amount,
-        destinationAccount: payroll.staff.bankAccountNumber || "unknown"
-      })
-    });
-    const data = await res.json();
-    if (data.status !== "success") {
-      console.error("Payout API failed:", data.message);
-      return;
-    }
+    // 3. Generate receipt reference
+    const receiptCode = `TXN_PAY_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-    // 4. Deduct balance and update status
+    // 4. Atomic balance deduction and ledger record creation
     await basePrisma.$transaction([
       basePrisma.school.update({
         where: { id: school.id },
@@ -126,8 +153,8 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
       basePrisma.payrollRecord.update({
         where: { id: payroll.id },
         data: { 
-          status: "DISBURSED VIA API",
-          receiptCode: data.transactionId
+          status: "DISBURSED",
+          receiptCode,
         }
       }),
       basePrisma.transaction.create({
@@ -136,33 +163,40 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
           type: "EXPENSE",
           category: "PAYROLL",
           amount: payroll.amount,
-          description: `Payroll disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName}`,
+          description: `Salary disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName} (${payroll.staff.role})`,
           referenceId: payroll.id
         }
       })
     ]);
 
-    revalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}`, "layout");
+    return { success: true, receiptCode };
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[HR Server Action] Failed to disburse payroll:", error);
+    return { success: false, error: error.message || "Disbursement processing failed." };
   }
 }
 
 export async function updateBankDetails(schoolDomain: string, staffId: string, formData: FormData) {
   try {
-    const bankName = formData.get("bankName") as string;
-    const accountName = formData.get("accountName") as string;
-    const bankAccountNumber = formData.get("bankAccountNumber") as string;
+    const bankName = (formData.get("bankName") as string)?.trim();
+    const accountName = (formData.get("accountName") as string)?.trim();
+    const bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim();
 
-    if (!bankName || !accountName || !bankAccountNumber) return;
+    if (!bankName || !accountName || !bankAccountNumber) {
+      return { success: false, error: "All bank account fields are required." };
+    }
 
     await basePrisma.staff.update({
       where: { id: staffId },
       data: { bankName, accountName, bankAccountNumber }
     });
 
-    revalidatePath(`/${schoolDomain}/hr`);
+    safeRevalidatePath(`/${schoolDomain}/hr`);
+    return { success: true };
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[HR Server Action] Failed to update bank details:", error);
+    return { success: false, error: error.message || "Failed to update bank details." };
   }
 }

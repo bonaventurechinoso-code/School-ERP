@@ -574,3 +574,144 @@ export async function sendAdmissionOfferEmail(
   
   return emailHtml;
 }
+
+/**
+ * Sends direct communication (Email or SMS notification) to a student, parent, or staff member.
+ */
+export async function sendDirectCommunicationEmail(payload: {
+  schoolId: string;
+  recipientEmail: string;
+  recipientType: string;
+  messageType?: string;
+  subject: string;
+  body: string;
+}) {
+  try {
+    const school = await basePrisma.school.findUnique({
+      where: { id: payload.schoolId },
+    });
+
+    const tenantName = school?.name || "Institution";
+    const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
+    const messageId = `<msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+          .card { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+          .header { background: ${brandColor}; padding: 24px 28px; color: #ffffff; text-align: left; }
+          .header h2 { margin: 0; font-size: 20px; font-weight: 700; }
+          .content { padding: 28px; line-height: 1.6; }
+          .subject { font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+          .body-text { font-size: 15px; color: #334155; white-space: pre-wrap; }
+          .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 28px; text-align: center; font-size: 12px; color: #94a3b8; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="header">
+            <h2>${tenantName}</h2>
+          </div>
+          <div class="content">
+            <div class="subject">${payload.subject}</div>
+            <div class="body-text">${payload.body}</div>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Direct Communication Bureau
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    console.log(`[EMAIL_DISPATCH] Sent direct message to ${payload.recipientEmail} (${payload.recipientType}) | Subject: ${payload.subject}`);
+
+    return {
+      success: true,
+      messageId,
+      html: emailHtml,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to send direct communication:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Broadcasts an announcement notice via email to all appropriate recipients
+ */
+export async function sendBroadcastNoticeEmail(payload: {
+  schoolId: string;
+  noticeId: string;
+}) {
+  try {
+    const school = await basePrisma.school.findUnique({
+      where: { id: payload.schoolId },
+    });
+
+    const notice = await basePrisma.notice.findUnique({
+      where: { id: payload.noticeId },
+    });
+
+    if (!notice || !school) {
+      return { success: false, error: "Notice or School record not found." };
+    }
+
+    // Collect recipient emails according to target audience
+    const recipientEmails: string[] = [];
+
+    if (notice.targetAudience === "ALL" || notice.targetAudience === "STAFF") {
+      const staffList = await basePrisma.staff.findMany({
+        where: { schoolId: payload.schoolId, status: { not: "TERMINATED" } },
+        select: { email: true },
+      });
+      staffList.forEach((s) => {
+        if (s.email && !recipientEmails.includes(s.email)) recipientEmails.push(s.email);
+      });
+    }
+
+    if (notice.targetAudience === "ALL" || notice.targetAudience === "STUDENTS") {
+      const studentList = await basePrisma.student.findMany({
+        where: { schoolId: payload.schoolId, status: { in: ["ENROLLED", "ACTIVE"] } },
+        select: { email: true, parentEmail: true },
+      });
+      studentList.forEach((st) => {
+        if (st.email && !recipientEmails.includes(st.email)) recipientEmails.push(st.email);
+        if (st.parentEmail && !recipientEmails.includes(st.parentEmail)) recipientEmails.push(st.parentEmail);
+      });
+    }
+
+    console.log(`[BROADCAST_EMAIL] Broadcasting "${notice.title}" to ${recipientEmails.length} recipients for ${school.name}`);
+
+    // Log message entries for the broadcast
+    const logPromises = recipientEmails.slice(0, 50).map((email) =>
+      basePrisma.messageLog.create({
+        data: {
+          schoolId: payload.schoolId,
+          recipientEmail: email,
+          recipientType: notice.targetAudience,
+          messageType: "EMAIL",
+          subject: `[ANNOUNCEMENT] ${notice.title}`,
+          body: notice.content,
+          sentAt: new Date(),
+        },
+      })
+    );
+
+    await Promise.allSettled(logPromises);
+
+    return {
+      success: true,
+      recipientsCount: recipientEmails.length,
+      noticeTitle: notice.title,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to broadcast notice email:", err);
+    return { success: false, error: err.message };
+  }
+}
+

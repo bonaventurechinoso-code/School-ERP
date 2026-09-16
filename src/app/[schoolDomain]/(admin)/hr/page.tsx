@@ -1,147 +1,148 @@
 import { basePrisma } from "@/lib/tenant-prisma";
-import { createDepartment, generatePayroll, voidPayroll, disbursePayroll } from "./actions";
-import BankDetailsForm from "./BankDetailsForm";
+import { createDepartment, generatePayroll } from "./actions";
+import PayrollDirectoryClient from "./PayrollDirectoryClient";
+import { PlusCircle, Building } from "lucide-react";
 
-export default async function HRPayrollPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
-  const params = await paramsPromise;
+export default async function HRPayrollPage({ 
+  params: paramsPromise 
+}: { 
+  params: Promise<{ schoolDomain: string }> | { schoolDomain: string }
+}) {
+  const params = await Promise.resolve(paramsPromise);
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: {
       departments: true,
       staff: {
-        include: { department: true, PayrollRecord: true }
+        include: { department: true, PayrollRecord: true },
+        orderBy: { firstName: "asc" },
       }
     }
   });
 
-  if (!school) return <div>Tenant Not Found</div>;
+  if (!school) {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        <h2 className="text-xl font-bold text-slate-800">Institution Not Found</h2>
+        <p>No school registered under domain: {params.schoolDomain}</p>
+      </div>
+    );
+  }
+
+  async function handleCreateDepartmentAction(formData: FormData) {
+    "use server";
+    await createDepartment(params.schoolDomain, formData);
+  }
+
+  async function handleGeneratePayrollAction(formData: FormData) {
+    "use server";
+    await generatePayroll(params.schoolDomain, formData);
+  }
 
   return (
-    <div className="space-y-8">
-      <h2 className="text-2xl font-bold text-slate-800">HR & Payroll Dashboard</h2>
+    <div className="space-y-8 animate-in fade-in duration-300">
+      <div>
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">HR & Payroll Management</h2>
+        <p className="text-slate-500 mt-1">Manage staff compensation, electronic wallet payouts, banking destinations, and pay slips.</p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* DEPARTMENTS SECTION */}
-        <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-xl font-semibold mb-4 text-slate-700">Departments</h3>
-          <ul className="mb-4 space-y-2">
-            {school.departments.length === 0 ? (
-              <li className="text-slate-500">No departments found.</li>
-            ) : (
-              school.departments.map(dept => (
-                <li key={dept.id} className="p-3 bg-slate-50 rounded border text-slate-700">
-                  {dept.name}
-                </li>
-              ))
-            )}
-          </ul>
-          
-          <form action={createDepartment.bind(null, params.schoolDomain)} className="flex flex-col sm:flex-row gap-2">
+      {/* INTERACTIVE PAYROLL DIRECTORY WITH WALLET BANNER */}
+      <PayrollDirectoryClient
+        schoolDomain={params.schoolDomain}
+        schoolName={school.name}
+        walletBalance={school.walletBalance}
+        departments={school.departments}
+        staff={school.staff}
+      />
+
+      {/* OPERATIONAL FORMS: NEW DEPT & GENERATE PAYROLL */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ADD DEPARTMENT */}
+        <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Building className="w-5 h-5 text-indigo-600" />
+              <h3 className="text-lg font-bold text-slate-800">Add Academic Department</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Group faculty and non-teaching personnel into academic departments (e.g., Mathematics, Sciences, Admin).
+            </p>
+          </div>
+
+          <form action={handleCreateDepartmentAction} className="flex flex-col sm:flex-row gap-3">
             <input 
               type="text" 
               name="name" 
-              placeholder="New Dept Name" 
-              className="border p-2 rounded w-full sm:flex-1"
+              placeholder="e.g. Humanities & Social Sciences" 
+              className="border border-slate-300 rounded-lg p-2.5 text-sm w-full sm:flex-1 focus:ring-2 focus:ring-indigo-500 outline-none"
               required 
             />
-            <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-800 w-full sm:w-auto">
-              Add
+            <button 
+              type="submit" 
+              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm shadow-sm shrink-0"
+            >
+              Add Department
             </button>
           </form>
         </section>
 
-        {/* PAYROLL SECTION */}
-        <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-xl font-semibold mb-4 text-slate-700">Generate Payroll</h3>
-          <form action={generatePayroll.bind(null, params.schoolDomain)} className="space-y-4">
+        {/* GENERATE PAYROLL */}
+        <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <PlusCircle className="w-5 h-5 text-indigo-600" />
+            <h3 className="text-lg font-bold text-slate-800">Generate Salary Record</h3>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            Schedule or prepare a remuneration record for any staff member prior to disbursement.
+          </p>
+
+          <form action={handleGeneratePayrollAction} className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Staff Member</label>
-              <select name="staffId" className="w-full border p-2 rounded" required>
-                <option value="">Select Staff...</option>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Staff Member</label>
+              <select name="staffId" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" required>
+                <option value="">-- Choose Employee --</option>
                 {school.staff.map(s => (
-                  <option key={s.id} value={s.id}>{s.firstName} {s.lastName} ({s.role})</option>
+                  <option key={s.id} value={s.id}>
+                    {s.firstName} {s.lastName} ({s.role}) {s.department ? `• ${s.department.name}` : ""}
+                  </option>
                 ))}
               </select>
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="w-full sm:flex-1">
-                <label className="block text-sm text-slate-600 mb-1">Amount</label>
-                <input type="number" name="amount" step="0.01" className="w-full border p-2 rounded" required />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Gross Salary Amount ($)</label>
+                <input 
+                  type="number" 
+                  name="amount" 
+                  step="0.01" 
+                  min="0.01"
+                  placeholder="e.g. 2500.00"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono" 
+                  required 
+                />
               </div>
-              <div className="w-full sm:flex-1">
-                <label className="block text-sm text-slate-600 mb-1">Pay Date</label>
-                <input type="date" name="payDate" className="w-full border p-2 rounded" required />
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Effective Payment Date</label>
+                <input 
+                  type="date" 
+                  name="payDate" 
+                  defaultValue={new Date().toISOString().split('T')[0]}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                  required 
+                />
               </div>
             </div>
 
-            <button type="submit" className="w-full bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-800">
-              Generate Payroll Record
+            <button 
+              type="submit" 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition text-sm shadow-sm"
+            >
+              Generate Payroll Entry
             </button>
           </form>
         </section>
       </div>
-
-      {/* STAFF DIRECTORY WITH PAYROLL */}
-      <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-xl font-semibold mb-4 text-slate-700">Staff & Payroll History</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-slate-700">
-              <tr>
-                <th className="p-3 font-semibold">Name</th>
-                <th className="p-3 font-semibold">Role</th>
-                <th className="p-3 font-semibold">Department</th>
-                <th className="p-3 font-semibold">Bank Details</th>
-                <th className="p-3 font-semibold">Recent Payments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {school.staff.map(s => (
-                <tr key={s.id} className="border-b last:border-0">
-                  <td className="p-3">{s.firstName} {s.lastName}</td>
-                  <td className="p-3">{s.role}</td>
-                  <td className="p-3">{s.department?.name || "N/A"}</td>
-                  <td className="p-3 text-xs">
-                    <BankDetailsForm staff={s} schoolDomain={params.schoolDomain} />
-                  </td>
-                  <td className="p-3">
-                    {s.PayrollRecord.length === 0 ? (
-                      <span className="text-slate-400">No records</span>
-                    ) : (
-                      <ul className="space-y-1">
-                        {s.PayrollRecord.map(pr => (
-                          <li key={pr.id} className="flex items-center gap-2">
-                            <span>
-                              ${pr.amount.toFixed(2)} on {new Date(pr.payDate).toLocaleDateString()}
-                            </span>
-                            {pr.status === 'PENDING' ? (
-                              <form action={disbursePayroll.bind(null, params.schoolDomain, pr.id)} className="inline">
-                                <button type="submit" className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200">
-                                  Disburse Funds
-                                </button>
-                              </form>
-                            ) : (
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${pr.status.includes('DISBURSED') ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {pr.status} {pr.receiptCode && <span className="ml-1 opacity-75 font-mono text-[10px]">#{pr.receiptCode}</span>}
-                              </span>
-                            )}
-                            <form action={voidPayroll.bind(null, params.schoolDomain, pr.id)}>
-                              <button type="submit" className="text-red-500 hover:text-red-700 font-bold px-1" title="Void Payment">
-                                ×
-                              </button>
-                            </form>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }
