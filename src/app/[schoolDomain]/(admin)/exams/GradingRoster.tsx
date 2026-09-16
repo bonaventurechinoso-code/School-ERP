@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useTransition } from "react";
 import { upsertExamResult } from "./actions";
 import { calculatePercentageToLetter } from "@/lib/gpa";
+import { useTenant } from "@/lib/tenant-context";
+import { resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 
 type GradingRosterProps = {
   schoolId: string;
@@ -12,6 +14,7 @@ type GradingRosterProps = {
 };
 
 export default function GradingRoster({ schoolId, exams, students, examResults }: GradingRosterProps) {
+  const tenant = useTenant();
   const [isPending, startTransition] = useTransition();
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
 
@@ -170,7 +173,7 @@ export default function GradingRoster({ schoolId, exams, students, examResults }
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
               <tr>
                 <th className="px-6 py-4 font-semibold">Student Name</th>
-                <th className="px-6 py-4 font-semibold">Email</th>
+                <th className="px-6 py-4 font-semibold">Reg No</th>
                 <th className="px-6 py-4 font-semibold">1st CA (Max: 15)</th>
                 <th className="px-6 py-4 font-semibold">2nd CA (Max: 15)</th>
                 <th className="px-6 py-4 font-semibold">Termly Exam (Max: 70)</th>
@@ -179,17 +182,29 @@ export default function GradingRoster({ schoolId, exams, students, examResults }
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {students.filter(s => s.status === "ENROLLED" || s.status === "ACTIVE").map((student) => {
+              {students.filter(s => s.status === "ENROLLED" || s.status === "ACTIVE").map((student, studentIndex) => {
                 const result = currentExamResults.get(student.id);
                 const studentScores = getStudentScores(student.id, result);
                 const ca1Str = studentScores.ca1.trim();
                 const ca2Str = studentScores.ca2.trim();
                 const examStr = studentScores.exam.trim();
 
-                // Format the automated email field as static, clean, read-only text string
-                const studentEmail =
-                  student.email ||
-                  `${student.firstName ? student.firstName.charAt(0).toLowerCase() : "s"}.${student.lastName ? student.lastName.toLowerCase().replace(/[^a-z0-9]/g, "") : "student"}@school.edu`;
+                // Format the standard student registration code matching active academic tier and profile
+                const studentClass = student.currentClass || "JSS 1";
+                const classCode = studentClass
+                  .replace(/Primary\s*/i, "PRI")
+                  .replace(/Basic\s*/i, "PRI")
+                  .replace(/SSS\s*/i, "SS")
+                  .replace(/Grade\s*/i, "G")
+                  .replace(/\s+/g, "")
+                  .toUpperCase() || "JSS1";
+
+                const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || "GW";
+                const regSequence = String(studentIndex + 1).padStart(3, "0");
+                const studentRegNo =
+                  student.admissionNumber && student.admissionNumber.includes(`/${classCode}/`)
+                    ? student.admissionNumber
+                    : `${schoolPrefix}/2026/${classCode}/${regSequence}`;
 
                 // If the input boxes for a student row are empty or blank strings (''),
                 // the 'Total' and 'Grade' cells must display a clean default placeholder hyphen ('—').
@@ -230,7 +245,7 @@ export default function GradingRoster({ schoolId, exams, students, examResults }
                       {student.firstName} {student.lastName}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-300 select-none">
-                      {studentEmail}
+                      {studentRegNo}
                     </td>
                     <td className="px-6 py-4">
                       <input 
