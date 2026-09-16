@@ -447,9 +447,9 @@ export function StudentProfileModule({
               <thead>
                 <tr className="border-b border-slate-100 dark:border-zinc-800 text-slate-400 dark:text-zinc-500 font-bold">
                   <th className="py-2.5 pr-4">Subject</th>
-                  <th className="py-2.5 px-3 text-center">CA 1 (15)</th>
-                  <th className="py-2.5 px-3 text-center">CA 2 (15)</th>
-                  <th className="py-2.5 px-3 text-center">Exam (70)</th>
+                  <th className="py-2.5 px-3 text-center">CA1 (20)</th>
+                  <th className="py-2.5 px-3 text-center">CA2 (20)</th>
+                  <th className="py-2.5 px-3 text-center">Exam (60)</th>
                   <th className="py-2.5 px-3 text-center">Total (100)</th>
                   <th className="py-2.5 pl-3 text-right">Grade</th>
                 </tr>
