@@ -200,6 +200,41 @@ export default function GradingRoster({
       ? "Daycare / Nursery"
       : rawActiveTier;
 
+  // The 'Position' column must ONLY be visible for K-12 tiers ('Daycare / Nursery', 'Primary School', 'Secondary School')
+  // If a tertiary tier (University, Polytechnic, College of Education) is active, hide the Position column entirely
+  const rawTierUpper = (rawActiveTier || "").toUpperCase();
+  const displayTierUpper = (activeTierDisplay || "").toUpperCase();
+
+  const isTertiaryTier =
+    activeTierCode === "UNIVERSITY" ||
+    activeTierCode === "POLYTECHNIC" ||
+    activeTierCode === "COLLEGE" ||
+    rawTierUpper.includes("UNIVERSITY") ||
+    rawTierUpper.includes("POLYTECHNIC") ||
+    rawTierUpper.includes("COLLEGE") ||
+    rawTierUpper.includes("TERTIARY") ||
+    rawTierUpper.includes("HIGHER") ||
+    rawTierUpper.includes("EDUCATION") ||
+    displayTierUpper.includes("UNIVERSITY") ||
+    displayTierUpper.includes("POLYTECHNIC") ||
+    displayTierUpper.includes("COLLEGE") ||
+    displayTierUpper.includes("EDUCATION");
+
+  const isK12Tier =
+    !isTertiaryTier &&
+    (activeTierDisplay === "Daycare / Nursery" ||
+      activeTierDisplay === "Primary School" ||
+      activeTierDisplay === "Secondary School" ||
+      activeTierCode === "NURSERY" ||
+      activeTierCode === "PRIMARY" ||
+      activeTierCode === "SECONDARY" ||
+      rawTierUpper.includes("NURSERY") ||
+      rawTierUpper.includes("DAYCARE") ||
+      rawTierUpper.includes("PRIMARY") ||
+      rawTierUpper.includes("SECONDARY"));
+
+  const showPositionColumn = isK12Tier && !isTertiaryTier;
+
   // 2. Derive Class Options for Active Tier
   const availableClasses = useMemo(() => {
     const standardClasses = TIER_CLASSES_MAP[activeTierCode] || TIER_CLASSES_MAP.SECONDARY;
@@ -361,9 +396,18 @@ export default function GradingRoster({
         (res.ca1Score != null || res.ca2Score != null || res.examScore != null) &&
         (res.ca1Score > 0 || res.ca2Score > 0 || res.examScore > 0 || (res.score != null && res.score > 0));
 
-      const firstCa = hasScores && res?.ca1Score != null ? String(res.ca1Score) : "";
-      const secondCa = hasScores && res?.ca2Score != null ? String(res.ca2Score) : "";
-      const exam = hasScores && res?.examScore != null ? String(res.examScore) : "";
+      const firstCa =
+        hasScores && res?.ca1Score != null
+          ? String(Math.min(Math.max(res.ca1Score, 0), 15))
+          : "";
+      const secondCa =
+        hasScores && res?.ca2Score != null
+          ? String(Math.min(Math.max(res.ca2Score, 0), 15))
+          : "";
+      const exam =
+        hasScores && res?.examScore != null
+          ? String(Math.min(Math.max(res.examScore, 0), 70))
+          : "";
 
       initScores[student.regNo] = {
         firstCa,
@@ -414,9 +458,18 @@ export default function GradingRoster({
       (result.ca1Score != null || result.ca2Score != null || result.examScore != null) &&
       (result.ca1Score > 0 || result.ca2Score > 0 || result.examScore > 0 || (result.score != null && result.score > 0));
 
-    const firstCa = hasScores && result?.ca1Score != null ? String(result.ca1Score) : "";
-    const secondCa = hasScores && result?.ca2Score != null ? String(result.ca2Score) : "";
-    const exam = hasScores && result?.examScore != null ? String(result.examScore) : "";
+    const firstCa =
+      hasScores && result?.ca1Score != null
+        ? String(Math.min(Math.max(result.ca1Score, 0), 15))
+        : "";
+    const secondCa =
+      hasScores && result?.ca2Score != null
+        ? String(Math.min(Math.max(result.ca2Score, 0), 15))
+        : "";
+    const exam =
+      hasScores && result?.examScore != null
+        ? String(Math.min(Math.max(result.examScore, 0), 70))
+        : "";
 
     return {
       firstCa,
@@ -427,7 +480,7 @@ export default function GradingRoster({
     };
   };
 
-  // Explicitly keyed update handler bound directly to student.regNo
+  // Explicitly keyed update handler bound directly to student.regNo with strict score validation
   const handleInputChange = (
     regNo: string,
     field: "firstCa" | "secondCa" | "exam",
@@ -435,14 +488,28 @@ export default function GradingRoster({
     studentId: string,
     result: any
   ) => {
+    let sanitizedValue = value;
+    if (sanitizedValue !== "") {
+      const num = parseFloat(sanitizedValue);
+      if (!isNaN(num)) {
+        if ((field === "firstCa" || field === "secondCa") && num > 15) {
+          sanitizedValue = "15";
+        } else if (field === "exam" && num > 70) {
+          sanitizedValue = "70";
+        } else if (num < 0) {
+          sanitizedValue = "0";
+        }
+      }
+    }
+
     const current = getStudentScores(regNo, studentId, result);
     setScores((prev) => ({
       ...prev,
       [regNo]: {
         ...current,
-        [field]: value,
-        ca1: field === "firstCa" ? value : current.firstCa,
-        ca2: field === "secondCa" ? value : current.secondCa,
+        [field]: sanitizedValue,
+        ca1: field === "firstCa" ? sanitizedValue : current.firstCa,
+        ca2: field === "secondCa" ? sanitizedValue : current.secondCa,
       },
     }));
   };
@@ -690,6 +757,9 @@ export default function GradingRoster({
                 <th className="px-6 py-4 font-semibold">Termly Exam (Max: 70)</th>
                 <th className="px-6 py-4 font-semibold">Total (100)</th>
                 <th className="px-6 py-4 font-semibold">Grade</th>
+                {showPositionColumn && (
+                  <th className="px-6 py-4 font-semibold text-center">Position</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -732,30 +802,17 @@ export default function GradingRoster({
                   gradeDisplay = calculatePercentageToLetter(percentage, isHigherEd);
                 }
 
+                const isCa1Over =
+                  ca1Str !== "" && (parseFloat(ca1Str) > 15 || parseFloat(ca1Str) < 0);
+                const isCa2Over =
+                  ca2Str !== "" && (parseFloat(ca2Str) > 15 || parseFloat(ca2Str) < 0);
+                const isExamOver =
+                  examStr !== "" && (parseFloat(examStr) > 70 || parseFloat(examStr) < 0);
+
                 return (
                   <tr key={student.regNo} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className={`inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold rounded-md shrink-0 ${
-                            position === 1
-                              ? "bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
-                              : position === 2
-                              ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600"
-                              : position === 3
-                              ? "bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700"
-                              : position > 3
-                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                              : "bg-slate-50 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700"
-                          }`}
-                          title={position > 0 ? `Position in ${selectedClass}: ${getOrdinalSuffix(position)}` : "Unranked / Absent"}
-                        >
-                          {position > 0 ? getOrdinalSuffix(position) : "—"}
-                        </span>
-                        <span className="font-semibold text-slate-900 dark:text-white">
-                          {student.lastName}, {student.firstName}
-                        </span>
-                      </div>
+                    <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
+                      {student.lastName}, {student.firstName}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-300 select-none">
                       {student.regNo}
@@ -775,7 +832,11 @@ export default function GradingRoster({
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                          isCa1Over
+                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                        }`}
                         placeholder="—"
                       />
                     </td>
@@ -794,7 +855,11 @@ export default function GradingRoster({
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                          isCa2Over
+                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                        }`}
                         placeholder="—"
                       />
                     </td>
@@ -813,7 +878,11 @@ export default function GradingRoster({
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className="w-20 border border-slate-300 dark:border-slate-700 rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                          isExamOver
+                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                        }`}
                         placeholder="—"
                       />
                     </td>
@@ -823,6 +892,26 @@ export default function GradingRoster({
                     <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">
                       {gradeDisplay}
                     </td>
+                    {showPositionColumn && (
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-1 text-xs font-bold rounded-md ${
+                            position === 1
+                              ? "bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-sm"
+                              : position === 2
+                              ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shadow-sm"
+                              : position === 3
+                              ? "bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700 shadow-sm"
+                              : position > 3
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                              : "bg-slate-50 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700"
+                          }`}
+                          title={position > 0 ? `Position in ${selectedClass}: ${getOrdinalSuffix(position)}` : "Unranked / Absent"}
+                        >
+                          {position > 0 ? getOrdinalSuffix(position) : "—"}
+                        </span>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
