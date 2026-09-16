@@ -12,8 +12,10 @@ import {
   Award,
   Users,
   Search,
+  FileText,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
+import StudentReportCardModal, { ReportCardStudentData } from "./StudentReportCardModal";
 
 // -------------------------------------------------------------
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
@@ -621,6 +623,7 @@ function ReportCardsContent() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "info" } | null>(null);
+  const [selectedStudentForModal, setSelectedStudentForModal] = useState<ReportCardStudentData | null>(null);
 
   // Compute positions across the class roster based on strictly descending calculated total score
   const rankedRoster = useMemo(() => {
@@ -1272,27 +1275,81 @@ function ReportCardsContent() {
 
                         {/* Action */}
                         <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => handleSaveGrade(student)}
-                            disabled={student.saving}
-                            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition font-medium text-xs shadow-xs cursor-pointer ${
-                              student.saved 
-                                ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                : "bg-blue-600 text-white hover:bg-blue-700"
-                            } disabled:opacity-50`}
-                          >
-                            {student.saved ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Saved
-                              </>
-                            ) : (
-                              <>
-                                <Save className="w-3.5 h-3.5" />
-                                {student.saving ? "Saving..." : "Save Grade"}
-                              </>
-                            )}
-                          </button>
+                          <div className="inline-flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedStudentForModal({
+                                  id: student.id,
+                                  name: student.name,
+                                  admissionNumber: student.admissionNumber,
+                                  currentClass: className || "JSS 1",
+                                  term: term || "First Term",
+                                  academicYear: "2026/2027",
+                                  tier: academicTier,
+                                  rank: student.rank,
+                                  totalStudents: stats.totalStudents,
+                                  overallTotal: student.total,
+                                  overallAverage: student.total,
+                                  overallGrade: grade.grade,
+                                  status: student.status,
+                                  subjects: [
+                                    {
+                                      subject:
+                                        subject ||
+                                        (academicTier === "SECONDARY"
+                                          ? "Mathematics"
+                                          : "General Studies"),
+                                      ca1: student.ca1Num,
+                                      ca2: student.ca2Num,
+                                      exam: student.examNum,
+                                      total: student.total,
+                                      grade: grade.grade,
+                                      subjectPosition:
+                                        student.rank > 0
+                                          ? getOrdinalSuffix(student.rank)
+                                          : "—",
+                                      remark:
+                                        grade.grade === "A1"
+                                          ? "Distinction in subject concepts"
+                                          : grade.grade.startsWith("B")
+                                          ? "Very good performance"
+                                          : grade.grade.startsWith("C")
+                                          ? "Credit pass"
+                                          : "Pass",
+                                    },
+                                  ],
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs shadow-2xs transition cursor-pointer"
+                              title="View Terminal Report Sheet"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              <span>View Sheet</span>
+                            </button>
+
+                            <button 
+                              onClick={() => handleSaveGrade(student)}
+                              disabled={student.saving}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition font-medium text-xs shadow-xs cursor-pointer ${
+                                student.saved 
+                                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                  : "bg-blue-600 text-white hover:bg-blue-700"
+                              } disabled:opacity-50`}
+                            >
+                              {student.saved ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Saved
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-3.5 h-3.5" />
+                                  {student.saving ? "Saving..." : "Save Grade"}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1339,6 +1396,17 @@ function ReportCardsContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Terminal Student Report Card Modal & Printable PDF Preview */}
+      {selectedStudentForModal && (
+        <StudentReportCardModal
+          isOpen={Boolean(selectedStudentForModal)}
+          onClose={() => setSelectedStudentForModal(null)}
+          studentData={selectedStudentForModal}
+          schoolName={tenant.name || "Greenwood Academy"}
+          schoolDomain={tenant.subdomain || "greenwood"}
+        />
       )}
     </div>
   );
