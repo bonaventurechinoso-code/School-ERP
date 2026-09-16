@@ -492,7 +492,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
                 Barr. E. C. Okoli
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Registrar's Signature & Date
+                Registrar&apos;s Signature & Date
               </span>
             </div>
 
@@ -512,7 +512,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
                 Dr. K. Nwachukwu
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Principal's Signature & Date
+                Principal&apos;s Signature & Date
               </span>
             </div>
 
@@ -524,7 +524,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
               Issued under the seal and authority of the Governing Council of {school.name}.
             </p>
             <p>
-              Any alteration, erasure, or unauthorized duplication renders this transcript completely void. Verification may be confirmed directly with the Registrar's Office.
+              Any alteration, erasure, or unauthorized duplication renders this transcript completely void. Verification may be confirmed directly with the Registrar&apos;s Office.
             </p>
           </div>
 

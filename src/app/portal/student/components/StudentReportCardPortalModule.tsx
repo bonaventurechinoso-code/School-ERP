@@ -558,15 +558,15 @@ export function StudentReportCardPortalModule({
           <div className="p-4 rounded-xl border border-slate-200/80 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
             <div className="space-y-1">
               <span className="font-bold text-slate-400 uppercase text-[10px] tracking-wider block">
-                Class Teacher's Remark:
+                Class Teacher&apos;s Remark:
               </span>
               <p className="text-slate-800 dark:text-zinc-200 font-medium italic">
-                "{student.fullName} has demonstrated exceptional academic discipline, sharp intellect, and commendable consistency across all assessments this term."
+                &ldquo;{student.fullName} has demonstrated exceptional academic discipline, sharp intellect, and commendable consistency across all assessments this term.&rdquo;
               </p>
             </div>
             <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
               <div className="font-serif italic text-sm text-slate-700 dark:text-zinc-300">Mrs. O. Adebayo</div>
-              <span className="text-[10px] text-slate-400">Class Teacher's Signature</span>
+              <span className="text-[10px] text-slate-400">Class Teacher&apos;s Signature</span>
             </div>
           </div>
 
@@ -574,10 +574,10 @@ export function StudentReportCardPortalModule({
           <div className="p-4 rounded-xl border border-slate-200/80 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
             <div className="space-y-1">
               <span className="font-bold text-slate-400 uppercase text-[10px] tracking-wider block">
-                Principal's Official Remark:
+                Principal&apos;s Official Remark:
               </span>
               <p className="text-slate-800 dark:text-zinc-200 font-medium italic">
-                "An outstanding, well-rounded terminal performance. Keep up this commendable standard of academic brilliance!"
+                &ldquo;An outstanding, well-rounded terminal performance. Keep up this commendable standard of academic brilliance!&rdquo;
               </p>
             </div>
             <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 flex items-center gap-4">
@@ -586,7 +586,7 @@ export function StudentReportCardPortalModule({
               </div>
               <div>
                 <div className="font-serif italic text-sm text-slate-700 dark:text-zinc-300">Dr. K. Nwachukwu</div>
-                <span className="text-[10px] text-slate-400">Principal's Signature</span>
+                <span className="text-[10px] text-slate-400">Principal&apos;s Signature</span>
               </div>
             </div>
           </div>
