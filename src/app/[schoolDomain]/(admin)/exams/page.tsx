@@ -58,7 +58,7 @@ export default async function ExamsPage({
   const activeTierName = activeTierObj ? activeTierObj.name : "";
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [courses, exams, students, examResults] = await Promise.all([
+  const [courses, exams, students, examResults, staff] = await Promise.all([
     tenantDb.course.findMany({
       where: {
         schoolId: school.id,
@@ -85,8 +85,34 @@ export default async function ExamsPage({
       where: {
         schoolId: school.id,
       }
-    })
+    }),
+    tenantDb.staff.findMany({
+      where: {
+        schoolId: school.id,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    }),
   ]);
+
+  // Strict isolation query for bonavee_scheduled_exams:
+  // SELECT * FROM bonavee_scheduled_exams WHERE tenant_id = params.tenant ORDER BY exam_date DESC
+  let scheduledExamsRaw: any[] = [];
+  try {
+    scheduledExamsRaw = await basePrisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM bonavee_scheduled_exams WHERE tenant_id = $1 OR tenant_id = $2 ORDER BY exam_date DESC`,
+      school.id,
+      params.schoolDomain
+    );
+  } catch (err) {
+    // Graceful fallback if table is freshly created
+    scheduledExamsRaw = [];
+  }
 
   const activeTab = searchParams.tab || "exams";
   const savedTierConfigs = ((school.tierDatabasesConfig as any)?.assessmentWeights as Record<string, Record<string, number>>) || {};
@@ -143,8 +169,12 @@ export default async function ExamsPage({
         {activeTab === "exams" ? (
           <ExamsList 
             schoolId={school.id} 
+            schoolDomain={params.schoolDomain}
             exams={exams} 
+            scheduledExams={scheduledExamsRaw}
             courses={courses} 
+            staff={staff}
+            tierName={activeTierName}
           />
         ) : activeTab === "config" ? (
           <GradingConfigTab
