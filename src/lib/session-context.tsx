@@ -1,12 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback, useMemo } from "react";
+import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { SessionPayload, UserRole } from "./auth";
 import { isFinanceRole, isAcademicRole, isAdminExecutive, isSuperAdmin as checkSuperAdmin, getDevMockRoleConfig } from "./permissions";
+import { customFetch, setAuthToken, getAuthToken, STORAGE_SESSION_KEY, STORAGE_TOKEN_KEY, AUTH_UPDATE_EVENT } from "./api-client";
 
-export const STORAGE_SESSION_KEY = "schoolerp_session";
-export const STORAGE_TOKEN_KEY = "schoolerp_auth_token";
-export const AUTH_UPDATE_EVENT = "auth-session-update";
+export { STORAGE_SESSION_KEY, STORAGE_TOKEN_KEY, AUTH_UPDATE_EVENT };
 
 export interface SessionContextType {
   session: SessionPayload | null;
@@ -74,10 +73,15 @@ export function persistStoredSession(sessionPayload: SessionPayload | null): voi
       const serialized = JSON.stringify(sessionPayload);
       window.sessionStorage.setItem(STORAGE_SESSION_KEY, serialized);
       window.localStorage.setItem(STORAGE_SESSION_KEY, serialized);
+      if (sessionPayload.sessionToken) {
+        setAuthToken(sessionPayload.sessionToken, sessionPayload.sessionToken);
+      }
     } else {
       window.sessionStorage.removeItem(STORAGE_SESSION_KEY);
       window.localStorage.removeItem(STORAGE_SESSION_KEY);
+      window.sessionStorage.removeItem(STORAGE_TOKEN_KEY);
       window.localStorage.removeItem(STORAGE_TOKEN_KEY);
+      setAuthToken(null);
     }
   } catch (err) {
     console.warn("[SessionContext] Failed to persist session to storage:", err);
@@ -102,21 +106,49 @@ export function SessionProvider({
     return true;
   });
 
+  const isFetchingRef = useRef(false);
+  const hasFetchedRef = useRef(Boolean(initialSession));
+
   // Sync state if server prop changes
   useEffect(() => {
     if (initialSession) {
       setSession(initialSession);
       setLoading(false);
+      hasFetchedRef.current = true;
       persistStoredSession(initialSession);
+      if (initialSession.sessionToken) {
+        setAuthToken(initialSession.sessionToken, initialSession.sessionToken);
+      }
     }
   }, [initialSession]);
 
-  // 2. Imperative Session Refresh
-  const refreshSession = useCallback(async () => {
+  // 2. Imperative Session Refresh (strictly gated to run once unless explicitly triggered)
+  const refreshSession = useCallback(async (force = false) => {
+    if (!force && hasFetchedRef.current) return;
+    if (isFetchingRef.current) return;
+
+    // Check if on an unauthenticated public route where background fetching is unnecessary
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      const isPublic =
+        path.includes("/login") ||
+        path.includes("/register") ||
+        path.includes("/apply") ||
+        path.includes("/access-denied") ||
+        path.includes("/trial-expired");
+      if (isPublic && !getAuthToken() && !getStoredSession()) {
+        hasFetchedRef.current = true;
+        setLoading(false);
+        return;
+      }
+    }
+
+    isFetchingRef.current = true;
+    hasFetchedRef.current = true;
+
     try {
-      const res = await fetch("/api/v1/auth/session", {
+      const res = await customFetch("/api/v1/auth/session", {
         method: "GET",
-        headers: { "Cache-Control": "no-cache" },
       });
 
       if (res.ok) {
@@ -124,6 +156,10 @@ export function SessionProvider({
         if (data.authenticated && data.session) {
           setSession(data.session);
           persistStoredSession(data.session);
+          const effectiveToken = data.session.token || data.session.sessionToken;
+          if (effectiveToken) {
+            setAuthToken(effectiveToken, data.session.sessionToken);
+          }
           setLoading(false);
           return;
         }
@@ -133,11 +169,10 @@ export function SessionProvider({
       const stored = getStoredSession();
       if (stored) {
         setSession(stored);
-        setLoading(false);
       } else {
         setSession(null);
-        setLoading(false);
       }
+      setLoading(false);
     } catch (error) {
       console.warn("[SessionContext] Background session check failed:", error);
       const stored = getStoredSession();
@@ -145,31 +180,46 @@ export function SessionProvider({
         setSession(stored);
       }
       setLoading(false);
+    } finally {
+      isFetchingRef.current = false;
     }
   }, []);
 
-  // 3. Client Hydration & Storage Event Synchronization
+  // 3. Client Hydration & Storage Event Synchronization (Runs ONCE per page initialization)
   useEffect(() => {
-    // Immediate hydration from browser storage if server prop was not present
-    if (!session && !mockConfig) {
-      const stored = getStoredSession();
-      if (stored) {
-        setSession(stored);
-        setLoading(false);
+    // If server already resolved session or mock is active, skip eager client fetch
+    if (initialSession || mockConfig) {
+      hasFetchedRef.current = true;
+      setLoading(false);
+      return;
+    }
+
+    // Hydrate immediately from browser storage
+    const stored = getStoredSession();
+    if (stored) {
+      setSession(stored);
+      setLoading(false);
+      if (stored.sessionToken) {
+        setAuthToken(stored.sessionToken, stored.sessionToken);
       }
     }
 
-    // Background validation
-    refreshSession();
+    // Single-attempt initial background validation
+    if (!hasFetchedRef.current) {
+      refreshSession();
+    }
 
     // Event listener for in-app login/logout dispatches
     const handleAuthEvent = () => {
-      const stored = getStoredSession();
-      if (stored) {
-        setSession(stored);
+      const freshStored = getStoredSession();
+      if (freshStored) {
+        setSession(freshStored);
         setLoading(false);
+        if (freshStored.sessionToken) {
+          setAuthToken(freshStored.sessionToken, freshStored.sessionToken);
+        }
       }
-      refreshSession();
+      refreshSession(true); // Explicit user action, allow forced refresh
     };
 
     // Cross-tab storage synchronization
@@ -180,6 +230,9 @@ export function SessionProvider({
             const parsed = JSON.parse(e.newValue);
             setSession(parsed);
             setLoading(false);
+            if (parsed.sessionToken) {
+              setAuthToken(parsed.sessionToken, parsed.sessionToken);
+            }
           } catch {}
         } else {
           setSession(null);
@@ -195,7 +248,7 @@ export function SessionProvider({
       window.removeEventListener(AUTH_UPDATE_EVENT, handleAuthEvent);
       window.removeEventListener("storage", handleStorageEvent);
     };
-  }, [session, mockConfig, refreshSession]);
+  }, []);
 
   // 4. Role & Permission Calculations
   const role = useMemo(() => {

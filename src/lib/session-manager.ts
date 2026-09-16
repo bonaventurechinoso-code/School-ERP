@@ -41,6 +41,7 @@ export interface CreateSessionParams {
   permissions?: string[];
   ipAddress?: string | null;
   userAgent?: string | null;
+  sessionToken?: string | null;
 }
 
 /**
@@ -54,7 +55,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
   cookieToken: string;
   expiresAt: Date;
 }> {
-  const sessionToken = crypto.randomUUID();
+  const sessionToken = params.sessionToken || crypto.randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE_MS);
 
@@ -78,8 +79,11 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
 
   // 2. Cryptographically sign the session token with tenantId and role binding
   const cookieToken = await new jose.SignJWT({
-    jti: sessionToken,
-    sessionToken,
+    jti: sessionToken || crypto.randomUUID(),
+    sessionToken: sessionToken || crypto.randomUUID(),
+    sessionId: sessionToken || crypto.randomUUID(),
+    id: sessionToken || crypto.randomUUID(),
+    token: sessionToken || crypto.randomUUID(),
     userId: params.userId,
     email: params.email || undefined,
     tenantId: params.tenantId || "global-saas",
@@ -135,20 +139,28 @@ export async function validateDatabaseSession(
   try {
     // 1. Cryptographic token signature verification
     const { payload } = await jose.jwtVerify(token, SECRET_KEY);
-    const sessionTokenId = (payload.jti as string) || (payload.sessionToken as string);
+    const sessionTokenId =
+      (payload.sessionToken as string) ||
+      (payload.sessionId as string) ||
+      (payload.jti as string) ||
+      (payload.token as string) ||
+      (payload.id as string);
 
     if (!sessionTokenId) {
-      console.warn("[AUTH_SECURITY_ALERT]: Missing sessionTokenId in JWT payload.");
       return null;
     }
 
-    // 2. Query the active database session record
-    const dbSession = await basePrisma.session.findUnique({
-      where: { sessionToken: sessionTokenId },
+    // 2. Query the active database session record by sessionToken or id
+    const dbSession = await basePrisma.session.findFirst({
+      where: {
+        OR: [
+          { sessionToken: sessionTokenId },
+          { id: sessionTokenId },
+        ],
+      },
     });
 
     if (!dbSession) {
-      console.warn(`[AUTH_SECURITY]: Session token '${sessionTokenId}' not found in active database registry.`);
       return null;
     }
 
@@ -195,7 +207,7 @@ export async function validateDatabaseSession(
       }).catch(() => {});
     }
 
-    // 7. Return server-authoritative session state
+    // 7. Return server-authoritative session state including sessionToken
     return {
       userId: dbSession.userId,
       email: dbSession.email || (payload.email as string),
@@ -206,6 +218,9 @@ export async function validateDatabaseSession(
       staffRole: dbSession.staffRole || (payload.staffRole as string) || undefined,
       activeTiers: (payload.activeTiers as string[]) || [],
       permissions: (payload.permissions as string[]) || [],
+      sessionToken: dbSession.sessionToken,
+      sessionId: dbSession.sessionToken,
+      token: token,
       dbSessionId: dbSession.id,
       expiresAt: dbSession.expiresAt,
     };
@@ -232,7 +247,13 @@ export async function revokeDatabaseSession(sessionTokenOrCookie?: string | null
       let sessionTokenId = token;
       try {
         const { payload } = await jose.jwtVerify(token, SECRET_KEY);
-        sessionTokenId = (payload.jti as string) || (payload.sessionToken as string) || token;
+        sessionTokenId =
+          (payload.sessionToken as string) ||
+          (payload.sessionId as string) ||
+          (payload.jti as string) ||
+          (payload.token as string) ||
+          (payload.id as string) ||
+          token;
       } catch {}
 
       await basePrisma.session.updateMany({

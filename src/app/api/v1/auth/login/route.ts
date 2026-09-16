@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import * as jose from "jose";
+import crypto from "crypto";
 import { cookies } from "next/headers";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
-import { createDatabaseSession, SESSION_MAX_AGE_SECONDS } from "@/lib/session-manager";
+import { createDatabaseSession, SESSION_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, getSecureCookieOptions } from "@/lib/session-manager";
 
 export async function POST(req: Request) {
   try {
@@ -49,8 +50,9 @@ export async function POST(req: Request) {
       if (isCentralAuthenticated) {
         const adminId = platformAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
+        const distinctSessionToken = crypto.randomUUID();
 
-        await createDatabaseSession({
+        const sessionResult = await createDatabaseSession({
           userId: adminId,
           email: normalizedEmail,
           tenantId: "global-saas",
@@ -61,16 +63,23 @@ export async function POST(req: Request) {
           permissions: permissions,
           ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
           userAgent: req.headers.get("user-agent"),
+          sessionToken: distinctSessionToken || crypto.randomUUID(),
         });
 
-        return NextResponse.json({
+        const response = NextResponse.json({
           success: true,
+          userId: adminId,
           role: "SUPER_ADMIN",
           schoolDomain: "admin",
           redirectUrl: "/admin",
           permissions,
+          sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
+          token: sessionResult.cookieToken,
           maxAge: SESSION_MAX_AGE_SECONDS,
         });
+
+        response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+        return response;
       } else if (platformAdmin && !schoolDomain) {
         return NextResponse.json({ error: "Invalid Super-Admin credentials." }, { status: 401 });
       }
@@ -118,8 +127,9 @@ export async function POST(req: Request) {
 
         if (devRole) {
           const permissions = getDefaultPermissionsForRole(devRole);
+          const distinctSessionToken = crypto.randomUUID();
 
-          await createDatabaseSession({
+          const sessionResult = await createDatabaseSession({
             userId: devUserId,
             email: email,
             tenantId: tenant.id,
@@ -131,17 +141,24 @@ export async function POST(req: Request) {
             permissions: permissions,
             ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
             userAgent: req.headers.get("user-agent"),
+            sessionToken: distinctSessionToken || crypto.randomUUID(),
           });
 
-          return NextResponse.json({ 
+          const response = NextResponse.json({ 
             success: true, 
+            userId: devUserId,
             role: devRole, 
             staffRole: devStaffRole,
             schoolDomain: tenant.subdomain,
             activeTiers,
             permissions,
+            sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
+            token: sessionResult.cookieToken,
             maxAge: SESSION_MAX_AGE_SECONDS,
           });
+
+          response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+          return response;
         }
       }
     }
@@ -228,9 +245,10 @@ export async function POST(req: Request) {
 
     // 2. FETCH ROLE PERMISSIONS
     const permissions = getDefaultPermissionsForRole(resolvedRole);
+    const distinctSessionToken = crypto.randomUUID();
 
     // 3. PERSIST SERVER-CONTROLLED DATABASE SESSION (30-min idle limit + cryptographic binding)
-    await createDatabaseSession({
+    const sessionResult = await createDatabaseSession({
       userId: authenticatedUserId,
       email: authenticatedEmail,
       tenantId: tenant.id,
@@ -242,17 +260,24 @@ export async function POST(req: Request) {
       permissions: permissions,
       ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
       userAgent: req.headers.get("user-agent"),
+      sessionToken: distinctSessionToken || crypto.randomUUID(),
     });
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       success: true, 
+      userId: authenticatedUserId,
       role: resolvedRole, 
       staffRole: resolvedStaffRole,
       schoolDomain: tenant.subdomain,
       activeTiers,
       permissions,
+      sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
+      token: sessionResult.cookieToken,
       maxAge: SESSION_MAX_AGE_SECONDS,
     });
+
+    response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+    return response;
 
   } catch (error: any) {
     console.error("Auth Login Error:", error);

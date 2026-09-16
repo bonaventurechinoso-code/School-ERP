@@ -8,6 +8,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { Lock, Mail, ArrowRight, Building2, Eye, EyeOff } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
+import { beginTokenWait, setAuthToken } from "@/lib/api-client";
 
 export default function TenantLoginPage() {
 
@@ -26,6 +27,7 @@ export default function TenantLoginPage() {
     setErrorMsg("");
 
     try {
+      beginTokenWait();
       const res = await fetch("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,7 +41,13 @@ export default function TenantLoginPage() {
         const { role, schoolDomain: targetDomain } = data;
         
         if (!role || !targetDomain) {
+          setAuthToken(null);
           throw new Error("Unauthorized access");
+        }
+
+        const effectiveSessionToken = data.sessionToken || data.token;
+        if (effectiveSessionToken) {
+          setAuthToken(data.token || effectiveSessionToken, effectiveSessionToken);
         }
 
         // Persist session payload to sessionStorage & localStorage for instant reactive hydration
@@ -53,6 +61,8 @@ export default function TenantLoginPage() {
           staffRole: data.staffRole,
           activeTiers: data.activeTiers || [],
           permissions: data.permissions || [],
+          sessionToken: effectiveSessionToken,
+          token: data.token,
         };
         persistStoredSession(sessionPayload);
         window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));

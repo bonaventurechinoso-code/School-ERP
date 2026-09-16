@@ -30,7 +30,13 @@ export async function middleware(req: NextRequest) {
     path.startsWith('/super-admin/');
 
   if (isGlobalAdminPath) {
-    const sessionToken = req.cookies.get('session')?.value;
+    let sessionToken = req.cookies.get('session')?.value;
+    if (!sessionToken) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        sessionToken = authHeader.substring(7);
+      }
+    }
     const isDev = process.env.NODE_ENV === 'development';
 
     if (!sessionToken) {
@@ -132,7 +138,13 @@ export async function middleware(req: NextRequest) {
   const isTenantAdminPath = tenantAdminSegments.some(segment => path.includes(segment));
 
   if (isTenantAdminPath) {
-    const sessionToken = req.cookies.get('session')?.value;
+    let sessionToken = req.cookies.get('session')?.value;
+    if (!sessionToken) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        sessionToken = authHeader.substring(7);
+      }
+    }
     const isDev = process.env.NODE_ENV === 'development';
     const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
     const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
@@ -234,12 +246,21 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(deniedUrl);
       }
 
+      const resolvedSessionToken =
+        (payload.sessionToken as string) ||
+        (payload.sessionId as string) ||
+        (payload.jti as string) ||
+        (payload.token as string) ||
+        (payload.id as string) ||
+        sessionToken ||
+        '';
+
       // Inject cryptographically verified session claims into downstream request headers
       req.headers.set('x-user-id', (payload.userId as string) || '');
       req.headers.set('x-user-role', rawRole);
       req.headers.set('x-staff-role', staffRole);
       req.headers.set('x-tenant-id', (payload.tenantId as string) || '');
-      req.headers.set('x-session-token', (payload.sessionToken as string) || (payload.jti as string) || '');
+      req.headers.set('x-session-token', resolvedSessionToken);
     } catch (err) {
       // Token is invalid or expired
       const targetPath = subdomain ? `/${subdomain}/login` : '/access-denied';

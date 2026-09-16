@@ -59,7 +59,7 @@ async function verifyStaffPortalHub() {
         parentPhone: "08031234567",
       },
     });
-    initialData.students.push({
+    (initialData.students as any[]).push({
       id: testStudent.id,
       firstName: testStudent.firstName,
       lastName: testStudent.lastName,

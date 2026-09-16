@@ -21,6 +21,7 @@ import {
   Layers,
 } from "lucide-react";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
+import { customFetch, beginTokenWait, setAuthToken } from "@/lib/api-client";
 
 /**
  * SMART AUTO-ROUTING ASSURANCE:
@@ -61,6 +62,7 @@ function UniversalLoginPageContent() {
     setErrorMsg("");
 
     try {
+      beginTokenWait();
       const res = await signIn("credentials", {
         email: email.trim().toLowerCase(),
         password,
@@ -69,6 +71,7 @@ function UniversalLoginPageContent() {
       });
 
       if (res?.error) {
+        setAuthToken(null);
         setErrorMsg("Invalid credentials. Please verify your email and password.");
         setIsSubmitting(false);
       } else if (res?.ok) {
@@ -76,7 +79,7 @@ function UniversalLoginPageContent() {
         // Query active session to resolve authenticated tenant, role, and operational tier desk
         let sessionPayload: any = null;
         try {
-          const v1SessionRes = await fetch("/api/v1/auth/session");
+          const v1SessionRes = await customFetch("/api/v1/auth/session");
           if (v1SessionRes.ok) {
             const v1Data = await v1SessionRes.json();
             if (v1Data.authenticated && v1Data.session) {
@@ -86,7 +89,7 @@ function UniversalLoginPageContent() {
         } catch {}
 
         if (!sessionPayload) {
-          const sessionRes = await fetch("/api/auth/session");
+          const sessionRes = await customFetch("/api/auth/session");
           const sessionData = await sessionRes.json();
           const user = sessionData?.user;
           if (user) {
@@ -100,11 +103,15 @@ function UniversalLoginPageContent() {
               staffRole: user.staffRole,
               activeTiers: user.activeTiers || [],
               permissions: user.permissions || [],
+              sessionToken: user.sessionToken,
             };
           }
         }
 
         if (sessionPayload) {
+          if (sessionPayload.sessionToken) {
+            setAuthToken(sessionPayload.token || sessionPayload.sessionToken, sessionPayload.sessionToken);
+          }
           persistStoredSession(sessionPayload);
           window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
         }

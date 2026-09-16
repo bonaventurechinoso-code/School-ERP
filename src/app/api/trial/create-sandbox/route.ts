@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
-import * as jose from "jose";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
+import { createDatabaseSession } from "@/lib/session-manager";
 
 const SANDBOX_SUBDOMAIN = "trial-sandbox";
 const SANDBOX_SCHOOL_NAME = "Trial Sandbox Academy";
@@ -208,10 +208,7 @@ async function generateTrialSessionToken(
   schoolName: string,
   activeTiers: string[]
 ): Promise<string> {
-  const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-  const secret = new TextEncoder().encode(jwtSecret);
-
-  return new jose.SignJWT({
+  const sessionResult = await createDatabaseSession({
     userId: staffId,
     email: staffEmail,
     tenantId: schoolId,
@@ -220,11 +217,10 @@ async function generateTrialSessionToken(
     role: "SCHOOL_ADMIN",
     activeTiers: activeTiers,
     permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(secret);
+    userAgent: "Trial Sandbox Session",
+  });
+
+  return sessionResult.cookieToken;
 }
 
 /**

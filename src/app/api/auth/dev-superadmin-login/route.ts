@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import * as jose from "jose";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
+import { createDatabaseSession } from "@/lib/session-manager";
 
 const MASTER_DEV_EMAIL = "superadmin@platform.com";
 const MASTER_DEV_USER_ID = "master-dev-superadmin-id";
@@ -11,10 +11,7 @@ const MASTER_DEV_USER_ID = "master-dev-superadmin-id";
  * session cookie, and redirects directly into the Super Admin panel (/admin).
  */
 async function generateDevSuperAdminSession(): Promise<string> {
-  const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-  const secret = new TextEncoder().encode(jwtSecret);
-
-  return new jose.SignJWT({
+  const sessionResult = await createDatabaseSession({
     userId: MASTER_DEV_USER_ID,
     email: MASTER_DEV_EMAIL,
     tenantId: "global-saas",
@@ -23,11 +20,10 @@ async function generateDevSuperAdminSession(): Promise<string> {
     role: "SUPER_ADMIN",
     activeTiers: ["Central Platform"],
     permissions: getDefaultPermissionsForRole("SUPER_ADMIN"),
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(secret);
+    userAgent: "Dev Backdoor SuperAdmin",
+  });
+
+  return sessionResult.cookieToken;
 }
 
 export async function GET(req: Request) {

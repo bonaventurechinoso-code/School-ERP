@@ -58,8 +58,12 @@ async function runRbacVerification() {
     const canonicalRole = normalizeRole(rawRole);
     const permissions = getDefaultPermissionsForRole(canonicalRole);
 
-    // Sign JWT with expanded claims
+    const testSessionToken = `mock-session-${rawRole.toLowerCase()}-uuid`;
+    // Sign JWT with expanded claims including sessionToken
     const token = await new jose.SignJWT({
+      jti: testSessionToken,
+      sessionToken: testSessionToken,
+      sessionId: testSessionToken,
       userId: `user-${rawRole.toLowerCase()}-123`,
       email: `${rawRole.toLowerCase()}@greenwood.edu`,
       tenantId: "tenant-gw-01",
