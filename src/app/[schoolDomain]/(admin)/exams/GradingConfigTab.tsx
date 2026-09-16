@@ -118,7 +118,7 @@ export default function GradingConfigTab({
               Institutional Tier Grading Configurations
             </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Configure and calibrate assessment component weights for each active institutional tier.
+              Configure and calibrate assessment component weights for the selected academic tier.
             </p>
           </div>
 
