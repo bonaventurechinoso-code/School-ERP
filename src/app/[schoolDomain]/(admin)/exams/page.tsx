@@ -4,6 +4,7 @@ import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import ExamsList from "./ExamsList";
 import GradingRoster from "./GradingRoster";
+import GradingConfigTab from "./GradingConfigTab";
 
 export default async function ExamsPage({ 
   params: paramsPromise, 
@@ -88,6 +89,7 @@ export default async function ExamsPage({
   ]);
 
   const activeTab = searchParams.tab || "exams";
+  const savedTierConfigs = ((school.tierDatabasesConfig as any)?.assessmentWeights as Record<string, Record<string, number>>) || {};
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -97,7 +99,7 @@ export default async function ExamsPage({
           Assessments
         </h2>
         <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
-          Schedule assessments and manage student grades.
+          Schedule assessments, manage grading spreadsheets, and calibrate institutional tier weights.
         </p>
       </header>
       
@@ -124,6 +126,16 @@ export default async function ExamsPage({
           >
             Grading Roster
           </a>
+          <a
+            href={`/${params.schoolDomain}/exams?tab=config`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "config"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+            }`}
+          >
+            Grading Configuration
+          </a>
         </nav>
       </div>
 
@@ -133,6 +145,13 @@ export default async function ExamsPage({
             schoolId={school.id} 
             exams={exams} 
             courses={courses} 
+          />
+        ) : activeTab === "config" ? (
+          <GradingConfigTab
+            schoolId={school.id}
+            schoolDomain={params.schoolDomain}
+            initialTierName={activeTierName}
+            savedConfigs={savedTierConfigs}
           />
         ) : (
           <GradingRoster 
@@ -149,4 +168,3 @@ export default async function ExamsPage({
     </div>
   );
 }
-
