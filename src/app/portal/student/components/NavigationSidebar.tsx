@@ -10,7 +10,8 @@ import {
   GraduationCap, 
   Receipt,
   LogOut, 
-  X
+  X,
+  FileSpreadsheet,
 } from "lucide-react";
 import { TierPresentationConfig, StudentProfileData } from "../types";
 
@@ -41,6 +42,7 @@ export function NavigationSidebar({
 }: NavigationSidebarProps) {
   const navItems = [
     { id: "OVERVIEW", label: "Dashboard Overview", icon: LayoutDashboard },
+    { id: "REPORTS", label: "Report Card & Results", icon: FileSpreadsheet },
     { id: "PROFILE", label: "Student Bio & Profile", icon: User },
     { id: "COMMUNICATIONS", label: "Live Communications", icon: Megaphone },
     { id: "FINANCE", label: tierConfig.billingTitle, icon: CreditCard },

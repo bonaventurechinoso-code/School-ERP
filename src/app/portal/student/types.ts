@@ -180,3 +180,5 @@ export interface StudentPortalWorkspaceData {
   isAccessDenied?: boolean;
   isSuspended?: boolean;
 }
+
+export type StudentPortalTab = "OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE" | "TRANSACTIONS" | "REPORTS";

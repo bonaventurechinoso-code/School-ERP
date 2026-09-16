@@ -4,13 +4,15 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { 
   StudentPortalWorkspaceData, 
-  TierPresentationConfig 
+  TierPresentationConfig,
+  StudentPortalTab 
 } from "../types";
 import { getTierPresentationConfig, INSTITUTIONAL_TIER_PRESETS } from "../tier-config";
 import { StudentProfileModule } from "./StudentProfileModule";
 import { CommunicationsModule } from "./CommunicationsModule";
 import { FeesFinanceModule } from "./FeesFinanceModule";
 import { TransactionHistoryModule } from "./TransactionHistoryModule";
+import { StudentReportCardPortalModule } from "./StudentReportCardPortalModule";
 import { NavigationSidebar } from "./NavigationSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -39,7 +41,7 @@ interface StudentPortalClientProps {
 }
 
 export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE" | "TRANSACTIONS">("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<StudentPortalTab>("OVERVIEW");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTier, setActiveTier] = useState<string>(initialData.tierConfig.tierName);
 
@@ -202,6 +204,16 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                       ? "Track continuous assessments (CA1/CA2), termly reports, class standings, and academic announcements."
                       : "Monitor collegiate course credit unit loading, faculty dues, semester GPA tracking, and senate bulletins."}
                   </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("REPORTS")}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-100 border border-indigo-400/30 text-xs font-bold transition shadow-xs cursor-pointer"
+                    >
+                      <Award className="w-3.5 h-3.5 text-amber-300" />
+                      <span>View Termly Report Card →</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Student Identity Card */}
@@ -378,6 +390,18 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                 schoolId={school.id}
                 studentLoginId={student.admissionNumber}
                 onBack={() => setActiveTab("OVERVIEW")}
+              />
+            </div>
+          )}
+
+          {/* TAB 6: REPORT CARDS & RESULTS MODULE */}
+          {activeTab === "REPORTS" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <StudentReportCardPortalModule
+                student={student}
+                tierConfig={currentTierConfig}
+                schoolName={school.name}
+                subdomain={school.subdomain}
               />
             </div>
           )}
