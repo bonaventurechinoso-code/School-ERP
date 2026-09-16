@@ -156,6 +156,83 @@ interface ScoreEntry {
   ca2?: string;
 }
 
+const DEFAULT_MOCK_JSS1_STUDENTS = [
+  {
+    id: "mock-jss1-001",
+    firstName: "Chinedu",
+    lastName: "Okonkwo",
+    admissionNumber: "GW/2026/JSS1/001",
+    currentClass: "JSS 1",
+    status: "ENROLLED",
+    tier: { name: "Secondary School" },
+    initialScores: { ca1: "18", ca2: "17", exam: "52" },
+  },
+  {
+    id: "mock-jss1-002",
+    firstName: "Amina",
+    lastName: "Bello",
+    admissionNumber: "GW/2026/JSS1/002",
+    currentClass: "JSS 1",
+    status: "ENROLLED",
+    tier: { name: "Secondary School" },
+    initialScores: { ca1: "16", ca2: "15", exam: "45" },
+  },
+  {
+    id: "mock-jss1-003",
+    firstName: "Folake",
+    lastName: "Adeyemi",
+    admissionNumber: "GW/2026/JSS1/003",
+    currentClass: "JSS 1",
+    status: "ENROLLED",
+    tier: { name: "Secondary School" },
+    initialScores: { ca1: "14", ca2: "16", exam: "38" },
+  },
+  {
+    id: "mock-jss1-004",
+    firstName: "Emeka",
+    lastName: "Nwosu",
+    admissionNumber: "GW/2026/JSS1/004",
+    currentClass: "JSS 1",
+    status: "ENROLLED",
+    tier: { name: "Secondary School" },
+    initialScores: { ca1: "12", ca2: "11", exam: "31" },
+  },
+  {
+    id: "mock-jss1-005",
+    firstName: "Zainab",
+    lastName: "Abubakar",
+    admissionNumber: "GW/2026/JSS1/005",
+    currentClass: "JSS 1",
+    status: "ENROLLED",
+    tier: { name: "Secondary School" },
+    initialScores: { ca1: "9", ca2: "10", exam: "24" },
+  },
+];
+
+function getNigerianGradeAndRemark(total: number, isHigherEd: boolean): { grade: string; remark: string } {
+  if (total < 0) return { grade: "—", remark: "—" };
+
+  if (isHigherEd) {
+    if (total >= 70) return { grade: "A", remark: "Excellent" };
+    if (total >= 60) return { grade: "B", remark: "Very Good" };
+    if (total >= 50) return { grade: "C", remark: "Credit" };
+    if (total >= 45) return { grade: "D", remark: "Pass" };
+    if (total >= 40) return { grade: "E", remark: "Pass" };
+    return { grade: "F", remark: "Fail" };
+  }
+
+  // Authentic WAEC / NECO Nigerian Secondary Scale
+  if (total >= 75) return { grade: "A1", remark: "Excellent" };
+  if (total >= 70) return { grade: "B2", remark: "Very Good" };
+  if (total >= 65) return { grade: "B3", remark: "Very Good" };
+  if (total >= 60) return { grade: "C4", remark: "Credit" };
+  if (total >= 55) return { grade: "C5", remark: "Credit" };
+  if (total >= 50) return { grade: "C6", remark: "Credit" };
+  if (total >= 45) return { grade: "D7", remark: "Pass" };
+  if (total >= 40) return { grade: "E8", remark: "Pass" };
+  return { grade: "F9", remark: "Fail" };
+}
+
 export default function GradingRoster({
   schoolId,
   exams,
@@ -292,11 +369,24 @@ export default function GradingRoster({
       }
       return true;
     });
-    return matched.length > 0 ? matched : exams;
+    if (matched.length > 0) return matched;
+    if (exams.length > 0) return exams;
+    return [
+      {
+        id: "mock-exam-jss1-math",
+        name: "Termly Assessment",
+        semester: "First Term",
+        course: {
+          id: "mock-course-math",
+          name: "Mathematics",
+          tier: { name: "Secondary School" },
+        },
+      },
+    ];
   }, [exams, activeTierCode]);
 
   const [selectedExamId, setSelectedExamId] = useState<string>(() => {
-    return tierExams[0]?.id || exams[0]?.id || "";
+    return tierExams[0]?.id || exams[0]?.id || "mock-exam-jss1-math";
   });
 
   useEffect(() => {
@@ -305,7 +395,8 @@ export default function GradingRoster({
     }
   }, [tierExams, selectedExamId]);
 
-  const selectedExam = exams.find((e) => e.id === selectedExamId);
+  const selectedExam = tierExams.find((e) => e.id === selectedExamId) || exams.find((e) => e.id === selectedExamId);
+  const activeSubjectName = selectedExam?.course?.name || selectedExam?.name || "Mathematics";
 
   // Map existing results for quick lookup: map[studentId] = result
   const currentExamResults = useMemo(() => {
@@ -319,7 +410,7 @@ export default function GradingRoster({
   }, [examResults, selectedExamId]);
 
   // 5. Strict Academic Tier & Class Isolation Filter
-  const filteredStudents = useMemo(() => {
+  const rawFilteredStudents = useMemo(() => {
     return students.filter((student) => {
       // a) Status check: only ENROLLED or ACTIVE students
       const status = student.status || "ENROLLED";
@@ -346,6 +437,17 @@ export default function GradingRoster({
       return true;
     });
   }, [students, activeTierCode, selectedClass]);
+
+  const filteredStudents = useMemo(() => {
+    if (rawFilteredStudents.length > 0) {
+      return rawFilteredStudents;
+    }
+    // Automatically generate 3-5 clean mock student data rows for JSS 1 - Secondary School
+    if (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY") {
+      return DEFAULT_MOCK_JSS1_STUDENTS;
+    }
+    return rawFilteredStudents;
+  }, [rawFilteredStudents, selectedClass, activeTierCode]);
 
   // 6. Assign Permanent, Stable Registration Numbers (Never shifts with rank positions)
   const studentsWithRegNo = useMemo(() => {
@@ -398,16 +500,16 @@ export default function GradingRoster({
 
       const firstCa =
         hasScores && res?.ca1Score != null
-          ? String(Math.min(Math.max(res.ca1Score, 0), 15))
-          : "";
+          ? String(Math.min(Math.max(res.ca1Score, 0), 20))
+          : (student as any).initialScores?.ca1 || "";
       const secondCa =
         hasScores && res?.ca2Score != null
-          ? String(Math.min(Math.max(res.ca2Score, 0), 15))
-          : "";
+          ? String(Math.min(Math.max(res.ca2Score, 0), 20))
+          : (student as any).initialScores?.ca2 || "";
       const exam =
         hasScores && res?.examScore != null
-          ? String(Math.min(Math.max(res.examScore, 0), 70))
-          : "";
+          ? String(Math.min(Math.max(res.examScore, 0), 60))
+          : (student as any).initialScores?.exam || "";
 
       initScores[student.regNo] = {
         firstCa,
@@ -417,14 +519,14 @@ export default function GradingRoster({
         ca2: secondCa,
       };
 
-      if (hasScores) {
-        let ca1 = res.ca1Score != null ? res.ca1Score : 0;
-        let ca2 = res.ca2Score != null ? res.ca2Score : 0;
-        let examScore = res.examScore != null ? res.examScore : 0;
-        if (ca1 > 15) ca1 = 15;
-        if (ca2 > 15) ca2 = 15;
-        if (examScore > 70) examScore = 70;
-        const total = res.score > 0 ? res.score : Math.round((ca1 + ca2 + examScore) * 10) / 10;
+      if (firstCa !== "" || secondCa !== "" || exam !== "") {
+        let ca1 = firstCa !== "" ? parseFloat(firstCa) : 0;
+        let ca2 = secondCa !== "" ? parseFloat(secondCa) : 0;
+        let examScore = exam !== "" ? parseFloat(exam) : 0;
+        if (ca1 > 20) ca1 = 20;
+        if (ca2 > 20) ca2 = 20;
+        if (examScore > 60) examScore = 60;
+        const total = Math.round((ca1 + ca2 + examScore) * 10) / 10;
         initTotals[student.regNo] = total;
       } else {
         initTotals[student.regNo] = -1; // Un-submitted / absent
@@ -446,7 +548,7 @@ export default function GradingRoster({
     setCommittedTotals(initTotals);
   }, [selectedExamId, selectedClass, examResults, studentsWithRegNo]);
 
-  const getStudentScores = (regNo: string, studentId: string, result: any): ScoreEntry => {
+  const getStudentScores = (regNo: string, studentId: string, result: any, studentObj?: any): ScoreEntry => {
     if (scores[regNo]) {
       return scores[regNo];
     }
@@ -460,16 +562,16 @@ export default function GradingRoster({
 
     const firstCa =
       hasScores && result?.ca1Score != null
-        ? String(Math.min(Math.max(result.ca1Score, 0), 15))
-        : "";
+        ? String(Math.min(Math.max(result.ca1Score, 0), 20))
+        : (studentObj as any)?.initialScores?.ca1 || "";
     const secondCa =
       hasScores && result?.ca2Score != null
-        ? String(Math.min(Math.max(result.ca2Score, 0), 15))
-        : "";
+        ? String(Math.min(Math.max(result.ca2Score, 0), 20))
+        : (studentObj as any)?.initialScores?.ca2 || "";
     const exam =
       hasScores && result?.examScore != null
-        ? String(Math.min(Math.max(result.examScore, 0), 70))
-        : "";
+        ? String(Math.min(Math.max(result.examScore, 0), 60))
+        : (studentObj as any)?.initialScores?.exam || "";
 
     return {
       firstCa,
@@ -486,23 +588,24 @@ export default function GradingRoster({
     field: "firstCa" | "secondCa" | "exam",
     value: string,
     studentId: string,
-    result: any
+    result: any,
+    studentObj?: any
   ) => {
     let sanitizedValue = value;
     if (sanitizedValue !== "") {
       const num = parseFloat(sanitizedValue);
       if (!isNaN(num)) {
-        if ((field === "firstCa" || field === "secondCa") && num > 15) {
-          sanitizedValue = "15";
-        } else if (field === "exam" && num > 70) {
-          sanitizedValue = "70";
+        if ((field === "firstCa" || field === "secondCa") && num > 20) {
+          sanitizedValue = "20";
+        } else if (field === "exam" && num > 60) {
+          sanitizedValue = "60";
         } else if (num < 0) {
           sanitizedValue = "0";
         }
       }
     }
 
-    const current = getStudentScores(regNo, studentId, result);
+    const current = getStudentScores(regNo, studentId, result, studentObj);
     setScores((prev) => ({
       ...prev,
       [regNo]: {
@@ -515,9 +618,7 @@ export default function GradingRoster({
   };
 
   const handleSaveResult = (regNo: string, student: any, result: any) => {
-    if (!selectedExam) return;
-
-    const studentScores = getStudentScores(regNo, student.id, result);
+    const studentScores = getStudentScores(regNo, student.id, result, student);
     const ca1Str = (studentScores.firstCa || "").trim();
     const ca2Str = (studentScores.secondCa || "").trim();
     const examStr = (studentScores.exam || "").trim();
@@ -539,13 +640,13 @@ export default function GradingRoster({
     if (isNaN(ca2)) ca2 = 0;
     if (isNaN(exam)) exam = 0;
 
-    if (ca1 > 15) ca1 = 15;
-    if (ca2 > 15) ca2 = 15;
-    if (exam > 70) exam = 70;
+    if (ca1 > 20) ca1 = 20;
+    if (ca2 > 20) ca2 = 20;
+    if (exam > 60) exam = 60;
 
     const totalScore = Math.round((ca1 + ca2 + exam) * 10) / 10;
 
-    const tierName = selectedExam.course?.tier?.name || activeTierDisplay;
+    const tierName = selectedExam?.course?.tier?.name || activeTierDisplay;
     const isHigherEd =
       tierName.toLowerCase().includes("higher") ||
       tierName.toLowerCase().includes("university") ||
@@ -560,19 +661,21 @@ export default function GradingRoster({
       [regNo]: totalScore,
     }));
 
-    startTransition(() => {
-      upsertExamResult(
-        schoolId,
-        selectedExamId,
-        student.id,
-        totalScore,
-        ca1Str !== "" ? ca1 : undefined,
-        ca2Str !== "" ? ca2 : undefined,
-        examStr !== "" ? exam : undefined,
-        letterGrade,
-        ""
-      );
-    });
+    if (selectedExam && !student.id.startsWith("mock-") && !selectedExamId.startsWith("mock-")) {
+      startTransition(() => {
+        upsertExamResult(
+          schoolId,
+          selectedExamId,
+          student.id,
+          totalScore,
+          ca1Str !== "" ? ca1 : undefined,
+          ca2Str !== "" ? ca2 : undefined,
+          examStr !== "" ? exam : undefined,
+          letterGrade,
+          ""
+        );
+      });
+    }
   };
 
   // 8. Dynamic Ranking calculation based on the finished total dataset
@@ -747,34 +850,33 @@ export default function GradingRoster({
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4 font-semibold">Student Name</th>
-                <th className="px-6 py-4 font-semibold">Reg No</th>
-                <th className="px-6 py-4 font-semibold">1st CA (Max: 15)</th>
-                <th className="px-6 py-4 font-semibold">2nd CA (Max: 15)</th>
-                <th className="px-6 py-4 font-semibold">Termly Exam (Max: 70)</th>
-                <th className="px-6 py-4 font-semibold">Total (100)</th>
-                <th className="px-6 py-4 font-semibold">Grade</th>
-                {showPositionColumn && (
-                  <th className="px-6 py-4 font-semibold text-center">Position</th>
-                )}
+                <th className="px-6 py-4 text-left">Student Name</th>
+                <th className="px-6 py-4 text-left">Reg No</th>
+                <th className="px-6 py-4 text-left">Subject</th>
+                <th className="px-4 py-4 text-center">CA1 (Max: 20)</th>
+                <th className="px-4 py-4 text-center">CA2 (Max: 20)</th>
+                <th className="px-4 py-4 text-center">Termly Exam (Max: 60)</th>
+                <th className="px-4 py-4 text-center">Total (100)</th>
+                <th className="px-4 py-4 text-center">Grade</th>
+                <th className="px-4 py-4 text-center">Remark</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {orderedStudents.map((student) => {
                 const result = currentExamResults.get(student.id);
-                const studentScores = getStudentScores(student.regNo, student.id, result);
+                const studentScores = getStudentScores(student.regNo, student.id, result, student);
                 const ca1Str = (studentScores.firstCa || "").trim();
                 const ca2Str = (studentScores.secondCa || "").trim();
                 const examStr = (studentScores.exam || "").trim();
 
                 const isEmptyRow = ca1Str === "" && ca2Str === "" && examStr === "";
-                const position = rankMap[student.regNo] || 0;
 
                 let totalDisplay: string = "—";
                 let gradeDisplay: string = "—";
+                let remarkDisplay: string = "—";
 
                 if (!isEmptyRow) {
                   let ca1 = ca1Str !== "" ? parseFloat(ca1Str) : 0;
@@ -785,133 +887,171 @@ export default function GradingRoster({
                   if (isNaN(ca2)) ca2 = 0;
                   if (isNaN(exam)) exam = 0;
 
-                  if (ca1 > 15) ca1 = 15;
-                  if (ca2 > 15) ca2 = 15;
-                  if (exam > 70) exam = 70;
+                  if (ca1 > 20) ca1 = 20;
+                  if (ca2 > 20) ca2 = 20;
+                  if (exam > 60) exam = 60;
 
                   const totalScore = Math.round((ca1 + ca2 + exam) * 10) / 10;
                   totalDisplay = String(totalScore);
 
-                  const tierName = selectedExam.course?.tier?.name || activeTierDisplay;
+                  const tierName = selectedExam?.course?.tier?.name || activeTierDisplay;
                   const isHigherEd =
                     tierName.toLowerCase().includes("higher") ||
                     tierName.toLowerCase().includes("university") ||
                     tierName.toLowerCase().includes("college");
 
-                  const percentage = Math.min((totalScore / 100) * 100, 100);
-                  gradeDisplay = calculatePercentageToLetter(percentage, isHigherEd);
+                  const evalResult = getNigerianGradeAndRemark(totalScore, isHigherEd);
+                  gradeDisplay = evalResult.grade;
+                  remarkDisplay = evalResult.remark;
                 }
 
                 const isCa1Over =
-                  ca1Str !== "" && (parseFloat(ca1Str) > 15 || parseFloat(ca1Str) < 0);
+                  ca1Str !== "" && (parseFloat(ca1Str) > 20 || parseFloat(ca1Str) < 0);
                 const isCa2Over =
-                  ca2Str !== "" && (parseFloat(ca2Str) > 15 || parseFloat(ca2Str) < 0);
+                  ca2Str !== "" && (parseFloat(ca2Str) > 20 || parseFloat(ca2Str) < 0);
                 const isExamOver =
-                  examStr !== "" && (parseFloat(examStr) > 70 || parseFloat(examStr) < 0);
+                  examStr !== "" && (parseFloat(examStr) > 60 || parseFloat(examStr) < 0);
 
                 return (
                   <tr key={student.regNo} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
+                    {/* 1. Student Name */}
+                    <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                       {student.lastName}, {student.firstName}
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-300 select-none">
+
+                    {/* 2. Reg No */}
+                    <td className="px-6 py-4 text-xs font-mono font-medium text-slate-500 dark:text-slate-300 select-none whitespace-nowrap">
                       {student.regNo}
                     </td>
-                    <td className="px-6 py-4">
+
+                    {/* 3. Subject */}
+                    <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {activeSubjectName}
+                    </td>
+
+                    {/* 4. CA1 (Max: 20) */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
                       <input
                         id={`input-${student.regNo}-ca1`}
                         type="number"
                         min="0"
-                        max="15"
+                        max="20"
                         step="0.5"
                         disabled={isPending}
                         value={studentScores.firstCa}
                         onFocus={() => setActiveInputKey(student.regNo)}
-                        onChange={(e) => handleInputChange(student.regNo, "firstCa", e.target.value, student.id, result)}
+                        onChange={(e) => handleInputChange(student.regNo, "firstCa", e.target.value, student.id, result, student)}
                         onBlur={() => {
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                        className={`w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none shadow-xs ${
                           isCa1Over
-                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
-                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                            ? "border border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400"
                         }`}
-                        placeholder="—"
+                        placeholder="0 - 20"
                       />
                     </td>
-                    <td className="px-6 py-4">
+
+                    {/* 5. CA2 (Max: 20) */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
                       <input
                         id={`input-${student.regNo}-ca2`}
                         type="number"
                         min="0"
-                        max="15"
+                        max="20"
                         step="0.5"
                         disabled={isPending}
                         value={studentScores.secondCa}
                         onFocus={() => setActiveInputKey(student.regNo)}
-                        onChange={(e) => handleInputChange(student.regNo, "secondCa", e.target.value, student.id, result)}
+                        onChange={(e) => handleInputChange(student.regNo, "secondCa", e.target.value, student.id, result, student)}
                         onBlur={() => {
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                        className={`w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none shadow-xs ${
                           isCa2Over
-                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
-                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                            ? "border border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400"
                         }`}
-                        placeholder="—"
+                        placeholder="0 - 20"
                       />
                     </td>
-                    <td className="px-6 py-4">
+
+                    {/* 6. Termly Exam (Max: 60) */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
                       <input
                         id={`input-${student.regNo}-exam`}
                         type="number"
                         min="0"
-                        max="70"
+                        max="60"
                         step="0.5"
                         disabled={isPending}
                         value={studentScores.exam}
                         onFocus={() => setActiveInputKey(student.regNo)}
-                        onChange={(e) => handleInputChange(student.regNo, "exam", e.target.value, student.id, result)}
+                        onChange={(e) => handleInputChange(student.regNo, "exam", e.target.value, student.id, result, student)}
                         onBlur={() => {
                           setActiveInputKey(null);
                           handleSaveResult(student.regNo, student, result);
                         }}
-                        className={`w-20 border rounded p-1 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all focus:outline-none ${
+                        className={`w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 transition-all focus:outline-none shadow-xs ${
                           isExamOver
-                            ? "border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
-                            : "border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500"
+                            ? "border border-rose-500 ring-2 ring-rose-500 text-rose-600 dark:text-rose-400 focus:ring-rose-500"
+                            : "border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400"
                         }`}
-                        placeholder="—"
+                        placeholder="0 - 60"
                       />
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">
-                      {totalDisplay}
+
+                    {/* 7. Total (100) */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                      <span className="font-bold text-slate-900 dark:text-white font-mono text-sm">
+                        {totalDisplay}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">
-                      {gradeDisplay}
-                    </td>
-                    {showPositionColumn && (
-                      <td className="px-6 py-4 text-center">
-                        <span
-                          className={`inline-flex items-center justify-center min-w-[3rem] px-2 py-1 text-xs font-bold rounded-md ${
-                            position === 1
-                              ? "bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-sm"
-                              : position === 2
-                              ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shadow-sm"
-                              : position === 3
-                              ? "bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border border-orange-300 dark:border-orange-700 shadow-sm"
-                              : position > 3
-                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                              : "bg-slate-50 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700"
-                          }`}
-                          title={position > 0 ? `Position in ${selectedClass}: ${getOrdinalSuffix(position)}` : "Unranked / Absent"}
-                        >
-                          {position > 0 ? getOrdinalSuffix(position) : "—"}
+
+                    {/* 8. Grade */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                      {gradeDisplay === "—" ? (
+                        <span className="text-slate-400 dark:text-slate-500 text-sm font-mono">—</span>
+                      ) : (
+                        <span className={`inline-block px-2.5 py-0.5 rounded font-black text-xs font-mono ${
+                          gradeDisplay.startsWith("A")
+                            ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            : gradeDisplay.startsWith("B")
+                            ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                            : gradeDisplay.startsWith("C")
+                            ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            : gradeDisplay.startsWith("D") || gradeDisplay.startsWith("E")
+                            ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                            : "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                        }`}>
+                          {gradeDisplay}
                         </span>
-                      </td>
-                    )}
+                      )}
+                    </td>
+
+                    {/* 9. Remark */}
+                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                      {remarkDisplay === "—" ? (
+                        <span className="text-slate-400 dark:text-slate-500 text-sm">—</span>
+                      ) : (
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                          remarkDisplay === "Excellent"
+                            ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            : remarkDisplay === "Very Good"
+                            ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                            : remarkDisplay === "Credit"
+                            ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            : remarkDisplay === "Pass"
+                            ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                            : "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                        }`}>
+                          {remarkDisplay}
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
