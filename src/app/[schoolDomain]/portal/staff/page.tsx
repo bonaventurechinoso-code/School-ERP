@@ -2,42 +2,50 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { 
-  ShieldAlert, 
-  Users, 
-  BookOpen, 
-  Calendar, 
-  CheckSquare, 
-  ClipboardList, 
-  Briefcase, 
-  ArrowRight, 
-  LogOut, 
-  Building2, 
-  ArrowLeft 
-} from "lucide-react";
+import { getSession } from "@/lib/auth";
+import { ShieldAlert, Briefcase, LogOut, ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import StaffPortalClient from "./StaffPortalClient";
+import { fetchStaffPortalInitialData } from "./actions";
 
 export default async function TenantStaffPortalPage({
   params: paramsPromise,
   searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }>;
-  searchParams: Promise<{ denied?: string }>;
+  searchParams: Promise<{ denied?: string; tab?: string }>;
 }) {
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
+  const validTabs = ["overview", "rosters", "attendance", "gradebook"] as const;
+  const requestedTab = validTabs.includes(searchParams.tab as any)
+    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook")
+    : "overview";
 
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: schoolDomain },
-    include: {
-      academicTiers: true,
-    },
-  });
+  const [school, session] = await Promise.all([
+    basePrisma.school.findUnique({
+      where: { subdomain: schoolDomain },
+      include: {
+        academicTiers: {
+          orderBy: { level: "asc" },
+        },
+      },
+    }),
+    getSession(),
+  ]);
 
   if (!school) {
     return notFound();
   }
+
+  const initialData = await fetchStaffPortalInitialData(school.id);
+
+  const staffName =
+    session?.email
+      ? session.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : "Faculty Educator";
+  const staffRole = session?.staffRole || "Class Teacher";
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors duration-200">
@@ -49,12 +57,16 @@ export default async function TenantStaffPortalPage({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-black text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight truncate">Staff Portal</h1>
+              <h1 className="font-black text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight truncate">
+                Staff Portal
+              </h1>
               <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 truncate max-w-[120px] sm:max-w-none">
                 {school.name}
               </span>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">Educator & Staff Classroom Workspace</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
+              Educator & Staff Classroom Workspace
+            </p>
           </div>
         </div>
 
@@ -79,7 +91,6 @@ export default async function TenantStaffPortalPage({
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-6">
-        
         {/* Access Denied Interception Notice */}
         {isAccessDenied && (
           <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -102,138 +113,19 @@ export default async function TenantStaffPortalPage({
           </div>
         )}
 
-        {/* Staff Welcome Banner */}
-        <div className="bg-gradient-to-br from-emerald-900 via-teal-950 to-slate-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-          <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold mb-3 border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Active Faculty Member • {school.name}</span>
-              </div>
-              <h2 className="text-2xl sm:text-4xl font-black tracking-tight mb-2">
-                Staff & Educator Workspace
-              </h2>
-              <p className="text-sm text-emerald-200 max-w-xl">
-                Manage your assigned classrooms, mark student attendance, record assessment scores, and submit termly report grades.
-              </p>
-
-              {/* Academic Tiers Available */}
-              {school.academicTiers.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 mt-4 pt-2">
-                  <span className="text-xs text-emerald-300/70 font-semibold uppercase tracking-wider">Active School Tiers:</span>
-                  {school.academicTiers.map((tier) => (
-                    <span 
-                      key={tier.id}
-                      className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-emerald-100 border border-white/15 backdrop-blur-xs"
-                    >
-                      {tier.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-                <Briefcase className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs text-emerald-200 uppercase font-bold tracking-wider">Department</p>
-                <p className="text-sm font-black text-white">Academics & Instruction</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Metric Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Assigned Classes</span>
-              <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">4</p>
-            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">Active This Session</span>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Total Students</span>
-              <BookOpen className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">128</p>
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 mt-1 block">Across Assigned Streams</span>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Attendance Logged</span>
-              <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">100%</p>
-            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">Up to date today</span>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Pending Term Grades</span>
-              <ClipboardList className="w-4 h-4 text-amber-500" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">14</p>
-            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-1 block">Due this Friday</span>
-          </div>
-        </div>
-
-        {/* Educator Quick Links */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-6 shadow-xs">
-          <h3 className="text-base font-black text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-emerald-600" />
-            <span>Classroom Management Modules</span>
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition group cursor-pointer">
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                Classroom Rosters
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-3">
-                Review enrolled pupils, parent contacts, and special accommodations.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
-                <span>View Rosters</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition group cursor-pointer">
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                Daily Attendance Register
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-3">
-                Take morning and period roll calls with one-click bulk status toggles.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
-                <span>Open Register</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition group cursor-pointer">
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                Enter Term Assessments
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-3">
-                Input CA test results, exam scores, and automated remark rubrics.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
-                <span>Grade Entries</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-          </div>
-        </div>
-
+        {/* Interactive Staff Portal Client Module */}
+        <StaffPortalClient
+          schoolId={school.id}
+          schoolName={school.name}
+          schoolDomain={school.subdomain}
+          staffName={staffName}
+          staffRole={staffRole}
+          initialTiers={initialData.tiers}
+          initialClassrooms={initialData.classrooms}
+          initialCourses={initialData.courses}
+          initialStudents={initialData.students}
+          defaultTab={requestedTab}
+        />
       </main>
     </div>
   );
