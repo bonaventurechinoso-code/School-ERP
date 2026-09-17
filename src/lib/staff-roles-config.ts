@@ -158,3 +158,68 @@ export function getStaffTierBadgeLabel(category: StaffTierCategory): string {
       return "Primary School Tier";
   }
 }
+
+/**
+ * Dynamic Staff Role Presentation Wrapper
+ * Safely maps core system roles to appropriate educational terminology based on the active tier,
+ * preventing tertiary titles (e.g. Lecturer, Professor) from bleeding into K-12 or Nursery environments.
+ */
+export function formatStaffRoleByTier(role: string, category: StaffTierCategory = "PRIMARY"): string {
+  if (!role) return "Staff Member";
+  const norm = role.toUpperCase().trim().replace(/[\s-]+/g, "_");
+
+  if (category === "NURSERY") {
+    if (norm.includes("PROFESSOR") || norm.includes("READER")) return "Early Educator";
+    if (norm.includes("LECTURER") || norm.includes("FACULTY")) return "Caregiver";
+    if (norm.includes("TEACHER")) return "Early Educator";
+    if (norm.includes("NANNY") || norm.includes("CLEANER")) return "Nanny";
+    if (norm.includes("CAREGIVER")) return "Caregiver";
+    if (norm.includes("HEADMASTER") || norm.includes("PRINCIPAL") || norm.includes("PROVOST") || norm.includes("DEAN")) {
+      return "Head Teacher";
+    }
+  } else if (category === "PRIMARY") {
+    if (norm.includes("PROFESSOR") || norm.includes("READER") || norm.includes("LECTURER") || norm.includes("FACULTY")) {
+      return "Class Teacher";
+    }
+    if (norm.includes("PRINCIPAL") || norm.includes("PROVOST") || norm.includes("DEAN") || norm.includes("RECTOR") || norm.includes("CHANCELLOR")) {
+      return "Headmaster / Headmistress";
+    }
+    if (norm.includes("CAREGIVER") || norm.includes("NANNY")) {
+      return "Class Assistant";
+    }
+  } else if (category === "SECONDARY") {
+    if (norm.includes("PROFESSOR") || norm.includes("READER") || norm.includes("LECTURER") || norm.includes("FACULTY")) {
+      return "Subject Teacher";
+    }
+    if (norm.includes("HEADMASTER") || norm.includes("PROVOST") || norm.includes("RECTOR") || norm.includes("CHANCELLOR")) {
+      return "Principal";
+    }
+    if (norm.includes("DEAN")) {
+      return "Dean of Studies";
+    }
+    if (norm.includes("CAREGIVER") || norm.includes("NANNY")) {
+      return "Lab Attendant";
+    }
+  } else if (category === "TERTIARY") {
+    // Retain and polish tertiary academic roles
+    if (norm === "PROFESSOR") return "Professor";
+    if (norm.includes("ASSOCIATE_PROFESSOR") || norm.includes("READER")) return "Associate Professor / Reader";
+    if (norm.includes("SENIOR_LECTURER")) return "Senior Lecturer";
+    if (norm === "LECTURER_I" || norm === "LECTURER_1") return "Lecturer I";
+    if (norm === "LECTURER_II" || norm === "LECTURER_2") return "Lecturer II";
+    if (norm.includes("ASSISTANT_LECTURER")) return "Assistant Lecturer";
+    if (norm.includes("GRADUATE_ASSISTANT")) return "Graduate Assistant";
+    if (norm === "LECTURER") return "Lecturer";
+  }
+
+  // Normalize snake_case or SCREAMING_SNAKE to Title Case
+  if (norm.includes("_")) {
+    return role
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  return role;
+}
+

@@ -1,18 +1,28 @@
+import { cookies } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { createDepartment, generatePayroll } from "./actions";
 import PayrollDirectoryClient from "./PayrollDirectoryClient";
 import { PlusCircle, Building } from "lucide-react";
+import { resolveStaffTierCategory, formatStaffRoleByTier } from "@/lib/staff-roles-config";
 
 export default async function HRPayrollPage({ 
-  params: paramsPromise 
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
 }: { 
-  params: Promise<{ schoolDomain: string }> | { schoolDomain: string }
+  params: Promise<{ schoolDomain: string }> | { schoolDomain: string };
+  searchParams?: Promise<{ tier?: string }>;
 }) {
   const params = await Promise.resolve(paramsPromise);
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+  const cookieStore = await cookies();
+  const cookieTier = cookieStore.get("activeTier")?.value;
+  const activeTierParam = searchParams?.tier || cookieTier;
+
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: {
       departments: true,
+      academicTiers: true,
       staff: {
         include: { department: true, PayrollRecord: true },
         orderBy: { firstName: "asc" },
@@ -28,6 +38,9 @@ export default async function HRPayrollPage({
       </div>
     );
   }
+
+  const effectiveTier = activeTierParam || school.academicTiers?.[0]?.name;
+  const tierCategory = resolveStaffTierCategory(effectiveTier);
 
   async function handleCreateDepartmentAction(formData: FormData) {
     "use server";
@@ -53,6 +66,7 @@ export default async function HRPayrollPage({
         walletBalance={school.walletBalance}
         departments={school.departments}
         staff={school.staff}
+        activeTier={effectiveTier}
       />
 
       {/* OPERATIONAL FORMS: NEW DEPT & GENERATE PAYROLL */}
@@ -74,7 +88,7 @@ export default async function HRPayrollPage({
               type="text" 
               name="name" 
               placeholder="e.g. Humanities & Social Sciences" 
-              className="border border-slate-300 rounded-lg p-2.5 text-sm w-full sm:flex-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="border border-slate-300 rounded-lg p-2.5 text-sm w-full sm:flex-1 focus:ring-2 focus:ring-indigo-500 outline-none" 
               required 
             />
             <button 
@@ -103,7 +117,7 @@ export default async function HRPayrollPage({
                 <option value="">-- Choose Employee --</option>
                 {school.staff.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.firstName} {s.lastName} ({s.role}) {s.department ? `• ${s.department.name}` : ""}
+                    {s.firstName} {s.lastName} ({formatStaffRoleByTier(s.role, tierCategory)}) {s.department ? `• ${s.department.name}` : ""}
                   </option>
                 ))}
               </select>

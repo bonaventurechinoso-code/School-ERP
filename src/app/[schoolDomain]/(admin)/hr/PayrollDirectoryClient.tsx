@@ -1,10 +1,17 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useTenant } from "@/lib/tenant-context";
 import { disbursePayroll, voidPayroll, deleteDepartment } from "./actions";
 import BankDetailsForm from "./BankDetailsForm";
 import PaySlipModal, { PaySlipData } from "./PaySlipModal";
-import { Wallet, AlertCircle, FileText, CheckCircle2, Trash2 } from "lucide-react";
+import { Wallet, AlertCircle, FileText, CheckCircle2, Trash2, Building } from "lucide-react";
+import { 
+  StaffTierCategory, 
+  resolveStaffTierCategory, 
+  formatStaffRoleByTier 
+} from "@/lib/staff-roles-config";
 
 export interface PayrollDirectoryProps {
   schoolDomain: string;
@@ -12,6 +19,7 @@ export interface PayrollDirectoryProps {
   walletBalance: number;
   departments: { id: string; name: string }[];
   staff: any[];
+  activeTier?: string;
 }
 
 export default function PayrollDirectoryClient({
@@ -20,7 +28,15 @@ export default function PayrollDirectoryClient({
   walletBalance,
   departments,
   staff,
+  activeTier,
 }: PayrollDirectoryProps) {
+  const tenant = useTenant();
+  const searchParams = useSearchParams();
+  const paramTier = searchParams?.get("tier");
+
+  const effectiveTier = paramTier || activeTier || (tenant as any)?.activeTier || tenant?.preciseTier || "PRIMARY";
+  const tierCategory: StaffTierCategory = resolveStaffTierCategory(effectiveTier);
+
   const [isPending, startTransition] = useTransition();
   const [selectedPaySlip, setSelectedPaySlip] = useState<PaySlipData | null>(null);
   const [actionAlert, setActionAlert] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -82,8 +98,8 @@ export default function PayrollDirectoryClient({
   return (
     <div className="space-y-6">
       {/* WALLET BALANCE & HR KPI BANNER */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between min-h-[180px]">
           <div className="flex items-center justify-between">
             <span className="text-xs uppercase font-bold tracking-wider text-indigo-300">School Wallet Balance</span>
             <Wallet className="w-5 h-5 text-indigo-400" />
@@ -104,7 +120,7 @@ export default function PayrollDirectoryClient({
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between min-h-[180px]">
           <div className="text-xs uppercase font-bold tracking-wider text-slate-500">Pending Payroll Liability</div>
           <div className="my-3">
             <div className={`text-3xl font-extrabold tracking-tight font-mono ${totalPending > walletBalance ? 'text-rose-600' : 'text-slate-900'}`}>
@@ -125,15 +141,23 @@ export default function PayrollDirectoryClient({
           <div className="text-xs text-slate-400">Total unprocessed salary records awaiting payout</div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
-          <div className="text-xs uppercase font-bold tracking-wider text-slate-500">Staff Count & Departments</div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between min-h-[180px]">
+          <div className="text-xs uppercase font-bold tracking-wider text-slate-500">Staff Count & Organization</div>
           <div className="my-3">
             <div className="text-3xl font-extrabold tracking-tight text-slate-900">
               {staff.length} <span className="text-base font-normal text-slate-500">Staff Members</span>
             </div>
-            <div className="text-xs text-slate-500 mt-1">Distributed across {departments.length} departments</div>
+            <div className="text-xs text-slate-500 mt-1">
+              {departments.length > 0 
+                ? `Organized across ${departments.length} department${departments.length > 1 ? "s" : ""}` 
+                : "Staff members unassigned to departments"}
+            </div>
           </div>
-          <div className="text-xs text-slate-400">All staff bio-data and banking profiles are synchronized</div>
+          <div className="text-xs text-slate-400">
+            {departments.length > 0 
+              ? "All staff bio-data and banking profiles are synchronized" 
+              : "Operating under centralized institutional administrative pool"}
+          </div>
         </div>
       </div>
 
@@ -149,9 +173,23 @@ export default function PayrollDirectoryClient({
 
       {/* DEPARTMENTS QUICK BAR */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-        <h4 className="text-sm font-bold uppercase tracking-wider text-slate-600 mb-3">Academic & Operational Departments</h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-bold uppercase tracking-wider text-slate-600">Academic & Operational Departments</h4>
+          {departments.length > 0 && (
+            <span className="text-xs text-slate-400 font-medium">
+              {departments.length} {departments.length === 1 ? "department" : "departments"} configured
+            </span>
+          )}
+        </div>
         {departments.length === 0 ? (
-          <p className="text-xs text-slate-400">No departments configured yet. Add one below.</p>
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center gap-2.5">
+              <Building className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>
+                <strong>No institutional departments configured yet.</strong> Staff members are unassigned to specific operational departments and managed under the central directory.
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {departments.map((d) => {
@@ -214,7 +252,7 @@ export default function PayrollDirectoryClient({
                     </td>
 
                     <td className="p-4 align-top">
-                      <div className="font-medium text-slate-800">{s.role}</div>
+                      <div className="font-medium text-slate-800">{formatStaffRoleByTier(s.role, tierCategory)}</div>
                       <div className="text-xs text-slate-500">{s.department?.name || "General"}</div>
                     </td>
 
@@ -274,7 +312,10 @@ export default function PayrollDirectoryClient({
                                       payDate: pr.payDate,
                                       status: pr.status,
                                       receiptCode: pr.receiptCode,
-                                      staff: s,
+                                      staff: {
+                                        ...s,
+                                        role: formatStaffRoleByTier(s.role, tierCategory),
+                                      },
                                       schoolName,
                                     })}
                                     className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium transition"
