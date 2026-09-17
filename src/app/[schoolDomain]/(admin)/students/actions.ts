@@ -948,3 +948,286 @@ export async function executeTermEndPromotionAction(
     };
   }
 }
+
+export interface PromoteStudentSingleParams {
+  studentId: string;
+  targetClass?: string;
+  targetTierId?: string;
+  reason?: string;
+  tierContext?: string;
+}
+
+/**
+ * Direct promotion for individual students from the profile drawer or row action.
+ * Records audit history in dynamicFields.promotionHistory.
+ */
+export async function promoteStudentSingle(
+  schoolId: string,
+  params: PromoteStudentSingleParams
+) {
+  try {
+    const tenantDb = await resolveDbForAction(schoolId, params.tierContext);
+    const existing = await tenantDb.student.findUnique({
+      where: { id: params.studentId },
+      include: { tier: true }
+    });
+
+    if (!existing) {
+      return { success: false, error: "Student not found in tier database." };
+    }
+
+    let nextClass = params.targetClass;
+    let isGraduation = false;
+
+    if (!nextClass) {
+      const calc = await getNextGrade(existing.currentClass, existing.tier?.name || params.tierContext);
+      nextClass = calc.nextClass || undefined;
+      isGraduation = calc.isGraduation;
+    }
+
+    const dynamicFields = (existing.dynamicFields as Record<string, any>) || {};
+    const promotionHistory = Array.isArray(dynamicFields.promotionHistory) ? [...dynamicFields.promotionHistory] : [];
+
+    const historyEntry = {
+      date: new Date().toISOString(),
+      fromClass: existing.currentClass || "Unassigned",
+      toClass: isGraduation ? "Alumni" : nextClass || "Next Grade",
+      fromTier: existing.tier?.name || params.tierContext || "Current Tier",
+      toTier: params.targetTierId ? "New Tier" : (existing.tier?.name || params.tierContext || "Current Tier"),
+      type: isGraduation ? "GRADUATION" : params.targetTierId ? "TIER_TRANSITION" : "PROMOTION",
+      remarks: params.reason || (isGraduation ? "Graduated to Alumni" : "Class Promotion")
+    };
+    promotionHistory.unshift(historyEntry);
+
+    const updateData: any = {
+      dynamicFields: {
+        ...dynamicFields,
+        promotionHistory
+      }
+    };
+
+    if (isGraduation) {
+      updateData.status = "ALUMNI";
+      updateData.alumniAt = new Date();
+      updateData.currentClass = null;
+    } else {
+      updateData.currentClass = nextClass;
+      if (params.targetTierId) {
+        updateData.tierId = params.targetTierId;
+      }
+    }
+
+    const updated = await tenantDb.student.update({
+      where: { id: params.studentId },
+      data: updateData,
+      include: { tier: true }
+    });
+
+    try {
+      await basePrisma.student.update({
+        where: { id: params.studentId },
+        data: updateData
+      });
+    } catch {}
+
+    await invalidateStudentNamespace(schoolId, params.tierContext);
+    safeRevalidatePath("/[schoolDomain]/students", "page");
+
+    return { success: true, student: updated, isGraduation };
+  } catch (error: any) {
+    console.error("[Server Action] promoteStudentSingle error:", error);
+    return { success: false, error: error.message || "Failed to promote student." };
+  }
+}
+
+export interface TransitionStudentTierParams {
+  studentIds: string[];
+  targetTierId: string;
+  targetClass: string;
+  tierContext?: string;
+  reason?: string;
+}
+
+/**
+ * Moves individual students or cohorts across structural academic tiers
+ * (e.g. Daycare/Nursery 2 -> Primary 1, or Primary 6 -> JSS 1).
+ */
+export async function transitionStudentTier(
+  schoolId: string,
+  params: TransitionStudentTierParams
+) {
+  try {
+    const tenantDb = await resolveDbForAction(schoolId, params.tierContext);
+    const targetTier = await basePrisma.academicTier.findUnique({
+      where: { id: params.targetTierId }
+    });
+
+    if (!targetTier) {
+      return { success: false, error: "Target academic tier not found." };
+    }
+
+    let count = 0;
+    for (const studentId of params.studentIds) {
+      const existing = await tenantDb.student.findUnique({
+        where: { id: studentId },
+        include: { tier: true }
+      });
+      if (!existing) continue;
+
+      const dynamicFields = (existing.dynamicFields as Record<string, any>) || {};
+      const promotionHistory = Array.isArray(dynamicFields.promotionHistory) ? [...dynamicFields.promotionHistory] : [];
+
+      promotionHistory.unshift({
+        date: new Date().toISOString(),
+        fromClass: existing.currentClass || "Unassigned",
+        toClass: params.targetClass,
+        fromTier: existing.tier?.name || params.tierContext || "Previous Tier",
+        toTier: targetTier.name,
+        type: "TIER_TRANSITION",
+        remarks: params.reason || `Transitioned to ${targetTier.name}`
+      });
+
+      const updateData = {
+        tierId: params.targetTierId,
+        currentClass: params.targetClass,
+        dynamicFields: {
+          ...dynamicFields,
+          promotionHistory
+        }
+      };
+
+      await tenantDb.student.update({
+        where: { id: studentId },
+        data: updateData
+      });
+
+      try {
+        await basePrisma.student.update({
+          where: { id: studentId },
+          data: updateData
+        });
+      } catch {}
+
+      count++;
+    }
+
+    await invalidateStudentNamespace(schoolId, params.tierContext);
+    safeRevalidatePath("/[schoolDomain]/students", "page");
+
+    return { success: true, count, targetTierName: targetTier.name };
+  } catch (error: any) {
+    console.error("[Server Action] transitionStudentTier error:", error);
+    return { success: false, error: error.message || "Failed to transition students to tier." };
+  }
+}
+
+export interface StudentKycPayload {
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  stateOfOrigin?: string;
+  email?: string;
+  admissionNumber?: string;
+  currentClass?: string;
+  tierId?: string;
+  parentName?: string;
+  parentOccupation?: string;
+  parentPhone?: string;
+  parentWhatsApp?: string;
+  parentEmail?: string;
+  nin?: string;
+  lgaOfOrigin?: string;
+  bloodGroup?: string;
+  genotype?: string;
+  allergies?: string;
+  medicalNotes?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  birthCertVerified?: boolean;
+  ninVerified?: boolean;
+  medicalCertVerified?: boolean;
+  previousSchoolVerified?: boolean;
+  passportPhotoUrl?: string;
+}
+
+/**
+ * Updates Student Bio-Data, Guardian details, Health profiles (Blood Group, Genotype),
+ * and official Nigerian KYC document verification statuses.
+ */
+export async function updateStudentKyc(
+  schoolId: string,
+  studentId: string,
+  kyc: StudentKycPayload,
+  tierContext?: string
+) {
+  try {
+    const tenantDb = await resolveDbForAction(schoolId, tierContext);
+    const existing = await tenantDb.student.findUnique({
+      where: { id: studentId },
+      include: { tier: true }
+    });
+
+    if (!existing) {
+      return { success: false, error: "Student not found in tier database." };
+    }
+
+    const existingFields = (existing.dynamicFields as Record<string, any>) || {};
+
+    const updatedDynamicFields = {
+      ...existingFields,
+      nin: kyc.nin !== undefined ? kyc.nin : existingFields.nin,
+      lgaOfOrigin: kyc.lgaOfOrigin !== undefined ? kyc.lgaOfOrigin : existingFields.lgaOfOrigin,
+      bloodGroup: kyc.bloodGroup !== undefined ? kyc.bloodGroup : existingFields.bloodGroup,
+      genotype: kyc.genotype !== undefined ? kyc.genotype : existingFields.genotype,
+      allergies: kyc.allergies !== undefined ? kyc.allergies : existingFields.allergies,
+      medicalNotes: kyc.medicalNotes !== undefined ? kyc.medicalNotes : existingFields.medicalNotes,
+      emergencyContactName: kyc.emergencyContactName !== undefined ? kyc.emergencyContactName : existingFields.emergencyContactName,
+      emergencyContactPhone: kyc.emergencyContactPhone !== undefined ? kyc.emergencyContactPhone : existingFields.emergencyContactPhone,
+      birthCertVerified: kyc.birthCertVerified !== undefined ? kyc.birthCertVerified : existingFields.birthCertVerified,
+      ninVerified: kyc.ninVerified !== undefined ? kyc.ninVerified : existingFields.ninVerified,
+      medicalCertVerified: kyc.medicalCertVerified !== undefined ? kyc.medicalCertVerified : existingFields.medicalCertVerified,
+      previousSchoolVerified: kyc.previousSchoolVerified !== undefined ? kyc.previousSchoolVerified : existingFields.previousSchoolVerified,
+      passportPhotoUrl: kyc.passportPhotoUrl !== undefined ? kyc.passportPhotoUrl : existingFields.passportPhotoUrl,
+      lastKycAuditedAt: new Date().toISOString()
+    };
+
+    const updateData: any = {
+      dynamicFields: updatedDynamicFields
+    };
+
+    if (kyc.firstName !== undefined) updateData.firstName = kyc.firstName;
+    if (kyc.lastName !== undefined) updateData.lastName = kyc.lastName;
+    if (kyc.email !== undefined) updateData.email = kyc.email;
+    if (kyc.admissionNumber !== undefined) updateData.admissionNumber = kyc.admissionNumber;
+    if (kyc.currentClass !== undefined) updateData.currentClass = kyc.currentClass;
+    if (kyc.tierId !== undefined) updateData.tierId = kyc.tierId;
+    if (kyc.stateOfOrigin !== undefined) updateData.stateOfOrigin = kyc.stateOfOrigin;
+    if (kyc.dateOfBirth !== undefined) updateData.dateOfBirth = kyc.dateOfBirth ? new Date(kyc.dateOfBirth) : null;
+    if (kyc.parentName !== undefined) updateData.parentName = kyc.parentName;
+    if (kyc.parentOccupation !== undefined) updateData.parentOccupation = kyc.parentOccupation;
+    if (kyc.parentPhone !== undefined) updateData.parentPhone = kyc.parentPhone;
+    if (kyc.parentWhatsApp !== undefined) updateData.parentWhatsApp = kyc.parentWhatsApp;
+    if (kyc.parentEmail !== undefined) updateData.parentEmail = kyc.parentEmail;
+
+    const updatedStudent = await tenantDb.student.update({
+      where: { id: studentId },
+      data: updateData,
+      include: { tier: true }
+    });
+
+    try {
+      await basePrisma.student.update({
+        where: { id: studentId },
+        data: updateData
+      });
+    } catch {}
+
+    await invalidateStudentNamespace(schoolId, tierContext);
+    safeRevalidatePath("/[schoolDomain]/students", "page");
+
+    return { success: true, student: updatedStudent };
+  } catch (error: any) {
+    console.error("[Server Action] updateStudentKyc error:", error);
+    return { success: false, error: error.message || "Failed to update student KYC records." };
+  }
+}

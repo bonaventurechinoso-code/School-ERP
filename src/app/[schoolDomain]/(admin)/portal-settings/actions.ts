@@ -18,12 +18,13 @@ export async function updatePortalSettings(
     contactPhone?: string;
     isPublicPortalEnabled: boolean; 
     welcomeGreeting: string;
-  }
+  },
+  schoolDomain?: string
 ) {
   try {
     const updatePayload: any = {
       isPublicPortalEnabled: data.isPublicPortalEnabled,
-      welcomeGreeting: data.welcomeGreeting,
+      welcomeGreeting: data.welcomeGreeting.trim(),
     };
 
     if (data.name?.trim()) {
@@ -38,11 +39,17 @@ export async function updatePortalSettings(
       data: updatePayload
     });
     
-    safeRevalidatePath(`/[schoolDomain]/portal-settings`, "page");
-    safeRevalidatePath(`/[schoolDomain]`, "layout");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/portal-settings`, "page");
+      safeRevalidatePath(`/${schoolDomain}`, "page");
+      safeRevalidatePath(`/${schoolDomain}`, "layout");
+      safeRevalidatePath(`/${schoolDomain}/apply`, "page");
+    } else {
+      safeRevalidatePath(`/portal-settings`, "page");
+    }
     return { success: true };
   } catch (error: any) {
-    console.error("[Server Action] Failed to update portal settings:", error);
+    console.error("[Portal Settings Action] Failed to update portal settings:", error);
     return { success: false, error: error.message || "Failed to update portal settings." };
   }
 }

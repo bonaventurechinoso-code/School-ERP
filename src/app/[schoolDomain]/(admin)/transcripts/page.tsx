@@ -1,6 +1,6 @@
 import React from "react";
 import { notFound } from "next/navigation";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts } from "@/lib/gpa";
 import AnnualBroadsheetClient from "./AnnualBroadsheetClient";
 import { fetchAnnualBroadsheet } from "./actions";
@@ -43,10 +43,14 @@ export default async function TranscriptsPage({
   });
 
   // 3. Fetch All Active Students for the Transcripts Directory
-  const tenantDb = getTenantClient(school.id);
+  const tenantDb = await getPrismaClientForTier(school.id, defaultTier);
   const studentsRaw = await tenantDb.student.findMany({
-    where: { status: { in: ["ACTIVE", "ENROLLED"] } },
+    where: { 
+      schoolId: school.id,
+      status: { in: ["ACTIVE", "ENROLLED"] } 
+    },
     include: {
+      tier: true,
       ExamResult: {
         include: {
           exam: {
@@ -65,6 +69,7 @@ export default async function TranscriptsPage({
       name: `${s.lastName}, ${s.firstName}`,
       admissionNumber: s.admissionNumber,
       currentClass: s.currentClass,
+      tierName: s.tier?.name || defaultTier,
       status: s.status,
       cumulativeGPA,
     };
@@ -72,6 +77,7 @@ export default async function TranscriptsPage({
 
   return (
     <AnnualBroadsheetClient
+      schoolId={school.id}
       schoolDomain={schoolDomain}
       schoolName={school.name}
       initialStudents={studentDirectory}

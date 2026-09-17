@@ -12,11 +12,13 @@ import {
   PlusCircle, 
   Layers, 
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Building2,
 } from "lucide-react";
 import InvoiceTable from "./InvoiceTable";
 import FeeTemplatesList from "./FeeTemplatesList";
 import LedgerTable from "./LedgerTable";
+import BankReconciliationView from "./BankReconciliationView";
 import { useActiveTierConfig } from "@/hooks/useClientTier";
 
 export function formatNaira(amount: number): string {
@@ -29,6 +31,7 @@ type InvoiceWithDetails = Invoice & {
 };
 
 export default function FinanceDashboard({
+  initialTab,
   hasHigherEd,
   activeTier,
   invoices,
@@ -42,6 +45,7 @@ export default function FinanceDashboard({
   totalExpenses,
   outstandingBalance,
 }: {
+  initialTab?: "overview" | "invoices" | "templates" | "ledger" | "reconciliation";
   hasHigherEd: boolean;
   activeTier?: string;
   invoices: InvoiceWithDetails[];
@@ -64,7 +68,18 @@ export default function FinanceDashboard({
   const tierStudents = React.useMemo(() => filterStudents(students), [students, filterStudents]);
   const tierClassrooms = React.useMemo(() => classrooms ? filterClasses(classrooms) : [], [classrooms, filterClasses]);
 
-  const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "templates" | "ledger">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "templates" | "ledger" | "reconciliation">(
+    initialTab || "overview"
+  );
+
+  const unallocatedCount = React.useMemo(() => {
+    return transactions.filter(
+      (t) =>
+        (t.category === "BANK_DEPOSIT" || t.type === "INCOME") &&
+        !t.referenceId?.includes("INV:") &&
+        !t.description.includes("[RECONCILED")
+    ).length;
+  }, [transactions]);
 
   const netCashFlow = totalPaid - totalExpenses;
   const collectionRate = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 0;
@@ -117,11 +132,28 @@ export default function FinanceDashboard({
         >
           General Ledger & Expenses ({transactions.length})
         </button>
+        <button
+          onClick={() => setActiveTab("reconciliation")}
+          className={`pb-3 font-semibold text-xs sm:text-sm whitespace-nowrap shrink-0 transition-colors inline-flex items-center gap-1.5 ${
+            activeTab === "reconciliation" 
+              ? "border-b-2 text-slate-900 dark:text-white" 
+              : "text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200"
+          }`}
+          style={{ borderBottomColor: activeTab === "reconciliation" ? tenant.branding.primaryColor : "transparent" }}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Bank Reconciliation</span>
+          {unallocatedCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white">
+              {unallocatedCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Content */}
       <div className="pt-2">
-        {activeTab === "overview" && (
+        <div className={activeTab === "overview" ? "block" : "hidden"}>
           <div className="space-y-6 animate-in fade-in duration-300">
             {/* Quick Action Shortcuts */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-zinc-900/60 rounded-2xl border border-slate-200 dark:border-zinc-800">
@@ -138,6 +170,13 @@ export default function FinanceDashboard({
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   <span>Issue Invoice</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("reconciliation")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Reconcile Deposits</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("ledger")}
@@ -238,41 +277,43 @@ export default function FinanceDashboard({
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {activeTab === "invoices" && (
-          <div className="animate-in fade-in duration-300">
-            <InvoiceTable 
-              activeTier={activeTier}
-              invoices={tierInvoices} 
-              students={tierStudents} 
-              feeTemplates={tierTemplates}
-              schoolId={schoolId} 
-            />
-          </div>
-        )}
+        <div className={activeTab === "invoices" ? "block" : "hidden"}>
+          <InvoiceTable 
+            activeTier={activeTier}
+            invoices={tierInvoices} 
+            students={tierStudents} 
+            feeTemplates={tierTemplates}
+            schoolId={schoolId} 
+          />
+        </div>
 
-        {activeTab === "templates" && (
-          <div className="animate-in fade-in duration-300">
-            <FeeTemplatesList 
-              hasHigherEd={hasHigherEd}
-              activeTier={activeTier}
-              feeTemplates={tierTemplates}
-              students={tierStudents}
-              classrooms={tierClassrooms}
-              schoolId={schoolId} 
-            />
-          </div>
-        )}
+        <div className={activeTab === "templates" ? "block" : "hidden"}>
+          <FeeTemplatesList 
+            hasHigherEd={hasHigherEd}
+            activeTier={activeTier}
+            feeTemplates={tierTemplates}
+            students={tierStudents}
+            classrooms={tierClassrooms}
+            schoolId={schoolId} 
+          />
+        </div>
 
-        {activeTab === "ledger" && (
-          <div className="animate-in fade-in duration-300">
-            <LedgerTable 
-              transactions={transactions} 
-              schoolId={schoolId}
-            />
-          </div>
-        )}
+        <div className={activeTab === "ledger" ? "block" : "hidden"}>
+          <LedgerTable 
+            transactions={transactions} 
+            schoolId={schoolId}
+          />
+        </div>
+
+        <div className={activeTab === "reconciliation" ? "block" : "hidden"}>
+          <BankReconciliationView
+            schoolId={schoolId}
+            transactions={transactions}
+            invoices={invoices}
+          />
+        </div>
       </div>
     </div>
   );

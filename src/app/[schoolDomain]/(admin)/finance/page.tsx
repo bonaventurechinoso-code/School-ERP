@@ -1,6 +1,7 @@
 import React, { Suspense } from "react";
+import Link from "next/link";
 import { cookies } from "next/headers";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import FinanceDashboard from "./FinanceDashboard";
 import { fetchInvoicesPaginated, fetchTransactionsPaginated } from "./actions";
@@ -10,7 +11,7 @@ export default async function FinancePage({
   searchParams: searchParamsPromise,
 }: { 
   params: Promise<{ schoolDomain: string }>;
-  searchParams?: Promise<{ tier?: string }>;
+  searchParams?: Promise<{ tier?: string; tab?: string }>;
 }) {
   const params = await paramsPromise;
   const searchParams = searchParamsPromise ? await searchParamsPromise : {};
@@ -55,7 +56,7 @@ export default async function FinancePage({
 
   const activeTierName = activeTierObj ? activeTierObj.name : (requestedTierParam || cookieTier || "");
 
-  const tenantDb = getTenantClient(school.id);
+  const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
   // High-performance cursor pagination and database aggregations for flat query speeds
   const [
@@ -119,13 +120,37 @@ export default async function FinancePage({
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      <header>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-          Fee Tracking & Finance
-        </h2>
-        <p className="text-slate-500 dark:text-zinc-400 mt-2 text-lg">
-          Manage invoices, record payments, and track institutional cash flow.
-        </p>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
+            Fee Tracking & Finance
+          </h2>
+          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
+            Manage invoices, record payments, and track institutional cash flow across all educational tiers.
+          </p>
+        </div>
+
+        {/* Academic Tier Switcher */}
+        {school.academicTiers.length > 1 && (
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 overflow-x-auto shrink-0">
+            {school.academicTiers.map((tier) => {
+              const isSelected = activeTierName.toLowerCase() === tier.name.toLowerCase();
+              return (
+                <Link
+                  key={tier.id}
+                  href={`/${params.schoolDomain}/finance?tier=${encodeURIComponent(tier.name)}`}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    isSelected
+                      ? "bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {tier.name}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       <Suspense fallback={
@@ -139,6 +164,7 @@ export default async function FinancePage({
         </div>
       }>
         <FinanceDashboard 
+          initialTab={searchParams?.tab as any}
           hasHigherEd={hasHigherEd}
           activeTier={activeTierName}
           invoices={invoicesResult.items}

@@ -123,14 +123,37 @@ export default async function StudentsPage({
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex flex-wrap items-center gap-2 sm:gap-3">
-          <span>Student Roster</span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <span>Student Roster</span>
+          </h2>
           {activeTierObj && (
             <span className="text-[11px] sm:text-xs uppercase tracking-wider px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full font-extrabold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
               {activeTierObj.name}
             </span>
           )}
-        </h2>
+        </div>
+
+        {school.academicTiers.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/60">
+            {school.academicTiers.map((t) => {
+              const isActive = t.name === activeTierName;
+              return (
+                <a
+                  key={t.id}
+                  href={`?tier=${encodeURIComponent(t.name)}`}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                    isActive
+                      ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200 dark:border-zinc-700"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {t.name}
+                </a>
+              );
+            })}
+          </div>
+        )}
       </header>
       
       <Suspense fallback={

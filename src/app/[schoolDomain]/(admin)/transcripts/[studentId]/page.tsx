@@ -13,7 +13,7 @@ import {
   FileCheck,
   Clock,
 } from "lucide-react";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts, getDegreeClass } from "@/lib/gpa";
 import {
   compileAnnualTerms,
@@ -147,9 +147,10 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
     return notFound();
   }
 
-  // 2. Fetch Student with Relations
-  const tenantDb = getTenantClient(school.id);
-  const student = await tenantDb.student.findUnique({
+  // 2. Fetch Student with Relations using Tier-Aware Database Client
+  const defaultTier = school.academicTiers[0]?.name || "Secondary School";
+  const tenantDb = await getPrismaClientForTier(school.id, defaultTier);
+  let student = await tenantDb.student.findUnique({
     where: { id: studentId },
     include: {
       tier: true,
@@ -167,6 +168,36 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
       reportCards: true,
     },
   });
+
+  // If student belongs to a specific tier different from default, query that tier client
+  if (student?.tier?.name && student.tier.name !== defaultTier) {
+    try {
+      const tierDb = await getPrismaClientForTier(school.id, student.tier.name);
+      const tierStudent = await tierDb.student.findUnique({
+        where: { id: studentId },
+        include: {
+          tier: true,
+          ExamResult: {
+            include: {
+              exam: {
+                include: {
+                  course: {
+                    include: { tier: true },
+                  },
+                },
+              },
+            },
+          },
+          reportCards: true,
+        },
+      });
+      if (tierStudent) {
+        student = tierStudent;
+      }
+    } catch {
+      // Fallback kept
+    }
+  }
 
   if (!student) {
     return notFound();
@@ -480,7 +511,99 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
         </div>
 
         {/* ========================================================= */}
-        {/* 5. OFFICIAL ENDORSEMENT & SECURITY SEAL                   */}
+        {/* 5. OFFICIAL GRADING SCALE & ASSESSMENT KEY                */}
+        {/* ========================================================= */}
+        <div className="p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs space-y-3 print:bg-white print:border-slate-300">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+            <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+              <FileCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Official Grading Scale & Assessment Interpretation</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {isHigherEd ? "NUC / NBTE 5.00 CGPA Standard" : "WAEC / NECO / Basic Education Standard"}
+            </span>
+          </div>
+
+          {isHigherEd ? (
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-[11px]">
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-blue-600">A (70-100%)</div>
+                <div className="text-slate-500 text-[10px]">5.00 GP • First Class</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-blue-600">B (60-69%)</div>
+                <div className="text-slate-500 text-[10px]">4.00 GP • 2nd Class Upper</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-slate-700 dark:text-slate-300">C (50-59%)</div>
+                <div className="text-slate-500 text-[10px]">3.00 GP • 2nd Class Lower</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-slate-700 dark:text-slate-300">D (45-49%)</div>
+                <div className="text-slate-500 text-[10px]">2.00 GP • Third Class</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-amber-600">E (40-44%)</div>
+                <div className="text-slate-500 text-[10px]">1.00 GP • Pass Degree</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-rose-600">F (0-39%)</div>
+                <div className="text-slate-500 text-[10px]">0.00 GP • Fail</div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5 text-center text-[10px]">
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-emerald-600 text-xs">A1</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">75-100%</div>
+                <div className="text-[9px] text-slate-400">Distinction</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-blue-600 text-xs">B2</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">70-74%</div>
+                <div className="text-[9px] text-slate-400">Very Good</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-blue-600 text-xs">B3</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">65-69%</div>
+                <div className="text-[9px] text-slate-400">Good</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-indigo-600 text-xs">C4</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">60-64%</div>
+                <div className="text-[9px] text-slate-400">Credit</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-indigo-600 text-xs">C5</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">55-59%</div>
+                <div className="text-[9px] text-slate-400">Credit</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-indigo-600 text-xs">C6</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">50-54%</div>
+                <div className="text-[9px] text-slate-400">Credit</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-amber-600 text-xs">D7</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">45-49%</div>
+                <div className="text-[9px] text-slate-400">Pass</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-amber-600 text-xs">E8</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">40-44%</div>
+                <div className="text-[9px] text-slate-400">Pass</div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="font-black text-rose-600 text-xs">F9</div>
+                <div className="font-semibold text-slate-600 dark:text-slate-300">0-39%</div>
+                <div className="text-[9px] text-slate-400">Fail</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================= */}
+        {/* 6. OFFICIAL ENDORSEMENT & SECURITY SEAL                   */}
         {/* ========================================================= */}
         <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-6">
           

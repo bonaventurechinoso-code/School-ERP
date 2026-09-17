@@ -82,12 +82,21 @@ export async function fetchAnnualBroadsheet(
   const academicYear = options.academicYear || "2026/2027";
 
   try {
-    const tenantDb = await getPrismaClientForTier(schoolId, tierName);
+    let actualSchoolId = schoolId;
+    if (!schoolId.includes("-")) {
+      const school = await basePrisma.school.findUnique({
+        where: { subdomain: schoolId },
+        select: { id: true },
+      });
+      if (school) actualSchoolId = school.id;
+    }
+
+    const tenantDb = await getPrismaClientForTier(actualSchoolId, tierName);
 
     // 1. Fetch all active students enrolled in this class
     const students = await tenantDb.student.findMany({
       where: {
-        schoolId,
+        schoolId: actualSchoolId,
         currentClass: className,
         status: "ENROLLED",
       },
@@ -104,7 +113,7 @@ export async function fetchAnnualBroadsheet(
     if (students.length === 0) {
       // Fallback query across all classes if none matched exact class string
       const anyStudents = await tenantDb.student.findMany({
-        where: { schoolId, status: "ENROLLED" },
+        where: { schoolId: actualSchoolId, status: "ENROLLED" },
         take: 10,
         select: {
           id: true,
@@ -124,7 +133,7 @@ export async function fetchAnnualBroadsheet(
     const studentIds = students.map((s) => s.id);
     const reportCards = await tenantDb.reportCard.findMany({
       where: {
-        schoolId,
+        schoolId: actualSchoolId,
         studentId: { in: studentIds },
         academicYear,
       },
@@ -292,13 +301,21 @@ export async function fetchAnnualBroadsheet(
  * Executes mass-promotion for the class cohort, honoring repeaters and advancing promoted students.
  */
 export async function executeClassPromotionAction(
-  schoolId: string,
+  schoolIdOrDomain: string,
   options: {
     tierName: string;
     repeatingStudentIds: string[];
   }
 ) {
-  return executeTermEndPromotionAction(schoolId, {
+  let actualSchoolId = schoolIdOrDomain;
+  if (!schoolIdOrDomain.includes("-")) {
+    const school = await basePrisma.school.findUnique({
+      where: { subdomain: schoolIdOrDomain },
+      select: { id: true },
+    });
+    if (school) actualSchoolId = school.id;
+  }
+  return executeTermEndPromotionAction(actualSchoolId, {
     tierName: options.tierName,
     repeatingStudentIds: options.repeatingStudentIds,
   });

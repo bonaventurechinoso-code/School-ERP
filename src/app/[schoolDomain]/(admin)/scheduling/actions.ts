@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
@@ -22,9 +22,11 @@ export async function createTimetableEntry(
     dayOfWeek: string;
     startTime: string;
     endTime: string;
-  }
+  },
+  schoolDomain?: string,
+  tierName?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   
   try {
     // 1. Check for Teacher Double-Booking Conflict
@@ -40,7 +42,10 @@ export async function createTimetableEntry(
     });
 
     if (staffConflict) {
-      return { success: false, error: `Conflict: Teacher is already booked for ${staffConflict.course.name} during this time slot.` };
+      return { 
+        success: false, 
+        error: `Conflict: Teacher is already booked for ${staffConflict.course.name} during this time slot (${data.startTime} - ${data.endTime}).` 
+      };
     }
 
     // 2. Check for Room Double-Booking Conflict
@@ -56,7 +61,10 @@ export async function createTimetableEntry(
     });
 
     if (roomConflict) {
-      return { success: false, error: `Conflict: Room is already booked for ${roomConflict.course.name} during this time.` };
+      return { 
+        success: false, 
+        error: `Conflict: Room is already booked for ${roomConflict.course.name} during this time (${data.startTime} - ${data.endTime}).` 
+      };
     }
 
     await tenantDb.timetable.create({
@@ -66,7 +74,11 @@ export async function createTimetableEntry(
       }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/scheduling`, "page");
+    } else {
+      safeRevalidatePath(`/scheduling`, "page");
+    }
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to create timetable entry:", error);
@@ -74,15 +86,19 @@ export async function createTimetableEntry(
   }
 }
 
-export async function deleteTimetableEntry(schoolId: string, id: string) {
-  const tenantDb = getTenantClient(schoolId);
+export async function deleteTimetableEntry(schoolId: string, id: string, schoolDomain?: string, tierName?: string) {
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   
   try {
     await tenantDb.timetable.delete({
       where: { id }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/scheduling`, "page");
+    } else {
+      safeRevalidatePath(`/scheduling`, "page");
+    }
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to delete timetable entry:", error);
@@ -97,11 +113,13 @@ export async function markStudentAttendance(
   studentId: string,
   dateString: string, // YYYY-MM-DD
   status: string,
-  notes?: string
+  notes?: string,
+  schoolDomain?: string,
+  tierName?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   const date = new Date(dateString);
-  date.setUTCHours(0,0,0,0); // Ensure it's midnight UTC for consistent daily matching
+  date.setUTCHours(0, 0, 0, 0); // Ensure it's midnight UTC for consistent daily matching
   
   try {
     await tenantDb.studentAttendance.upsert({
@@ -125,11 +143,83 @@ export async function markStudentAttendance(
       }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/scheduling`, "page");
+    } else {
+      safeRevalidatePath(`/scheduling`, "page");
+    }
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to mark student attendance:", error);
     return { success: false, error: error.message || "Failed to mark student attendance." };
+  }
+}
+
+/**
+ * Batch Action: Mark all active students in a given class as "PRESENT" for a specific date
+ */
+export async function markAllClassPresentAction(
+  schoolId: string,
+  classFilter: string,
+  dateString: string,
+  schoolDomain?: string,
+  tierName?: string
+) {
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
+  const date = new Date(dateString);
+  date.setUTCHours(0, 0, 0, 0);
+
+  try {
+    const whereClause: any = {
+      schoolId,
+      status: { in: ["ENROLLED", "ACTIVE"] }
+    };
+    if (classFilter && classFilter !== "ALL") {
+      whereClause.currentClass = classFilter;
+    }
+
+    const students = await tenantDb.student.findMany({
+      where: whereClause,
+      select: { id: true }
+    });
+
+    if (students.length === 0) {
+      return { success: true, count: 0, message: "No enrolled students found in this class." };
+    }
+
+    // Upsert attendance for each student in batch
+    await Promise.all(
+      students.map((student) =>
+        tenantDb.studentAttendance.upsert({
+          where: {
+            schoolId_studentId_date: {
+              schoolId,
+              studentId: student.id,
+              date
+            }
+          },
+          update: {
+            status: "PRESENT"
+          },
+          create: {
+            schoolId,
+            studentId: student.id,
+            date,
+            status: "PRESENT"
+          }
+        })
+      )
+    );
+
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/scheduling`, "page");
+    } else {
+      safeRevalidatePath(`/scheduling`, "page");
+    }
+    return { success: true, count: students.length };
+  } catch (error: any) {
+    console.error("[Server Action] Failed to batch mark students present:", error);
+    return { success: false, error: error.message || "Failed to batch mark students present." };
   }
 }
 
@@ -138,11 +228,13 @@ export async function markStaffAttendance(
   staffId: string,
   dateString: string, // YYYY-MM-DD
   status: string,
-  notes?: string
+  notes?: string,
+  schoolDomain?: string,
+  tierName?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   const date = new Date(dateString);
-  date.setUTCHours(0,0,0,0);
+  date.setUTCHours(0, 0, 0, 0);
   
   try {
     await tenantDb.staffAttendance.upsert({
@@ -166,7 +258,11 @@ export async function markStaffAttendance(
       }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/scheduling`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/scheduling`, "page");
+    } else {
+      safeRevalidatePath(`/scheduling`, "page");
+    }
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to mark staff attendance:", error);

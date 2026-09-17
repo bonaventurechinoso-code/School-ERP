@@ -1,7 +1,22 @@
 "use server";
 
-import { getTenantClient } from "@/lib/tenant-prisma";
+import { getTenantClient, basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+
+async function resolveSchoolId(schoolIdOrDomain: string): Promise<string> {
+  if (!schoolIdOrDomain) return "";
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdOrDomain);
+  if (isUuid) return schoolIdOrDomain;
+  try {
+    const school = await basePrisma.school.findUnique({
+      where: { subdomain: schoolIdOrDomain },
+      select: { id: true },
+    });
+    return school?.id || schoolIdOrDomain;
+  } catch {
+    return schoolIdOrDomain;
+  }
+}
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -352,6 +367,148 @@ export async function deleteInvoice(schoolId: string, invoiceId: string) {
   } catch (error: any) {
     console.error("[Server Action] Failed to delete invoice:", error);
     return { success: false, error: error.message || "Failed to delete invoice." };
+  }
+}
+
+export async function createBankDepositAction(
+  schoolIdOrDomain: string,
+  data: {
+    bankName: string;
+    accountNumber: string;
+    depositorName: string;
+    tellerOrRef: string;
+    amount: number;
+    depositDate: string;
+    notes?: string;
+    invoiceId?: string;
+    studentId?: string;
+  }
+) {
+  const schoolId = await resolveSchoolId(schoolIdOrDomain);
+  const tenantDb = getTenantClient(schoolId);
+  try {
+    if (!data.amount || data.amount <= 0) {
+      throw new Error("Deposit amount must be greater than zero.");
+    }
+    if (!data.bankName || !data.depositorName || !data.tellerOrRef) {
+      throw new Error("Bank name, depositor name, and teller/transaction reference are required.");
+    }
+
+    const desc = `[${data.bankName} - Acc: ${data.accountNumber || "Main"}] Ref: ${data.tellerOrRef} | Depositor: ${data.depositorName}${data.notes ? ` - ${data.notes}` : ""}`;
+
+    let refId = data.tellerOrRef;
+    if (data.invoiceId) {
+      refId = `${data.tellerOrRef}|INV:${data.invoiceId}`;
+    }
+
+    const txn = await tenantDb.transaction.create({
+      data: {
+        schoolId,
+        type: "INCOME",
+        category: "BANK_DEPOSIT",
+        amount: Math.round(data.amount * 100) / 100,
+        description: desc,
+        referenceId: refId,
+      },
+    });
+
+    if (data.invoiceId && data.studentId) {
+      await recordPayment(schoolId, {
+        studentId: data.studentId,
+        invoiceId: data.invoiceId,
+        amountPaid: data.amount,
+        method: "TRANSFER",
+      });
+    }
+
+    await invalidateFinanceNamespace(schoolId);
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
+    return { success: true, transaction: txn };
+  } catch (err: any) {
+    console.error("[Server Action] Failed to create bank deposit:", err);
+    return { success: false, error: err.message || "Failed to record bank deposit." };
+  }
+}
+
+export async function matchDepositToInvoiceAction(
+  schoolIdOrDomain: string,
+  data: {
+    transactionId: string;
+    invoiceId: string;
+    studentId: string;
+    allocatedAmount: number;
+  }
+) {
+  const schoolId = await resolveSchoolId(schoolIdOrDomain);
+  const tenantDb = getTenantClient(schoolId);
+  try {
+    const txn = await tenantDb.transaction.findUnique({
+      where: { id: data.transactionId },
+    });
+    if (!txn) throw new Error("Bank deposit transaction not found.");
+
+    const invoice = await tenantDb.invoice.findUnique({
+      where: { id: data.invoiceId },
+      include: { payments: true, student: true },
+    });
+    if (!invoice) throw new Error("Invoice not found.");
+
+    // Record payment against the invoice
+    await tenantDb.payment.create({
+      data: {
+        schoolId,
+        studentId: data.studentId,
+        invoiceId: data.invoiceId,
+        amountPaid: data.allocatedAmount,
+        method: "TRANSFER",
+      },
+    });
+
+    // Recalculate invoice status
+    const allPayments = await tenantDb.payment.findMany({ where: { invoiceId: data.invoiceId } });
+    const totalPaid = allPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+    const newStatus = totalPaid >= invoice.amountDue ? "PAID" : "PARTIAL";
+
+    await tenantDb.invoice.update({
+      where: { id: data.invoiceId },
+      data: { status: newStatus },
+    });
+
+    // Update transaction referenceId & description to show reconciled
+    const updatedRef = txn.referenceId ? `${txn.referenceId}|INV:${invoice.id}` : `INV:${invoice.id}`;
+    await tenantDb.transaction.update({
+      where: { id: txn.id },
+      data: {
+        referenceId: updatedRef,
+        description: `${txn.description} [RECONCILED: Inv #${invoice.id.slice(0, 8).toUpperCase()}]`,
+      },
+    });
+
+    await invalidateFinanceNamespace(schoolId);
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
+    return { success: true };
+  } catch (err: any) {
+    console.error("[Server Action] Failed to reconcile deposit with invoice:", err);
+    return { success: false, error: err.message || "Failed to reconcile deposit." };
+  }
+}
+
+export async function fetchBankDeposits(schoolIdOrDomain: string) {
+  const schoolId = await resolveSchoolId(schoolIdOrDomain);
+  const tenantDb = getTenantClient(schoolId);
+  try {
+    const deposits = await tenantDb.transaction.findMany({
+      where: {
+        schoolId,
+        category: { in: ["BANK_DEPOSIT", "TUITION"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    return { success: true, deposits };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to fetch bank deposits", deposits: [] };
   }
 }
 

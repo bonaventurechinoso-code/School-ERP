@@ -13,11 +13,13 @@ import {
   fetchStudentMetrics,
   toggleStudentSuspension,
   graduateTierCohort,
-  executeTermEndPromotionAction
+  executeTermEndPromotionAction,
+  promoteStudentSingle,
+  transitionStudentTier
 } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
-import { User, X, GraduationCap, ShieldAlert } from "lucide-react";
+import { User, X, GraduationCap, ShieldAlert, Layers, ArrowRight, CheckCircle2 } from "lucide-react";
 import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
 type StudentWithTier = Student & { tier?: AcademicTier | null };
@@ -579,6 +581,32 @@ export default function StudentTable({
         </div>
       </div>
 
+      {/* Tier Switcher Navigation */}
+      {tiers.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl w-fit border border-slate-200 dark:border-zinc-700/60">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400 px-3 py-1 flex items-center gap-1">
+            <Layers className="w-3 h-3 text-indigo-500" />
+            <span>Academic Tier:</span>
+          </span>
+          {tiers.map((t) => {
+            const isActive = activeTier && (t.name.toLowerCase() === activeTier.toLowerCase() || t.name.toLowerCase().includes(activeTier.toLowerCase()));
+            return (
+              <a
+                key={t.id}
+                href={`?tier=${encodeURIComponent(t.name)}`}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  isActive
+                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200 dark:border-zinc-700"
+                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                {t.name}
+              </a>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
           <label htmlFor="filter-by-class" className="text-sm font-medium text-slate-700 dark:text-zinc-300">Filter by Class:</label>
@@ -958,8 +986,18 @@ export default function StudentTable({
                 <td className="px-6 py-4 font-mono text-sm text-slate-600 dark:text-zinc-400">
                   {student.admissionNumber || "N/A"}
                 </td>
-                <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                  {student.firstName} {student.lastName}
+                <td 
+                  className="px-6 py-4 font-medium text-slate-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  onClick={() => setSelectedStudent(student)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{student.firstName} {student.lastName}</span>
+                    {(student.dynamicFields as any)?.nin && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                        NIN
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-slate-600 dark:text-zinc-300">
                   {student.currentClass || student.tier?.name || "—"}
@@ -984,6 +1022,14 @@ export default function StudentTable({
                 </td>
                 <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                   <div className="inline-flex items-center gap-1.5">
+                    <button 
+                      onClick={() => setSelectedStudent(student)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition flex items-center gap-1"
+                      title="View KYC & Health Profile"
+                    >
+                      <User className="w-3 h-3 text-indigo-500" />
+                      <span>KYC</span>
+                    </button>
                     <button 
                       disabled={isPending}
                       onClick={() => openEditForm(student)}
@@ -1171,7 +1217,15 @@ export default function StudentTable({
       {selectedStudent && (
         <StudentProfileDrawer 
           student={selectedStudent} 
+          schoolId={schoolId}
+          tiers={tiers}
+          activeTier={activeTier}
           onClose={() => setSelectedStudent(null)} 
+          onStudentUpdated={(updated) => {
+            setSelectedStudent(updated);
+            setStudentList((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+            refreshMetrics();
+          }}
         />
       )}
 

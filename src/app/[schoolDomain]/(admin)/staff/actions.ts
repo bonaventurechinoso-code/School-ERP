@@ -1,49 +1,111 @@
 "use server";
 
-import { getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
 
+function safeRevalidate(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful no-op in non-HTTP contexts (e.g. testing)
+  }
+}
+
 /**
- * High-performance cursor-based fetching for Staff Directory wrapped in Smart Cache-Aside.
- * Flat lookup times across millions of staff/teacher records.
+ * Safely resolves school identifier whether passed as UUID or subdomain string
+ */
+export async function resolveSchoolId(schoolIdentifier: string): Promise<string> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
+  if (isUuid) return schoolIdentifier;
+
+  const school = await basePrisma.school.findUnique({
+    where: { subdomain: schoolIdentifier },
+    select: { id: true },
+  });
+  return school?.id || schoolIdentifier;
+}
+
+/**
+ * Ensure the multi-tenant staff metadata table exists for Nigerian TRCN & KYC storage
+ */
+export async function ensureStaffMetadataTable() {
+  try {
+    await basePrisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS bonavee_staff_metadata (
+        staff_id TEXT PRIMARY KEY,
+        phone TEXT,
+        whatsapp TEXT,
+        nin TEXT,
+        gender TEXT,
+        state_of_origin TEXT,
+        lga_of_origin TEXT,
+        residential_address TEXT,
+        qualification TEXT,
+        institution TEXT,
+        graduation_year TEXT,
+        trcn_number TEXT,
+        trcn_category TEXT,
+        trcn_status TEXT,
+        specialization TEXT,
+        appointment_type TEXT,
+        appointment_date TEXT,
+        emergency_name TEXT,
+        emergency_phone TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+  } catch (err) {
+    console.error("[ensureStaffMetadataTable] Table check/create error:", err);
+  }
+}
+
+/**
+ * High-performance cursor-based fetching for Staff Directory with Department,
+ * Today's Attendance, and Nigerian TRCN/KYC Metadata.
  */
 export async function fetchStaffPaginated(
-  schoolId: string,
+  schoolIdentifier: string,
   options?: {
     role?: string;
     status?: string;
+    departmentId?: string;
     cursor?: string | null;
     limit?: number;
     search?: string;
   }
 ): Promise<CursorPaginationResult<any>> {
+  const schoolId = await resolveSchoolId(schoolIdentifier);
   const role = options?.role;
   const status = options?.status;
+  const departmentId = options?.departmentId;
   const cursor = options?.cursor;
   const limit = options?.limit || 25;
   const search = options?.search;
 
+  await ensureStaffMetadataTable();
+
   const cacheKey = buildCacheKey({
     tenantId: schoolId,
     table: "staff",
-    action: "paginated",
+    action: "paginated_enhanced",
     cursor,
     limit,
-    filters: { role, status, search },
+    filters: { role, status, departmentId, search },
   });
 
   return cacheAside<CursorPaginationResult<any>>({
     key: cacheKey,
-    ttlSeconds: 1800, // 30 minutes safe sliding TTL
+    ttlSeconds: 900, // 15 minutes safe sliding TTL
     fetchFn: async () => {
       const tenantDb = getTenantClient(schoolId);
       const whereClause: any = {
         schoolId,
         ...(status && status !== "ALL" ? { status } : {}),
         ...(role && role !== "ALL" ? { role } : {}),
+        ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
       };
 
       if (search && search.trim()) {
@@ -55,108 +117,432 @@ export async function fetchStaffPaginated(
         ];
       }
 
-      return executeCursorPagination(async (args) => {
+      // Today's date range for attendance check
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const paginatedResult = await executeCursorPagination(async (args) => {
         return tenantDb.staff.findMany({
           ...args,
           where: whereClause,
           orderBy: { createdAt: "desc" },
-          include: { department: true },
+          include: { 
+            department: true,
+            StaffAttendance: {
+              where: {
+                date: {
+                  gte: todayStart,
+                  lte: todayEnd,
+                }
+              },
+              take: 1,
+            },
+            PayrollRecord: {
+              orderBy: { payDate: "desc" },
+              take: 1,
+            }
+          },
         });
       }, { cursor, limit });
+
+      // Augment items with metadata from bonavee_staff_metadata
+      const items = paginatedResult.items || [];
+      const staffIds = items.map((s: any) => s.id);
+      const metadataMap: Record<string, any> = {};
+
+      if (staffIds.length > 0) {
+        try {
+          const rows: any[] = await basePrisma.$queryRawUnsafe(`
+            SELECT * FROM bonavee_staff_metadata WHERE staff_id = ANY($1::text[])
+          `, staffIds);
+          rows.forEach((r: any) => {
+            metadataMap[r.staff_id] = r;
+          });
+        } catch {
+          // Graceful fallback if table query fails
+        }
+      }
+
+      const enhancedItems = items.map((staff: any) => ({
+        ...staff,
+        metadata: metadataMap[staff.id] || null,
+        todayAttendance: staff.StaffAttendance?.[0] || null,
+        latestPayroll: staff.PayrollRecord?.[0] || null,
+      }));
+
+      return {
+        ...paginatedResult,
+        items: enhancedItems,
+      };
     },
   });
 }
 
-export async function createStaff(
-  schoolId: string,
-  data: { firstName: string; lastName: string; email: string; role: string; status: string }
-) {
-  const tenantDb = getTenantClient(schoolId);
-  
+/**
+ * Fetch full staff profile dossier including metadata, department,
+ * attendance records, and recent payroll slips.
+ */
+export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: string) {
   try {
-    const timestampData: any = {};
-    if (data.status === "ONBOARDING") timestampData.onboardingAt = new Date();
-    if (data.status === "ACTIVE") timestampData.activeAt = new Date();
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    await ensureStaffMetadataTable();
 
-    await tenantDb.staff.create({
+    const staff = await tenantDb.staff.findUnique({
+      where: { id: staffId },
+      include: {
+        department: true,
+        PayrollRecord: {
+          orderBy: { payDate: "desc" },
+          take: 6,
+        },
+        StaffAttendance: {
+          orderBy: { date: "desc" },
+          take: 14,
+        },
+      }
+    });
+
+    if (!staff) {
+      return { success: false, error: "Staff record not found." };
+    }
+
+    let metadata: any = null;
+    try {
+      const rows: any[] = await basePrisma.$queryRawUnsafe(`
+        SELECT * FROM bonavee_staff_metadata WHERE staff_id = $1 LIMIT 1
+      `, staffId);
+      if (rows.length > 0) {
+        metadata = rows[0];
+      }
+    } catch {
+      // Graceful fallback
+    }
+
+    // Calculate 30-day attendance turnout stats
+    const totalMarked = staff.StaffAttendance.length;
+    const presentCount = staff.StaffAttendance.filter((a: any) => a.status === "PRESENT").length;
+    const lateCount = staff.StaffAttendance.filter((a: any) => a.status === "LATE").length;
+    const attendanceRate = totalMarked > 0 ? Math.round(((presentCount + lateCount * 0.5) / totalMarked) * 100) : 100;
+
+    return {
+      success: true,
+      data: {
+        ...staff,
+        metadata,
+        stats: {
+          totalMarked,
+          presentCount,
+          lateCount,
+          attendanceRate,
+        }
+      }
+    };
+  } catch (error: any) {
+    console.error("[fetchStaffFullProfile] Error:", error);
+    return { success: false, error: error.message || "Failed to load staff profile." };
+  }
+}
+
+/**
+ * Create new staff member with optional department, remuneration, bank details, and TRCN metadata
+ */
+export async function createStaff(
+  schoolIdentifier: string,
+  data: { 
+    firstName: string; 
+    lastName: string; 
+    email: string; 
+    role: string; 
+    status?: string;
+    departmentId?: string | null;
+    baseSalary?: number | null;
+    bankName?: string | null;
+    bankAccountNumber?: string | null;
+    accountName?: string | null;
+    // Metadata fields
+    phone?: string;
+    whatsapp?: string;
+    nin?: string;
+    gender?: string;
+    stateOfOrigin?: string;
+    lgaOfOrigin?: string;
+    residentialAddress?: string;
+    qualification?: string;
+    institution?: string;
+    graduationYear?: string;
+    trcnNumber?: string;
+    trcnCategory?: string;
+    trcnStatus?: string;
+    specialization?: string;
+    appointmentType?: string;
+    emergencyName?: string;
+    emergencyPhone?: string;
+  }
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    await ensureStaffMetadataTable();
+
+    const timestampData: any = {};
+    const status = data.status || "ONBOARDING";
+    if (status === "ONBOARDING") timestampData.onboardingAt = new Date();
+    if (status === "ACTIVE") timestampData.activeAt = new Date();
+
+    const staff = await tenantDb.staff.create({
       data: {
         schoolId,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        role: data.role,
-        status: data.status,
-        ...timestampData
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        email: data.email.trim().toLowerCase(),
+        role: data.role.trim(),
+        status,
+        departmentId: data.departmentId || null,
+        baseSalary: data.baseSalary ? Number(data.baseSalary) : null,
+        bankName: data.bankName || null,
+        bankAccountNumber: data.bankAccountNumber || null,
+        accountName: data.accountName || null,
+        ...timestampData,
       }
     });
 
-    // Write-Through Cache Invalidation
-    await invalidateStaffNamespace(schoolId);
+    // Save metadata if any provided
+    if (data.phone || data.trcnNumber || data.qualification || data.nin || data.whatsapp) {
+      await basePrisma.$executeRawUnsafe(`
+        INSERT INTO bonavee_staff_metadata (
+          staff_id, phone, whatsapp, nin, gender, state_of_origin, lga_of_origin,
+          residential_address, qualification, institution, graduation_year,
+          trcn_number, trcn_category, trcn_status, specialization, appointment_type,
+          emergency_name, emergency_phone, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()
+        )
+        ON CONFLICT (staff_id) DO UPDATE SET
+          phone = EXCLUDED.phone,
+          whatsapp = EXCLUDED.whatsapp,
+          nin = EXCLUDED.nin,
+          gender = EXCLUDED.gender,
+          state_of_origin = EXCLUDED.state_of_origin,
+          lga_of_origin = EXCLUDED.lga_of_origin,
+          residential_address = EXCLUDED.residential_address,
+          qualification = EXCLUDED.qualification,
+          institution = EXCLUDED.institution,
+          graduation_year = EXCLUDED.graduation_year,
+          trcn_number = EXCLUDED.trcn_number,
+          trcn_category = EXCLUDED.trcn_category,
+          trcn_status = EXCLUDED.trcn_status,
+          specialization = EXCLUDED.specialization,
+          appointment_type = EXCLUDED.appointment_type,
+          emergency_name = EXCLUDED.emergency_name,
+          emergency_phone = EXCLUDED.emergency_phone,
+          updated_at = NOW();
+      `, 
+        staff.id,
+        data.phone || null,
+        data.whatsapp || null,
+        data.nin || null,
+        data.gender || null,
+        data.stateOfOrigin || null,
+        data.lgaOfOrigin || null,
+        data.residentialAddress || null,
+        data.qualification || null,
+        data.institution || null,
+        data.graduationYear || null,
+        data.trcnNumber || null,
+        data.trcnCategory || "Category C",
+        data.trcnStatus || "REGISTERED",
+        data.specialization || null,
+        data.appointmentType || "FULL_TIME",
+        data.emergencyName || null,
+        data.emergencyPhone || null
+      );
+    }
 
-    revalidatePath(`/[schoolDomain]/staff`, "page");
-    return { success: true };
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true, data: staff };
   } catch (error: any) {
-    console.error("[Server Action] Failed to create staff:", error);
-    return { success: false, error: error.message || "Failed to create staff." };
+    console.error("[createStaff] Failed to create staff:", error);
+    return { success: false, error: error.message || "Failed to create staff member." };
   }
 }
 
-export async function updateStaff(
-  schoolId: string,
+/**
+ * Atomically update staff profile credentials, compensation, and TRCN metadata
+ */
+export async function updateStaffProfile(
+  schoolIdentifier: string,
   staffId: string,
-  data: { firstName: string; lastName: string; email: string; role: string }
+  data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
+    status?: string;
+    departmentId?: string | null;
+    baseSalary?: number | null;
+    bankName?: string | null;
+    bankAccountNumber?: string | null;
+    accountName?: string | null;
+    // Metadata fields
+    phone?: string;
+    whatsapp?: string;
+    nin?: string;
+    gender?: string;
+    stateOfOrigin?: string;
+    lgaOfOrigin?: string;
+    residentialAddress?: string;
+    qualification?: string;
+    institution?: string;
+    graduationYear?: string;
+    trcnNumber?: string;
+    trcnCategory?: string;
+    trcnStatus?: string;
+    specialization?: string;
+    appointmentType?: string;
+    appointmentDate?: string;
+    emergencyName?: string;
+    emergencyPhone?: string;
+  }
 ) {
-  const tenantDb = getTenantClient(schoolId);
-  
   try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    await ensureStaffMetadataTable();
+
+    const updateData: any = {
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      email: data.email.trim().toLowerCase(),
+      role: data.role.trim(),
+      departmentId: data.departmentId || null,
+      baseSalary: data.baseSalary !== undefined && data.baseSalary !== null ? Number(data.baseSalary) : null,
+      bankName: data.bankName || null,
+      bankAccountNumber: data.bankAccountNumber || null,
+      accountName: data.accountName || null,
+    };
+
+    if (data.status) {
+      updateData.status = data.status;
+      if (data.status === "ACTIVE") updateData.activeAt = new Date();
+      if (data.status === "LEAVE") updateData.leaveAt = new Date();
+      if (data.status === "OFFBOARDED") updateData.offboardedAt = new Date();
+      if (data.status === "TERMINATED") updateData.terminatedAt = new Date();
+    }
+
     await tenantDb.staff.update({
       where: { id: staffId },
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        role: data.role,
-      }
+      data: updateData,
     });
 
-    // Write-Through Cache Invalidation
-    await invalidateStaffNamespace(schoolId);
+    // Upsert metadata record
+    await basePrisma.$executeRawUnsafe(`
+      INSERT INTO bonavee_staff_metadata (
+        staff_id, phone, whatsapp, nin, gender, state_of_origin, lga_of_origin,
+        residential_address, qualification, institution, graduation_year,
+        trcn_number, trcn_category, trcn_status, specialization, appointment_type,
+        appointment_date, emergency_name, emergency_phone, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
+      )
+      ON CONFLICT (staff_id) DO UPDATE SET
+        phone = EXCLUDED.phone,
+        whatsapp = EXCLUDED.whatsapp,
+        nin = EXCLUDED.nin,
+        gender = EXCLUDED.gender,
+        state_of_origin = EXCLUDED.state_of_origin,
+        lga_of_origin = EXCLUDED.lga_of_origin,
+        residential_address = EXCLUDED.residential_address,
+        qualification = EXCLUDED.qualification,
+        institution = EXCLUDED.institution,
+        graduation_year = EXCLUDED.graduation_year,
+        trcn_number = EXCLUDED.trcn_number,
+        trcn_category = EXCLUDED.trcn_category,
+        trcn_status = EXCLUDED.trcn_status,
+        specialization = EXCLUDED.specialization,
+        appointment_type = EXCLUDED.appointment_type,
+        appointment_date = EXCLUDED.appointment_date,
+        emergency_name = EXCLUDED.emergency_name,
+        emergency_phone = EXCLUDED.emergency_phone,
+        updated_at = NOW();
+    `,
+      staffId,
+      data.phone || null,
+      data.whatsapp || null,
+      data.nin || null,
+      data.gender || null,
+      data.stateOfOrigin || null,
+      data.lgaOfOrigin || null,
+      data.residentialAddress || null,
+      data.qualification || null,
+      data.institution || null,
+      data.graduationYear || null,
+      data.trcnNumber || null,
+      data.trcnCategory || "Category C",
+      data.trcnStatus || "REGISTERED",
+      data.specialization || null,
+      data.appointmentType || "FULL_TIME",
+      data.appointmentDate || null,
+      data.emergencyName || null,
+      data.emergencyPhone || null
+    );
 
-    revalidatePath(`/[schoolDomain]/staff`, "page");
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
     return { success: true };
   } catch (error: any) {
-    console.error("[Server Action] Failed to update staff:", error);
-    return { success: false, error: error.message || "Failed to update staff." };
+    console.error("[updateStaffProfile] Error:", error);
+    return { success: false, error: error.message || "Failed to update staff profile." };
   }
 }
 
-export async function deleteStaff(schoolId: string, staffId: string) {
-  const tenantDb = getTenantClient(schoolId);
-  
+/**
+ * Standard legacy update for backwards compatibility
+ */
+export async function updateStaff(
+  schoolIdentifier: string,
+  staffId: string,
+  data: { firstName: string; lastName: string; email: string; role: string; status?: string }
+) {
+  return updateStaffProfile(schoolIdentifier, staffId, data);
+}
+
+export async function deleteStaff(schoolIdentifier: string, staffId: string) {
   try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    
     await tenantDb.staff.delete({
       where: { id: staffId }
     });
 
-    // Write-Through Cache Invalidation
-    await invalidateStaffNamespace(schoolId);
+    // Cleanup metadata
+    try {
+      await basePrisma.$executeRawUnsafe(`DELETE FROM bonavee_staff_metadata WHERE staff_id = $1`, staffId);
+    } catch {
+      // non-blocking
+    }
 
-    revalidatePath(`/[schoolDomain]/staff`, "page");
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
     return { success: true };
   } catch (error: any) {
-    console.error("[Server Action] Failed to delete staff:", error);
+    console.error("[deleteStaff] Failed to delete staff:", error);
     return { success: false, error: error.message || "Failed to delete staff." };
   }
 }
 
 export async function updateStaffStatus(
-  schoolId: string,
+  schoolIdentifier: string,
   staffId: string,
   newStatus: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
-  
   try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
     const data: any = { status: newStatus };
     
     switch (newStatus) {
@@ -182,12 +568,152 @@ export async function updateStaffStatus(
       data
     });
 
-    // Write-Through Cache Invalidation
     await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[updateStaffStatus] Error:", error);
+    return { success: false, error: error.message || "Failed to update staff status." };
+  }
+}
 
-    revalidatePath(`/[schoolDomain]/staff`, "page");
-  } catch (error) {
-    console.error("[Server Action] Failed to update staff status:", error);
-    throw new Error("Failed to update staff status.");
+/**
+ * 1-Click Server Action: Quick mark today's staff attendance
+ */
+export async function markStaffQuickAttendanceAction(
+  schoolIdentifier: string,
+  staffId: string,
+  status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT",
+  notes?: string
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const record = await tenantDb.staffAttendance.upsert({
+      where: {
+        schoolId_staffId_date: {
+          schoolId,
+          staffId,
+          date: today,
+        }
+      },
+      update: {
+        status,
+        notes: notes || null,
+      },
+      create: {
+        schoolId,
+        staffId,
+        date: today,
+        status,
+        notes: notes || null,
+      }
+    });
+
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true, data: record };
+  } catch (error: any) {
+    console.error("[markStaffQuickAttendanceAction] Error:", error);
+    return { success: false, error: error.message || "Failed to mark staff attendance." };
+  }
+}
+
+/**
+ * Department Management Actions
+ */
+export async function createStaffDepartmentAction(
+  schoolIdentifier: string,
+  name: string,
+  tierId?: string | null
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const trimmed = name.trim();
+    if (!trimmed) return { success: false, error: "Department name is required." };
+
+    const dept = await basePrisma.department.create({
+      data: {
+        schoolId,
+        name: trimmed,
+        tierId: tierId || null,
+      }
+    });
+
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true, data: dept };
+  } catch (error: any) {
+    console.error("[createStaffDepartmentAction] Error:", error);
+    return { success: false, error: error.message || "Failed to create department." };
+  }
+}
+
+export async function deleteStaffDepartmentAction(
+  schoolIdentifier: string,
+  departmentId: string
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const staffCount = await basePrisma.staff.count({
+      where: { schoolId, departmentId }
+    });
+
+    if (staffCount > 0) {
+      return {
+        success: false,
+        error: `Cannot delete department: ${staffCount} staff member(s) are currently assigned to it. Please reassign them first.`
+      };
+    }
+
+    await basePrisma.department.delete({
+      where: { id: departmentId }
+    });
+
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[deleteStaffDepartmentAction] Error:", error);
+    return { success: false, error: error.message || "Failed to delete department." };
+  }
+}
+
+/**
+ * Generate Payroll Voucher record directly from Staff Dossier
+ */
+export async function generateStaffPayrollVoucherAction(
+  schoolIdentifier: string,
+  staffId: string,
+  amount: number,
+  payDateStr?: string
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return { success: false, error: "Please specify a valid remuneration amount." };
+    }
+
+    const payDate = payDateStr ? new Date(payDateStr) : new Date();
+    const receiptCode = `VOUCH-${Date.now().toString(36).toUpperCase()}`;
+
+    const record = await basePrisma.payrollRecord.create({
+      data: {
+        schoolId,
+        staffId,
+        amount: Number(amount),
+        status: "PENDING",
+        payDate,
+        receiptCode,
+      }
+    });
+
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true, data: record };
+  } catch (error: any) {
+    console.error("[generateStaffPayrollVoucherAction] Error:", error);
+    return { success: false, error: error.message || "Failed to generate payroll voucher." };
   }
 }

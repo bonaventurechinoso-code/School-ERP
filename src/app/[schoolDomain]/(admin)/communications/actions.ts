@@ -1,6 +1,6 @@
 "use server";
 
-import { getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { sendDirectCommunicationEmail, sendBroadcastNoticeEmail } from "@/lib/email-service";
 
@@ -19,56 +19,80 @@ export async function createNotice(
     content: string;
     targetAudience: string;
     priority: string;
-  }
+  },
+  schoolDomain?: string,
+  tierName?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   
   try {
     const notice = await tenantDb.notice.create({
       data: {
         schoolId,
-        title: data.title,
-        content: data.content,
-        targetAudience: data.targetAudience,
-        priority: data.priority,
+        title: data.title.trim(),
+        content: data.content.trim(),
+        targetAudience: data.targetAudience || "ALL",
+        priority: data.priority || "NORMAL",
       }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/communications`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/communications`, "page");
+    } else {
+      safeRevalidatePath(`/communications`, "page");
+    }
     return { success: true, noticeId: notice.id };
   } catch (error: any) {
-    console.error("[Server Action] Failed to create notice:", error);
+    console.error("[Communications Action] Failed to create notice:", error);
     return { success: false, error: error.message || "Failed to create notice." };
   }
 }
 
-export async function deleteNotice(schoolId: string, id: string) {
-  const tenantDb = getTenantClient(schoolId);
+export async function deleteNotice(
+  schoolId: string, 
+  id: string, 
+  schoolDomain?: string, 
+  tierName?: string
+) {
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   
   try {
     await tenantDb.notice.delete({
       where: { id }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/communications`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/communications`, "page");
+    } else {
+      safeRevalidatePath(`/communications`, "page");
+    }
     return { success: true };
   } catch (error: any) {
-    console.error("[Server Action] Failed to delete notice:", error);
+    console.error("[Communications Action] Failed to delete notice:", error);
     return { success: false, error: error.message || "Failed to delete notice." };
   }
 }
 
-export async function broadcastNotice(schoolId: string, noticeId: string) {
+export async function broadcastNotice(
+  schoolId: string, 
+  noticeId: string, 
+  schoolDomain?: string, 
+  tierName?: string
+) {
   try {
     const res = await sendBroadcastNoticeEmail({
       schoolId,
       noticeId,
     });
 
-    safeRevalidatePath(`/[schoolDomain]/communications`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/communications`, "page");
+    } else {
+      safeRevalidatePath(`/communications`, "page");
+    }
     return res;
   } catch (error: any) {
-    console.error("[Server Action] Failed to broadcast notice:", error);
+    console.error("[Communications Action] Failed to broadcast notice:", error);
     return { success: false, error: error.message || "Failed to broadcast notice." };
   }
 }
@@ -81,9 +105,11 @@ export async function logMessage(
     messageType: string;
     subject: string;
     body: string;
-  }
+  },
+  schoolDomain?: string,
+  tierName?: string
 ) {
-  const tenantDb = getTenantClient(schoolId);
+  const tenantDb = tierName ? await getPrismaClientForTier(schoolId, tierName) : getTenantClient(schoolId);
   
   try {
     // Normalize channel safely: "BRANDED_HTML" or "Official Email" -> "EMAIL"
@@ -95,30 +121,34 @@ export async function logMessage(
     // 1. Dispatch actual formatted email notification
     await sendDirectCommunicationEmail({
       schoolId,
-      recipientEmail: data.recipientEmail,
+      recipientEmail: data.recipientEmail.trim(),
       recipientType: data.recipientType,
       messageType: normalizedType,
-      subject: data.subject,
-      body: data.body,
+      subject: data.subject.trim(),
+      body: data.body.trim(),
     });
 
     // 2. Persist audit log record
     await tenantDb.messageLog.create({
       data: {
         schoolId,
-        recipientEmail: data.recipientEmail,
-        recipientType: data.recipientType,
+        recipientEmail: data.recipientEmail.trim(),
+        recipientType: data.recipientType || "STUDENT",
         messageType: normalizedType,
-        subject: data.subject,
-        body: data.body,
+        subject: data.subject.trim(),
+        body: data.body.trim(),
+        sentAt: new Date(),
       }
     });
 
-    safeRevalidatePath(`/[schoolDomain]/communications`, "page");
+    if (schoolDomain) {
+      safeRevalidatePath(`/${schoolDomain}/communications`, "page");
+    } else {
+      safeRevalidatePath(`/communications`, "page");
+    }
     return { success: true };
   } catch (error: any) {
-    console.error("[Server Action] Failed to dispatch and log message:", error);
+    console.error("[Communications Action] Failed to dispatch and log message:", error);
     return { success: false, error: error.message || "Failed to dispatch message." };
   }
 }
-

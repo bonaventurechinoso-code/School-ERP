@@ -14,7 +14,8 @@ import {
   AlertCircle, 
   X, 
   PlusCircle,
-  RefreshCw
+  RefreshCw,
+  FileCheck,
 } from "lucide-react";
 import { useActiveTierConfig } from "@/hooks/useClientTier";
 
@@ -480,6 +481,168 @@ export default function InvoiceTable({
     }
   };
 
+  const printClearancePass = (invoice: InvoiceWithDetails, totalPaid: number, balance: number) => {
+    const clearanceWindow = window.open("", "_blank");
+    if (clearanceWindow) {
+      const schoolName = tenant.name || "GREENWOOD ACADEMY";
+      const dashboardUrl = tenant?.subdomain ? `/${tenant.subdomain}/finance` : "/dashboard";
+      const clearanceNo = `CLR-${(tenant?.subdomain || "GW").toUpperCase()}/${new Date().getFullYear()}/${invoice.id.substring(0, 8).toUpperCase()}`;
+      const printDate = new Date().toLocaleDateString("en-NG", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const isCleared = balance <= 0 || invoice.status === "PAID";
+
+      clearanceWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Official Financial Clearance & Examination Pass - ${invoice.student.firstName} ${invoice.student.lastName}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              body { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                padding: 32px; 
+                color: #0f172a; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                line-height: 1.5; 
+                background-color: #ffffff;
+              }
+              @media print { 
+                .print\\:hidden, [class*="print:hidden"], [className*="print:hidden"], .btn-bar { display: none !important; } 
+                body { padding: 0 !important; max-width: 100% !important; } 
+              }
+            </style>
+          </head>
+          <body class="bg-white text-slate-900">
+            <!-- Navigation Action Bar (Print-Hidden) -->
+            <div class="print:hidden flex items-center justify-between w-full mb-6 p-4 border-b border-gray-100">
+              <a href="${dashboardUrl}" onclick="if (window.opener) { window.close(); return false; }" class="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition no-underline">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 19-7-7 7-7"/>
+                  <path d="M19 12H5"/>
+                </svg>
+                <span>Back to Finance</span>
+              </a>
+
+              <button class="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-blue-700 transition cursor-pointer" onclick="window.print()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect width="12" height="8" x="6" y="14"/>
+                </svg>
+                <span>Print Official Clearance Pass</span>
+              </button>
+            </div>
+
+            <!-- Header with Crest & Reference -->
+            <div class="border-b-2 border-slate-900 pb-5 mb-6 text-center">
+              <div class="inline-block w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-900 text-white font-black text-xl flex items-center justify-center border-2 border-amber-400 mb-2 shadow-sm">
+                GW
+              </div>
+              <h1 class="text-2xl font-black uppercase tracking-tight text-slate-900 mb-0.5">${schoolName}</h1>
+              <p class="text-xs font-semibold uppercase tracking-widest text-slate-600">Office of the Bursar & Financial Controller</p>
+              <div class="mt-2 inline-flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-mono font-bold tracking-wider">
+                <span>OFFICIAL FINANCIAL CLEARANCE & EXAMINATION PASS</span>
+              </div>
+              <p class="text-[11px] font-mono text-slate-500 mt-1">Ref: ${clearanceNo} • Date Issued: ${printDate}</p>
+            </div>
+
+            <!-- Student Bio-Data & Verification Profile -->
+            <div class="grid grid-cols-2 gap-6 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs mb-6">
+              <div class="space-y-2">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1">
+                  Candidate Bio-Data
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Student Full Name:</span>
+                  <span class="font-extrabold text-slate-900">${invoice.student.firstName} ${invoice.student.lastName}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Admission / Reg No:</span>
+                  <span class="font-bold font-mono text-blue-600">${invoice.student.admissionNumber || "N/A"}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Class Cohort:</span>
+                  <span class="font-bold text-slate-800">${invoice.student.currentClass || "Unassigned"}</span>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1">
+                  Financial Status Verification
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Total Billed:</span>
+                  <span class="font-bold font-mono text-slate-800">${formatNaira(invoice.amountDue)}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Total Cleared:</span>
+                  <span class="font-bold font-mono text-emerald-600">${formatNaira(totalPaid)}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Outstanding Balance:</span>
+                  <span class="font-bold font-mono ${isCleared ? 'text-emerald-600' : 'text-rose-600'}">
+                    ${isCleared ? "₦0.00 (NIL BALANCE)" : formatNaira(balance)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Official Certification Stamp / Authorization Banner -->
+            <div class="p-6 rounded-2xl ${isCleared ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950' : 'bg-amber-50 border-2 border-amber-500 text-amber-950'} mb-6 text-center space-y-2">
+              <span class="text-[10px] uppercase font-bold tracking-widest block ${isCleared ? 'text-emerald-700' : 'text-amber-700'}">
+                STATUTORY CLEARANCE CERTIFICATION
+              </span>
+              <div class="text-lg font-black tracking-tight ${isCleared ? 'text-emerald-900' : 'text-amber-900'}">
+                ${isCleared ? "CERTIFIED FULLY CLEARED — UNCONDITIONAL EXAMINATION PERMIT" : "PROVISIONAL CLEARANCE — OUTSTANDING BALANCE DOCUMENTED"}
+              </div>
+              <p class="text-xs ${isCleared ? 'text-emerald-800' : 'text-amber-800'} max-w-xl mx-auto">
+                ${isCleared 
+                  ? "This official certificate confirms that the student named above has satisfied all mandatory bursary and tuition fees for the term. The bearer is hereby granted full access to all Examination Halls, Laboratory Practicals, and Academic Assessment Sessions."
+                  : "The student has partially settled fees. Please note that full financial clearance is required prior to release of term end examinations result slip."}
+              </p>
+            </div>
+
+            <!-- Endorsement Signatures & Stamp Block -->
+            <div class="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-xs">
+              <div class="space-y-1">
+                <div class="h-12 border-b border-slate-400 flex items-end pb-1 font-serif italic text-sm text-slate-800">
+                  Mr. I. O. Alabi, FCA (Bursar)
+                </div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Bursar / Accounts Office Signature & Date
+                </span>
+              </div>
+
+              <div class="space-y-1 text-right">
+                <div class="h-12 border-b border-slate-400 flex items-end justify-end pb-1 font-serif italic text-sm text-slate-800">
+                  Dr. K. Nwachukwu (Chief Invigilator)
+                </div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Examination Officer / Hall Verification
+                </span>
+              </div>
+            </div>
+
+            <!-- Anti-Fraud Legal Notice -->
+            <div class="mt-8 text-center text-[10px] text-slate-400 space-y-0.5">
+              <p class="font-semibold uppercase tracking-wider">
+                Issued by the Bursary Department of ${schoolName}.
+              </p>
+              <p>
+                Any forgery, alteration, or unauthorized presentation of this docket constitutes serious academic misconduct.
+              </p>
+            </div>
+          </body>
+        </html>
+      `);
+      clearanceWindow.document.close();
+    }
+  };
+
   const renderStatus = (status: string) => {
     switch (status) {
       case "PENDING":
@@ -785,6 +948,15 @@ export default function InvoiceTable({
                         <span>Receipt</span>
                       </button>
 
+                      <button
+                        onClick={() => printClearancePass(invoice, totalPaid, balance)}
+                        className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300 font-medium rounded-lg transition text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800 cursor-pointer"
+                        title="Print Financial Clearance & Examination Pass"
+                      >
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>Clearance</span>
+                      </button>
+
                       {!hasPayments && (
                         <button
                           onClick={() => handleDeleteInvoice(invoice)}
@@ -926,6 +1098,14 @@ export default function InvoiceTable({
                     >
                       <Printer className="w-3.5 h-3.5" />
                       <span>Receipt</span>
+                    </button>
+                    <button
+                      onClick={() => printClearancePass(invoice, totalPaid, balance)}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300 font-medium rounded-lg transition text-xs flex items-center gap-1 border border-blue-200 dark:border-blue-800 cursor-pointer"
+                      title="Print Financial Clearance & Examination Pass"
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>Clearance</span>
                     </button>
                   </div>
                 </div>

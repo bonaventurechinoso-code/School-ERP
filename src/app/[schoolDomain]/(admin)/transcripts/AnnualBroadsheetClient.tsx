@@ -19,8 +19,10 @@ import {
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
+  Layers,
+  Loader2,
 } from "lucide-react";
-import { BroadsheetStudentRow, BroadsheetStats, executeClassPromotionAction } from "./actions";
+import { BroadsheetStudentRow, BroadsheetStats, executeClassPromotionAction, fetchAnnualBroadsheet } from "./actions";
 
 interface InitialStudent {
   id: string;
@@ -33,6 +35,7 @@ interface InitialStudent {
 }
 
 interface AnnualBroadsheetClientProps {
+  schoolId?: string;
   schoolDomain: string;
   schoolName: string;
   initialStudents: InitialStudent[];
@@ -55,6 +58,7 @@ const TIER_CLASSES: Record<string, string[]> = {
 };
 
 export default function AnnualBroadsheetClient({
+  schoolId,
   schoolDomain,
   schoolName,
   initialStudents,
@@ -70,6 +74,7 @@ export default function AnnualBroadsheetClient({
   const [selectedClass, setSelectedClass] = useState<string>(initialClass || "JSS 1");
   const [selectedSession, setSelectedSession] = useState<string>(academicYear);
   const [searchQuery, setSearchQuery] = useState("");
+  const [transcriptTierFilter, setTranscriptTierFilter] = useState<string>("ALL");
 
   const [broadsheet, setBroadsheet] = useState<BroadsheetStudentRow[]>(initialBroadsheet);
   const [stats, setStats] = useState<BroadsheetStats>(initialStats);
@@ -85,11 +90,38 @@ export default function AnnualBroadsheetClient({
     return TIER_CLASSES[selectedTier] || TIER_CLASSES["Secondary School"];
   }, [selectedTier]);
 
-  // Handle tier change: automatically reset class to first available
+  // Reactive data loader when filters change
+  const loadBroadsheetData = (tier: string, cls: string, session: string) => {
+    startTransition(async () => {
+      const res = await fetchAnnualBroadsheet(schoolId || schoolDomain, {
+        className: cls,
+        tierName: tier,
+        academicYear: session,
+      });
+      if (res.success) {
+        setBroadsheet(res.broadsheet);
+        setStats(res.stats);
+      }
+    });
+  };
+
+  // Handle tier change: automatically reset class to first available and reload
   const handleTierChange = (newTier: string) => {
     setSelectedTier(newTier);
     const classes = TIER_CLASSES[newTier] || ["JSS 1"];
-    setSelectedClass(classes[0]);
+    const targetClass = classes[0];
+    setSelectedClass(targetClass);
+    loadBroadsheetData(newTier, targetClass, selectedSession);
+  };
+
+  const handleClassChange = (newClass: string) => {
+    setSelectedClass(newClass);
+    loadBroadsheetData(selectedTier, newClass, selectedSession);
+  };
+
+  const handleSessionChange = (newSession: string) => {
+    setSelectedSession(newSession);
+    loadBroadsheetData(selectedTier, selectedClass, newSession);
   };
 
   // Filtered broadsheet based on search
@@ -105,15 +137,23 @@ export default function AnnualBroadsheetClient({
 
   // Filtered cumulative transcripts roster
   const filteredTranscripts = useMemo(() => {
-    if (!searchQuery.trim()) return initialStudents;
-    const q = searchQuery.toLowerCase();
-    return initialStudents.filter(
-      (s) =>
+    return initialStudents.filter((s) => {
+      if (transcriptTierFilter !== "ALL") {
+        const allowedClasses = TIER_CLASSES[transcriptTierFilter] || [];
+        const matchesTier =
+          (s.tierName && s.tierName.toLowerCase().includes(transcriptTierFilter.toLowerCase())) ||
+          (s.currentClass && allowedClasses.some((c) => c.toLowerCase() === s.currentClass?.toLowerCase()));
+        if (!matchesTier) return false;
+      }
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
         s.name.toLowerCase().includes(q) ||
         (s.admissionNumber && s.admissionNumber.toLowerCase().includes(q)) ||
         (s.currentClass && s.currentClass.toLowerCase().includes(q))
-    );
-  }, [initialStudents, searchQuery]);
+      );
+    });
+  }, [initialStudents, searchQuery, transcriptTierFilter]);
 
   // Trigger print layout
   const handlePrint = () => {
@@ -128,7 +168,7 @@ export default function AnnualBroadsheetClient({
       .map((r) => r.id);
 
     try {
-      const res = await executeClassPromotionAction(schoolDomain, {
+      const res = await executeClassPromotionAction(schoolId || schoolDomain, {
         tierName: selectedTier,
         repeatingStudentIds: repeatingIds,
       });
@@ -218,7 +258,7 @@ export default function AnnualBroadsheetClient({
                 </label>
                 <select
                   value={selectedSession}
-                  onChange={(e) => setSelectedSession(e.target.value)}
+                  onChange={(e) => handleSessionChange(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="2026/2027">2026/2027 Session</option>
@@ -248,12 +288,17 @@ export default function AnnualBroadsheetClient({
 
               {/* Class Selector */}
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Class Cohort
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Class Cohort
+                  </label>
+                  {isPending && (
+                    <Loader2 className="w-3 h-3 animate-spin text-blue-600 dark:text-blue-400" />
+                  )}
+                </div>
                 <select
                   value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
+                  onChange={(e) => handleClassChange(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {availableClasses.map((cls) => (
@@ -595,19 +640,39 @@ export default function AnnualBroadsheetClient({
       {activeTab === "transcripts" && (
         <div className="space-y-5">
           
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-96">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by student name, admission #, or class..."
-                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"
-              />
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by student name, admission #, or class..."
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"
+                />
+              </div>
+
+              {/* Tier Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {["ALL", "Secondary School", "Primary School", "Daycare / Nursery"].map((tier) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => setTranscriptTierFilter(tier)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                      transcriptTierFilter === tier
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {tier === "ALL" ? "All Tiers" : tier}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="text-xs text-slate-500 font-medium">
+            <div className="text-xs text-slate-500 font-medium shrink-0">
               Total Student Records: {filteredTranscripts.length}
             </div>
           </div>

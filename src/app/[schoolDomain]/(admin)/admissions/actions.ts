@@ -7,6 +7,28 @@ import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 
+function safeRevalidate(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful no-op in non-request contexts
+  }
+}
+
+/**
+ * Safely resolves school identifier whether passed as UUID or subdomain string
+ */
+export async function resolveSchoolId(schoolIdentifier: string): Promise<string> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
+  if (isUuid) return schoolIdentifier;
+
+  const school = await basePrisma.school.findUnique({
+    where: { subdomain: schoolIdentifier },
+    select: { id: true },
+  });
+  return school?.id || schoolIdentifier;
+}
+
 export type AdmissionActionResult = {
   success: boolean;
   student?: any;
@@ -15,16 +37,164 @@ export type AdmissionActionResult = {
   error?: string;
 };
 
+/**
+ * Register a new walk-in or telephone admission inquiry
+ */
+export async function createAdmissionLeadAction(payload: {
+  schoolId: string;
+  schoolDomain?: string;
+  applicantName: string;
+  targetGrade: string;
+  tierId: string;
+  parentName?: string;
+  parentContact: string;
+  parentPhone?: string;
+  parentEmail?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  source?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const uploadToken = crypto.randomUUID();
+    const uploadExpiresAt = new Date();
+    uploadExpiresAt.setDate(uploadExpiresAt.getDate() + 30); // 30 days valid
+
+    const lead = await basePrisma.admissionLead.create({
+      data: {
+        schoolId,
+        tierId: payload.tierId,
+        applicantName: payload.applicantName.trim(),
+        targetGrade: payload.targetGrade.trim(),
+        parentName: payload.parentName?.trim() || null,
+        parentContact: payload.parentContact.trim(),
+        parentPhone: payload.parentPhone?.trim() || payload.parentContact.trim(),
+        parentEmail: payload.parentEmail?.trim().toLowerCase() || null,
+        studentEmail: payload.studentEmail?.trim().toLowerCase() || null,
+        studentPhone: payload.studentPhone?.trim() || null,
+        source: payload.source || "Walk-In Inquiry",
+        status: "INQUIRY",
+        uploadToken,
+        uploadExpiresAt,
+        documents: {},
+        logs: [
+          {
+            timestamp: new Date().toISOString(),
+            action: "INQUIRY_CREATED",
+            note: "New direct admission inquiry registered.",
+          }
+        ]
+      },
+      include: { tier: true },
+    });
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+    return { success: true, lead };
+  } catch (error: any) {
+    console.error("[createAdmissionLeadAction] Error:", error);
+    return { success: false, error: error.message || "Failed to create inquiry." };
+  }
+}
+
+/**
+ * Update candidate document verification checklist (Passport, Birth Cert, Results, Medical)
+ */
+export async function updateLeadDocumentsAction(payload: {
+  leadId: string;
+  schoolId: string;
+  schoolDomain?: string;
+  documentType: string;
+  status: "VERIFIED" | "PENDING" | "REJECTED";
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { id: payload.leadId },
+    });
+    if (!lead) return { success: false, error: "Applicant lead not found." };
+
+    const docs = (lead.documents as any) || {};
+    docs[payload.documentType] = {
+      status: payload.status,
+      verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
+    };
+
+    const updated = await basePrisma.admissionLead.update({
+      where: { id: payload.leadId },
+      data: {
+        documents: docs,
+      },
+      include: { tier: true },
+    });
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+    return { success: true, lead: updated };
+  } catch (error: any) {
+    console.error("[updateLeadDocumentsAction] Error:", error);
+    return { success: false, error: error.message || "Failed to update document status." };
+  }
+}
+
+/**
+ * Record Entrance Examination and Interview Assessment Results
+ */
+export async function updateLeadScreeningAction(payload: {
+  leadId: string;
+  schoolId: string;
+  schoolDomain?: string;
+  examScore?: number;
+  interviewRating?: number;
+  recommendation?: string;
+  notes?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { id: payload.leadId },
+    });
+    if (!lead) return { success: false, error: "Applicant lead not found." };
+
+    const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
+    logs.push({
+      timestamp: new Date().toISOString(),
+      action: "SCREENING_EVALUATED",
+      examScore: payload.examScore ?? null,
+      interviewRating: payload.interviewRating ?? null,
+      recommendation: payload.recommendation ?? "RECOMMENDED",
+      notes: payload.notes || "",
+    });
+
+    const updated = await basePrisma.admissionLead.update({
+      where: { id: payload.leadId },
+      data: { logs },
+      include: { tier: true },
+    });
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+    return { success: true, lead: updated };
+  } catch (error: any) {
+    console.error("[updateLeadScreeningAction] Error:", error);
+    return { success: false, error: error.message || "Failed to update screening data." };
+  }
+}
+
+/**
+ * 1-Click Final Matriculation: Converts approved applicant into official Student record
+ */
 export async function enrollApplicantAction(payload: {
   leadId: string;
   schoolId: string;
   schoolDomain: string;
 }): Promise<AdmissionActionResult> {
-  const { leadId, schoolId, schoolDomain } = payload;
+  const { leadId, schoolDomain } = payload;
   try {
-    if (!leadId || !schoolId) {
-      return { success: false, error: "leadId and schoolId are required." };
+    if (!leadId) {
+      return { success: false, error: "leadId is required." };
     }
+    const schoolId = await resolveSchoolId(payload.schoolId);
 
     // 1. Fetch applicant lead with academic tier context
     const lead = await basePrisma.admissionLead.findUnique({
@@ -117,8 +287,7 @@ export async function enrollApplicantAction(payload: {
       },
     });
 
-    // 5. ROSTER DYNAMIC SYNC REFRESH & CACHE PURGE:
-    // Invalidate cached query instances and purge Redis cache namespaces
+    // 5. ROSTER DYNAMIC SYNC REFRESH & CACHE PURGE
     invalidateTierConnection();
     await Promise.all([
       invalidateAdmissionsNamespace(schoolId),
@@ -126,19 +295,15 @@ export async function enrollApplicantAction(payload: {
     ]);
 
     const domain = schoolDomain || school?.subdomain;
-    try {
-      if (domain) {
-        revalidatePath(`/${domain}/students`);
-        revalidatePath(`/${domain}/admissions`);
-        revalidatePath(`/${domain}/dashboard`);
-        revalidatePath(`/${domain}/scheduling`);
-      }
-      revalidatePath("/[schoolDomain]/(admin)/students", "page");
-      revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
-      revalidatePath("/[schoolDomain]/(admin)/dashboard", "page");
-    } catch {
-      // In non-request execution contexts (e.g. testing scripts), revalidatePath is a no-op
+    if (domain) {
+      safeRevalidate(`/${domain}/students`);
+      safeRevalidate(`/${domain}/admissions`);
+      safeRevalidate(`/${domain}/dashboard`);
+      safeRevalidate(`/${domain}/scheduling`);
     }
+    safeRevalidate("/[schoolDomain]/(admin)/students", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
 
     return {
       success: true,
@@ -152,17 +317,21 @@ export async function enrollApplicantAction(payload: {
   }
 }
 
+/**
+ * Move lead across the admissions pipeline stages
+ */
 export async function updateLeadStatusAction(payload: {
   leadId: string;
   status: string;
   schoolId: string;
   schoolDomain: string;
 }): Promise<AdmissionActionResult> {
-  const { leadId, status, schoolId, schoolDomain } = payload;
+  const { leadId, status, schoolDomain } = payload;
   try {
-    if (!leadId || !status || !schoolId) {
+    if (!leadId || !status) {
       return { success: false, error: "Missing required parameters." };
     }
+    const schoolId = await resolveSchoolId(payload.schoolId);
 
     if (status === "ENROLLED") {
       return await enrollApplicantAction({ leadId, schoolId, schoolDomain });
@@ -173,7 +342,7 @@ export async function updateLeadStatusAction(payload: {
     if (status === "APPROVED") {
       const token = crypto.randomUUID();
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      expiresAt.setDate(expiresAt.getDate() + 14); // 14-day offer window
 
       updatedLead = await basePrisma.admissionLead.update({
         where: { id: leadId },
@@ -213,16 +382,12 @@ export async function updateLeadStatusAction(payload: {
     await invalidateAdmissionsNamespace(schoolId);
 
     const domain = schoolDomain;
-    try {
-      if (domain) {
-        revalidatePath(`/${domain}/admissions`);
-        revalidatePath(`/${domain}/dashboard`);
-      }
-      revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
-      revalidatePath("/[schoolDomain]/(admin)/dashboard", "page");
-    } catch {
-      // In non-request execution contexts, revalidatePath is a no-op
+    if (domain) {
+      safeRevalidate(`/${domain}/admissions`);
+      safeRevalidate(`/${domain}/dashboard`);
     }
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
 
     return { success: true, lead: updatedLead };
   } catch (error: any) {
