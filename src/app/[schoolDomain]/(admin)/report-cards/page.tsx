@@ -622,7 +622,7 @@ function ReportCardsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "info" } | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "info" | "error" } | null>(null);
   const [selectedStudentForModal, setSelectedStudentForModal] = useState<ReportCardStudentData | null>(null);
 
   // Compute positions across the class roster based on strictly descending calculated total score
@@ -694,16 +694,34 @@ function ReportCardsContent() {
     return { totalStudents, compiledCount, pendingCount, avgScore };
   }, [rankedRoster]);
 
-  const handleBulkExportPdf = () => {
+  const handleBulkExportPdf = async () => {
     setIsExportingPdf(true);
     setActionFeedback({
-      message: `Preparing high-resolution PDF export for ${className} (${term} - ${subject})...`,
+      message: `Compiling and archiving official report card PDFs for ${className} (${term})...`,
       type: "info",
     });
-    setTimeout(() => {
+
+    try {
+      const zipUrl = `/api/v1/report-cards/zip?className=${encodeURIComponent(className)}&term=${encodeURIComponent(term)}&session=2026/2027&schoolId=${encodeURIComponent(tenant.id || "")}`;
+      const link = document.createElement("a");
+      link.href = zipUrl;
+      link.setAttribute("download", `ReportCards_${className.replace(/\s+/g, "_")}_${term.replace(/\s+/g, "_")}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setActionFeedback({
+        message: `Successfully generated and downloaded class report cards archive for ${className}!`,
+        type: "success",
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        message: `Export failed: ${err?.message || "Failed to download ZIP archive."}`,
+        type: "error",
+      });
+    } finally {
       setIsExportingPdf(false);
-      window.print();
-    }, 700);
+    }
   };
 
   const handlePublishResults = () => {
@@ -1127,6 +1145,8 @@ function ReportCardsContent() {
             <div className={`p-4 rounded-xl border flex items-center justify-between text-sm animate-in fade-in duration-300 ${
               actionFeedback.type === "success"
                 ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : actionFeedback.type === "error"
+                ? "bg-rose-50 border-rose-200 text-rose-800"
                 : "bg-blue-50 border-blue-200 text-blue-800"
             }`}>
               <div className="flex items-center gap-2.5">
@@ -1328,6 +1348,17 @@ function ReportCardsContent() {
                               <span>View Sheet</span>
                             </button>
 
+                            {/* Direct PDF Download Link */}
+                            <a
+                              href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(student.id)}&className=${encodeURIComponent(className)}&term=${encodeURIComponent(term)}&schoolId=${encodeURIComponent(tenant.id || "")}`}
+                              download={`ReportCard_${(student.admissionNumber || student.id).replace(/[^a-zA-Z0-9_-]/g, "_")}_${term.replace(/\s+/g, "_")}.pdf`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs shadow-2xs transition cursor-pointer"
+                              title="Download High-Resolution PDF"
+                            >
+                              <FileDown className="w-3.5 h-3.5 text-slate-500" />
+                              <span>PDF</span>
+                            </a>
+
                             <button 
                               onClick={() => handleSaveGrade(student)}
                               disabled={student.saving}
@@ -1372,7 +1403,7 @@ function ReportCardsContent() {
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              {/* Bulk Export PDF - secondary outline action */}
+              {/* Bulk Export ZIP / PDFs - secondary outline action */}
               <button
                 type="button"
                 onClick={handleBulkExportPdf}
@@ -1380,7 +1411,7 @@ function ReportCardsContent() {
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border-2 border-slate-300 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 text-slate-700 font-semibold text-sm shadow-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <FileDown className="w-4 h-4 text-slate-600" />
-                <span>{isExportingPdf ? "Generating PDF..." : "Bulk Export PDF"}</span>
+                <span>{isExportingPdf ? "Generating ZIP..." : "Bulk Export ZIP / PDFs"}</span>
               </button>
 
               {/* Publish & Email Results - prominent primary blue action */}

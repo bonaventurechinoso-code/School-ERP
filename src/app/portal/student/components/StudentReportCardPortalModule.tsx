@@ -14,6 +14,7 @@ import {
   Clock,
   TrendingUp,
   FileText,
+  FileDown,
 } from "lucide-react";
 import { StudentProfileData, TierPresentationConfig } from "../types";
 import { calculateBonaVeeResult, getGradeRemark } from "@/lib/assessmentEngine";
@@ -165,15 +166,25 @@ export function StudentReportCardPortalModule({
 
         </div>
 
-        {/* Action Button: Print / Save PDF */}
-        <div className="flex items-center gap-3">
+        {/* Action Buttons: Direct PDF Download & Print */}
+        <div className="flex items-center gap-2.5">
+          <a
+            href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(student.id)}&className=${encodeURIComponent(student.currentClass)}&term=${encodeURIComponent(selectedTerm)}&session=${encodeURIComponent(selectedSession)}`}
+            download={`ReportCard_${student.admissionNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}_${selectedTerm.replace(/\s+/g, "_")}.pdf`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-200 font-bold text-xs shadow-2xs transition cursor-pointer"
+            title="Download Official High-Resolution PDF"
+          >
+            <FileDown className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Download PDF</span>
+          </a>
+
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-sm hover:shadow transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-sm hover:shadow transition cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>Print / Save as PDF</span>
+            <span>Print Sheet</span>
           </button>
         </div>
       </div>

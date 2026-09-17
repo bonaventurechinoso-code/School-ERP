@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   GraduationCap,
   Sparkles,
+  FileDown,
 } from "lucide-react";
 import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib/assessmentEngine";
 
@@ -174,14 +175,24 @@ export default function StudentReportCardModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <a
+              href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(studentData.id)}&className=${encodeURIComponent(studentData.currentClass || "")}&term=${encodeURIComponent(studentData.term || "First Term")}`}
+              download={`ReportCard_${(studentData.admissionNumber || studentData.name).replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+              title="Download High-Resolution PDF"
+            >
+              <FileDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Download PDF</span>
+            </a>
+
             <button
               type="button"
               onClick={handlePrint}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-sm hover:shadow transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print / Export PDF</span>
+              <span>Print Sheet</span>
             </button>
 
             <button
