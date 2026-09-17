@@ -23,6 +23,8 @@ import {
   X,
   Layers,
   BookOpen,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   createScheduledExam,
@@ -293,7 +295,16 @@ export default function ExamsList({
   const [examList, setExamList] = useState<ScheduledExamRecord[]>(initialNormalizedList);
 
   useEffect(() => {
-    setExamList(initialNormalizedList);
+    setExamList((prev) => {
+      const localStatusMap = new Map(prev.map((e) => [e.id, e.status]));
+      return initialNormalizedList.map((item) => {
+        const localStatus = localStatusMap.get(item.id);
+        return {
+          ...item,
+          status: localStatus !== undefined ? localStatus : item.status,
+        };
+      });
+    });
   }, [initialNormalizedList]);
 
   // Form input states
@@ -484,15 +495,23 @@ export default function ExamsList({
   };
 
   /**
-   * CONTEXTUAL ACTION: PUBLISH / UNPUBLISH TOGGLE SWITCH
+   * CONTEXTUAL ACTION: PUBLISH / UNPUBLISH ACTION
+   * Instantly synchronizes reactive local state with top notification banner
    */
   const handleTogglePublish = async (exam: ScheduledExamRecord) => {
-    const nextStatus = exam.status === "published" ? "unpublished" : "published";
+    const isCurrentlyPublished = exam.status === "published";
+    const nextStatus = isCurrentlyPublished ? "unpublished" : "published";
 
-    // Optimistic local update
+    // 1. Instant optimistic local update directly in examList
     setExamList((prev) =>
       prev.map((item) => (item.id === exam.id ? { ...item, status: nextStatus } : item))
     );
+
+    // 2. Notification banner updates immediately in lockstep (zero latency / zero mismatch)
+    setSuccessMessage(
+      `Exam "${exam.title}" is now ${nextStatus === "published" ? "Published" : "Unpublished"}.`
+    );
+    setValidationError(null);
 
     startTransition(async () => {
       const res = await toggleExamPublishStatus(schoolId, schoolDomain, exam.id, exam.status);
@@ -501,11 +520,9 @@ export default function ExamsList({
         setExamList((prev) =>
           prev.map((item) => (item.id === exam.id ? { ...item, status: exam.status } : item))
         );
+        setSuccessMessage(null);
         setValidationError(res.error || "Failed to change publication status.");
       } else {
-        setSuccessMessage(
-          `Exam "${exam.title}" is now ${nextStatus === "published" ? "Published" : "Unpublished"}.`
-        );
         router.refresh();
       }
     });
@@ -649,10 +666,10 @@ export default function ExamsList({
                     <th scope="col" className="py-3.5 px-4 text-center">
                       Max Score
                     </th>
-                    <th scope="col" className="py-3.5 px-4 text-center">
+                    <th scope="col" className="py-3.5 px-4 text-center w-28 min-w-[7rem] max-w-[7rem] shrink-0">
                       Status
                     </th>
-                    <th scope="col" className="py-3.5 px-4 text-right">
+                    <th scope="col" className="py-3.5 px-4 text-right w-40 min-w-[10rem] shrink-0">
                       Actions
                     </th>
                   </tr>
@@ -734,39 +751,54 @@ export default function ExamsList({
                         </span>
                       </td>
 
-                      {/* Publish / Unpublish Toggle Switch */}
-                      <td className="py-4 px-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={exam.status === "published"}
-                            onClick={() => handleTogglePublish(exam)}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                              exam.status === "published"
-                                ? "bg-emerald-600"
-                                : "bg-slate-300 dark:bg-slate-700"
+                      {/* Administrative Status Badge Column */}
+                      <td className="py-4 px-4 text-center w-28 min-w-[7rem] max-w-[7rem] shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePublish(exam)}
+                          disabled={isPending}
+                          title={`Click to ${exam.status === "published" ? "unpublish" : "publish"} assessment`}
+                          aria-label={`Current status: ${exam.status === "published" ? "Published" : "Unpublished"}. Click to toggle.`}
+                          className={`inline-flex items-center justify-center w-[100px] h-7 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-150 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 hover:shadow-xs active:scale-95 ${
+                            exam.status === "published"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                              : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full mr-1.5 shrink-0 transition-colors ${
+                              exam.status === "published" ? "bg-emerald-500" : "bg-slate-400"
                             }`}
-                            title={
-                              exam.status === "published" ? "Published (Active)" : "Unpublished (Draft)"
-                            }
-                          >
-                            <span
-                              aria-hidden="true"
-                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                exam.status === "published" ? "translate-x-4" : "translate-x-0"
-                              }`}
-                            />
-                          </button>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            {exam.status === "published" ? "Published" : "Draft"}
+                          />
+                          <span className="truncate">
+                            {exam.status === "published" ? "Published" : "Unpublished"}
                           </span>
-                        </div>
+                        </button>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-4 text-right">
+                      <td className="py-4 px-4 text-right w-40 min-w-[10rem] shrink-0">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Publish / Unpublish Icon Action Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePublish(exam)}
+                            disabled={isPending}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              exam.status === "published"
+                                ? "text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                            }`}
+                            title={exam.status === "published" ? "Unpublish Assessment" : "Publish Assessment"}
+                            aria-label={exam.status === "published" ? "Unpublish Assessment" : "Publish Assessment"}
+                          >
+                            {exam.status === "published" ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+
                           {/* View Grading Roster Link */}
                           <Link
                             href={`/${schoolDomain}/exams/${exam.id}/roster`}
@@ -834,28 +866,27 @@ export default function ExamsList({
                     </div>
                   </div>
 
-                  {/* Publish Switch */}
-                  <div className="flex flex-col items-end shrink-0">
+                  {/* Mobile Status Badge */}
+                  <div className="shrink-0">
                     <button
                       type="button"
-                      role="switch"
-                      aria-checked={exam.status === "published"}
                       onClick={() => handleTogglePublish(exam)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      disabled={isPending}
+                      title={`Click to ${exam.status === "published" ? "unpublish" : "publish"} assessment`}
+                      aria-label={`Current status: ${exam.status === "published" ? "Published" : "Unpublished"}. Click to toggle.`}
+                      className={`inline-flex items-center justify-center px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-150 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 ${
                         exam.status === "published"
-                          ? "bg-emerald-600"
-                          : "bg-slate-300 dark:bg-slate-700"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                       }`}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          exam.status === "published" ? "translate-x-4" : "translate-x-0"
+                        className={`w-1.5 h-1.5 rounded-full mr-1.5 shrink-0 transition-colors ${
+                          exam.status === "published" ? "bg-emerald-500" : "bg-slate-400"
                         }`}
                       />
+                      <span>{exam.status === "published" ? "Published" : "Unpublished"}</span>
                     </button>
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold mt-0.5">
-                      {exam.status === "published" ? "Published" : "Draft"}
-                    </span>
                   </div>
                 </div>
 

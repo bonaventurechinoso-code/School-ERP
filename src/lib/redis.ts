@@ -10,40 +10,55 @@ declare global {
   var __redisLastFailureTime: number | undefined;
 }
 
-// Ensure connection config explicitly uses 127.0.0.1 instead of localhost
-// to avoid Node.js attempting IPv6 resolution (::1) before falling back,
-// which causes a 2-to-3 second connection timeout delay on local machines.
-const rawRedisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
-const REDIS_URL = rawRedisUrl
-  .replace("//localhost:", "//127.0.0.1:")
-  .replace("//localhost", "//127.0.0.1");
+/**
+ * Explicit Windows-optimized network parameters:
+ * Force IPv4 host string "127.0.0.1" and port 6379.
+ * Using "127.0.0.1" instead of "localhost" eliminates the 2-to-3 second IPv6 (::1) DNS lookup
+ * timeout common in Windows background services and Node.js networking stacks.
+ */
+const REDIS_HOST = "127.0.0.1";
+const REDIS_PORT = 6379;
 
-// 15-second circuit breaker cooldown after a connection failure
-const CIRCUIT_BREAKER_COOLDOWN_MS = 15000;
+const rawRedisUrl = process.env.REDIS_URL;
+const REDIS_URL = rawRedisUrl
+  ? rawRedisUrl.replace("//localhost:", `//${REDIS_HOST}:`).replace("//localhost", `//${REDIS_HOST}`)
+  : `redis://${REDIS_HOST}:${REDIS_PORT}`;
+
+// Circuit breaker cooldown: if offline, fail fast in 0ms to DB fallback without blocking queries
+const CIRCUIT_BREAKER_COOLDOWN_MS = 5000;
 
 const redisOptions: RedisOptions = {
-  lazyConnect: true,
-  family: 4, // Explicitly force IPv4 to avoid IPv6 DNS timeout delays
-  enableOfflineQueue: false, // Prevents queries from hanging indefinitely if Redis is offline
-  maxRetriesPerRequest: 1,   // Fail fast so fallback to Prisma takes over immediately
-  connectTimeout: 500,       // 500ms max timeout - prevents 2-3s delay
+  host: REDIS_HOST,
+  port: REDIS_PORT,
+  family: 4,                  // Explicitly force IPv4 to eliminate Windows IPv6 (::1) resolution delays
+  lazyConnect: true,          // Connect lazily so Next.js server boots without blocking
+  enableOfflineQueue: false,  // Fail fast on offline state so Safe DB fallback takes over instantly
+  maxRetriesPerRequest: 1,    // Single attempt per query before handing off to Prisma fallback
+  connectTimeout: 1000,       // 1 second connection timeout
   disconnectTimeout: 500,
-  commandTimeout: 500,
-  retryStrategy(times) {
-    if (times > 2) return null; // Stop retrying quickly; fallback to DB
-    return 1000;
+  commandTimeout: 1000,
+  keepAlive: 10000,           // 10-second TCP keepalive for persistent Windows Service connection
+  retryStrategy(times: number) {
+    // Reconnection backoff: smooth exponential backoff capped at 3000ms.
+    // NEVER returns null: allows the client to automatically detect when the local
+    // Redis Windows Service is ready and seamlessly transition from Safe DB fallback
+    // to the in-memory cache layer without requiring an application restart.
+    const delay = Math.min(times * 200, 3000);
+    return delay;
   },
 };
 
 function createRedisClient(): Redis | null {
   try {
-    const client = new Redis(REDIS_URL, redisOptions);
+    const client = rawRedisUrl
+      ? new Redis(REDIS_URL, redisOptions)
+      : new Redis(redisOptions);
 
     client.on("error", (err: any) => {
       globalThis.__redisLastFailureTime = Date.now();
       if (!globalThis.__redisFailedLogged) {
         console.warn(
-          `[REDIS_FALLBACK] Redis at 127.0.0.1 is unreachable (${err?.message || err}). Safe DB fallback is active.`
+          `[REDIS_FALLBACK] Redis at ${REDIS_HOST}:${REDIS_PORT} is unreachable (${err?.message || err}). Safe DB fallback is active.`
         );
         globalThis.__redisFailedLogged = true;
       }
@@ -51,8 +66,14 @@ function createRedisClient(): Redis | null {
 
     client.on("connect", () => {
       if (process.env.NODE_ENV !== "production") {
-        console.log("[REDIS] Successfully connected to Redis instance at 127.0.0.1.");
+        console.log(`[REDIS] Successfully connected to Redis instance at ${REDIS_HOST}:${REDIS_PORT}.`);
       }
+      globalThis.__redisFailedLogged = false;
+      globalThis.__redisLastFailureTime = 0;
+    });
+
+    client.on("ready", () => {
+      console.log(`[REDIS] Redis client ready and accepting commands at ${REDIS_HOST}:${REDIS_PORT}.`);
       globalThis.__redisFailedLogged = false;
       globalThis.__redisLastFailureTime = 0;
     });
@@ -86,7 +107,17 @@ export default clientInstance;
 export async function getRedisClient(): Promise<Redis | null> {
   if (!clientInstance) return null;
 
-  // Circuit-breaker check: avoid 2-3s socket hang if Redis went down recently
+  // Immediate fast path: already connected and ready
+  if (clientInstance.status === "ready") {
+    return clientInstance;
+  }
+
+  // If in the middle of connecting or reconnecting, fail fast to safe DB fallback
+  if (clientInstance.status === "connecting" || clientInstance.status === "reconnecting") {
+    return null;
+  }
+
+  // Circuit-breaker check: avoid TCP socket hang if Redis failed recently
   const lastFailure = globalThis.__redisLastFailureTime || 0;
   if (Date.now() - lastFailure < CIRCUIT_BREAKER_COOLDOWN_MS) {
     return null;
@@ -96,11 +127,11 @@ export async function getRedisClient(): Promise<Redis | null> {
     if (clientInstance.status === "wait" || clientInstance.status === "close") {
       await clientInstance.connect();
     }
-    return clientInstance;
+    return (clientInstance.status as string) === "ready" ? clientInstance : null;
   } catch (err: any) {
     globalThis.__redisLastFailureTime = Date.now();
     if (!globalThis.__redisFailedLogged) {
-      console.warn("[REDIS_FALLBACK] Lazy connect to 127.0.0.1 failed. Circuit breaker active; falling back to DB.");
+      console.warn(`[REDIS_FALLBACK] Lazy connect to ${REDIS_HOST}:${REDIS_PORT} failed. Circuit breaker active; falling back to DB.`);
       globalThis.__redisFailedLogged = true;
     }
     return null;

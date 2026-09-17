@@ -86,12 +86,18 @@ export async function logMessage(
   const tenantDb = getTenantClient(schoolId);
   
   try {
+    // Normalize channel safely: "BRANDED_HTML" or "Official Email" -> "EMAIL"
+    const normalizedType =
+      data.messageType === "BRANDED_HTML" || data.messageType === "Official Email"
+        ? "EMAIL"
+        : (data.messageType || "EMAIL");
+
     // 1. Dispatch actual formatted email notification
     await sendDirectCommunicationEmail({
       schoolId,
       recipientEmail: data.recipientEmail,
       recipientType: data.recipientType,
-      messageType: data.messageType,
+      messageType: normalizedType,
       subject: data.subject,
       body: data.body,
     });
@@ -102,7 +108,7 @@ export async function logMessage(
         schoolId,
         recipientEmail: data.recipientEmail,
         recipientType: data.recipientType,
-        messageType: data.messageType,
+        messageType: normalizedType,
         subject: data.subject,
         body: data.body,
       }
