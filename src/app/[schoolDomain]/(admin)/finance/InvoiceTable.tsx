@@ -16,7 +16,7 @@ import {
   PlusCircle,
   RefreshCw
 } from "lucide-react";
-import { useActiveTierConfig } from "@/lib/tier-config";
+import { useActiveTierConfig } from "@/hooks/useClientTier";
 
 type InvoiceWithDetails = Invoice & {
   student: Student & { currentClass?: string | null };
@@ -251,6 +251,7 @@ export default function InvoiceTable({
     const receiptWindow = window.open("", "_blank");
     if (receiptWindow) {
       const schoolName = tenant.name || "INSTITUTIONAL BURSARY";
+      const dashboardUrl = tenant?.subdomain ? `/${tenant.subdomain}/finance` : "/dashboard";
       const receiptNo = `RCP-${invoice.id.substring(0, 8).toUpperCase()}`;
       const printDate = new Date().toLocaleDateString("en-NG", {
         year: "numeric",
@@ -263,100 +264,214 @@ export default function InvoiceTable({
         <html>
           <head>
             <title>Official Bursary Receipt - ${invoice.student.firstName} ${invoice.student.lastName}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
             <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #0f172a; max-width: 680px; margin: 0 auto; line-height: 1.5; }
-              .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 24px; }
-              .header h1 { margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 1.5px; color: #0f172a; }
-              .header p { color: #64748b; margin: 4px 0 0 0; font-size: 13px; font-weight: 500; }
-              .receipt-badge { display: inline-block; margin-top: 8px; padding: 3px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 9999px; font-size: 11px; font-weight: 700; color: #334155; }
-              .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; font-size: 13px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; }
-              .meta-grid strong { color: #475569; }
-              .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-              .table th, .table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-              .table th { background: #f1f5f9; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; color: #475569; }
-              .total-row { font-weight: 700; font-size: 14px; }
-              .payment-log { margin-top: 18px; padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; font-size: 12px; }
-              .stamp-box { margin-top: 36px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 20px; border-top: 1px solid #e2e8f0; }
-              .seal { border: 2px dashed #0284c7; color: #0284c7; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 800; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
-              .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #94a3b8; }
-              .btn-bar { text-align: center; margin-top: 20px; }
-              .print-btn { padding: 9px 24px; background: #0f172a; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
-              @media print { .btn-bar { display: none; } body { padding: 0; } }
+              body { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                padding: 32px; 
+                color: #0f172a; 
+                max-width: 780px; 
+                margin: 0 auto; 
+                line-height: 1.5; 
+                background-color: #ffffff;
+              }
+              @media print { 
+                .print\\:hidden, [class*="print:hidden"], [className*="print:hidden"], .btn-bar { display: none !important; } 
+                body { padding: 0 !important; max-width: 100% !important; } 
+              }
             </style>
           </head>
-          <body>
-            <div class="header">
-              <h1>${schoolName}</h1>
-              <p>Official Bursary & Tuition Receipt</p>
-              <div class="receipt-badge">${receiptNo}</div>
+          <body class="bg-white text-slate-900">
+            <!-- Print-Shielded Top Navigation Action Bar -->
+            <div class="print:hidden flex items-center justify-between w-full mb-6 p-4 border-b border-gray-100" className="print:hidden flex items-center justify-between w-full mb-6 p-4 border-b border-gray-100">
+              <a href="${dashboardUrl}" onclick="if (window.opener) { window.close(); return false; }" class="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition no-underline">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 19-7-7 7-7"/>
+                  <path d="M19 12H5"/>
+                </svg>
+                <span>Back to Dashboard</span>
+              </a>
+
+              <button class="inline-flex items-center gap-2 px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-slate-800 transition cursor-pointer" onclick="window.print()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect width="12" height="8" x="6" y="14"/>
+                </svg>
+                <span>Print Official Receipt</span>
+              </button>
             </div>
 
-            <div class="meta-grid">
+            <!-- Official Header -->
+            <div class="text-center border-b-2 border-slate-900 pb-5 mb-6">
+              <h1 class="text-2xl font-black uppercase tracking-wider text-slate-900 mb-1">${schoolName}</h1>
+              <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Official Bursary & Tuition Receipt</p>
+              <div class="mt-2 inline-flex items-center px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-xs font-mono font-bold text-slate-700">
+                ${receiptNo}
+              </div>
+            </div>
+
+            <!-- 2-Column Split Grid: Student Profile & Receipt Metadata -->
+            <div class="grid grid-cols-2 gap-8 mb-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
+              <!-- Left Column: Student Details -->
+              <div class="space-y-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 pb-1 border-b border-slate-200">
+                  Student Information
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Student Name:</span>
+                  <span class="font-bold text-slate-900 text-right">${invoice.student.firstName} ${invoice.student.lastName}</span>
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Admission No:</span>
+                  <span class="font-bold text-slate-700 font-mono text-right">${invoice.student.admissionNumber || "N/A"}</span>
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Class / Tier:</span>
+                  <span class="font-bold text-slate-700 text-right">${invoice.student.currentClass || "Unassigned"}</span>
+                </div>
+              </div>
+
+              <!-- Right Column: Receipt Details -->
+              <div class="space-y-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 pb-1 border-b border-slate-200">
+                  Receipt Details
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Date Issued:</span>
+                  <span class="font-semibold text-slate-700 text-right">${new Date(invoice.createdAt).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })}</span>
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Due Date:</span>
+                  <span class="font-semibold text-slate-700 text-right">${new Date(invoice.dueDate).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })}</span>
+                </div>
+                <div class="flex justify-between items-baseline gap-2">
+                  <span class="text-slate-500 font-medium">Receipt Date:</span>
+                  <span class="font-semibold text-slate-700 font-mono text-right">${printDate}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Structured Bill Items Table -->
+            <div class="overflow-hidden border border-slate-200 rounded-2xl mb-6 shadow-2xs">
+              <table class="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
+                    <th class="py-3 px-4 border-r border-slate-200">Billing Item Description</th>
+                    <th class="py-3 px-4 text-center border-r border-slate-200 w-32">Status</th>
+                    <th class="py-3 px-4 text-right w-44">Amount Billed</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                  <tr>
+                    <td class="py-4 px-4 font-semibold text-slate-800 border-r border-slate-100">
+                      ${invoice.description}
+                    </td>
+                    <td class="py-4 px-4 text-center border-r border-slate-100">
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        invoice.status === 'PAID'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : invoice.status === 'PARTIALLY_PAID'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }">
+                        ${invoice.status}
+                      </span>
+                    </td>
+                    <td class="py-4 px-4 text-right font-mono font-bold text-slate-900 text-sm">
+                      ₦${invoice.amountDue.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Bounded Summary & Audit Log Section -->
+            <div class="border border-slate-200 rounded-2xl p-4 bg-slate-50/60 mb-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                
+                <!-- Transaction Audit Log Box -->
+                <div class="p-4 bg-white border border-slate-200 rounded-xl h-full flex flex-col">
+                  <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Transaction Audit Log</span>
+                    <span class="text-[10px] font-semibold text-slate-400 font-mono">${invoice.payments?.length || 0} entry(ies)</span>
+                  </div>
+                  ${invoice.payments && invoice.payments.length > 0 ? `
+                    <ul class="space-y-2 text-xs flex-1">
+                      ${invoice.payments.map(p => `
+                        <li class="flex items-center justify-between py-1 border-b border-dashed border-slate-100 last:border-0">
+                          <div>
+                            <strong class="text-slate-700 font-semibold">${p.method}</strong>
+                            <div class="text-slate-400 text-[10px]">${new Date(p.paymentDate).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })}</div>
+                          </div>
+                          <span class="font-mono font-bold text-emerald-600">₦${p.amountPaid.toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span>
+                        </li>
+                      `).join("")}
+                    </ul>
+                  ` : `
+                    <div class="text-xs text-slate-400 italic py-4 text-center flex-1 flex items-center justify-center">
+                      No electronic payment entries recorded.
+                    </div>
+                  `}
+                </div>
+
+                <!-- Reconciliation Tallies Box -->
+                <div class="p-4 bg-white border border-slate-200 rounded-xl space-y-2 text-xs">
+                  <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Reconciliation Summary</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      balance <= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }">
+                      ${balance <= 0 ? 'CLEARED' : 'OUTSTANDING'}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center justify-between py-1 text-slate-600">
+                    <span class="font-medium text-slate-500">Total Billed:</span>
+                    <span class="font-mono font-bold text-slate-800">
+                      ₦${invoice.amountDue.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center justify-between py-1 border-t border-slate-100 text-emerald-700">
+                    <span class="font-medium">Total Reconciled / Paid:</span>
+                    <span class="font-mono font-bold text-sm">
+                      ₦${totalPaid.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center justify-between py-1.5 border-t border-slate-200 font-bold ${balance > 0 ? 'text-rose-600' : 'text-emerald-600'}">
+                    <span class="text-xs">Outstanding Balance:</span>
+                    <span class="font-mono text-base font-black">
+                      ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Official Seal & Authorization Footer -->
+            <div class="flex items-end justify-between pt-4 border-t border-slate-200 text-xs mt-6">
               <div>
-                <div><strong>Student Name:</strong> ${invoice.student.firstName} ${invoice.student.lastName}</div>
-                <div><strong>Admission No:</strong> ${invoice.student.admissionNumber || "N/A"}</div>
-                <div><strong>Class / Tier:</strong> ${invoice.student.currentClass || "Unassigned"}</div>
+                <p class="font-semibold text-slate-700 m-0">Issued by Bursary & Accounts Department</p>
+                <p class="text-[11px] text-slate-400 mt-0.5 m-0 font-mono">Official System Voucher • Ref: ${receiptNo}</p>
               </div>
-              <div style="text-align: right;">
-                <div><strong>Date Issued:</strong> ${new Date(invoice.createdAt).toLocaleDateString("en-NG")}</div>
-                <div><strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString("en-NG")}</div>
-                <div><strong>Receipt Date:</strong> ${printDate}</div>
+              <div class="border-2 border-dashed border-sky-600 text-sky-700 px-4 py-2 rounded-xl text-center font-extrabold text-[11px] tracking-widest uppercase">
+                <div>OFFICIALLY RECONCILED</div>
+                <div class="text-[9px] font-normal text-sky-500 mt-0.5">BURSARY OFFICE AUDIT</div>
               </div>
             </div>
 
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th style="text-align: right;">Status</th>
-                  <th style="text-align: right;">Amount Billed</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>${invoice.description}</strong></td>
-                  <td style="text-align: right;"><span style="font-weight: 700; color: ${invoice.status === 'PAID' ? '#16a34a' : '#ea580c'};">${invoice.status}</span></td>
-                  <td style="text-align: right; font-weight: 700;">₦${invoice.amountDue.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-                <tr class="total-row">
-                  <td colspan="2" style="text-align: right; color: #16a34a;">Total Amount Reconciled / Paid:</td>
-                  <td style="text-align: right; color: #16a34a;">₦${totalPaid.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-                <tr class="total-row">
-                  <td colspan="2" style="text-align: right; color: ${balance > 0 ? '#dc2626' : '#16a34a'};">Outstanding Balance:</td>
-                  <td style="text-align: right; color: ${balance > 0 ? '#dc2626' : '#16a34a'};">₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            ${invoice.payments && invoice.payments.length > 0 ? `
-              <div class="payment-log">
-                <strong>Transaction Audit Log:</strong>
-                <ul style="margin: 6px 0 0 0; padding-left: 20px;">
-                  ${invoice.payments.map(p => `
-                    <li>₦${p.amountPaid.toLocaleString("en-NG", { minimumFractionDigits: 2 })} paid via <strong>${p.method}</strong> on ${new Date(p.paymentDate).toLocaleDateString("en-NG")}</li>
-                  `).join("")}
-                </ul>
-              </div>
-            ` : ''}
-
-            <div class="stamp-box">
-              <div>
-                <p style="margin: 0; font-size: 12px; color: #64748b;">Issued by Bursary & Accounts Department</p>
-                <p style="margin: 2px 0 0 0; font-size: 11px; color: #94a3b8;">Computer-generated official school financial voucher</p>
-              </div>
-              <div class="seal">
-                OFFICIALLY RECONCILED<br/>
-                <span style="font-size: 10px; font-weight: normal;">BURSARY OFFICE</span>
-              </div>
+            <div class="text-center mt-6 text-[11px] text-slate-400">
+              <p>Thank you for your institutional payment. Please retain this official receipt for financial clearance.</p>
             </div>
 
-            <div class="footer">
-              <p>Thank you for your institutional payment. Please retain this receipt for clearance.</p>
-            </div>
-
-            <div class="btn-bar">
-              <button class="print-btn" onclick="window.print()">Print Official Receipt</button>
+            <!-- Print Button Bottom Fallback (Shielded) -->
+            <div class="btn-bar print:hidden text-center mt-6">
+              <button class="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs shadow-sm transition cursor-pointer" onclick="window.print()">
+                Print Official Receipt
+              </button>
             </div>
           </body>
         </html>

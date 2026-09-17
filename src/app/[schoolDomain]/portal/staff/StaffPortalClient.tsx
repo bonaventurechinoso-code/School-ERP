@@ -29,17 +29,31 @@ import {
   Building2,
   CheckCircle,
   RefreshCw,
+  Download,
+  FileText,
+  Send,
+  CalendarDays,
+  Check,
+  PlusCircle,
+  FileCheck,
 } from "lucide-react";
 import {
   saveClassroomAttendance,
   saveClassroomGrades,
   fetchClassroomAttendance,
   fetchClassroomGrades,
+  compileClassReportCardsFromStaffPortal,
   AttendanceRecordPayload,
   GradeEntryPayload,
   StaffProfileData,
   PayrollRecordItem,
   TimetablePeriodItem,
+  LessonNoteData,
+  fetchStaffLessonNotesAction,
+  submitLessonNoteAction,
+  LeaveRequestData,
+  fetchStaffLeaveRequestsAction,
+  submitLeaveRequestAction,
 } from "./actions";
 
 export interface StudentItem {
@@ -90,7 +104,9 @@ interface StaffPortalClientProps {
   initialClassrooms: ClassroomItem[];
   initialCourses: CourseItem[];
   initialStudents: StudentItem[];
-  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "payslips";
+  initialLessonNotes?: LessonNoteData[];
+  initialLeaveRequests?: LeaveRequestData[];
+  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips";
 }
 
 function formatNaira(amount: number): string {
@@ -110,9 +126,11 @@ export default function StaffPortalClient({
   initialClassrooms,
   initialCourses,
   initialStudents,
+  initialLessonNotes = [],
+  initialLeaveRequests = [],
   defaultTab = "overview",
 }: StaffPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "payslips">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips">(defaultTab);
   const [isPending, startTransition] = useTransition();
 
   // Tier & Class Filtering
@@ -135,6 +153,41 @@ export default function StaffPortalClient({
   const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
   const [isLoadingGrades, setIsLoadingGrades] = useState(false);
   const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
+
+  // Report Card Batch Compilation State
+  const [isCompilingReportCards, setIsCompilingReportCards] = useState(false);
+  const [compilationMessage, setCompilationMessage] = useState<string | null>(null);
+  const [compilationError, setCompilationError] = useState<string | null>(null);
+
+  // Lesson Notes State
+  const [lessonNotes, setLessonNotes] = useState<LessonNoteData[]>(initialLessonNotes);
+  const [showLessonNoteModal, setShowLessonNoteModal] = useState(false);
+  const [selectedLessonNote, setSelectedLessonNote] = useState<LessonNoteData | null>(null);
+  const [lessonFormData, setLessonFormData] = useState<LessonNoteData>({
+    weekNumber: 1,
+    subject: initialCourses[0]?.name || "General Mathematics",
+    className: initialClassrooms[0]?.name || "JSS 1",
+    topic: "",
+    subTopic: "",
+    objectives: "",
+    instructionalMaterials: "",
+    introduction: "",
+    presentationSteps: "",
+    evaluation: "",
+    status: "SUBMITTED",
+  });
+
+  // Leave Requests State
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestData[]>(initialLeaveRequests);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveFormData, setLeaveFormData] = useState<LeaveRequestData>({
+    leaveType: "CASUAL",
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0],
+    reason: "",
+    reliefTeacher: "",
+    status: "PENDING",
+  });
 
   // Payslip Modal State
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecordItem | null>(null);
@@ -364,6 +417,144 @@ export default function StaffPortalClient({
     });
   };
 
+  // Attendance CSV Export Handler
+  const handleExportAttendanceCSV = () => {
+    if (classStudents.length === 0) {
+      alert("No students found in this class stream to export.");
+      return;
+    }
+
+    const headers = ["Student Name", "Admission Number", "Class", "Date", "Status", "Notes"];
+    const rows = classStudents.map((s) => {
+      const name = `"${s.lastName}, ${s.firstName}"`;
+      const adm = `"${s.admissionNumber || s.registrationNumber || "N/A"}"`;
+      const cls = `"${selectedClass}"`;
+      const dt = `"${attendanceDate}"`;
+      const status = `"${attendanceMap[s.id]?.status || "PRESENT"}"`;
+      const notes = `"${(attendanceMap[s.id]?.notes || "").replace(/"/g, '""')}"`;
+      return [name, adm, cls, dt, status, notes].join(",");
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Attendance_${selectedClass.replace(/\s+/g, "_")}_${attendanceDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Report Card Batch Compilation Handler
+  const handleCompileReportCards = () => {
+    if (!selectedClass) {
+      setCompilationError("Please select a classroom first.");
+      return;
+    }
+    setIsCompilingReportCards(true);
+    setCompilationMessage(null);
+    setCompilationError(null);
+
+    startTransition(async () => {
+      try {
+        const res = await compileClassReportCardsFromStaffPortal(
+          schoolId,
+          selectedClass,
+          selectedTerm,
+          academicYear
+        );
+
+        if (res.success) {
+          setCompilationMessage(res.message || `Successfully compiled report cards for ${selectedClass}.`);
+          setTimeout(() => setCompilationMessage(null), 8000);
+        } else {
+          setCompilationError(res.error || "Failed to compile class report cards.");
+        }
+      } catch (err: any) {
+        setCompilationError(err.message || "An error occurred during report card compilation.");
+      } finally {
+        setIsCompilingReportCards(false);
+      }
+    });
+  };
+
+  // Lesson Note Handlers
+  const handleSaveLessonNote = (status: "DRAFT" | "SUBMITTED") => {
+    if (!staffProfile?.id) {
+      alert("Faculty profile not resolved. Please contact administrator.");
+      return;
+    }
+    if (!lessonFormData.topic || !lessonFormData.objectives) {
+      alert("Please enter a Topic and Behavioral Objectives.");
+      return;
+    }
+
+    startTransition(async () => {
+      const payload: LessonNoteData = {
+        ...lessonFormData,
+        status,
+      };
+      const res = await submitLessonNoteAction(schoolId, staffProfile.id, payload);
+      if (res.success && res.note) {
+        setLessonNotes((prev) => {
+          const idx = prev.findIndex((n) => n.id === res.note!.id);
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = res.note!;
+            return copy;
+          }
+          return [res.note!, ...prev];
+        });
+        setShowLessonNoteModal(false);
+        setLessonFormData({
+          weekNumber: (lessonFormData.weekNumber % 14) + 1,
+          subject: lessonFormData.subject,
+          className: lessonFormData.className,
+          topic: "",
+          subTopic: "",
+          objectives: "",
+          instructionalMaterials: "",
+          introduction: "",
+          presentationSteps: "",
+          evaluation: "",
+          status: "SUBMITTED",
+        });
+      } else {
+        alert(res.error || "Failed to save lesson note.");
+      }
+    });
+  };
+
+  // Leave Request Handler
+  const handleSaveLeaveRequest = () => {
+    if (!staffProfile?.id) {
+      alert("Faculty profile not resolved. Please contact administrator.");
+      return;
+    }
+    if (!leaveFormData.reason.trim()) {
+      alert("Please provide a reason for the leave application.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await submitLeaveRequestAction(schoolId, staffProfile.id, leaveFormData);
+      if (res.success && res.request) {
+        setLeaveRequests((prev) => [res.request!, ...prev]);
+        setShowLeaveModal(false);
+        setLeaveFormData({
+          leaveType: "CASUAL",
+          startDate: new Date().toISOString().split("T")[0],
+          endDate: new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0],
+          reason: "",
+          reliefTeacher: "",
+          status: "PENDING",
+        });
+      } else {
+        alert(res.error || "Failed to submit leave request.");
+      }
+    });
+  };
+
   // Group timetable by day of the week
   const scheduleByDay = useMemo(() => {
     const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
@@ -382,13 +573,15 @@ export default function StaffPortalClient({
   return (
     <div className="space-y-6">
       {/* Navigation Tab Bar */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2 overflow-x-auto hide-scrollbar">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2 overflow-x-auto hide-scrollbar print:hidden">
         {[
           { id: "overview", label: "Dashboard Overview", icon: Briefcase },
           { id: "rosters", label: "Classroom Rosters", icon: Users },
           { id: "attendance", label: "Daily Attendance", icon: CheckSquare },
           { id: "gradebook", label: "Gradebook & Assessments", icon: Award },
           { id: "schedule", label: "Teaching Schedule", icon: Calendar },
+          { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen },
+          { id: "leaves", label: "Faculty Leave Requests", icon: Clock },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
@@ -660,7 +853,18 @@ export default function StaffPortalClient({
       {/* ========================================================================= */}
       {activeTab === "attendance" && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+          {/* Printable Attendance Sheet Header */}
+          <div className="hidden print:block mb-6 text-center border-b border-slate-300 pb-4">
+            <h1 className="text-xl font-black uppercase tracking-wide text-black">{schoolName}</h1>
+            <p className="text-sm font-semibold text-slate-700">Official Daily Classroom Attendance Register</p>
+            <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
+              <span><strong>Class / Arm:</strong> {selectedClass}</span>
+              <span><strong>Date:</strong> {attendanceDate}</span>
+              <span><strong>Faculty:</strong> {staffName} ({staffRole})</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs print:hidden">
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
@@ -697,7 +901,25 @@ export default function StaffPortalClient({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 justify-end">
+            <div className="flex flex-wrap items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={handleExportAttendanceCSV}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
+                title="Export current classroom attendance register to CSV file"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
+                title="Print physical attendance roster sheet"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Register</span>
+              </button>
               <button
                 type="button"
                 onClick={handleMarkAllPresent}
@@ -804,6 +1026,18 @@ export default function StaffPortalClient({
               </table>
             </div>
           </div>
+
+          {/* Print-only Teacher & Principal Signature Block */}
+          <div className="hidden print:flex justify-between items-center mt-12 pt-6 border-t border-slate-400 text-xs text-black">
+            <div>
+              <p className="font-bold">Class Teacher Signature: _______________________</p>
+              <p className="text-[10px] text-slate-600 mt-1">Date: {attendanceDate}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-bold">Principal / Supervisor Seal: _______________________</p>
+              <p className="text-[10px] text-slate-600 mt-1">Official Institutional Register Stamp</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -872,10 +1106,25 @@ export default function StaffPortalClient({
               )}
             </div>
 
-            <div className="flex items-center gap-2 justify-end">
+            <div className="flex flex-wrap items-center gap-2 justify-end">
               <button
                 type="button"
-                disabled={isPending}
+                disabled={isCompilingReportCards || isPending}
+                onClick={handleCompileReportCards}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                title="Compile term report cards with class ranking, GPA, and subject summaries for all students in this class"
+              >
+                {isCompilingReportCards ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileCheck className="w-3.5 h-3.5" />
+                )}
+                <span>{isCompilingReportCards ? "Compiling..." : "Compile Class Report Cards"}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isPending || isCompilingReportCards}
                 onClick={handleSaveGrades}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
@@ -884,6 +1133,20 @@ export default function StaffPortalClient({
               </button>
             </div>
           </div>
+
+          {compilationMessage && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-amber-600" />
+              <span>{compilationMessage}</span>
+            </div>
+          )}
+
+          {compilationError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{compilationError}</span>
+            </div>
+          )}
 
           {gradesSaveMessage && (
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
@@ -1322,6 +1585,673 @@ export default function StaffPortalClient({
                   <span className="font-normal text-[9px]">BURSARY DISBURSEMENT</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: LESSON NOTES & SCHEMES OF WORK                                     */}
+      {/* ========================================================================= */}
+      {activeTab === "lessons" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Header & Action Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-600" />
+                <span>Lesson Notes & Curriculum Schemes</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedLessonNote(null);
+                setLessonFormData({
+                  weekNumber: 1,
+                  subject: initialCourses[0]?.name || "General Mathematics",
+                  className: initialClassrooms[0]?.name || "JSS 1",
+                  topic: "",
+                  subTopic: "",
+                  objectives: "",
+                  instructionalMaterials: "",
+                  introduction: "",
+                  presentationSteps: "",
+                  evaluation: "",
+                  status: "SUBMITTED",
+                });
+                setShowLessonNoteModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>New Lesson Plan</span>
+            </button>
+          </div>
+
+          {/* Metrics Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
+                Total Lesson Plans
+              </span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">{lessonNotes.length}</p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
+                Under Review
+              </span>
+              <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                {lessonNotes.filter((n) => n.status === "SUBMITTED").length}
+              </p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
+                Approved by HOD
+              </span>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                {lessonNotes.filter((n) => n.status === "APPROVED").length}
+              </p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-500 block mb-1">
+                Drafts
+              </span>
+              <p className="text-2xl font-black text-slate-600 dark:text-zinc-300">
+                {lessonNotes.filter((n) => n.status === "DRAFT").length}
+              </p>
+            </div>
+          </div>
+
+          {/* Lesson Plans List */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                Weekly Instructional Submissions
+              </h4>
+              <span className="text-xs text-slate-400">
+                Showing {lessonNotes.length} plan{lessonNotes.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {lessonNotes.length === 0 ? (
+              <div className="p-12 text-center">
+                <BookOpen className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Lesson Notes Prepared Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  Create your weekly scheme of work, objectives, instructional aids, and evaluation steps.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedLessonNote(null);
+                    setShowLessonNoteModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>Create First Lesson Note</span>
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                {lessonNotes.map((note) => {
+                  const isApproved = note.status === "APPROVED";
+                  const isSubmitted = note.status === "SUBMITTED";
+                  const isRevision = note.status === "REVISION_REQUESTED";
+
+                  const badgeStyle = isApproved
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    : isSubmitted
+                    ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                    : isRevision
+                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                    : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
+
+                  return (
+                    <div
+                      key={note.id || `${note.weekNumber}-${note.topic}`}
+                      className="p-5 hover:bg-slate-50/70 dark:hover:bg-zinc-800/30 transition flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase">
+                            Week {note.weekNumber}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                            {note.className} • {note.subject}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
+                            {note.status}
+                          </span>
+                        </div>
+                        <h5 className="text-sm font-bold text-slate-900 dark:text-white">{note.topic}</h5>
+                        {note.subTopic && (
+                          <p className="text-xs text-slate-600 dark:text-zinc-400">
+                            <strong>Sub-Topic:</strong> {note.subTopic}
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-500 dark:text-zinc-500 line-clamp-1">
+                          <strong>Objectives:</strong> {note.objectives}
+                        </p>
+                        {note.supervisorFeedback && (
+                          <div className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+                            <strong>HOD Review:</strong> {note.supervisorFeedback}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedLessonNote(note);
+                            setLessonFormData({ ...note });
+                            setShowLessonNoteModal(true);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition cursor-pointer"
+                        >
+                          View & Edit
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 8: FACULTY LEAVE REQUESTS                                             */}
+      {/* ========================================================================= */}
+      {activeTab === "leaves" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Header & Action Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-indigo-600" />
+                <span>Faculty Leave Applications & Absence</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                Apply for statutory faculty leave, assign relief teachers for class coverage, and track approval status.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowLeaveModal(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Apply for Leave</span>
+            </button>
+          </div>
+
+          {/* Statutory Allowances & Status */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
+                Casual Leave Entitlement
+              </span>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">7 Days / Yr</p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
+                Medical Leave Allowance
+              </span>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">10 Days / Yr</p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
+                Pending Applications
+              </span>
+              <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                {leaveRequests.filter((l) => l.status === "PENDING").length}
+              </p>
+            </div>
+            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-500 block mb-1">
+                Approved Records
+              </span>
+              <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                {leaveRequests.filter((l) => l.status === "APPROVED").length}
+              </p>
+            </div>
+          </div>
+
+          {/* Leave History Table */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                Application History & Duty Relief
+              </h4>
+              <span className="text-xs text-slate-400">
+                {leaveRequests.length} Record{leaveRequests.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {leaveRequests.length === 0 ? (
+              <div className="p-12 text-center">
+                <CalendarDays className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Leave Applications on Record</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  You have full attendance standing. When you require absence, submit an application here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>Apply for Leave</span>
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                    <tr>
+                      <th className="px-6 py-3.5">Leave Type</th>
+                      <th className="px-6 py-3.5">Duration</th>
+                      <th className="px-6 py-3.5">Relief Faculty</th>
+                      <th className="px-6 py-3.5">Reason</th>
+                      <th className="px-6 py-3.5 text-center">Status</th>
+                      <th className="px-6 py-3.5">Admin Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                    {leaveRequests.map((leave) => {
+                      const isPendingStatus = leave.status === "PENDING";
+                      const isApproved = leave.status === "APPROVED";
+                      const badgeClass = isApproved
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                        : isPendingStatus
+                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                        : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
+
+                      return (
+                        <tr key={leave.id || `${leave.startDate}-${leave.leaveType}`} className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40">
+                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-mono text-[11px]">
+                              {leave.leaveType}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-slate-700 dark:text-zinc-200">
+                              {leave.startDate} to {leave.endDate}
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {Math.max(1, Math.round((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / 86400000) + 1)} day(s)
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-700 dark:text-zinc-300">
+                            {leave.reliefTeacher || "None Nominated"}
+                          </td>
+                          <td className="px-6 py-4 text-slate-600 dark:text-zinc-400 max-w-xs truncate" title={leave.reason}>
+                            {leave.reason}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
+                              {leave.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500 dark:text-zinc-400 text-xs">
+                            {leave.adminNotes || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CREATE / EDIT LESSON NOTE                                          */}
+      {/* ========================================================================= */}
+      {showLessonNoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                    {selectedLessonNote ? "Edit Curriculum Lesson Plan" : "Prepare Weekly Lesson Note"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Standard educational delivery scheme & behavioral objectives
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLessonNoteModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Week Number (1 - 14):
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={14}
+                    value={lessonFormData.weekNumber}
+                    onChange={(e) =>
+                      setLessonFormData((prev) => ({ ...prev, weekNumber: parseInt(e.target.value) || 1 }))
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Class Cohort:
+                  </label>
+                  <select
+                    value={lessonFormData.className}
+                    onChange={(e) =>
+                      setLessonFormData((prev) => ({ ...prev, className: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                  >
+                    {initialClassrooms.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Subject / Course:
+                  </label>
+                  <select
+                    value={lessonFormData.subject}
+                    onChange={(e) =>
+                      setLessonFormData((prev) => ({ ...prev, subject: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                  >
+                    {initialCourses.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Topic: *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Quadratic Equations by Factorization"
+                    value={lessonFormData.topic}
+                    onChange={(e) => setLessonFormData((prev) => ({ ...prev, topic: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Sub-Topic (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Finding roots of trinomials"
+                    value={lessonFormData.subTopic || ""}
+                    onChange={(e) => setLessonFormData((prev) => ({ ...prev, subTopic: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Behavioral Objectives: * (By the end of the lesson, learners should be able to...)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="1. Define quadratic equations in standard form. 2. Factorize ax^2 + bx + c = 0."
+                  value={lessonFormData.objectives}
+                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, objectives: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Instructional Aids & Teaching Materials:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Whiteboard, geometric models, graphing paper, flashcards"
+                  value={lessonFormData.instructionalMaterials || ""}
+                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, instructionalMaterials: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Introduction / Prior Knowledge Hook:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Review linear equations and expansion of brackets with interactive questions."
+                  value={lessonFormData.introduction || ""}
+                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, introduction: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Step-by-Step Presentation / Teacher & Student Activities:
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Step 1: Teacher explains standard form ax^2 + bx + c = 0. Step 2: Teacher solves worked example on the board. Step 3: Students work in pairs on guided problem set."
+                  value={lessonFormData.presentationSteps || ""}
+                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, presentationSteps: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Evaluation, Classwork & Homework:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Classwork: Exercises 1 to 4 on page 82. Homework: Solve questions 5 to 10 for submission on Thursday."
+                  value={lessonFormData.evaluation || ""}
+                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, evaluation: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
+              <button
+                type="button"
+                onClick={() => setShowLessonNoteModal(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleSaveLessonNote("DRAFT")}
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-white font-bold text-xs hover:bg-slate-300 dark:hover:bg-zinc-600 transition disabled:opacity-50 cursor-pointer"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleSaveLessonNote("SUBMITTED")}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isPending ? "Submitting..." : "Submit for HOD Approval"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: LEAVE APPLICATION                                                  */}
+      {/* ========================================================================= */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                    Faculty Leave Application
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Formal notice for statutory or medical absence
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Leave Category:
+                </label>
+                <select
+                  value={leaveFormData.leaveType}
+                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, leaveType: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                >
+                  <option value="CASUAL">Casual Leave (Short absence)</option>
+                  <option value="SICK">Medical / Sick Leave</option>
+                  <option value="ANNUAL">Annual Leave / Recess</option>
+                  <option value="COMPASSIONATE">Compassionate / Bereavement</option>
+                  <option value="MATERNITY">Maternity Leave</option>
+                  <option value="PATERNITY">Paternity Leave</option>
+                  <option value="STUDY">Academic / Study Leave</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Start Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={leaveFormData.startDate}
+                    onChange={(e) => setLeaveFormData((prev) => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                    Resumption Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={leaveFormData.endDate}
+                    onChange={(e) => setLeaveFormData((prev) => ({ ...prev, endDate: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Nominated Relief Teacher (For classroom coverage):
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Mr. Chukwuemeka Eze (English Dept)"
+                  value={leaveFormData.reliefTeacher || ""}
+                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reliefTeacher: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                  Reason & Academic Handover Notes: *
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Provide details regarding the reason for leave and instructional plans handed over..."
+                  value={leaveFormData.reason}
+                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
+              <button
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleSaveLeaveRequest}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition disabled:opacity-50 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isPending ? "Submitting..." : "Submit Application"}</span>
+              </button>
             </div>
           </div>
         </div>

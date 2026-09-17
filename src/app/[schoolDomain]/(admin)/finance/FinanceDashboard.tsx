@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { Invoice, Payment, Student, FeeTemplate, Transaction } from "@prisma/client";
 import { useTenant } from "@/lib/tenant-context";
-import { apiClient } from "@/lib/api-client";
 import { 
   FileText, 
   CreditCard, 
@@ -13,16 +12,12 @@ import {
   PlusCircle, 
   Layers, 
   ArrowUpRight,
-  ArrowDownRight,
-  Bot,
-  Send,
-  RefreshCw,
-  X
+  ArrowDownRight
 } from "lucide-react";
 import InvoiceTable from "./InvoiceTable";
 import FeeTemplatesList from "./FeeTemplatesList";
 import LedgerTable from "./LedgerTable";
-import { useActiveTierConfig } from "@/lib/tier-config";
+import { useActiveTierConfig } from "@/hooks/useClientTier";
 
 export function formatNaira(amount: number): string {
   return `₦${(amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -70,51 +65,6 @@ export default function FinanceDashboard({
   const tierClassrooms = React.useMemo(() => classrooms ? filterClasses(classrooms) : [], [classrooms, filterClasses]);
 
   const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "templates" | "ledger">("overview");
-
-  // Institutional AI Input State (Rule 3)
-  const [aiInput, setAiInput] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [aiFallbackAlert, setAiFallbackAlert] = useState<string | null>(null);
-
-  const handleAiQuerySubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const prompt = aiInput.trim();
-    if (!prompt) {
-      setAiFallbackAlert("Please enter a query before asking Institutional AI.");
-      return;
-    }
-
-    setIsAiLoading(true);
-    setAiFallbackAlert(null);
-
-    try {
-      // Forward input strings to AI router stream via client interceptor
-      const res = await apiClient.post("/api/v1/admin/ai-query", { prompt });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `AI stream error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const feedback = data?.response;
-
-      // Safely catch empty/null feedback states with fallback UI alert
-      if (!feedback || typeof feedback !== "string" || !feedback.trim()) {
-        setAiFallbackAlert("Institutional AI router returned empty feedback. Please rephrase or query specific metrics like student enrollment or fees.");
-        setAiResponse(null);
-      } else {
-        setAiResponse(feedback);
-        setAiFallbackAlert(null);
-      }
-    } catch (err: any) {
-      console.error("[Institutional AI Error]:", err);
-      setAiFallbackAlert(err.message || "Failed to communicate with Institutional AI router stream.");
-      setAiResponse(null);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
 
   const netCashFlow = totalPaid - totalExpenses;
   const collectionRate = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 0;
@@ -323,82 +273,6 @@ export default function FinanceDashboard({
             />
           </div>
         )}
-      </div>
-
-      {/* Ask Institutional AI Entry Form at Bottom (Rule 3) */}
-      <div className="bg-slate-900 dark:bg-black text-white rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shrink-0">
-              <Bot className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm text-white">Ask Institutional AI</h4>
-              <p className="text-xs text-slate-400">Institutional analytical assistant for enrollment, fee collections, and cash flow</p>
-            </div>
-          </div>
-          {isAiLoading && (
-            <span className="text-xs text-blue-400 flex items-center gap-1.5 self-start sm:self-auto font-medium">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              <span>Querying AI router stream...</span>
-            </span>
-          )}
-        </div>
-
-        {/* Fallback UI Alert for Empty/Null Feedback States */}
-        {aiFallbackAlert && (
-          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div className="flex-1">{aiFallbackAlert}</div>
-            <button
-              type="button"
-              onClick={() => setAiFallbackAlert(null)}
-              className="text-amber-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* AI Response Output Card */}
-        {aiResponse && (
-          <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 text-xs sm:text-sm text-slate-100 space-y-2 animate-in fade-in">
-            <div className="flex items-center justify-between text-xs text-blue-400 font-semibold uppercase tracking-wider">
-              <span>Institutional AI Feedback</span>
-              <button
-                type="button"
-                onClick={() => setAiResponse(null)}
-                className="text-slate-400 hover:text-white cursor-pointer text-xs"
-              >
-                Clear
-              </button>
-            </div>
-            <p className="leading-relaxed whitespace-pre-wrap">{aiResponse}</p>
-          </div>
-        )}
-
-        {/* AI Input Form */}
-        <form onSubmit={handleAiQuerySubmit} className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Ask anything about fees, collections, student counts, or institutional ledger..."
-            value={aiInput}
-            onChange={(e) => {
-              setAiInput(e.target.value);
-              if (aiFallbackAlert) setAiFallbackAlert(null);
-            }}
-            disabled={isAiLoading}
-            className="flex-1 bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <button
-            type="submit"
-            disabled={isAiLoading || !aiInput.trim()}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shrink-0"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ask AI</span>
-          </button>
-        </form>
       </div>
     </div>
   );

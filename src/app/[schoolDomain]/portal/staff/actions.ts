@@ -2,6 +2,15 @@
 
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { compileClassReportCards } from "@/lib/report-card-service";
+
+function safeRevalidate(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful fallback when invoked outside Next.js request/action context (e.g. testing)
+  }
+}
 
 export interface AttendanceRecordPayload {
   studentId: string;
@@ -101,7 +110,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       });
     }
 
-    const [school, classrooms, courses, students] = await Promise.all([
+    const [school, classrooms, courses, students, lessonNotes, leaveRequests] = await Promise.all([
       basePrisma.school.findUnique({
         where: { id: schoolId },
         include: {
@@ -136,6 +145,8 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
         },
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       }),
+      currentStaff ? fetchStaffLessonNotesAction(schoolId, currentStaff.id) : Promise.resolve([]),
+      currentStaff ? fetchStaffLeaveRequestsAction(schoolId, currentStaff.id) : Promise.resolve([]),
     ]);
 
     return {
@@ -144,6 +155,8 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       classrooms,
       courses,
       students,
+      lessonNotes,
+      leaveRequests,
       staffProfile: currentStaff
         ? {
             id: currentStaff.id,
@@ -171,6 +184,8 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       classrooms: [],
       courses: [],
       students: [],
+      lessonNotes: [],
+      leaveRequests: [],
       staffProfile: null,
       payrollRecords: [],
       timetable: [],
@@ -417,5 +432,240 @@ export async function saveClassroomGrades(
       success: false,
       error: error.message || "Failed to save grades",
     };
+  }
+}
+
+/**
+ * 6. Batch compile class report cards from staff portal
+ */
+export async function compileClassReportCardsFromStaffPortal(
+  schoolId: string,
+  className: string,
+  term: string,
+  academicYear: string,
+  tierName?: string
+) {
+  try {
+    const result = await compileClassReportCards({
+      schoolId,
+      className,
+      term,
+      academicYear,
+      tierName,
+    });
+    safeRevalidate("/[schoolDomain]/portal/staff", "page");
+    return {
+      success: true,
+      compiledCount: result.totalCompiled,
+      data: result,
+      message: `Successfully compiled ${result.totalCompiled} report cards for ${className} (${term}, ${academicYear}).`,
+    };
+  } catch (error: any) {
+    console.error("[compileClassReportCardsFromStaffPortal Error]:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to compile report cards.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. LESSON NOTES & SCHEME OF WORK SUBMISSIONS
+// ---------------------------------------------------------------------------
+
+export interface LessonNoteData {
+  id?: string;
+  weekNumber: number;
+  subject: string;
+  className: string;
+  topic: string;
+  subTopic?: string;
+  objectives: string;
+  instructionalMaterials?: string;
+  introduction?: string;
+  presentationSteps?: string;
+  evaluation?: string;
+  status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REVISION_REQUESTED";
+  submittedAt?: string;
+  feedback?: string;
+  supervisorFeedback?: string;
+}
+
+export async function fetchStaffLessonNotesAction(schoolId: string, staffId: string): Promise<LessonNoteData[]> {
+  try {
+    const notices = await basePrisma.notice.findMany({
+      where: {
+        schoolId,
+        authorId: staffId,
+        targetAudience: "LESSON_NOTE",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return notices.map((n) => {
+      try {
+        const parsed = JSON.parse(n.content);
+        return {
+          ...parsed,
+          id: n.id,
+          status: (n.priority as any) || parsed.status || "DRAFT",
+          submittedAt: n.createdAt.toISOString(),
+        };
+      } catch {
+        return {
+          id: n.id,
+          weekNumber: 1,
+          subject: "General",
+          className: "Class",
+          topic: n.title,
+          objectives: n.content,
+          status: (n.priority as any) || "DRAFT",
+          submittedAt: n.createdAt.toISOString(),
+        };
+      }
+    });
+  } catch (err) {
+    console.error("[fetchStaffLessonNotesAction Error]:", err);
+    return [];
+  }
+}
+
+export async function submitLessonNoteAction(
+  schoolId: string,
+  staffId: string,
+  note: LessonNoteData
+) {
+  try {
+    const title = `Week ${note.weekNumber}: ${note.topic} (${note.subject} - ${note.className})`;
+    const content = JSON.stringify(note);
+    const priority = note.status || "SUBMITTED";
+
+    if (note.id) {
+      const updated = await basePrisma.notice.update({
+        where: { id: note.id },
+        data: {
+          title,
+          content,
+          priority,
+          updatedAt: new Date(),
+        },
+      });
+      safeRevalidate("/[schoolDomain]/portal/staff", "page");
+      return { success: true, id: updated.id, note: { ...note, id: updated.id } };
+    } else {
+      const created = await basePrisma.notice.create({
+        data: {
+          schoolId,
+          authorId: staffId,
+          targetAudience: "LESSON_NOTE",
+          title,
+          content,
+          priority,
+        },
+      });
+      safeRevalidate("/[schoolDomain]/portal/staff", "page");
+      return { success: true, id: created.id, note: { ...note, id: created.id } };
+    }
+  } catch (err: any) {
+    console.error("[submitLessonNoteAction Error]:", err);
+    return { success: false, error: err.message || "Failed to submit lesson note" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. FACULTY LEAVE & ABSENCE REQUESTS
+// ---------------------------------------------------------------------------
+
+export interface LeaveRequestData {
+  id?: string;
+  leaveType: "ANNUAL" | "SICK" | "MATERNITY" | "CASUAL" | "STUDY" | string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  reliefTeacher?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  appliedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+  adminNotes?: string;
+}
+
+export async function fetchStaffLeaveRequestsAction(schoolId: string, staffId: string): Promise<LeaveRequestData[]> {
+  try {
+    const notices = await basePrisma.notice.findMany({
+      where: {
+        schoolId,
+        authorId: staffId,
+        targetAudience: "LEAVE_REQUEST",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return notices.map((n) => {
+      try {
+        const parsed = JSON.parse(n.content);
+        return {
+          ...parsed,
+          id: n.id,
+          status: (n.priority as any) || parsed.status || "PENDING",
+          appliedAt: n.createdAt.toISOString(),
+        };
+      } catch {
+        return {
+          id: n.id,
+          leaveType: "CASUAL",
+          startDate: n.createdAt.toISOString().split("T")[0],
+          endDate: n.createdAt.toISOString().split("T")[0],
+          reason: n.content,
+          status: (n.priority as any) || "PENDING",
+          appliedAt: n.createdAt.toISOString(),
+        };
+      }
+    });
+  } catch (err) {
+    console.error("[fetchStaffLeaveRequestsAction Error]:", err);
+    return [];
+  }
+}
+
+export async function submitLeaveRequestAction(
+  schoolId: string,
+  staffId: string,
+  request: LeaveRequestData
+) {
+  try {
+    const title = `${request.leaveType} Leave Request (${request.startDate} to ${request.endDate})`;
+    const content = JSON.stringify(request);
+    const priority = request.status || "PENDING";
+
+    if (request.id) {
+      const updated = await basePrisma.notice.update({
+        where: { id: request.id },
+        data: {
+          title,
+          content,
+          priority,
+          updatedAt: new Date(),
+        },
+      });
+      safeRevalidate("/[schoolDomain]/portal/staff", "page");
+      return { success: true, id: updated.id, leave: { ...request, id: updated.id }, request: { ...request, id: updated.id } };
+    } else {
+      const created = await basePrisma.notice.create({
+        data: {
+          schoolId,
+          authorId: staffId,
+          targetAudience: "LEAVE_REQUEST",
+          title,
+          content,
+          priority,
+        },
+      });
+      safeRevalidate("/[schoolDomain]/portal/staff", "page");
+      return { success: true, id: created.id, leave: { ...request, id: created.id }, request: { ...request, id: created.id } };
+    }
+  } catch (err: any) {
+    console.error("[submitLeaveRequestAction Error]:", err);
+    return { success: false, error: err.message || "Failed to submit leave request" };
   }
 }

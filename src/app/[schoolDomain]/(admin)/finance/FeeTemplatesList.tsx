@@ -19,7 +19,7 @@ import {
   Calculator
 } from "lucide-react";
 
-import { useActiveTierConfig } from "@/lib/tier-config";
+import { useActiveTierConfig } from "@/hooks/useClientTier";
 
 export default function FeeTemplatesList({
   hasHigherEd,

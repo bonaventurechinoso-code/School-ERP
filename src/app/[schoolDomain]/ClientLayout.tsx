@@ -56,7 +56,7 @@ export default function ClientLayout({
   }, [effectiveRole, staffRole, schoolDomain]);
 
   return (
-    <div className="flex flex-1 h-full w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950">
+    <div className="flex flex-1 h-screen max-h-screen w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950 relative">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div

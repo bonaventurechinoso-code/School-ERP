@@ -18,9 +18,9 @@ export default async function TenantStaffPortalPage({
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
-  const validTabs = ["overview", "rosters", "attendance", "gradebook", "schedule", "payslips"] as const;
+  const validTabs = ["overview", "rosters", "attendance", "gradebook", "schedule", "lessons", "leaves", "payslips"] as const;
   const requestedTab = validTabs.includes(searchParams.tab as any)
-    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "payslips")
+    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips")
     : "overview";
 
   const [school, session] = await Promise.all([
@@ -128,6 +128,8 @@ export default async function TenantStaffPortalPage({
           initialClassrooms={initialData.classrooms}
           initialCourses={initialData.courses}
           initialStudents={initialData.students}
+          initialLessonNotes={initialData.lessonNotes}
+          initialLeaveRequests={initialData.leaveRequests}
           defaultTab={requestedTab}
         />
       </main>

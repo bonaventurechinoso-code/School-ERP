@@ -53,12 +53,12 @@ export function SidebarSkeleton({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:translate-x-0 ${
-        isSidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      className={`fixed inset-y-0 left-0 z-40 w-72 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:min-w-[16rem] md:max-w-[16rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+        isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
       }`}
     >
       {/* Header Skeleton */}
-      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50">
+      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50 shrink-0">
         <div className="flex items-center gap-3 min-w-0 w-full">
           <div className="w-9 h-9 rounded-xl bg-slate-800 animate-pulse shrink-0" />
           <div className="space-y-1.5 flex-1 min-w-0">
@@ -75,12 +75,12 @@ export function SidebarSkeleton({
       </div>
 
       {/* Tier Switcher Skeleton */}
-      <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40">
+      <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40 shrink-0">
         <div className="h-9 w-full rounded-xl bg-slate-800/70 animate-pulse" />
       </div>
 
       {/* Nav Items Skeleton */}
-      <div className="flex-1 px-3 py-6 flex flex-col gap-2 overflow-hidden">
+      <div className="flex-1 min-h-0 px-3 py-6 flex flex-col gap-2 overflow-hidden">
         {[
           { w: "w-28", id: "s1" },
           { w: "w-36", id: "s2" },
@@ -102,7 +102,7 @@ export function SidebarSkeleton({
       </div>
 
       {/* Footer Wallet Skeleton */}
-      <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto">
+      <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto shrink-0">
         <div className="h-16 w-full rounded-xl bg-slate-800/60 animate-pulse" />
       </div>
     </aside>
@@ -178,12 +178,12 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:translate-x-0 ${
-        isSidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      className={`fixed inset-y-0 left-0 z-40 w-72 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:min-w-[16rem] md:max-w-[16rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+        isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
       }`}
     >
       {/* Brand Header */}
-      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50">
+      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           {tenant?.branding?.logoUrl ? (
             <img
@@ -211,7 +211,7 @@ export default function Sidebar({
 
       {/* Sidebar Tier Switcher (for Multi-Tier Tenants) */}
       {tiers && tiers.length > 0 && (
-        <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40">
+        <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40 shrink-0">
           <TierSwitcher
             tiers={tiers}
             currentTier={currentTier}
@@ -222,7 +222,7 @@ export default function Sidebar({
       )}
 
       {/* Reactive Navigation Modules */}
-      <nav className="flex-1 px-3 py-6 flex flex-col gap-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 px-3 py-4 flex flex-col gap-1 overflow-y-auto overscroll-contain">
         {links.length === 0 && loading ? (
           <div className="space-y-2 py-2">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -257,7 +257,7 @@ export default function Sidebar({
 
       {/* Bottom Sidebar - Wallet Balance Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
       {isWalletAuthorized && headerContent && (
-        <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto">
+        <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto shrink-0">
           {headerContent}
         </div>
       )}
