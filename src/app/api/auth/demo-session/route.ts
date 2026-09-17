@@ -7,19 +7,42 @@ const DEMO_SUBDOMAIN = "demo";
 const DEMO_SCHOOL_NAME = "Demo School";
 const DEMO_ADMIN_EMAIL = "demo.admin@schoolerp.local";
 
+export const dynamic = "force-dynamic";
+
+interface CachedDemoTenant {
+  demoSchool: any;
+  staffId: string;
+  staffEmail: string;
+  tierNames: string[];
+  cachedAt: number;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __cachedDemoTenant: CachedDemoTenant | undefined;
+}
+
+const CACHE_TTL_MS = 60 * 1000;
+
 /**
  * Idempotently retrieves or provisions the isolated demo school tenant.
  * Ensures Demo School exists with baseline tiers, staff, and configurations
  * strictly isolated from the global platform administration layer.
  */
 async function getOrProvisionDemoTenant() {
-  let demoSchool = await basePrisma.school.findFirst({
-    where: {
-      OR: [
-        { subdomain: DEMO_SUBDOMAIN },
-        { name: { contains: "Demo", mode: "insensitive" } },
-      ],
-    },
+  const cached = (globalThis as any).__cachedDemoTenant as CachedDemoTenant | undefined;
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return {
+      demoSchool: cached.demoSchool,
+      staffId: cached.staffId,
+      staffEmail: cached.staffEmail,
+      tierNames: cached.tierNames,
+    };
+  }
+
+  // Fast-path indexed query by subdomain
+  let demoSchool = await basePrisma.school.findUnique({
+    where: { subdomain: DEMO_SUBDOMAIN },
     include: {
       academicTiers: {
         orderBy: { level: "asc" },
@@ -27,6 +50,18 @@ async function getOrProvisionDemoTenant() {
       staff: true,
     },
   });
+
+  if (!demoSchool) {
+    demoSchool = await basePrisma.school.findFirst({
+      where: { name: { contains: "Demo", mode: "insensitive" } },
+      include: {
+        academicTiers: {
+          orderBy: { level: "asc" },
+        },
+        staff: true,
+      },
+    });
+  }
 
   if (!demoSchool) {
     demoSchool = await basePrisma.school.create({
@@ -80,12 +115,19 @@ async function getOrProvisionDemoTenant() {
   const tierNames = tiers.map((t) => t.name);
   const adminStaff = demoSchool.staff?.find((s) => s.role === "ADMIN" || s.role === "TENANT_ADMIN") || demoSchool.staff?.[0];
 
-  return {
+  const result = {
     demoSchool,
     staffId: adminStaff?.id || "demo-tenant-admin-id",
     staffEmail: adminStaff?.email || DEMO_ADMIN_EMAIL,
     tierNames,
   };
+
+  (globalThis as any).__cachedDemoTenant = {
+    ...result,
+    cachedAt: Date.now(),
+  };
+
+  return result;
 }
 
 /**

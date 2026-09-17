@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { FeeTemplate, Student } from "@prisma/client";
 import { createFeeTemplate, deleteFeeTemplate, bulkCreateInvoices } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
@@ -18,21 +19,38 @@ import {
   Calculator
 } from "lucide-react";
 
+import { useActiveTierConfig } from "@/lib/tier-config";
+
 export default function FeeTemplatesList({
   hasHigherEd,
+  activeTier: initialActiveTier,
   feeTemplates,
   students,
   classrooms = [],
   schoolId,
 }: {
   hasHigherEd: boolean;
+  activeTier?: string;
   feeTemplates: FeeTemplate[];
   students: (Student & { currentClass?: string | null })[];
   classrooms?: string[];
   schoolId: string;
 }) {
   const tenant = useTenant();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const { 
+    activeTier, 
+    tierConfig, 
+    isDaycare, 
+    isPrimary, 
+    isSecondary, 
+    isTertiary, 
+    filterClasses, 
+    filterStudents, 
+    filterFeeTemplates 
+  } = useActiveTierConfig(initialActiveTier);
 
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: "", defaultAmount: 0, billingType: "FLAT" });
@@ -48,19 +66,30 @@ export default function FeeTemplatesList({
   const [modalClassFilter, setModalClassFilter] = useState<string>("ALL");
   const [modalSearch, setModalSearch] = useState<string>("");
 
-  // Extract all available classes
-  const availableClasses = useMemo(() => {
-    const set = new Set<string>();
-    classrooms.forEach(c => set.add(c));
-    students.forEach(s => {
-      if (s.currentClass) set.add(s.currentClass);
-    });
-    return Array.from(set).sort();
-  }, [classrooms, students]);
+  // Prune fee templates according to tier constraints
+  const isolatedFeeTemplates = useMemo(() => {
+    return filterFeeTemplates(feeTemplates);
+  }, [feeTemplates, filterFeeTemplates]);
 
-  // Filter students in the bulk modal
+  // Prune students to strictly those belonging to the active tier
+  const tierStudents = useMemo(() => {
+    return filterStudents(students);
+  }, [students, filterStudents]);
+
+  // Extract all available classes strictly belonging to the active tier
+  const availableClasses = useMemo(() => {
+    const rawSet = new Set<string>();
+    classrooms.forEach(c => rawSet.add(c));
+    tierStudents.forEach(s => {
+      if (s.currentClass) rawSet.add(s.currentClass);
+    });
+    const filtered = filterClasses(Array.from(rawSet)).sort();
+    return filtered.length > 0 ? filtered : [...tierConfig.defaultClasses];
+  }, [classrooms, tierStudents, filterClasses, tierConfig.defaultClasses]);
+
+  // Filter students in the bulk modal strictly from tier-isolated students
   const modalFilteredStudents = useMemo(() => {
-    return students.filter(s => {
+    return tierStudents.filter(s => {
       if (modalClassFilter !== "ALL" && (s.currentClass || "Unassigned") !== modalClassFilter) {
         return false;
       }
@@ -72,7 +101,7 @@ export default function FeeTemplatesList({
       }
       return true;
     });
-  }, [students, modalClassFilter, modalSearch]);
+  }, [tierStudents, modalClassFilter, modalSearch]);
 
   const handleCreateTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,25 +202,54 @@ export default function FeeTemplatesList({
               {errorMsg}
             </div>
           )}
-          {hasHigherEd && (
-            <div className="md:col-span-2 flex items-center space-x-4 mb-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Billing Structure:</label>
+          {/* Billing Structure Selection: Isolated by Academic Tier */}
+          <div className="md:col-span-2 flex flex-wrap items-center gap-4 mb-2">
+            <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Billing Structure:</label>
+            <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
+              <input 
+                type="radio" 
+                name="billingType" 
+                checked={formData.billingType === "FLAT"} 
+                onChange={() => setFormData({...formData, billingType: "FLAT"})} 
+                className="text-indigo-600 focus:ring-indigo-500" 
+              />
+              <span>Flat Termly Rate</span>
+            </label>
+
+            {/* Tertiary Tier: Per Credit Unit */}
+            {isTertiary && (
               <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
-                <input type="radio" name="billingType" checked={formData.billingType === "FLAT"} onChange={() => setFormData({...formData, billingType: "FLAT"})} className="text-indigo-600 focus:ring-indigo-500" />
-                <span>Flat Termly Fee</span>
-              </label>
-              <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
-                <input type="radio" name="billingType" checked={formData.billingType === "PER_CREDIT"} onChange={() => setFormData({...formData, billingType: "PER_CREDIT"})} className="text-indigo-600 focus:ring-indigo-500" />
+                <input 
+                  type="radio" 
+                  name="billingType" 
+                  checked={formData.billingType === "PER_CREDIT"} 
+                  onChange={() => setFormData({...formData, billingType: "PER_CREDIT"})} 
+                  className="text-indigo-600 focus:ring-indigo-500" 
+                />
                 <span>Per Credit Unit</span>
               </label>
-            </div>
-          )}
+            )}
+
+            {/* Primary & Secondary Tiers: Per Subject Fee */}
+            {(isPrimary || isSecondary) && (
+              <label className="flex items-center space-x-2 text-sm cursor-pointer text-slate-700 dark:text-zinc-300">
+                <input 
+                  type="radio" 
+                  name="billingType" 
+                  checked={formData.billingType === "PER_CREDIT"} 
+                  onChange={() => setFormData({...formData, billingType: "PER_CREDIT"})} 
+                  className="text-indigo-600 focus:ring-indigo-500" 
+                />
+                <span>Per Subject Fee</span>
+              </label>
+            )}
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Fee Schedule Name</label>
             <input 
               required 
               type="text" 
-              placeholder="e.g. 1st Term Tuition (Junior Secondary)" 
+              placeholder={isDaycare ? "e.g. 1st Term Tuition & Creche Care" : isTertiary ? "e.g. 1st Semester Faculty Dues" : "e.g. 1st Term Tuition (Junior Secondary)"} 
               className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" 
               value={formData.name} 
               onChange={e => setFormData({ ...formData, name: e.target.value })} 
@@ -199,7 +257,11 @@ export default function FeeTemplatesList({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">
-              {formData.billingType === "PER_CREDIT" ? "Amount Per Credit Unit (₦)" : "Fixed Amount (₦)"}
+              {formData.billingType === "PER_CREDIT"
+                ? isTertiary
+                  ? "Amount Per Credit Unit (₦)"
+                  : "Amount Per Subject (₦)"
+                : "Fixed Amount (₦)"}
             </label>
             <input 
               required 
@@ -241,15 +303,15 @@ export default function FeeTemplatesList({
         </div>
       )}
 
-      {/* Template Cards Grid */}
+      {/* Template Cards Grid: Isolated by Academic Tier */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {feeTemplates.length === 0 && (
+        {isolatedFeeTemplates.length === 0 && (
           <div className="col-span-full p-12 text-center text-slate-500 dark:text-zinc-500 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm italic text-sm">
-            No fee templates created yet. Click "New Fee Template" to build tuition or fee schedules.
+            No fee templates created yet for {tierConfig.label}. Click "New Fee Template" to build tuition or fee schedules.
           </div>
         )}
         
-        {feeTemplates.map(template => {
+        {isolatedFeeTemplates.map(template => {
           const isBulkOpen = showBulkForm === template.id;
           const projectedTotal = selectedStudents.size * template.defaultAmount;
 
@@ -322,9 +384,9 @@ export default function FeeTemplatesList({
                           onChange={e => setModalClassFilter(e.target.value)}
                           className="text-xs border border-slate-200 dark:border-zinc-700 rounded-lg px-2 py-1 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200"
                         >
-                          <option value="ALL">All Classes ({students.length})</option>
+                          <option value="ALL">All Classes ({tierStudents.length})</option>
                           {availableClasses.map(c => {
-                            const count = students.filter(s => (s.currentClass || "Unassigned") === c).length;
+                            const count = tierStudents.filter(s => (s.currentClass || "Unassigned") === c).length;
                             return (
                               <option key={c} value={c}>
                                 {c} ({count})

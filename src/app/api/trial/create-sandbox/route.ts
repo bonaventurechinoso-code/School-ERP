@@ -7,12 +7,37 @@ const SANDBOX_SUBDOMAIN = "trial-sandbox";
 const SANDBOX_SCHOOL_NAME = "Trial Sandbox Academy";
 const SANDBOX_ADMIN_EMAIL = "trial.admin@schoolerp.local";
 
+export const dynamic = "force-dynamic";
+
+interface CachedTrialSandbox {
+  school: any;
+  adminStaff: any;
+  tierNames: string[];
+  cachedAt: number;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __cachedTrialSandbox: CachedTrialSandbox | undefined;
+}
+
+const CACHE_TTL_MS = 60 * 1000;
+
 /**
  * Idempotently provisions or retrieves the isolated trial sandbox tenant.
  * Safely seeds baseline school metadata, academic tiers, administration staff,
  * and sample classrooms/students completely isolated from the main SaaS administration layer.
  */
 async function provisionOrGetTrialSandbox() {
+  const cached = (globalThis as any).__cachedTrialSandbox as CachedTrialSandbox | undefined;
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return {
+      school: cached.school,
+      adminStaff: cached.adminStaff,
+      tierNames: cached.tierNames,
+    };
+  }
+
   // 1. Check if sandbox school already exists
   let school = await basePrisma.school.findUnique({
     where: { subdomain: SANDBOX_SUBDOMAIN },
@@ -118,36 +143,38 @@ async function provisionOrGetTrialSandbox() {
   const primaryTier = tiers.find(t => t.name.includes("Primary")) || tiers[0];
   const secondaryTier = tiers.find(t => t.name.includes("Secondary")) || tiers[tiers.length - 1];
 
-  // 3. Ensure administration department exists
-  let dept = await basePrisma.department.findFirst({
-    where: { schoolId: school.id },
-  });
-  if (!dept) {
-    dept = await basePrisma.department.create({
-      data: {
-        schoolId: school.id,
-        name: "Academic Administration",
-      },
-    });
-  }
-
-  // 4. Ensure admin staff exists for the trial session
-  let adminStaff = await basePrisma.staff.findFirst({
-    where: { schoolId: school.id, role: "ADMIN" },
-  });
+  // 3 & 4. Ensure admin staff exists for the trial session
+  let adminStaff = school.staff?.find((s: any) => s.role === "ADMIN") || null;
   if (!adminStaff) {
-    adminStaff = await basePrisma.staff.create({
-      data: {
-        schoolId: school.id,
-        firstName: "Trial",
-        lastName: "Administrator",
-        email: SANDBOX_ADMIN_EMAIL,
-        role: "ADMIN",
-        status: "ACTIVE",
-        departmentId: dept.id,
-        password: "",
-      },
+    let dept = await basePrisma.department.findFirst({
+      where: { schoolId: school.id },
     });
+    if (!dept) {
+      dept = await basePrisma.department.create({
+        data: {
+          schoolId: school.id,
+          name: "Academic Administration",
+        },
+      });
+    }
+
+    adminStaff = await basePrisma.staff.findFirst({
+      where: { schoolId: school.id, role: "ADMIN" },
+    });
+    if (!adminStaff) {
+      adminStaff = await basePrisma.staff.create({
+        data: {
+          schoolId: school.id,
+          firstName: "Trial",
+          lastName: "Administrator",
+          email: SANDBOX_ADMIN_EMAIL,
+          role: "ADMIN",
+          status: "ACTIVE",
+          departmentId: dept.id,
+          password: "",
+        },
+      });
+    }
   }
 
   // 5. Ensure sample classrooms exist
@@ -190,11 +217,18 @@ async function provisionOrGetTrialSandbox() {
     }
   }
 
-  return {
+  const result = {
     school,
     adminStaff,
     tierNames: tiers.map(t => t.name),
   };
+
+  (globalThis as any).__cachedTrialSandbox = {
+    ...result,
+    cachedAt: Date.now(),
+  };
+
+  return result;
 }
 
 /**

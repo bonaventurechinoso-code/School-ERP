@@ -18,6 +18,7 @@ import {
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
 import { User, X, GraduationCap, ShieldAlert } from "lucide-react";
+import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
 type StudentWithTier = Student & { tier?: AcademicTier | null };
 
@@ -72,100 +73,19 @@ export function getClassOptionsForTier(
   tiersList: AcademicTier[] = [],
   classroomsList: Array<{ id: string; name: string }> = []
 ): string[] {
-  let tierIdentifier = (activeTierName || "").trim().toLowerCase();
+  let tierIdentifier = (activeTierName || "").trim();
 
   // If activeTierName matches a tier ID or name in tiersList, use that tier's name
   const matchingTier = tiersList.find(
     (t) => t.id === activeTierName || t.name.toLowerCase() === activeTierName?.toLowerCase()
   );
   if (matchingTier) {
-    tierIdentifier = matchingTier.name.toLowerCase();
+    tierIdentifier = matchingTier.name;
   } else if ((!tierIdentifier || tierIdentifier === "all") && tiersList.length > 0) {
-    tierIdentifier = tiersList[0].name.toLowerCase();
+    tierIdentifier = tiersList[0].name;
   }
 
-  // 1. Daycare / Nursery
-  if (
-    tierIdentifier.includes("nursery") ||
-    tierIdentifier.includes("daycare") ||
-    tierIdentifier.includes("creche") ||
-    tierIdentifier.includes("early") ||
-    tierIdentifier.includes("preschool") ||
-    tierIdentifier.includes("kindergarten")
-  ) {
-    return ["Creche", "Nursery 1", "Nursery 2", "Nursery 3", "Pre-School / Kindergarten"];
-  }
-
-  // 2. Primary School
-  if (
-    tierIdentifier.includes("primary") ||
-    tierIdentifier.includes("elementary") ||
-    tierIdentifier.includes("basic")
-  ) {
-    return ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"];
-  }
-
-  // 3. College of Education (Checked before 'college' substring in secondary)
-  if (
-    tierIdentifier.includes("college of education") ||
-    tierIdentifier.includes("nce") ||
-    tierIdentifier.includes("teacher")
-  ) {
-    return ["NCE 1", "NCE 2", "NCE 3"];
-  }
-
-  // 4. Polytechnic
-  if (
-    tierIdentifier.includes("polytechnic") ||
-    tierIdentifier.includes("poly") ||
-    tierIdentifier.includes("nd ") ||
-    tierIdentifier.includes("hnd")
-  ) {
-    return ["ND 1", "ND 2", "HND 1", "HND 2"];
-  }
-
-  // 5. University
-  if (
-    tierIdentifier.includes("university") ||
-    tierIdentifier.includes("undergraduate") ||
-    tierIdentifier.includes("postgraduate") ||
-    tierIdentifier.includes("degree") ||
-    tierIdentifier.includes("uni")
-  ) {
-    return ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level"];
-  }
-
-  // 6. Secondary School
-  if (
-    tierIdentifier.includes("secondary") ||
-    tierIdentifier.includes("high") ||
-    tierIdentifier.includes("junior") ||
-    tierIdentifier.includes("senior") ||
-    tierIdentifier.includes("jss") ||
-    tierIdentifier.includes("sss") ||
-    tierIdentifier.includes("college")
-  ) {
-    return ["JSS 1", "JSS 2", "JSS 3", "SS 1", "SS 2", "SS 3"];
-  }
-
-  // If tierIdentifier is "all" and multiple tiers exist, aggregate across tiers
-  if (tierIdentifier === "all" && tiersList.length > 1) {
-    const combined: string[] = [];
-    tiersList.forEach((t) => {
-      const opts = getClassOptionsForTier(t.name, [], []);
-      opts.forEach((o) => {
-        if (!combined.includes(o)) combined.push(o);
-      });
-    });
-    if (combined.length > 0) return combined;
-  }
-
-  // Fallback: If classrooms provided, use their unique names; otherwise default to Primary classes
-  if (classroomsList && classroomsList.length > 0) {
-    return Array.from(new Set(classroomsList.map((c) => c.name)));
-  }
-
-  return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"];
+  return getClassesForTier(tierIdentifier, classroomsList.map((c) => c.name));
 }
 
 export function getGraduatingClassForTier(
@@ -628,14 +548,8 @@ export default function StudentTable({
   const currentBulkLabel = selectedIds.length > 0 ? `${bulkActionLabel} (${selectedIds.length})` : bulkActionGlobalLabel;
 
   const getLadderForTier = (tierName?: string) => {
-    const t = (tierName || "").toLowerCase();
-    if (t.includes("secondary") || t.includes("high") || t.includes("senior") || t.includes("college")) {
-      return ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3", "Alumni (Class Slot Cleared)"];
-    }
-    if (t.includes("nursery") || t.includes("daycare") || t.includes("creche") || t.includes("early")) {
-      return ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2", "Alumni (Class Slot Cleared)"];
-    }
-    return ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6", "Alumni (Class Slot Cleared)"];
+    const config = getTierConfig(tierName);
+    return [...config.defaultClasses, "Alumni (Class Slot Cleared)"];
   };
 
   return (

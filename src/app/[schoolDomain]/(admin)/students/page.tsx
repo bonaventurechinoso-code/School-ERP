@@ -111,6 +111,10 @@ export default async function StudentsPage({
       },
     }).catch(() => 0),
     tenantDb.classroom.findMany({
+      where: {
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
       orderBy: { name: "asc" },
     }).catch(() => []),
   ]);

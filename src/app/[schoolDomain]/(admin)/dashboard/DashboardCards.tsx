@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Users, BookOpen, FileText, Wallet, Calendar } from "lucide-react";
+import { getTierConfig } from "@/lib/tier-config";
 import {
   getEnrolledStudentsCount,
   getActiveStaffCount,
@@ -43,6 +44,7 @@ export async function StudentRosterCard({
 }) {
   const enrolledStudents = await getEnrolledStudentsCount(schoolId, activeTier);
   const accentColor = primaryColor || "#4f46e5";
+  const tierConfig = getTierConfig(activeTier);
 
   return (
     <Link href={`/${subdomain}/students`} className="block col-span-1 active:scale-[0.98] transition-transform">
@@ -55,7 +57,7 @@ export async function StudentRosterCard({
         </div>
         <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
           <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1">
-            Pupils / Students Enrolled
+            {tierConfig.terms.learnerPlural || tierConfig.terms.studentPlural} Enrolled
           </h3>
           <div 
             className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
@@ -186,6 +188,7 @@ export async function FinancialSummaryCard({
 }) {
   const termlyRevenue = await getTermlyRevenue(schoolId, activeTier);
   const accentColor = primaryColor || "#4f46e5";
+  const tierConfig = getTierConfig(activeTier);
 
   return (
     <div 
@@ -197,7 +200,7 @@ export async function FinancialSummaryCard({
       </div>
       <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
         <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1">
-          Termly Revenue
+          {tierConfig.terms.periodName} Revenue
         </h3>
         <div 
           className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
@@ -231,6 +234,7 @@ export async function EventsStatusCard({
 }) {
   const eventsCount = await getEventsCount(schoolId, activeTier);
   const accentColor = primaryColor || "#4f46e5";
+  const tierConfig = getTierConfig(activeTier);
 
   return (
     <div 
@@ -255,7 +259,7 @@ export async function EventsStatusCard({
         {eventsCount}
       </p>
       <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-3 block relative z-10">
-        Scheduled on Timetable
+        Scheduled on {tierConfig.terms.periodName} Timetable
       </span>
     </div>
   );

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useRef } from "react";
 import { Invoice, Payment, Student, FeeTemplate } from "@prisma/client";
 import { createInvoice, recordPayment, deleteInvoice } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import { formatNaira } from "./FinanceDashboard";
+import { apiClient } from "@/lib/api-client";
 import { 
   Search, 
   Trash2, 
@@ -12,8 +13,10 @@ import {
   CheckCircle2, 
   AlertCircle, 
   X, 
-  PlusCircle
+  PlusCircle,
+  RefreshCw
 } from "lucide-react";
+import { useActiveTierConfig } from "@/lib/tier-config";
 
 type InvoiceWithDetails = Invoice & {
   student: Student & { currentClass?: string | null };
@@ -21,11 +24,13 @@ type InvoiceWithDetails = Invoice & {
 };
 
 export default function InvoiceTable({ 
+  activeTier: initialActiveTier,
   invoices, 
   students,
   feeTemplates,
   schoolId 
 }: { 
+  activeTier?: string;
   invoices: InvoiceWithDetails[], 
   students: (Student & { currentClass?: string | null })[],
   feeTemplates: FeeTemplate[],
@@ -34,9 +39,108 @@ export default function InvoiceTable({
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
 
+  const { 
+    activeTier, 
+    tierConfig, 
+    filterStudents, 
+    filterInvoices, 
+    filterFeeTemplates 
+  } = useActiveTierConfig(initialActiveTier);
+
+  // Prune students, invoices, and fee templates by active tier
+  const tierStudents = useMemo(() => {
+    return filterStudents(students);
+  }, [students, filterStudents]);
+
+  const isolatedFeeTemplates = useMemo(() => {
+    return filterFeeTemplates(feeTemplates);
+  }, [feeTemplates, filterFeeTemplates]);
+
+  const tierInvoices = useMemo(() => {
+    return filterInvoices(invoices);
+  }, [invoices, filterInvoices]);
+
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceData, setInvoiceData] = useState({ studentId: "", feeTemplateId: "", amountDue: 0, dueDate: "", description: "" });
   
+  // Reactive Student Search State (Rule 2)
+  const [studentSearchInput, setStudentSearchInput] = useState("");
+  const [isSearchingStudent, setIsSearchingStudent] = useState(false);
+  const [studentSearchResult, setStudentSearchResult] = useState<{
+    student: { id: string; name: string; admissionNumber?: string | null; currentClass?: string | null };
+    ledgerBalance: number;
+  } | null>(null);
+  const [studentSearchError, setStudentSearchError] = useState<string | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const performStudentLookup = async (query: string) => {
+    if (!query.trim()) return;
+    setIsSearchingStudent(true);
+    setStudentSearchError(null);
+
+    try {
+      // Dispatch internal API request using client interceptor to fetch student ledger balance via Prisma
+      const res = await apiClient.get(
+        `/api/v1/finance/student-balance?q=${encodeURIComponent(query.trim())}&schoolId=${schoolId}`
+      );
+      const data = await res.json();
+
+      if (res.ok && data.success && data.student) {
+        setInvoiceData((prev) => ({
+          ...prev,
+          studentId: data.student.id,
+          amountDue: data.amountDue !== undefined ? data.amountDue : prev.amountDue,
+          dueDate: data.dueDate || prev.dueDate,
+          description: data.description || prev.description,
+        }));
+        setStudentSearchResult({
+          student: data.student,
+          ledgerBalance: data.ledgerBalance || 0,
+        });
+        setStudentSearchError(null);
+      } else {
+        setStudentSearchError(data.error || `No student ledger record found for "${query}".`);
+        setStudentSearchResult(null);
+      }
+    } catch (err: any) {
+      console.error("[Student Lookup Error]:", err);
+      setStudentSearchError("Failed to lookup student ledger balance. Check connection.");
+      setStudentSearchResult(null);
+    } finally {
+      setIsSearchingStudent(false);
+    }
+  };
+
+  const handleStudentSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setStudentSearchInput(val);
+    setStudentSearchError(null);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (!val.trim()) {
+      setStudentSearchResult(null);
+      return;
+    }
+
+    // Debounce optimization (350ms)
+    searchTimeoutRef.current = setTimeout(() => {
+      performStudentLookup(val);
+    }, 350);
+  };
+
+  const handleStudentSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      performStudentLookup(studentSearchInput);
+    }
+  };
+
   const [showPaymentForm, setShowPaymentForm] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState({ amountPaid: 0, method: "CASH" });
 
@@ -48,7 +152,7 @@ export default function InvoiceTable({
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "PARTIAL" | "PAID" | "OVERDUE">("ALL");
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter(inv => {
+    return tierInvoices.filter(inv => {
       // Status filter
       if (statusFilter !== "ALL" && inv.status !== statusFilter) {
         return false;
@@ -65,7 +169,7 @@ export default function InvoiceTable({
       }
       return true;
     });
-  }, [invoices, statusFilter, searchQuery]);
+  }, [tierInvoices, statusFilter, searchQuery]);
 
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const templateId = e.target.value;
@@ -353,16 +457,74 @@ export default function InvoiceTable({
               {errorMsg}
             </div>
           )}
+          {/* Reactive Student Search Trigger (Rule 2) */}
+          <div className="md:col-span-2 bg-slate-50 dark:bg-zinc-950/60 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                Student Search (Ledger Lookup)
+              </label>
+              {isSearchingStudent && (
+                <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 font-medium">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Fetching ledger balance...
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="e.g. Nnamdi nwaosu"
+                value={studentSearchInput}
+                onChange={handleStudentSearchChange}
+                onKeyDown={handleStudentSearchKeyDown}
+                className="w-full pl-9 pr-24 py-2 text-sm bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-xl text-slate-900 dark:text-zinc-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => performStudentLookup(studentSearchInput)}
+                disabled={isSearchingStudent || !studentSearchInput.trim()}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-lg text-xs font-semibold disabled:opacity-40 transition cursor-pointer"
+              >
+                Lookup
+              </button>
+            </div>
+
+            {/* Search Feedback: Success Alert */}
+            {studentSearchResult && (
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-medium">
+                  Linked <strong>{studentSearchResult.student.name}</strong> ({studentSearchResult.student.currentClass || "Enrolled"}) — Outstanding Ledger Balance: <strong>{formatNaira(studentSearchResult.ledgerBalance)}</strong>. Populated Amount Due, Due Date, and Description.
+                </span>
+              </div>
+            )}
+
+            {/* Search Feedback: Error Alert */}
+            {studentSearchError && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{studentSearchError}</span>
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1">Student</label>
             <select 
               required 
               className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" 
               value={invoiceData.studentId} 
-              onChange={e => setInvoiceData({...invoiceData, studentId: e.target.value})}
+              onChange={e => {
+                const sid = e.target.value;
+                setInvoiceData({...invoiceData, studentId: sid});
+                if (sid) {
+                  performStudentLookup(sid);
+                }
+              }}
             >
-              <option value="" disabled>Select student...</option>
-              {students.map(s => (
+              <option value="" disabled>Select student ({tierStudents.length} available)...</option>
+              {tierStudents.map(s => (
                 <option key={s.id} value={s.id}>
                   {s.firstName} {s.lastName} {s.currentClass ? `(${s.currentClass})` : ""} {s.admissionNumber ? `- ${s.admissionNumber}` : ""}
                 </option>
@@ -377,7 +539,7 @@ export default function InvoiceTable({
               onChange={handleTemplateChange}
             >
               <option value="">-- Custom Invoice --</option>
-              {feeTemplates.map(t => (
+              {isolatedFeeTemplates.map(t => (
                 <option key={t.id} value={t.id}>{t.name} ({formatNaira(t.defaultAmount)})</option>
               ))}
             </select>
@@ -408,7 +570,7 @@ export default function InvoiceTable({
             <input 
               required 
               type="text" 
-              placeholder="e.g. 1st Term Tuition & Feeding" 
+              placeholder={`e.g. 1st ${tierConfig.terms.periodName} ${tierConfig.terms.billingTitle}`} 
               className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" 
               value={invoiceData.description} 
               onChange={e => setInvoiceData({...invoiceData, description: e.target.value})} 

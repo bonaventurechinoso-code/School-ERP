@@ -2,13 +2,42 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users } from "lucide-react";
+import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LandingPage() {
   const [isSolutionsOpen, setIsSolutionsOpen] = useState(false);
   const [isAnnual, setIsAnnual] = useState(false);
+  const [loadingGateway, setLoadingGateway] = useState<"trial" | "demo" | null>(null);
+
+  const handleGatewayNavigation = async (type: "trial" | "demo", endpoint: string) => {
+    // Prevent duplicate firing if a request is already in-flight
+    if (loadingGateway) return;
+    setLoadingGateway(type);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Gateway returned HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data?.redirectUrl) {
+        window.location.assign(data.redirectUrl);
+        return;
+      }
+      window.location.assign(endpoint);
+    } catch (err) {
+      console.error(`[GATEWAY_INITIALIZATION_ERROR] Failed to navigate to ${type}:`, err);
+      // Fallback navigation directly to endpoint GET route
+      window.location.assign(endpoint);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 font-sans selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-300">
@@ -182,12 +211,43 @@ export default function LandingPage() {
             A single, scalable ERP platform designed to drive operational excellence from Early Childhood Centers to Universities and Polytechnics. Manage admissions, finance, and academics in one place.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/api/trial/create-sandbox" prefetch={false} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
-              Start Free Trial <ArrowRight className="h-5 w-5" />
-            </Link>
-            <Link href="/api/auth/demo-session" prefetch={false} className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2">
-              Explore Demo Environment
-            </Link>
+            <button
+              type="button"
+              id="start-free-trial-btn"
+              disabled={loadingGateway !== null}
+              onClick={() => handleGatewayNavigation("trial", "/api/trial/create-sandbox")}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+            >
+              {loadingGateway === "trial" ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-white" />
+                  <span>Start Free Trial</span>
+                </>
+              ) : (
+                <>
+                  <span>Start Free Trial</span>
+                  <ArrowRight className="h-5 w-5" />
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              id="explore-demo-btn"
+              disabled={loadingGateway !== null}
+              onClick={() => handleGatewayNavigation("demo", "/api/auth/demo-session")}
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2"
+            >
+              {loadingGateway === "demo" ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-white" />
+                  <span>Explore Demo Environment</span>
+                </>
+              ) : (
+                <>
+                  <span>Explore Demo Environment</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </section>

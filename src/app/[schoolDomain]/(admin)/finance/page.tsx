@@ -1,14 +1,27 @@
 import React, { Suspense } from "react";
+import { cookies } from "next/headers";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import FinanceDashboard from "./FinanceDashboard";
 import { fetchInvoicesPaginated, fetchTransactionsPaginated } from "./actions";
 
-export default async function FinancePage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+export default async function FinancePage({ 
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
+}: { 
+  params: Promise<{ schoolDomain: string }>;
+  searchParams?: Promise<{ tier?: string }>;
+}) {
   const params = await paramsPromise;
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
-    include: { academicTiers: true },
+    include: { 
+      academicTiers: {
+        orderBy: { level: "asc" }
+      } 
+    },
   });
 
   if (!school) {
@@ -18,6 +31,29 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
       </div>
     );
   }
+
+  // Resolve active tier from URL searchParams or cookie fallback
+  const cookieStore = await cookies();
+  const cookieTier = cookieStore.get("activeTier")?.value;
+  const requestedTierParam = searchParams?.tier;
+
+  const activeTierObj = school.academicTiers.find((t) => {
+    if (requestedTierParam) {
+      return (
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
+        t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+      );
+    }
+    if (cookieTier) {
+      return (
+        t.name.toLowerCase() === cookieTier.toLowerCase() ||
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier)
+      );
+    }
+    return false;
+  }) || (school.academicTiers.length > 0 ? school.academicTiers[0] : null);
+
+  const activeTierName = activeTierObj ? activeTierObj.name : (requestedTierParam || cookieTier || "");
 
   const tenantDb = getTenantClient(school.id);
   
@@ -35,13 +71,19 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
     fetchInvoicesPaginated(school.id, { limit: 50 }),
     fetchTransactionsPaginated(school.id, { limit: 50 }),
     tenantDb.student.findMany({
-      where: { schoolId: school.id },
+      where: { 
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
       select: { id: true, firstName: true, lastName: true, currentClass: true, admissionNumber: true },
       take: 500,
       orderBy: [{ currentClass: "asc" }, { firstName: "asc" }],
     }),
     tenantDb.classroom.findMany({
-      where: { schoolId: school.id },
+      where: { 
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
       select: { name: true },
       orderBy: { name: "asc" },
     }),
@@ -98,6 +140,7 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
       }>
         <FinanceDashboard 
           hasHigherEd={hasHigherEd}
+          activeTier={activeTierName}
           invoices={invoicesResult.items}
           students={students as any}
           classrooms={classrooms.map(c => c.name)}

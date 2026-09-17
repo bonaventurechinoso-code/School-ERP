@@ -211,7 +211,27 @@ export async function getClassroomsForTenant(schoolId: string, tierContext?: str
     ttlSeconds: 600, // 10 minutes sliding TTL
     fetchFn: async () => {
       const tenantDb = await getPrismaClientForTier(schoolId, activeTier || "");
+      let tierFilter = {};
+      if (activeTier && activeTier !== "all") {
+        const tierRecord = await basePrisma.academicTier.findFirst({
+          where: {
+            schoolId,
+            OR: [
+              { name: { equals: activeTier, mode: "insensitive" } },
+              { name: { contains: activeTier, mode: "insensitive" } },
+            ],
+          },
+        });
+        if (tierRecord) {
+          tierFilter = { tierId: tierRecord.id };
+        }
+      }
+
       return await tenantDb.classroom.findMany({
+        where: {
+          schoolId,
+          ...tierFilter,
+        },
         orderBy: { name: "asc" },
       }).catch(() => []);
     },
