@@ -18,9 +18,9 @@ export default async function TenantStaffPortalPage({
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
-  const validTabs = ["overview", "rosters", "attendance", "gradebook"] as const;
+  const validTabs = ["overview", "rosters", "attendance", "gradebook", "schedule", "payslips"] as const;
   const requestedTab = validTabs.includes(searchParams.tab as any)
-    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook")
+    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "payslips")
     : "overview";
 
   const [school, session] = await Promise.all([
@@ -39,13 +39,14 @@ export default async function TenantStaffPortalPage({
     return notFound();
   }
 
-  const initialData = await fetchStaffPortalInitialData(school.id);
+  const initialData = await fetchStaffPortalInitialData(school.id, session?.email);
 
-  const staffName =
-    session?.email
-      ? session.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      : "Faculty Educator";
-  const staffRole = session?.staffRole || "Class Teacher";
+  const staffName = initialData.staffProfile
+    ? `${initialData.staffProfile.firstName} ${initialData.staffProfile.lastName}`
+    : session?.email
+    ? session.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Faculty Educator";
+  const staffRole = initialData.staffProfile?.role || session?.staffRole || "Class Teacher";
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors duration-200">
@@ -120,6 +121,9 @@ export default async function TenantStaffPortalPage({
           schoolDomain={school.subdomain}
           staffName={staffName}
           staffRole={staffRole}
+          staffProfile={initialData.staffProfile}
+          initialPayroll={initialData.payrollRecords}
+          initialTimetable={initialData.timetable}
           initialTiers={initialData.tiers}
           initialClassrooms={initialData.classrooms}
           initialCourses={initialData.courses}

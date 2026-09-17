@@ -284,3 +284,74 @@ export async function bulkCreateInvoices(
     return { success: false, error: error.message || "Failed to bulk create invoices." };
   }
 }
+
+export async function createTransaction(
+  schoolId: string,
+  data: {
+    type: "INCOME" | "EXPENSE";
+    category: string;
+    amount: number;
+    description: string;
+    referenceId?: string;
+  }
+) {
+  const tenantDb = getTenantClient(schoolId);
+  try {
+    if (!data.amount || data.amount <= 0) {
+      throw new Error("Amount must be greater than zero.");
+    }
+    if (!data.description || data.description.trim() === "") {
+      throw new Error("Description is required.");
+    }
+
+    const txn = await tenantDb.transaction.create({
+      data: {
+        schoolId,
+        type: data.type,
+        category: data.category.toUpperCase(),
+        amount: Math.round(data.amount * 100) / 100,
+        description: data.description.trim(),
+        referenceId: data.referenceId || null,
+      },
+    });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
+
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
+    return { success: true, transaction: txn };
+  } catch (error: any) {
+    console.error("[Server Action] Failed to create transaction:", error);
+    return { success: false, error: error.message || "Failed to record transaction." };
+  }
+}
+
+export async function deleteInvoice(schoolId: string, invoiceId: string) {
+  const tenantDb = getTenantClient(schoolId);
+  try {
+    const invoice = await tenantDb.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { payments: true },
+    });
+
+    if (!invoice) throw new Error("Invoice not found.");
+
+    if (invoice.payments.length > 0) {
+      throw new Error("Cannot delete an invoice that already has recorded payments. Reconcile or void payments first.");
+    }
+
+    await tenantDb.invoice.delete({
+      where: { id: invoiceId },
+    });
+
+    // Write-Through Cache Invalidation
+    await invalidateFinanceNamespace(schoolId);
+
+    safeRevalidatePath(`/[schoolDomain]/finance`, "page");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Server Action] Failed to delete invoice:", error);
+    return { success: false, error: error.message || "Failed to delete invoice." };
+  }
+}
+

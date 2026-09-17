@@ -26,18 +26,24 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
     invoicesResult,
     transactionsResult,
     students,
+    classrooms,
     feeTemplates,
     invoicedAggregate,
     paidAggregate,
     expensesAggregate,
   ] = await Promise.all([
-    fetchInvoicesPaginated(school.id, { limit: 25 }),
-    fetchTransactionsPaginated(school.id, { limit: 25 }),
+    fetchInvoicesPaginated(school.id, { limit: 50 }),
+    fetchTransactionsPaginated(school.id, { limit: 50 }),
     tenantDb.student.findMany({
       where: { schoolId: school.id },
-      select: { id: true, firstName: true, lastName: true, admissionNumber: true },
-      take: 100,
-      orderBy: { firstName: "asc" },
+      select: { id: true, firstName: true, lastName: true, currentClass: true, admissionNumber: true },
+      take: 500,
+      orderBy: [{ currentClass: "asc" }, { firstName: "asc" }],
+    }),
+    tenantDb.classroom.findMany({
+      where: { schoolId: school.id },
+      select: { name: true },
+      orderBy: { name: "asc" },
     }),
     tenantDb.feeTemplate.findMany({
       where: { schoolId: school.id },
@@ -72,10 +78,10 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <header>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
           Fee Tracking & Finance
         </h2>
-        <p className="text-slate-500 mt-2 text-lg">
+        <p className="text-slate-500 dark:text-zinc-400 mt-2 text-lg">
           Manage invoices, record payments, and track institutional cash flow.
         </p>
       </header>
@@ -94,6 +100,7 @@ export default async function FinancePage({ params: paramsPromise }: { params: P
           hasHigherEd={hasHigherEd}
           invoices={invoicesResult.items}
           students={students as any}
+          classrooms={classrooms.map(c => c.name)}
           feeTemplates={feeTemplates}
           transactions={transactionsResult.items}
           schoolId={school.id}

@@ -18,11 +18,89 @@ export interface GradeEntryPayload {
   teacherRemarks?: string;
 }
 
+export interface StaffProfileData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  department: string;
+  baseSalary: number;
+  bankName: string;
+  bankAccountNumber: string;
+  accountName: string;
+  status: string;
+}
+
+export interface PayrollRecordItem {
+  id: string;
+  amount: number;
+  status: string;
+  payDate: Date | string;
+  receiptCode?: string | null;
+}
+
+export interface TimetablePeriodItem {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  course: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  classroom: {
+    id: string;
+    name: string;
+  };
+}
+
 /**
- * 1. Fetch all classrooms, tiers, courses, and active students for a tenant
+ * 1. Fetch all classrooms, tiers, courses, active students, and current faculty profile for a tenant
  */
-export async function fetchStaffPortalInitialData(schoolId: string) {
+export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?: string) {
   try {
+    // 1. Resolve logged-in staff member or active faculty
+    let currentStaff: any = null;
+    if (staffEmail) {
+      currentStaff = await basePrisma.staff.findFirst({
+        where: { schoolId, email: staffEmail },
+        include: {
+          department: true,
+          PayrollRecord: {
+            orderBy: { payDate: "desc" },
+          },
+          Timetable: {
+            include: {
+              course: true,
+              classroom: true,
+            },
+            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+          },
+        },
+      });
+    }
+
+    if (!currentStaff) {
+      currentStaff = await basePrisma.staff.findFirst({
+        where: { schoolId },
+        include: {
+          department: true,
+          PayrollRecord: {
+            orderBy: { payDate: "desc" },
+          },
+          Timetable: {
+            include: {
+              course: true,
+              classroom: true,
+            },
+            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+          },
+        },
+      });
+    }
+
     const [school, classrooms, courses, students] = await Promise.all([
       basePrisma.school.findUnique({
         where: { id: schoolId },
@@ -66,6 +144,23 @@ export async function fetchStaffPortalInitialData(schoolId: string) {
       classrooms,
       courses,
       students,
+      staffProfile: currentStaff
+        ? {
+            id: currentStaff.id,
+            firstName: currentStaff.firstName,
+            lastName: currentStaff.lastName,
+            email: currentStaff.email,
+            role: currentStaff.role,
+            department: currentStaff.department?.name || "Academics",
+            baseSalary: currentStaff.baseSalary || 0,
+            bankName: currentStaff.bankName || "First Bank of Nigeria",
+            bankAccountNumber: currentStaff.bankAccountNumber || "N/A",
+            accountName: currentStaff.accountName || `${currentStaff.firstName} ${currentStaff.lastName}`,
+            status: currentStaff.status,
+          }
+        : null,
+      payrollRecords: currentStaff?.PayrollRecord || [],
+      timetable: currentStaff?.Timetable || [],
     };
   } catch (error: any) {
     console.error("[fetchStaffPortalInitialData Error]:", error);
@@ -76,9 +171,13 @@ export async function fetchStaffPortalInitialData(schoolId: string) {
       classrooms: [],
       courses: [],
       students: [],
+      staffProfile: null,
+      payrollRecords: [],
+      timetable: [],
     };
   }
 }
+
 
 /**
  * 2. Fetch daily attendance records for a class on a specific date
