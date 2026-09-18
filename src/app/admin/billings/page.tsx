@@ -136,7 +136,7 @@ export default async function BillingsPage() {
 
         <div className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Balance</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Commission Balance</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
               <Wallet className="w-4 h-4" />
             </div>
@@ -145,7 +145,7 @@ export default async function BillingsPage() {
             {formatNgn(Number(platformWallet.balance))}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
-            Ready for Paystack payout transfer
+            Platform 2% software fee balance
           </p>
         </div>
 
@@ -166,7 +166,7 @@ export default async function BillingsPage() {
 
         <div className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Schools Escrow Funds</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">School Settlements</span>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               <CreditCard className="w-4 h-4" />
             </div>
@@ -175,7 +175,7 @@ export default async function BillingsPage() {
             {formatNgn(Number(tenantWalletsAggregate._sum.balance || 0))}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
-            Across {tenantWalletsAggregate._count} tenant school wallets
+            Mirror ledger (settled daily 6am by Wema Bank)
           </p>
         </div>
       </div>

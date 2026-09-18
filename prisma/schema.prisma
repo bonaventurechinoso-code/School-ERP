@@ -57,6 +57,8 @@ model School {
 
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")
+  paystackSubaccountCode String?
+  paystackSplitCode      String?
 
   students          Student[]
   staff             Staff[]
@@ -389,10 +391,13 @@ model Invoice {
   feeTemplateId String?
   feeTemplate   FeeTemplate? @relation(fields: [feeTemplateId], references: [id], onDelete: SetNull)
 
-  amountDue   Float
-  dueDate     DateTime
-  status      String   @default("PENDING") // PENDING, PARTIAL, PAID, OVERDUE
-  description String
+  amountDue         Float
+  amountPaid        Float     @default(0)
+  paystackReference String?   @unique
+  paidAt            DateTime?
+  dueDate           DateTime
+  status            String    @default("PENDING") // PENDING, PARTIAL, PAID, OVERDUE, FAILED
+  description       String
 
   payments Payment[]
 
@@ -881,6 +886,9 @@ model WalletTransaction {
   reference     String   @unique
   description   String?
   createdBy     String?
+  source           String?  @default("paystack_webhook")
+  paystackReference String?
+  settlementStatus String?  @default("settled")
   createdAt     DateTime @default(now())
 }
 

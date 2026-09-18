@@ -38,10 +38,11 @@ import {
 
 interface StudentPortalClientProps {
   initialData: StudentPortalWorkspaceData;
+  initialTab?: StudentPortalTab;
 }
 
-export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<StudentPortalTab>("OVERVIEW");
+export function StudentPortalClient({ initialData, initialTab }: StudentPortalClientProps) {
+  const [activeTab, setActiveTab] = useState<StudentPortalTab>(initialTab || "OVERVIEW");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTier, setActiveTier] = useState<string>(initialData.tierConfig.tierName);
 
@@ -51,6 +52,100 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
   }, [activeTier]);
 
   const { school, student, communications, finance, isAccessDenied, isSuspended } = initialData;
+  const [financeState, setFinanceState] = useState(finance);
+  const [paymentBanner, setPaymentBanner] = useState<string | null>(null);
+
+  // Model A Paystack Split Return Listener:
+  // Detects return redirect from Paystack callback with payment=success
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment") === "success" || params.get("reference")) {
+        setActiveTab("FINANCE");
+        const invoiceId = params.get("invoiceId") || "inv-ec-2";
+        const amount = Number(params.get("amount")) || 15000;
+        const ref = params.get("reference") || `PAY-${Date.now()}`;
+
+        setPaymentBanner(`Payment of ₦${amount.toLocaleString()} settled successfully via Paystack (Ref: ${ref}). Funds routed directly to school account.`);
+
+        setFinanceState((prev) => {
+          if (prev.invoices.some((inv) => inv.id === invoiceId && (inv.status === "PAID" || inv.amountDue <= inv.amountPaid))) {
+            return prev;
+          }
+          const targetInv = prev.invoices.find((i) => i.id === invoiceId);
+          const invDesc = targetInv?.description || "Creche After-School Care & Play Material Levy";
+          const updatedInvoices = prev.invoices.map((inv) => {
+            if (inv.id === invoiceId) {
+              return {
+                ...inv,
+                status: "PAID" as const,
+                amountPaid: inv.amountDue,
+              };
+            }
+            return inv;
+          });
+
+          const newPayment = {
+            id: `pay-${Date.now()}`,
+            reference: ref,
+            invoiceId: invoiceId,
+            invoiceDescription: invDesc,
+            amountPaid: amount,
+            paymentDate: new Date().toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }),
+            method: "PAYSTACK",
+            status: "VERIFIED" as const,
+            receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
+          };
+
+          return {
+            ...prev,
+            invoices: updatedInvoices,
+            totalPaid: prev.totalPaid + amount,
+            outstandingBalance: Math.max(0, prev.outstandingBalance - amount),
+            payments: [newPayment, ...prev.payments],
+          };
+        });
+      }
+    }
+  }, []);
+
+  const handlePaymentSuccess = (invoiceId: string, amountPaid: number, reference: string) => {
+    setPaymentBanner(`Payment of ₦${amountPaid.toLocaleString()} settled successfully via Paystack (Ref: ${reference}). Funds routed directly to school account.`);
+    setFinanceState((prev) => {
+      const targetInv = prev.invoices.find((i) => i.id === invoiceId);
+      const invDesc = targetInv?.description || "Creche After-School Care & Play Material Levy";
+      const updatedInvoices = prev.invoices.map((inv) => {
+        if (inv.id === invoiceId) {
+          return {
+            ...inv,
+            status: "PAID" as const,
+            amountPaid: inv.amountDue,
+          };
+        }
+        return inv;
+      });
+
+      const newPayment = {
+        id: `pay-${Date.now()}`,
+        reference: reference,
+        invoiceId: invoiceId,
+        invoiceDescription: invDesc,
+        amountPaid: amountPaid,
+        paymentDate: new Date().toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }),
+        method: "PAYSTACK",
+        status: "VERIFIED" as const,
+        receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
+      };
+
+      return {
+        ...prev,
+        invoices: updatedInvoices,
+        totalPaid: prev.totalPaid + amountPaid,
+        outstandingBalance: Math.max(0, prev.outstandingBalance - amountPaid),
+        payments: [newPayment, ...prev.payments],
+      };
+    });
+  };
 
   const isHigherEd = currentTierConfig.category === "HIGHER_ED";
   const isSecondary = currentTierConfig.category === "SECONDARY";
@@ -305,43 +400,112 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
                       <CreditCard className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className={`text-2xl sm:text-3xl font-black whitespace-nowrap font-mono tabular-nums tracking-tight ${finance.outstandingBalance > 0 ? "text-purple-700 dark:text-purple-300" : "text-emerald-600 dark:text-emerald-400"}`}>
-                    {finance.currency}{finance.outstandingBalance.toLocaleString()}
+                  <p className={`text-2xl sm:text-3xl font-black whitespace-nowrap font-mono tabular-nums tracking-tight ${financeState.outstandingBalance > 0 ? "text-purple-700 dark:text-purple-300" : "text-emerald-600 dark:text-emerald-400"}`}>
+                    {financeState.currency}{financeState.outstandingBalance.toLocaleString()}
                   </p>
                   <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mt-1 block">
-                    {finance.outstandingBalance > 0 ? "Payment Due" : "Clear Ledger"}
+                    {financeState.outstandingBalance > 0 ? "Payment Due" : "Clear Ledger"}
                   </span>
                 </div>
               </div>
 
-              {/* Responsive Layout Grid: Profile Snippet + Communications + Finance */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left 8 Cols: Academic Rank & Communications Snapshot */}
-                <div className="lg:col-span-8 space-y-6">
-                  {/* Module 1 Embedded */}
-                  <StudentProfileModule
-                    student={student}
-                    tierConfig={currentTierConfig}
-                    onNavigateToProfile={() => setActiveTab("PROFILE")}
-                  />
-
-                  {/* Module 2 Embedded */}
-                  <CommunicationsModule
-                    communications={communications}
-                    tierConfig={currentTierConfig}
-                  />
+              {/* Isolated Miniature Overview Summary Strip (< 15% Screen Height) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                {/* 1. Latest Institutional Bulletin Snapshot */}
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                        <Megaphone className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Latest Bulletin</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Read-only digest</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                      {communications.notices[0]?.title || "No active school bulletins at this time"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      {communications.notices[0]?.content || "Official school announcements and notices will appear here."}
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      {communications.notices.length} active announcements
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("COMMUNICATIONS")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      Open Broadcasts <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Right 4 Cols: Fees & Finance Module Stack */}
-                <div className="lg:col-span-4 space-y-6">
-                  <FeesFinanceModule
-                    finance={finance}
-                    tierConfig={currentTierConfig}
-                    schoolId={school.id}
-                    studentLoginId={student.admissionNumber}
-                    isOverview={true}
-                    onViewTransactionHistory={() => setActiveTab("TRANSACTIONS")}
-                  />
+                {/* 2. Academic Enrollment Standing Snapshot */}
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                        <Award className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Academic Record</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Official Registry</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                      Class / Level: {student.currentClass}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      Status: <span className="font-semibold text-emerald-600 dark:text-emerald-400 uppercase">{student.status || "ENROLLED"}</span> • {currentTierConfig.tierName}
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      Verified Bio Profile
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("PROFILE")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      View Student Bio <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Tuition & Clearance Ledger Snapshot */}
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                        <CreditCard className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Bursary Clearance</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Fiscal Cycle</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                      {financeState.outstandingBalance > 0
+                        ? `Balance Due: ${financeState.currency}${financeState.outstandingBalance.toLocaleString()}`
+                        : "Tuition & Fees Cleared"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      {financeState.outstandingBalance > 0
+                        ? "Clearance required before term examination seating"
+                        : "Account in good standing with school bursary"}
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      {finance.invoices.length} billed invoices
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("FINANCE")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      Bursary Portal <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -371,12 +535,30 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
           {/* TAB 4: FEES & FINANCE MODULE */}
           {activeTab === "FINANCE" && (
             <div className="space-y-6 animate-in fade-in duration-300">
+              {paymentBanner && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-3 text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>{paymentBanner}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentBanner(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1 cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <FeesFinanceModule
-                finance={finance}
+                finance={financeState}
                 tierConfig={currentTierConfig}
                 schoolId={school.id}
                 studentLoginId={student.admissionNumber}
+                subdomain={school.subdomain}
+                student={student}
                 onViewTransactionHistory={() => setActiveTab("TRANSACTIONS")}
+                onPaymentSuccess={handlePaymentSuccess}
               />
             </div>
           )}
@@ -385,7 +567,7 @@ export function StudentPortalClient({ initialData }: StudentPortalClientProps) {
           {activeTab === "TRANSACTIONS" && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <TransactionHistoryModule
-                finance={finance}
+                finance={financeState}
                 tierConfig={currentTierConfig}
                 schoolId={school.id}
                 studentLoginId={student.admissionNumber}

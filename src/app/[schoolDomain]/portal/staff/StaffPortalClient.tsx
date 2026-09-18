@@ -692,63 +692,99 @@ export default function StaffPortalClient({
             </div>
           </div>
 
-          {/* Quick Action Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div
-              onClick={() => setActiveTab("rosters")}
-              className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-lg transition-all cursor-pointer group"
-            >
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Users className="w-5 h-5" />
+          {/* Isolated Miniature Educator Summary Strip (< 15% Screen Height) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            {/* 1. Daily Roll Call Readiness */}
+            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
+                    <CheckSquare className="w-4 h-4" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider">Morning Roll Call</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">Daily Register</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  Date: {attendanceDate}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                  Synchronized attendance for {selectedClass} and assigned cohorts.
+                </p>
               </div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white mb-1">
-                Classroom Rosters
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-4">
-                Inspect enrolled pupils, registration numbers, guardian contacts, and status.
-              </p>
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
-                <span>View Class Directory</span>
-                <ArrowRight className="w-4 h-4" />
-              </span>
+              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Ready for roll call
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("attendance")}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+                >
+                  Take Attendance <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
-            <div
-              onClick={() => setActiveTab("attendance")}
-              className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-teal-500 dark:hover:border-teal-600 hover:shadow-lg transition-all cursor-pointer group"
-            >
-              <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <CheckSquare className="w-5 h-5" />
+            {/* 2. Assessment & Grading Matrix */}
+            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                    <Award className="w-4 h-4" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider">Assessment Status</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">WAEC Standard</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {selectedTerm} • {academicYear}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                  Continuous assessment (CA1, CA2) and term examination entry.
+                </p>
               </div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white mb-1">
-                Daily Attendance Register
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-4">
-                Take morning roll call with one-click bulk present toggles and real-time database sync.
-              </p>
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 group-hover:translate-x-1 transition-transform">
-                <span>Open Attendance Sheet</span>
-                <ArrowRight className="w-4 h-4" />
-              </span>
+              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                <span className="text-[10px] text-slate-400">
+                  Gradebook Active
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("gradebook")}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                >
+                  Enter Scores <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
-            <div
-              onClick={() => setActiveTab("gradebook")}
-              className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-500 dark:hover:border-indigo-600 hover:shadow-lg transition-all cursor-pointer group"
-            >
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Award className="w-5 h-5" />
+            {/* 3. Assigned Cohorts Directory */}
+            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <Users className="w-4 h-4" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider">Class Directory</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">Rosters</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {classStudents.length} Learners in {selectedClass}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                  Access student records, guardian emergency lines, and bio details.
+                </p>
               </div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white mb-1">
-                20/20/60 Gradebook
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-4">
-                Enter continuous assessments and exam scores with instant WAEC grading letter calculations.
-              </p>
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>Open Grade Matrix</span>
-                <ArrowRight className="w-4 h-4" />
-              </span>
+              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                <span className="text-[10px] text-slate-400">
+                  {initialClassrooms.length} assigned stream(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("rosters")}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                >
+                  View Directory <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

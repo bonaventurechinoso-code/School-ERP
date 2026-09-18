@@ -13,12 +13,15 @@ export default async function TenantStudentPortalPage({
     denied?: string; 
     tier?: string; 
     studentId?: string; 
-    loginId?: string; 
+    loginId?: string;
+    tab?: string;
+    payment?: string;
   }>;
 }) {
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
+  const shouldOpenFinance = searchParams.tab?.toLowerCase() === "finance" || searchParams.payment === "success";
 
   const school = await basePrisma.school.findUnique({
     where: { subdomain: schoolDomain },
@@ -40,5 +43,10 @@ export default async function TenantStudentPortalPage({
     workspaceData.isAccessDenied = true;
   }
 
-  return <StudentPortalClient initialData={workspaceData} />;
+  return (
+    <StudentPortalClient 
+      initialData={workspaceData} 
+      initialTab={shouldOpenFinance ? "FINANCE" : undefined}
+    />
+  );
 }
