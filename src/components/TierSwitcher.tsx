@@ -9,6 +9,7 @@ export interface TierItem {
   id: string;
   name: string;
   sublabel?: string;
+  slug?: string;
   databaseName?: string | null;
   databaseUrl?: string | null;
 }
@@ -24,12 +25,12 @@ interface TierSwitcherProps {
  * The complete, authentic spectrum of educational tiers available for trial testing.
  */
 export const COMPLETE_TRIAL_TIERS: TierItem[] = [
-  { id: "tier-nursery", name: "Daycare / Nursery", sublabel: "Early Childhood Care" },
-  { id: "tier-primary", name: "Primary School", sublabel: "Basic 1 - 6" },
-  { id: "tier-secondary", name: "Secondary School", sublabel: "Junior & Senior Secondary" },
-  { id: "tier-coe", name: "College of Education", sublabel: "Tertiary NCE" },
-  { id: "tier-poly", name: "Polytechnic", sublabel: "Tertiary ND/HND" },
-  { id: "tier-uni", name: "University", sublabel: "Undergraduate & Postgraduate" },
+  { id: "tier-nursery", name: "Daycare / Nursery", sublabel: "Early Childhood Care", slug: "nursery" },
+  { id: "tier-primary", name: "Primary School", sublabel: "Basic 1 - 6", slug: "primary" },
+  { id: "tier-secondary", name: "Secondary School", sublabel: "Junior & Senior Secondary", slug: "secondary" },
+  { id: "tier-uni", name: "University", sublabel: "Undergraduate & Postgraduate", slug: "university" },
+  { id: "tier-poly", name: "Polytechnic", sublabel: "ND & HND Programs", slug: "polytechnic" },
+  { id: "tier-coe", name: "College of Education", sublabel: "NCE Programs", slug: "college_education" },
 ];
 
 export function getTierStyle(tierName: string, isActive: boolean) {
@@ -88,7 +89,7 @@ export default function TierSwitcher({
   // Determine whether current environment is the Trial Sandbox
   const isTrial = schoolDomain === "trial-sandbox" || schoolDomain.includes("trial");
 
-  // Effective tiers: For trial sandbox (or when fewer tiers exist), merge with the complete spectrum of 6 tiers
+  // Effective tiers: For trial sandbox (or when fewer tiers exist), merge with the complete spectrum of tiers
   const effectiveTiers: TierItem[] = useMemo(() => {
     if (isTrial || tiers.length <= 2) {
       return COMPLETE_TRIAL_TIERS.map((trialTier) => {
@@ -98,19 +99,54 @@ export default function TierSwitcher({
             sanitizeTierSlug(t.name) === sanitizeTierSlug(trialTier.name)
         );
         return existing
-          ? { ...existing, sublabel: trialTier.sublabel }
+          ? { ...existing, sublabel: trialTier.sublabel, slug: trialTier.slug }
           : trialTier;
       });
     }
 
-    // Attach known sublabels to existing tiers
-    return tiers.map((t) => {
+    // Attach known sublabels to existing tiers, splitting any legacy aggregated tertiary tiers into discrete entries
+    return tiers.flatMap((t) => {
+      const upper = (t.name || "").toUpperCase();
+      const isAggregatedTertiary =
+        (upper.includes("HIGHER") && upper.includes("UNIVERSITY")) ||
+        upper.includes("HIGHER INSTITUTION") ||
+        upper === "TERTIARY";
+
+      if (isAggregatedTertiary) {
+        return [
+          {
+            id: `${t.id || "tier"}-uni`,
+            name: "University",
+            sublabel: "Undergraduate & Postgraduate",
+            slug: "university",
+            databaseName: t.databaseName ? t.databaseName.replace(/_[^_]+$/, "_university") : null,
+            databaseUrl: t.databaseUrl,
+          },
+          {
+            id: `${t.id || "tier"}-poly`,
+            name: "Polytechnic",
+            sublabel: "ND & HND Programs",
+            slug: "polytechnic",
+            databaseName: t.databaseName ? t.databaseName.replace(/_[^_]+$/, "_polytechnic") : null,
+            databaseUrl: t.databaseUrl,
+          },
+          {
+            id: `${t.id || "tier"}-coe`,
+            name: "College of Education",
+            sublabel: "NCE Programs",
+            slug: "college_education",
+            databaseName: t.databaseName ? t.databaseName.replace(/_[^_]+$/, "_college_education") : null,
+            databaseUrl: t.databaseUrl,
+          },
+        ];
+      }
+
       const match = COMPLETE_TRIAL_TIERS.find(
         (ct) =>
           ct.name.toLowerCase() === t.name.toLowerCase() ||
           sanitizeTierSlug(ct.name) === sanitizeTierSlug(t.name)
       );
-      return match ? { ...t, sublabel: match.sublabel } : t;
+      return [match ? { ...t, sublabel: match.sublabel, slug: match.slug } : t];
     });
   }, [isTrial, tiers]);
 
@@ -122,7 +158,8 @@ export default function TierSwitcher({
     effectiveTiers.find(
       (t) =>
         (paramTier &&
-          (sanitizeTierSlug(t.name) === sanitizeTierSlug(paramTier) ||
+          ((t.slug && t.slug.toLowerCase() === paramTier.toLowerCase()) ||
+            sanitizeTierSlug(t.name) === sanitizeTierSlug(paramTier) ||
             t.name.toLowerCase().includes(paramTier.toLowerCase()) ||
             sanitizeTierSlug(paramTier).includes(sanitizeTierSlug(t.name)))) ||
         (currentTier &&
@@ -131,7 +168,7 @@ export default function TierSwitcher({
     ) || effectiveTiers[0];
 
   const handleSelectTier = (tier: TierItem) => {
-    const slug = sanitizeTierSlug(tier.name);
+    const slug = tier.slug || sanitizeTierSlug(tier.name);
     // 1. Set cookie for activeTier so server components and layouts immediately read it
     document.cookie = `activeTier=${encodeURIComponent(tier.name)}; path=/; max-age=31536000; SameSite=Lax`;
 

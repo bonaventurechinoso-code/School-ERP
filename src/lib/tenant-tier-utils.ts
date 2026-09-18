@@ -15,7 +15,7 @@ export function sanitizeTierSlug(tierName: string): string {
   if (upper.includes("SECONDARY")) return "secondary";
   if (upper.includes("UNIVERSITY")) return "university";
   if (upper.includes("POLYTECHNIC")) return "polytechnic";
-  if (upper.includes("COLLEGE")) return "college";
+  if (upper.includes("COLLEGE")) return "college_education";
   
   // Fallback: clean alphanumeric
   return tierName.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_").slice(0, 20);

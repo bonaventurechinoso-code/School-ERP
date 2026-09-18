@@ -11,8 +11,6 @@ import {
   FileText,
   CheckCircle2,
   Clock,
-  LayoutGrid,
-  List,
   Phone,
   ArrowRight,
   UserCheck,
@@ -337,7 +335,7 @@ export default function AdmissionsPipeline({
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-800">Admissions Pipeline & CRM</h3>
+            <h3 className="text-lg font-bold text-slate-800">Admissions Pipeline</h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Managing {filteredLeads.length} active applicant prospects
             </p>
@@ -369,28 +367,6 @@ export default function AdmissionsPipeline({
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
-
-          {/* VIEW MODE TOGGLE */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`p-1.5 rounded-lg transition ${
-                viewMode === "kanban" ? "bg-white text-indigo-600 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
-              }`}
-              title="Kanban Board View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("table")}
-              className={`p-1.5 rounded-lg transition ${
-                viewMode === "table" ? "bg-white text-indigo-600 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
-              }`}
-              title="List Roster View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
 
           {/* LOG INQUIRY BUTTON */}
           <button

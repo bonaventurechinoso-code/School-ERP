@@ -39,22 +39,37 @@ export default async function FinancePage({
   const requestedTierParam = searchParams?.tier;
 
   const activeTierObj = school.academicTiers.find((t) => {
+    const isHigherEdPlaceholder =
+      t.name === "Higher Institution / University" ||
+      t.name.toLowerCase().includes("higher institution") ||
+      t.name.toUpperCase() === "TERTIARY";
+
     if (requestedTierParam) {
       return (
         sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
-        t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+        t.name.toLowerCase().includes(requestedTierParam.toLowerCase()) ||
+        (isHigherEdPlaceholder &&
+          (requestedTierParam.toLowerCase().includes("poly") ||
+            requestedTierParam.toLowerCase().includes("college") ||
+            requestedTierParam.toLowerCase().includes("uni") ||
+            requestedTierParam.toLowerCase().includes("higher")))
       );
     }
     if (cookieTier) {
       return (
         t.name.toLowerCase() === cookieTier.toLowerCase() ||
-        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier)
+        sanitizeTierSlug(t.name) === sanitizeTierSlug(cookieTier) ||
+        (isHigherEdPlaceholder &&
+          (cookieTier.toLowerCase().includes("poly") ||
+            cookieTier.toLowerCase().includes("college") ||
+            cookieTier.toLowerCase().includes("uni") ||
+            cookieTier.toLowerCase().includes("higher")))
       );
     }
     return false;
   }) || (school.academicTiers.length > 0 ? school.academicTiers[0] : null);
 
-  const activeTierName = activeTierObj ? activeTierObj.name : (requestedTierParam || cookieTier || "");
+  const activeTierName = requestedTierParam || activeTierObj?.name || cookieTier || "";
 
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
@@ -113,8 +128,11 @@ export default async function FinancePage({
 
   const hasHigherEd = school.academicTiers.some(t => 
     t.name.toLowerCase().includes("higher ed") || 
+    t.name.toLowerCase().includes("higher institution") || 
     t.name.toLowerCase().includes("university") || 
-    t.name.toLowerCase().includes("college")
+    t.name.toLowerCase().includes("polytechnic") || 
+    t.name.toLowerCase().includes("college") ||
+    t.name.toUpperCase() === "TERTIARY"
   );
 
   return (
@@ -134,18 +152,41 @@ export default async function FinancePage({
         {school.academicTiers.length > 1 && (
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 overflow-x-auto shrink-0">
             {school.academicTiers.map((tier) => {
-              const isSelected = activeTierName.toLowerCase() === tier.name.toLowerCase();
+              const isAggregatedHigherEd =
+                tier.name === "Higher Institution / University" ||
+                tier.name.toLowerCase().includes("higher institution");
+
+              // Dynamic label: replace aggregated placeholder with specific tier from ?tier query param
+              let displayTierName = tier.name;
+              if (isAggregatedHigherEd) {
+                const paramLower = (requestedTierParam || cookieTier || "").toLowerCase();
+                if (paramLower.includes("poly")) {
+                  displayTierName = "Polytechnic";
+                } else if (paramLower.includes("college")) {
+                  displayTierName = "College of Education";
+                } else {
+                  displayTierName = "University";
+                }
+              }
+
+              const isSelected =
+                (activeTierObj ? activeTierObj.id === tier.id : false) ||
+                activeTierName.toLowerCase() === tier.name.toLowerCase() ||
+                activeTierName.toLowerCase() === displayTierName.toLowerCase();
+
+              const tierQueryParam = isAggregatedHigherEd ? displayTierName : tier.name;
+
               return (
                 <Link
                   key={tier.id}
-                  href={`/${params.schoolDomain}/finance?tier=${encodeURIComponent(tier.name)}`}
+                  href={`/${params.schoolDomain}/finance?tier=${encodeURIComponent(tierQueryParam)}`}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                     isSelected
                       ? "bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs"
                       : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  {tier.name}
+                  {displayTierName}
                 </Link>
               );
             })}

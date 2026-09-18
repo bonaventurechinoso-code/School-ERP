@@ -178,6 +178,8 @@ export function resolveTierType(tierIdentifier?: string | null): AcademicTierTyp
     lower.includes("university") ||
     lower.includes("polytechnic") ||
     lower.includes("college of education") ||
+    lower.includes("college_education") ||
+    lower === "college" ||
     lower.includes("tertiary") ||
     lower.includes("higher") ||
     lower.includes("degree") ||

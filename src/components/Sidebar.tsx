@@ -25,6 +25,8 @@ import TierSwitcher from "@/components/TierSwitcher";
 export interface SidebarTier {
   id: string;
   name: string;
+  sublabel?: string;
+  slug?: string;
   databaseName?: string | null;
   databaseUrl?: string | null;
 }

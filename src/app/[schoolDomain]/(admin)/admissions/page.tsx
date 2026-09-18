@@ -68,7 +68,11 @@ export default async function AdmissionsPage({
     ? school.academicTiers.find(
         (t) =>
           sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
-          t.name.toLowerCase().includes(requestedTierParam.toLowerCase())
+          t.name.toLowerCase().includes(requestedTierParam.toLowerCase()) ||
+          ((t.name === "Higher Institution / University" || t.name.toLowerCase().includes("higher institution")) &&
+            (requestedTierParam.toLowerCase().includes("poly") ||
+              requestedTierParam.toLowerCase().includes("college") ||
+              requestedTierParam.toLowerCase().includes("uni")))
       )
     : null;
 
@@ -115,7 +119,7 @@ export default async function AdmissionsPage({
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100">
-            Admissions & Enrollment CRM
+            Admissions & Enrollment
           </h2>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
             Track and manage prospective candidates from initial inquiry to entrance assessment and final matriculation.
@@ -136,18 +140,41 @@ export default async function AdmissionsPage({
               All Tiers ({totalLeads})
             </Link>
             {school.academicTiers.map((tier) => {
-              const isSelected = activeTierName.toLowerCase() === tier.name.toLowerCase();
+              const isAggregatedHigherEd =
+                tier.name === "Higher Institution / University" ||
+                tier.name.toLowerCase().includes("higher institution");
+
+              // Dynamic label: replace aggregated placeholder with specific tier from ?tier query param
+              let displayTierName = tier.name;
+              if (isAggregatedHigherEd) {
+                const paramLower = (requestedTierParam || cookieTier || "").toLowerCase();
+                if (paramLower.includes("poly")) {
+                  displayTierName = "Polytechnic";
+                } else if (paramLower.includes("college")) {
+                  displayTierName = "College of Education";
+                } else {
+                  displayTierName = "University";
+                }
+              }
+
+              const isSelected =
+                (activeTierObj ? activeTierObj.id === tier.id : false) ||
+                activeTierName.toLowerCase() === tier.name.toLowerCase() ||
+                activeTierName.toLowerCase() === displayTierName.toLowerCase();
+
+              const tierQueryParam = isAggregatedHigherEd ? displayTierName : tier.name;
+
               return (
                 <Link
                   key={tier.id}
-                  href={`/${params.schoolDomain}/admissions?tier=${encodeURIComponent(tier.name)}`}
+                  href={`/${params.schoolDomain}/admissions?tier=${encodeURIComponent(tierQueryParam)}`}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     isSelected
                       ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
                       : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50"
                   }`}
                 >
-                  {tier.name}
+                  {displayTierName}
                 </Link>
               );
             })}
