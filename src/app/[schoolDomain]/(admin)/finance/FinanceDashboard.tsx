@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Invoice, Payment, Student, FeeTemplate, Transaction } from "@prisma/client";
 import { useTenant } from "@/lib/tenant-context";
 import { 
@@ -14,6 +15,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Building2,
+  ShieldCheck,
 } from "lucide-react";
 import InvoiceTable from "./InvoiceTable";
 import FeeTemplatesList from "./FeeTemplatesList";
@@ -44,6 +46,7 @@ export default function FinanceDashboard({
   totalPaid,
   totalExpenses,
   outstandingBalance,
+  pendingVerificationsCount = 0,
 }: {
   initialTab?: "overview" | "invoices" | "templates" | "ledger" | "reconciliation";
   hasHigherEd: boolean;
@@ -58,6 +61,7 @@ export default function FinanceDashboard({
   totalPaid: number;
   totalExpenses: number;
   outstandingBalance: number;
+  pendingVerificationsCount?: number;
 }) {
   const tenant = useTenant();
   const { tierConfig, filterClasses, filterInvoices, filterFeeTemplates, filterStudents } = useActiveTierConfig(activeTier);
@@ -149,6 +153,22 @@ export default function FinanceDashboard({
             </span>
           )}
         </button>
+        <Link
+          href={`/${tenant.subdomain || schoolId}/finance/verifications`}
+          className="pb-3 font-semibold text-xs sm:text-sm whitespace-nowrap shrink-0 transition-colors inline-flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 border-b-2 border-transparent"
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <span>Payment Verifications</span>
+          {pendingVerificationsCount > 0 ? (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse">
+              {pendingVerificationsCount}
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-zinc-800 text-slate-500">
+              0
+            </span>
+          )}
+        </Link>
       </div>
 
       {/* Content */}
@@ -163,7 +183,19 @@ export default function FinanceDashboard({
                   Collection Efficiency: <strong className="text-emerald-600 dark:text-emerald-400">{collectionRate}%</strong>
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link
+                  href={`/${tenant.subdomain || schoolId}/finance/verifications`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Verify Bank Proofs</span>
+                  {pendingVerificationsCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-white text-amber-700">
+                      {pendingVerificationsCount}
+                    </span>
+                  )}
+                </Link>
                 <button
                   onClick={() => setActiveTab("invoices")}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"

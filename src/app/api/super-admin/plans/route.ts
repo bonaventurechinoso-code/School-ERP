@@ -1,72 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_PLANS } from "@/lib/saas-plans";
 
-export const DEFAULT_PLANS = [
-  {
-    name: "Basic",
-    priceNgn: 25000,
-    billingCycle: "termly",
-    maxStudents: 150,
-    maxStaff: 15,
-    maxStorageGb: 5,
-    modules: ["academics", "attendance", "students"],
-    commissionPercent: 3.5,
-    isActive: true,
-  },
-  {
-    name: "Standard",
-    priceNgn: 50000,
-    billingCycle: "termly",
-    maxStudents: 500,
-    maxStaff: 40,
-    maxStorageGb: 15,
-    modules: ["academics", "attendance", "students", "finance", "admissions"],
-    commissionPercent: 2.5,
-    isActive: true,
-  },
-  {
-    name: "Premium",
-    priceNgn: 100000,
-    billingCycle: "termly",
-    maxStudents: 1500,
-    maxStaff: 100,
-    maxStorageGb: 50,
-    modules: [
-      "academics",
-      "attendance",
-      "students",
-      "finance",
-      "admissions",
-      "payroll",
-      "communications",
-      "exams",
-    ],
-    commissionPercent: 2.0,
-    isActive: true,
-  },
-  {
-    name: "Enterprise",
-    priceNgn: 250000,
-    billingCycle: "termly",
-    maxStudents: 5000,
-    maxStaff: 300,
-    maxStorageGb: 200,
-    modules: [
-      "academics",
-      "attendance",
-      "students",
-      "finance",
-      "admissions",
-      "payroll",
-      "communications",
-      "exams",
-      "scheduling",
-      "custom_domain",
-    ],
-    commissionPercent: 1.5,
-    isActive: true,
-  },
-];
 
 export async function GET() {
   try {

@@ -45,7 +45,7 @@ const NIGERIAN_BANKS = [
   "Ecobank Nigeria",
   "Wema Bank / ALAT",
   "Monnify Virtual Account",
-  "Paystack Settlement",
+  "NIP Direct Bank Transfer",
   "Remita Direct Debit",
 ];
 

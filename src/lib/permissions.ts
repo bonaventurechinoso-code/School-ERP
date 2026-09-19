@@ -218,7 +218,19 @@ export function checkRouteAuthorization(
     };
   }
 
-  // 3. Public Portal Settings
+  // 3. Public Portal Settings & Bank Configuration
+  if (pathname.includes("/settings/bank")) {
+    if (category === "FINANCIAL") {
+      return { allowed: true, category, effectiveRoleName };
+    }
+    return {
+      allowed: false,
+      reason: `Access Denied: Institutional bank account configuration is reserved for the School Bursar and Executive Administration. (${effectiveRoleName})`,
+      category,
+      effectiveRoleName,
+    };
+  }
+
   if (pathname.includes("/portal-settings")) {
     return {
       allowed: false,

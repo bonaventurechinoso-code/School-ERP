@@ -206,10 +206,10 @@ export function FeesFinanceModule({
                 </span>
               </div>
 
-              {/* Model A Wema Bank Settlement Notice */}
+              {/* Manual Direct Bank Settlement Notice */}
               <div className="mt-3 pt-2.5 border-t border-amber-100/80 dark:border-amber-900/30 flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-zinc-400 font-medium">
                 <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span className="truncate">Balance held by Wema Bank via Paystack - Settled daily 6am</span>
+                <span className="truncate">Direct Manual Bank Transfer — Verified by School Bursary (0% Platform Fee)</span>
               </div>
             </div>
           </div>

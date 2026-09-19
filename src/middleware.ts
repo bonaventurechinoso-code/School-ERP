@@ -40,9 +40,9 @@ export async function middleware(req: NextRequest) {
     const isDev = process.env.NODE_ENV === 'development';
 
     if (!sessionToken) {
-      const deniedUrl = new URL('/access-denied', req.url);
-      deniedUrl.searchParams.set('message', 'Platform Super-Admin authentication required. Please log in with authorized credentials.');
-      return NextResponse.redirect(deniedUrl);
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', path);
+      return NextResponse.redirect(loginUrl);
     }
 
     try {
@@ -75,9 +75,9 @@ export async function middleware(req: NextRequest) {
       );
       return NextResponse.redirect(deniedUrl);
     } catch (err) {
-      const deniedUrl = new URL('/access-denied', req.url);
-      deniedUrl.searchParams.set('message', 'Super-Admin session invalid or expired. Please re-authenticate.');
-      const response = NextResponse.redirect(deniedUrl);
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', path);
+      const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('session');
       return response;
     }
@@ -131,7 +131,7 @@ export async function middleware(req: NextRequest) {
 
   // --- Auth Check & RBAC Protection for Tenant Administrative Routes ---
   const tenantAdminSegments = [
-    '/dashboard', '/finance', '/hr', '/portal-settings',
+    '/dashboard', '/finance', '/hr', '/portal-settings', '/settings',
     '/admissions', '/staff', '/students', '/scheduling',
     '/exams', '/transcripts', '/report-cards', '/communications'
   ];

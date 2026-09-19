@@ -9,6 +9,8 @@ import {
   ApplicantPipelineCard,
   FinancialSummaryCard,
   EventsStatusCard,
+  PendingVerificationsCard,
+  CollectionBankCard,
   DashboardSkeleton,
 } from "./DashboardCards";
 import DashboardClientHeader from "./DashboardClientHeader";
@@ -103,22 +105,21 @@ export default async function TenantDashboard({
           />
         </Suspense>
 
-        {/* 3. Applicant Pipeline Module */}
+        {/* 3. Pending Payment Verifications Module (Links to /finance/verifications) */}
         <Suspense fallback={<DashboardSkeleton />}>
-          <ApplicantPipelineCard
+          <PendingVerificationsCard
             schoolId={school.id}
             subdomain={school.subdomain}
-            activeTier={activeTier}
-            activeTierId={activeTierId}
             primaryColor="#d97706"
           />
         </Suspense>
 
-        {/* 4. Financial Summary Module (Protected) */}
+        {/* 4. Verified Revenue Module (Protected) */}
         {isFinanceAuthorized && (
           <Suspense fallback={<DashboardSkeleton />}>
             <FinancialSummaryCard
               schoolId={school.id}
+              subdomain={school.subdomain}
               activeTier={activeTier}
               primaryColor="#059669"
             />
@@ -135,6 +136,14 @@ export default async function TenantDashboard({
         </Suspense>
 
       </div>
+
+      {/* 6. Direct Collection Bank Widget */}
+      <Suspense fallback={<div className="h-24 bg-white dark:bg-zinc-900 rounded-2xl animate-pulse" />}>
+        <CollectionBankCard
+          schoolId={school.id}
+          subdomain={school.subdomain}
+        />
+      </Suspense>
     </div>
   );
 }

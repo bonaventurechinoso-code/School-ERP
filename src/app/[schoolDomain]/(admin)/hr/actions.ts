@@ -133,23 +133,13 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
       return { success: false, error: "This payroll record has already been disbursed." };
     }
 
-    // 2. Strict Check on Wallet Balance
-    if (school.walletBalance < payroll.amount) {
-      return { 
-        success: false, 
-        error: `Insufficient school wallet balance ($${school.walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} available, $${payroll.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} required). Please top up your school wallet first.` 
-      };
-    }
-
-    // 3. Generate receipt reference
+    // 2. CBN Model A Compliance: No platform wallet check or mutation.
+    // Payroll is disbursed via external banking / direct settlement and logged for analytical accounting.
+    // Generate receipt reference
     const receiptCode = `TXN_PAY_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-    // 4. Atomic balance deduction and ledger record creation
+    // 3. Mark disbursed and record analytical expense
     await basePrisma.$transaction([
-      basePrisma.school.update({
-        where: { id: school.id },
-        data: { walletBalance: school.walletBalance - payroll.amount }
-      }),
       basePrisma.payrollRecord.update({
         where: { id: payroll.id },
         data: { 
@@ -163,7 +153,7 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
           type: "EXPENSE",
           category: "PAYROLL",
           amount: payroll.amount,
-          description: `Salary disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName} (${payroll.staff.role})`,
+          description: `Salary disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName} (${payroll.staff.role}) - Settled via external bank instruction`,
           referenceId: payroll.id
         }
       })

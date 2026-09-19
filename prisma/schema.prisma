@@ -60,6 +60,14 @@ model School {
   paystackSubaccountCode String?
   paystackSplitCode      String?
 
+  // Manual Bank Transfer Direct Settlement Configuration
+  settlementBankName     String?
+  settlementBankCode     String?
+  settlementAccountNumber String?
+  settlementAccountName  String?
+  paymentInstruction     String   @default("Use Student Admission No as transfer narration")
+  collectionMode         String   @default("MANUAL_BANK_TRANSFER")
+
   students          Student[]
   staff             Staff[]
   classrooms        Classroom[]
@@ -80,7 +88,7 @@ model School {
   departments       Department[]
   payrollRecords    PayrollRecord[]
   transactions      Transaction[]
-  walletBalance     Float @default(0)
+  walletBalance     Float @default(0) // DEPRECATED: CBN Model A Compliance - zero platform wallet liability
   academicTiers     AcademicTier[]
   admissionLeads    AdmissionLead[]
 
@@ -92,6 +100,7 @@ model School {
   primaryDbUrl         String? // Explicit primary tier database URL
   secondaryDbUrl       String? // Explicit secondary tier database URL
   tierDatabases        TenantTierDatabase[]
+  paymentProofs        PaymentProof[]
 }
 
 model PlatformAdmin {
@@ -154,8 +163,10 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  feeStatus         String              @default("UNPAID")
   invoices          Invoice[]
   payments          Payment[]
+  paymentProofs     PaymentProof[]
   StudentAttendance StudentAttendance[]
   ExamResult        ExamResult[]
   GradeRecord       GradeRecord[]
@@ -400,6 +411,7 @@ model Invoice {
   description       String
 
   payments Payment[]
+  paymentProofs PaymentProof[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -431,6 +443,44 @@ model Payment {
   @@index([schoolId, invoiceId])
   @@index([schoolId, paymentDate(sort: Desc)])
   @@index([schoolId, studentId, paymentDate(sort: Desc)])
+}
+
+// ------------------------------------------------------
+// MANUAL PAYMENT PROOFS & VERIFICATION AUDIT QUEUE
+// ------------------------------------------------------
+
+model PaymentProof {
+  id                String       @id @default(uuid())
+  schoolId          String
+  school            School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoiceId         String?
+  invoice           Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  // Fast tabular and verification metadata
+  studentName       String
+  admissionNumber   String
+  amount            Float
+  paidAt            DateTime
+  payerBankName     String
+  payerAccountName  String?
+  sessionId         String       // NIP Transaction Session ID / Teller No / Ref
+  proofImageUrl     String       // Path or URL to uploaded receipt image
+  status            String       @default("PENDING") // PENDING | APPROVED | REJECTED
+  
+  submittedAt       DateTime     @default(now())
+  verifiedAt        DateTime?
+  verifiedById      String?      // Staff ID of approving/rejecting bursar
+  verifiedByName    String?
+  rejectionReason   String?
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([schoolId, status])
+  @@index([schoolId, studentId])
+  @@index([schoolId, sessionId])
 }
 
 model Transaction {
@@ -852,6 +902,11 @@ model Tenant {
   kycDocs                Json?
   paystackSubaccountCode String?
   paystackSplitCode      String?
+  paystackSettlementBank Json?          // { bankCode, bankName, accountNumber, accountName, updatedAt }
+  settlementBankName     String?
+  settlementAccountNumber String?
+  settlementAccountName  String?
+  collectionMode         String?        @default("MANUAL_BANK_TRANSFER")
   isImpersonationAllowed Boolean        @default(true)
   suspendedReason        String?
   suspendedAt            DateTime?
@@ -933,4 +988,28 @@ model AuditLog {
   ipAddress String?
   createdAt DateTime @default(now())
 }
+
+model PlatformBankConfig {
+  id            String   @id @default("global")
+  bankCode      String?
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}
+
+model PlatformEarnings {
+  id                    String   @id @default(cuid())
+  tenantId              String?
+  subaccountCode        String?
+  grossAmount           Float
+  platformFee           Float    // 2% split fee
+  schoolNet             Float    // 98% direct settlement
+  reference             String   @unique
+  source                String   @default("paystack_split")
+  settlementDestination String?
+  createdAt             DateTime @default(now())
+}
+
 

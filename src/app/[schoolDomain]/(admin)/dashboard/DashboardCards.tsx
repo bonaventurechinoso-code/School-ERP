@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Users, BookOpen, FileText, Wallet, Calendar } from "lucide-react";
+import { Users, BookOpen, FileText, CreditCard, Calendar, Clock, Building2 } from "lucide-react";
 import { getTierConfig } from "@/lib/tier-config";
 import {
   getEnrolledStudentsCount,
@@ -8,6 +8,8 @@ import {
   getPendingApplicationsCount,
   getTermlyRevenue,
   getEventsCount,
+  getPendingVerificationsCount,
+  getSchoolCollectionBank,
 } from "./actions";
 
 /**
@@ -179,43 +181,47 @@ export async function ApplicantPipelineCard({
  */
 export async function FinancialSummaryCard({
   schoolId,
+  subdomain,
   activeTier,
   primaryColor,
 }: {
   schoolId: string;
+  subdomain?: string;
   activeTier?: string;
   primaryColor?: string;
 }) {
   const termlyRevenue = await getTermlyRevenue(schoolId, activeTier);
-  const accentColor = primaryColor || "#4f46e5";
-  const tierConfig = getTierConfig(activeTier);
+  const accentColor = primaryColor || "#059669";
+  const targetFinanceUrl = subdomain ? `/${subdomain}/finance/verifications` : "/dashboard/finance";
 
   return (
-    <div 
-      className="col-span-1 active:scale-[0.98] transition-transform p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
-      style={{ borderTopColor: accentColor }}
-    >
-      <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
-        <Wallet className="w-32 h-32" />
-      </div>
-      <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
-        <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1">
-          {tierConfig.terms.periodName} Revenue
-        </h3>
-        <div 
-          className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
-          style={{ backgroundColor: `${accentColor}18`, color: accentColor }}
-        >
-          <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
+    <Link href={targetFinanceUrl} className="block col-span-1 active:scale-[0.98] transition-transform">
+      <div 
+        className="p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+        style={{ borderTopColor: accentColor }}
+      >
+        <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+          <CreditCard className="w-32 h-32" />
         </div>
+        <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
+          <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1">
+            Verified Revenue
+          </h3>
+          <div 
+            className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
+            style={{ backgroundColor: `${accentColor}18`, color: accentColor }}
+          >
+            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+        </div>
+        <p className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate font-mono">
+          ₦{termlyRevenue.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </p>
+        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-3 block relative z-10">
+          Manually verified in your bank (0% fee)
+        </span>
       </div>
-      <p className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
-        ₦{termlyRevenue.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </p>
-      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-3 block relative z-10">
-        Verified Fee Payments
-      </span>
-    </div>
+    </Link>
   );
 }
 
@@ -264,3 +270,115 @@ export async function EventsStatusCard({
     </div>
   );
 }
+
+/**
+ * 6. Modular Data Card: Pending Verifications
+ * Displays pending manual bank transfer proofs awaiting bursar audit.
+ */
+export async function PendingVerificationsCard({
+  schoolId,
+  subdomain,
+  primaryColor,
+}: {
+  schoolId: string;
+  subdomain: string;
+  primaryColor?: string;
+}) {
+  const pendingCount = await getPendingVerificationsCount(schoolId);
+  const accentColor = primaryColor || "#d97706";
+
+  return (
+    <Link href={`/${subdomain}/finance/verifications`} className="block col-span-1 active:scale-[0.98] transition-transform">
+      <div 
+        className="p-5 sm:p-6 rounded-2xl shadow-sm hover:shadow-md transition-all h-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 border-t-4 text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+        style={{ borderTopColor: accentColor }}
+      >
+        <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+          <Clock className="w-32 h-32" />
+        </div>
+        <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
+          <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1 flex items-center gap-1.5">
+            <span>Pending Verifications</span>
+            {pendingCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block" />
+            )}
+          </h3>
+          <div 
+            className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0 relative" 
+            style={{ backgroundColor: `${accentColor}18`, color: accentColor }}
+          >
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500" />
+            )}
+          </div>
+        </div>
+        <p className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white relative z-10 leading-none truncate">
+          {pendingCount.toLocaleString()}
+        </p>
+        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-3 block relative z-10">
+          Bank Proofs Awaiting Audit
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * 7. Modular Data Card: Collection Bank Summary Card
+ * Replaces the obsolete wallet balance widget with direct bank details.
+ */
+export async function CollectionBankCard({
+  schoolId,
+  subdomain,
+}: {
+  schoolId: string;
+  subdomain: string;
+}) {
+  const bank = await getSchoolCollectionBank(schoolId);
+  const isConfigured = Boolean(bank?.settlementAccountNumber && bank?.settlementBankName);
+
+  return (
+    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-start sm:items-center gap-3.5">
+        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+          <Building2 className="w-5 h-5" />
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-zinc-50">
+              Your Collection Bank
+            </h4>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+              Manual Mode (0% fee)
+            </span>
+          </div>
+          {isConfigured ? (
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+              <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                {bank?.settlementBankName}
+              </span>{" "}
+              —{" "}
+              <span className="font-mono font-bold text-slate-900 dark:text-zinc-100">
+                {bank?.settlementAccountNumber}
+              </span>{" "}
+              ({bank?.settlementAccountName})
+            </p>
+          ) : (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
+              Not configured yet. Setup your school bank account so parents can transfer tuition directly.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <Link
+        href={`/${subdomain}/settings/bank`}
+        className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 transition shrink-0"
+      >
+        {isConfigured ? "Edit Bank Settings" : "Setup Bank Account"}
+      </Link>
+    </div>
+  );
+}
+

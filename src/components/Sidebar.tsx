@@ -16,6 +16,8 @@ import {
   BookOpen,
   MessageSquare,
   Building2,
+  Landmark,
+  FileCheck2,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
@@ -134,6 +136,7 @@ export default function Sidebar({
     () => [
       { label: "Dashboard", href: `/${schoolDomain}/dashboard`, icon: Home },
       { label: "Public Portal Settings", href: `/${schoolDomain}/portal-settings`, icon: Settings },
+      { label: "Bank Account", href: `/${schoolDomain}/settings/bank`, icon: Landmark },
       { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
       { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
       { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
@@ -142,7 +145,8 @@ export default function Sidebar({
       { label: "Report Cards", href: `/${schoolDomain}/report-cards`, icon: FileSpreadsheet },
       { label: "Academic Records", href: `/${schoolDomain}/transcripts`, icon: BookOpen },
       { label: "Communications", href: `/${schoolDomain}/communications`, icon: MessageSquare },
-      { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
+      { label: "Payment Verifications", href: `/${schoolDomain}/finance/verifications`, icon: FileCheck2 },
+      { label: "Finance & Invoices", href: `/${schoolDomain}/finance`, icon: CreditCard },
       { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
     ],
     [schoolDomain]
@@ -257,7 +261,7 @@ export default function Sidebar({
         )}
       </nav>
 
-      {/* Bottom Sidebar - Wallet Balance Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
+      {/* Bottom Sidebar - Collection Account Mirror Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
       {isWalletAuthorized && headerContent && (
         <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto shrink-0">
           {headerContent}

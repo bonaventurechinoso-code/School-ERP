@@ -21,24 +21,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: "error", message: "Missing schoolId or amount" }, { status: 400 });
       }
 
-      await basePrisma.$transaction([
-        basePrisma.school.update({
-          where: { id: schoolId },
-          data: { walletBalance: { increment: amount } }
-        }),
-        basePrisma.transaction.create({
-          data: {
-            schoolId: schoolId,
-            type: "INCOME",
-            category: "TOP_UP",
-            amount: amount,
-            description: `Wallet top-up via external gateway`,
-            referenceId: data?.reference || null
-          }
-        })
-      ]);
+      // Under CBN Model A, platform never holds or increments tenant balances.
+      // Funds settle directly to tenant's settlement bank via Paystack subaccount.
+      await basePrisma.transaction.create({
+        data: {
+          schoolId: schoolId,
+          type: "INCOME",
+          category: "DIRECT_COLLECTION",
+          amount: amount,
+          description: `Paystack direct collection (CBN Model A - settled to tenant bank)`,
+          referenceId: data?.reference || null
+        }
+      });
       
-      console.log(`[Webhook] Wallet topped up for school ${schoolId} by ${amount}`);
+      console.log(`[Webhook] Direct collection logged for school ${schoolId} amount: ${amount} (Model A compliant, no wallet increment)`);
     }
 
     return NextResponse.json({ status: "success" });

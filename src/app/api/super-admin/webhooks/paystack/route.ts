@@ -126,85 +126,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Otherwise, process as a School Tuition Fee with Paystack Split Ledger
-      const subaccountCode = subaccount?.subaccount_code || metadata?.subaccountCode;
-      const splitCode = split?.split_code || metadata?.splitCode;
-      const tenantId = metadata?.tenantId;
-
-      const tenant = await prisma.tenant.findFirst({
-        where: {
-          OR: [
-            ...(tenantId ? [{ id: tenantId }] : []),
-            ...(subaccountCode ? [{ paystackSubaccountCode: subaccountCode }] : []),
-            ...(splitCode ? [{ paystackSplitCode: splitCode }] : []),
-          ],
+      // Non-subscription transactions (e.g. tuition fees) are ignored because all school fees are 100% direct manual bank transfer.
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Ignored charge event: school fees are 100% direct manual bank transfer, not processed through Paystack.",
         },
-        include: { plan: true },
-      });
-
-      if (tenant) {
-        const commissionPercent = tenant.plan?.commissionPercent || 2.0;
-        const platformCut = Math.round((totalAmountNgn * commissionPercent) / 100 * 100) / 100;
-        const tenantNet = totalAmountNgn - platformCut;
-
-        await prisma.$transaction(async (tx) => {
-          let wallet = await tx.wallet.findUnique({ where: { tenantId: tenant.id } });
-          if (!wallet) {
-            wallet = await tx.wallet.create({
-              data: { tenantId: tenant.id, balance: 0.0, currency: "NGN" },
-            });
-          }
-
-          const currentBalance = Number(wallet.balance);
-          const newBalance = currentBalance + tenantNet;
-
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { balance: newBalance },
-          });
-
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              tenantId: tenant.id,
-              type: "CREDIT",
-              category: "tuition",
-              amount: tenantNet,
-              balanceBefore: currentBalance,
-              balanceAfter: newBalance,
-              reference: `${reference}_tuition`,
-              description: `Tuition split settlement: Net credit after ${commissionPercent}% fee`,
-            },
-          });
-
-          // Platform Commission
-          const pWallet = await tx.platformWallet.findFirst();
-          if (pWallet) {
-            await tx.platformWallet.update({
-              where: { id: pWallet.id },
-              data: {
-                balance: { increment: platformCut },
-                totalRevenue: { increment: platformCut },
-              },
-            });
-          } else {
-            await tx.platformWallet.create({
-              data: { balance: platformCut, totalRevenue: platformCut },
-            });
-          }
-
-          await tx.platformTransaction.create({
-            data: {
-              tenantId: tenant.id,
-              type: "commission",
-              amount: platformCut,
-              reference: `${reference}_comm`,
-            },
-          });
-        });
-
-        return NextResponse.json({ success: true, message: "Tuition split settlement recorded" }, { status: 200 });
-      }
+        { status: 200 }
+      );
     }
 
     // 2. SUBSCRIPTION RENEWAL OR CREATION

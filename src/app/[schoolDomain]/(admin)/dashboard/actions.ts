@@ -306,3 +306,27 @@ export async function createAdmissionLead(
 
   return newLead;
 }
+
+/**
+ * 6. Modular Fetcher: Pending Payment Verifications Count
+ */
+export async function getPendingVerificationsCount(schoolId: string): Promise<number> {
+  return await basePrisma.paymentProof.count({
+    where: { schoolId, status: "PENDING" },
+  }).catch(() => 0);
+}
+
+/**
+ * 7. Modular Fetcher: School Collection Bank Details
+ */
+export async function getSchoolCollectionBank(schoolId: string) {
+  return await basePrisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      settlementBankName: true,
+      settlementAccountNumber: true,
+      settlementAccountName: true,
+      collectionMode: true,
+    },
+  }).catch(() => null);
+}

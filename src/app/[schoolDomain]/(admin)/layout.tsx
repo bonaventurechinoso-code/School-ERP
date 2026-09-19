@@ -5,7 +5,6 @@ import { jwtVerify } from "jose";
 import { getCachedSchool } from "@/lib/cache";
 import { isAdminExecutive, getDevMockRoleConfig } from "@/lib/permissions";
 import ClientLayout from "../ClientLayout";
-import WalletTopUp from "../WalletTopUp";
 
 export default async function AdminLayout({
   children,
@@ -57,16 +56,10 @@ export default async function AdminLayout({
     redirect("/portal/student?denied=true");
   }
 
-  // 2. SECURE WALLET BALANCE ACCESSIBILITY (EXECUTIVE LEADERSHIP ONLY)
-  const isWalletAuthorized = isAdminExecutive(userRole, staffRole);
-  const walletElement = isWalletAuthorized ? (
-    <WalletTopUp schoolId={school.id} walletBalance={school.walletBalance} />
-  ) : null;
-
   return (
     <ClientLayout 
       schoolName={school.name}
-      headerContent={walletElement}
+      headerContent={null}
       tiers={school.academicTiers.map((t) => ({
         id: t.id,
         name: t.name,

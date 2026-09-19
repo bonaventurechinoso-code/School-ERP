@@ -36,7 +36,9 @@ export async function GET(req: Request) {
 
   try {
     const sessionToken = await generateDevSuperAdminSession();
-    const redirectUrl = new URL("/admin", req.url);
+    const reqUrl = new URL(req.url);
+    const targetPath = reqUrl.searchParams.get("redirect") || "/admin/saas";
+    const redirectUrl = new URL(targetPath, req.url);
     const response = NextResponse.redirect(redirectUrl);
 
     response.cookies.set("session", sessionToken, {

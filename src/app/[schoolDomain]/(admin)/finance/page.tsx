@@ -83,6 +83,7 @@ export default async function FinancePage({
     invoicedAggregate,
     paidAggregate,
     expensesAggregate,
+    pendingVerificationsCount,
   ] = await Promise.all([
     fetchInvoicesPaginated(school.id, { limit: 50 }),
     fetchTransactionsPaginated(school.id, { limit: 50 }),
@@ -119,6 +120,9 @@ export default async function FinancePage({
       where: { schoolId: school.id, type: "EXPENSE" },
       _sum: { amount: true },
     }).catch(() => ({ _sum: { amount: 0 } })),
+    basePrisma.paymentProof.count({
+      where: { schoolId: school.id, status: "PENDING" },
+    }).catch(() => 0),
   ]);
 
   const totalInvoiced = invoicedAggregate._sum.amountDue || 0;
@@ -218,6 +222,7 @@ export default async function FinancePage({
           totalPaid={totalPaid}
           totalExpenses={totalExpenses}
           outstandingBalance={outstandingBalance}
+          pendingVerificationsCount={pendingVerificationsCount}
         />
       </Suspense>
 

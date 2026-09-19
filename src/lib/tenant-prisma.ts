@@ -11,7 +11,11 @@ declare global {
   var __admissionsPrismaMiddlewareAttached: boolean | undefined;
 }
 
-export const basePrisma: PrismaClient = (globalThis as any).__prismaBaseClient || new PrismaClient();
+const cachedClient = (globalThis as any).__prismaBaseClient;
+export const basePrisma: PrismaClient =
+  cachedClient && (cachedClient as any).paymentProof
+    ? cachedClient
+    : new PrismaClient();
 (globalThis as any).__prismaBaseClient = basePrisma;
 
 // Attach Prisma middleware to base client for automated inquiry email triggers

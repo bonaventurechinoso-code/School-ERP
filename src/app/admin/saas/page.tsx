@@ -1,13 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import SaasAdminDashboard from "./SaasAdminDashboard";
+import { DEFAULT_PLANS } from "@/lib/saas-plans";
 
 export const dynamic = "force-dynamic";
 
 export default async function SaasAdminPage() {
-  // 1. Fetch Plans
-  const rawPlans = await prisma.plan.findMany({
+  // 1. Fetch or Seed Baseline Plans
+  let rawPlans = await prisma.plan.findMany({
     orderBy: { priceNgn: "asc" },
   });
+
+  if (rawPlans.length === 0) {
+    for (const planDef of DEFAULT_PLANS) {
+      await prisma.plan.create({ data: planDef }).catch(() => {});
+    }
+    rawPlans = await prisma.plan.findMany({
+      orderBy: { priceNgn: "asc" },
+    });
+  }
 
   const plans = rawPlans.map((p) => ({
     id: p.id,
@@ -19,7 +29,51 @@ export default async function SaasAdminPage() {
     commissionPercent: p.commissionPercent,
   }));
 
-  // 2. Fetch Platform Wallet & Revenue
+  // 2. Fetch Platform Settlement Bank Configuration (Corporate Account)
+  let platformBank = await prisma.platformBankConfig.findUnique({
+    where: { id: "global" },
+  });
+
+  if (!platformBank) {
+    platformBank = await prisma.platformBankConfig.create({
+      data: {
+        id: "global",
+        bankCode: "035", // Wema Bank
+        bankName: "Wema Bank",
+        accountNumber: "0123456789",
+      },
+    });
+  }
+
+  // 3. Seed / Sync Baseline Tenants if None Exist in Tenant Table
+  const tenantCount = await prisma.tenant.count();
+  if (tenantCount === 0) {
+    const defaultPlan = rawPlans[0] || null;
+    const schools = await prisma.school.findMany();
+    for (const s of schools) {
+      await prisma.tenant.create({
+        data: {
+          schoolName: s.name,
+          subdomain: s.subdomain,
+          adminEmail: `admin@${s.subdomain}.edu.ng`,
+          contactPhone: s.contactPhone || "+2348012345678",
+          institutionTypes: ["PRIMARY", "SECONDARY"],
+          planId: defaultPlan?.id || null,
+          status: "ACTIVE",
+          paystackSubaccountCode: `ACCT_${s.subdomain.toUpperCase()}_001`,
+          paystackSplitCode: `SPLIT_${s.subdomain.toUpperCase()}_001`,
+          paystackSettlementBank: {
+            bankCode: "044",
+            bankName: "Access Bank",
+            accountNumber: "0123456789",
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // 4. Fetch Platform Revenue Mirror
   let platformWallet = await prisma.platformWallet.findFirst();
   if (!platformWallet) {
     platformWallet = await prisma.platformWallet.create({
@@ -27,7 +81,7 @@ export default async function SaasAdminPage() {
     });
   }
 
-  // 3. Aggregate Tenant Status Counts
+  // 5. Aggregate Tenant Status Counts
   const [totalTenants, activeTenants, suspendedTenants, pendingTenants] =
     await Promise.all([
       prisma.tenant.count(),
@@ -36,7 +90,7 @@ export default async function SaasAdminPage() {
       prisma.tenant.count({ where: { status: "PENDING" } }),
     ]);
 
-  // 4. Compute MRR / ARR
+  // 6. Compute MRR / ARR
   const activeSubs = await prisma.subscription.findMany({
     where: {
       status: { in: ["active", "trialing"] },
@@ -61,13 +115,7 @@ export default async function SaasAdminPage() {
     }
   }
 
-  const tenantWallets = await prisma.wallet.aggregate({
-    _sum: {
-      balance: true,
-    },
-  });
-
-  // 5. Recent Activity Logs & Transactions
+  // 7. Recent Activity Logs & Transactions
   const [recentTransactions, recentAuditLogs, plansWithCount] =
     await Promise.all([
       prisma.platformTransaction.findMany({
@@ -104,7 +152,6 @@ export default async function SaasAdminPage() {
       estimatedMrr,
       estimatedArr: estimatedMrr * 12,
       activeSubscriptionsCount: activeSubs.length,
-      totalTenantWalletFunds: Number(tenantWallets._sum.balance || 0),
     },
     planDistribution: plansWithCount.map((p) => ({
       id: p.id,
@@ -130,14 +177,11 @@ export default async function SaasAdminPage() {
     })),
   };
 
-  // 6. Fetch Tenants List
+  // 8. Fetch Tenants with 30-Day Collections and Manual Bank Transfer Details
   const rawTenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       plan: true,
-      wallets: {
-        take: 1,
-      },
       subscriptions: {
         take: 1,
         orderBy: { createdAt: "desc" },
@@ -146,57 +190,129 @@ export default async function SaasAdminPage() {
     },
   });
 
-  const tenants = rawTenants.map((t) => {
-    const primaryWallet = t.wallets[0];
-    const activeSub = t.subscriptions[0];
-    return {
-      id: t.id,
-      schoolName: t.schoolName,
-      subdomain: t.subdomain,
-      customDomain: t.customDomain,
-      adminEmail: t.adminEmail,
-      contactPhone: t.contactPhone,
-      institutionTypes: t.institutionTypes,
-      status: t.status,
-      kycStatus: t.kycStatus,
-      paystackSubaccountCode: t.paystackSubaccountCode,
-      paystackSplitCode: t.paystackSplitCode,
-      isImpersonationAllowed: t.isImpersonationAllowed,
-      suspendedReason: t.suspendedReason,
-      suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,
-      createdAt: t.createdAt.toISOString(),
-      plan: t.plan
-        ? {
-            id: t.plan.id,
-            name: t.plan.name,
-            priceNgn: t.plan.priceNgn,
-            billingCycle: t.plan.billingCycle,
-          }
-        : null,
-      wallet: primaryWallet
-        ? {
-            balance: Number(primaryWallet.balance),
-            currency: primaryWallet.currency,
-          }
-        : { balance: 0, currency: "NGN" },
-      subscription: activeSub
-        ? {
-            status: activeSub.status,
-            amountDue: Number(activeSub.amountDue),
-            endsAt: activeSub.endsAt.toISOString(),
-            trialEndsAt: activeSub.trialEndsAt
-              ? activeSub.trialEndsAt.toISOString()
-              : null,
-          }
-        : null,
-    };
-  });
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const tenants = await Promise.all(
+    rawTenants.map(async (t) => {
+      const activeSub = t.subscriptions[0];
+
+      // Find matching school for operational finance & verifications metrics
+      const matchingSchool = await prisma.school.findUnique({
+        where: { subdomain: t.subdomain },
+      });
+
+      let pendingVerificationsCount = 0;
+      let verifiedTuition30Days = 0;
+
+      if (matchingSchool) {
+        pendingVerificationsCount = await prisma.paymentProof.count({
+          where: {
+            schoolId: matchingSchool.id,
+            status: "PENDING",
+          },
+        });
+
+        const verifiedAgg = await prisma.payment.aggregate({
+          where: {
+            schoolId: matchingSchool.id,
+            createdAt: { gte: thirtyDaysAgo },
+          },
+          _sum: { amountPaid: true },
+        });
+        verifiedTuition30Days = Number(verifiedAgg._sum?.amountPaid || 0);
+      }
+
+      const settlementBankName =
+        matchingSchool?.settlementBankName ||
+        t.settlementBankName ||
+        (t.paystackSettlementBank as any)?.bankName ||
+        null;
+
+      const settlementAccountNumber =
+        matchingSchool?.settlementAccountNumber ||
+        t.settlementAccountNumber ||
+        (t.paystackSettlementBank as any)?.accountNumber ||
+        null;
+
+      const settlementAccountName =
+        matchingSchool?.settlementAccountName ||
+        t.settlementAccountName ||
+        (t.paystackSettlementBank as any)?.accountName ||
+        null;
+
+      const collectionMode =
+        matchingSchool?.collectionMode ||
+        t.collectionMode ||
+        "MANUAL_BANK_TRANSFER";
+
+      return {
+        id: t.id,
+        schoolName: t.schoolName,
+        subdomain: t.subdomain,
+        customDomain: t.customDomain,
+        adminEmail: t.adminEmail,
+        contactPhone: t.contactPhone,
+        institutionTypes: t.institutionTypes,
+        status: t.status,
+        kycStatus: t.kycStatus,
+        settlementBankName,
+        settlementAccountNumber,
+        settlementAccountName,
+        collectionMode,
+        pendingVerificationsCount,
+        paystackSubaccountCode: t.paystackSubaccountCode,
+        paystackSplitCode: t.paystackSplitCode,
+        paystackSettlementBank:
+          (t.paystackSettlementBank as any) ||
+          (settlementBankName && settlementAccountNumber
+            ? {
+                bankCode: matchingSchool?.settlementBankCode || "044",
+                bankName: settlementBankName,
+                accountNumber: settlementAccountNumber,
+                accountName: settlementAccountName,
+              }
+            : null),
+        isImpersonationAllowed: t.isImpersonationAllowed,
+        suspendedReason: t.suspendedReason,
+        suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,
+        createdAt: t.createdAt.toISOString(),
+        collection30Days: verifiedTuition30Days,
+        commission30Days: 0,
+        commissionPercent: 0,
+        plan: t.plan
+          ? {
+              id: t.plan.id,
+              name: t.plan.name,
+              priceNgn: t.plan.priceNgn,
+              billingCycle: t.plan.billingCycle,
+              commissionPercent: 0,
+            }
+          : null,
+        subscription: activeSub
+          ? {
+              status: activeSub.status,
+              amountDue: Number(activeSub.amountDue),
+              endsAt: activeSub.endsAt.toISOString(),
+              trialEndsAt: activeSub.trialEndsAt
+                ? activeSub.trialEndsAt.toISOString()
+                : null,
+            }
+          : null,
+      };
+    })
+  );
 
   return (
     <SaasAdminDashboard
       initialMetrics={metrics}
       initialTenants={tenants}
       plans={plans}
+      initialPlatformBank={{
+        bankCode: platformBank.bankCode || "035",
+        bankName: platformBank.bankName || "Wema Bank",
+        accountNumber: platformBank.accountNumber || "0123456789",
+        updatedAt: platformBank.updatedAt.toISOString(),
+      }}
     />
   );
 }
