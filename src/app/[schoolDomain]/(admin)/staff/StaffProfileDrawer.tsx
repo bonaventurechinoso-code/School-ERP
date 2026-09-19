@@ -23,13 +23,64 @@ import {
   DollarSign,
   ChevronRight,
   Send,
+  Copy,
+  Check,
+  Landmark,
+  Eye,
+  Trash2,
+  Shield,
+  Receipt,
+  Download,
+  Building,
+  ArrowRight,
 } from "lucide-react";
 import {
   fetchStaffFullProfile,
   updateStaffProfile,
   markStaffQuickAttendanceAction,
   generateStaffPayrollVoucherAction,
+  updatePayrollVoucherStatusAction,
+  deletePayrollVoucherAction,
 } from "./actions";
+
+/**
+ * Computes official Nigerian educational salary structure:
+ * - Basic Salary (60%)
+ * - Housing Allowance (20%)
+ * - Transport Allowance (10%)
+ * - Teaching / Utility Allowance (10%)
+ * - Contributory Pension (8% on BHT)
+ * - PAYE Tax (estimated progressive band ~5%)
+ * - Net Pay
+ */
+export function calculateSalaryBreakdown(gross: number) {
+  const safeGross = Math.max(0, gross || 0);
+  const basic = Math.round(safeGross * 0.60);
+  const housing = Math.round(safeGross * 0.20);
+  const transport = Math.round(safeGross * 0.10);
+  const utilityTeaching = Math.max(0, safeGross - (basic + housing + transport)); // 10%
+  
+  // Statutory deductions:
+  // Contributory Pension (PRA 2014): 8% of BHT (Basic + Housing + Transport = 90% of Gross)
+  const bht = basic + housing + transport;
+  const pension = Math.round(bht * 0.08); // 7.2% of Gross
+  // PAYE Tax (estimated standard progressive band ~5% effective for educational salary scale)
+  const payeTax = Math.round(safeGross * 0.05);
+  const totalDeductions = pension + payeTax;
+  const netPay = Math.max(0, safeGross - totalDeductions);
+
+  return {
+    gross: safeGross,
+    basic,
+    housing,
+    transport,
+    utilityTeaching,
+    pension,
+    payeTax,
+    totalDeductions,
+    netPay,
+  };
+}
 
 export interface StaffProfileDrawerProps {
   staff: any | null;
@@ -101,6 +152,13 @@ export default function StaffProfileDrawer({
   const [formData, setFormData] = useState<any>({});
   const [voucherAmount, setVoucherAmount] = useState<string>("");
   const [showVoucherForm, setShowVoucherForm] = useState(false);
+  const [voucherPeriod, setVoucherPeriod] = useState<string>(() => {
+    const d = new Date();
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  });
+  const [selectedVoucherForModal, setSelectedVoucherForModal] = useState<any | null>(null);
+  const [copiedNuban, setCopiedNuban] = useState(false);
+  const [voucherProcessingId, setVoucherProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (staff && isOpen) {
@@ -117,6 +175,7 @@ export default function StaffProfileDrawer({
       setIsEditing(false);
       setAlertMsg(null);
       setShowVoucherForm(false);
+      setSelectedVoucherForModal(null);
     }
   }, [staff, isOpen, schoolDomain]);
 
@@ -170,9 +229,27 @@ export default function StaffProfileDrawer({
 
   const staffEmployeeId = `GW/STF/2026/${staff.id.slice(0, 5).toUpperCase()}`;
 
+  const handleCopyNuban = (nuban: string) => {
+    if (!nuban) return;
+    try {
+      navigator.clipboard.writeText(nuban);
+      setCopiedNuban(true);
+      setTimeout(() => setCopiedNuban(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlertMsg(null);
+
+    if (formData.bankAccountNumber && formData.bankAccountNumber.trim()) {
+      if (!/^\d{10}$/.test(formData.bankAccountNumber.trim())) {
+        setAlertMsg({ type: "error", text: "NUBAN account number must be exactly 10 numerical digits." });
+        return;
+      }
+    }
 
     startTransition(async () => {
       const res = await updateStaffProfile(schoolDomain, staff.id, {
@@ -227,10 +304,61 @@ export default function StaffProfileDrawer({
         if (refreshed.success && refreshed.data) {
           setProfileData(refreshed.data);
         }
+        if (onStaffUpdated) onStaffUpdated();
       } else {
         setAlertMsg({ type: "error", text: res.error || "Failed to create voucher." });
       }
     });
+  };
+
+  const handleUpdateVoucherStatus = async (voucherId: string, newStatus: "PENDING" | "DISBURSED" | "PAID") => {
+    setVoucherProcessingId(voucherId);
+    try {
+      const res = await updatePayrollVoucherStatusAction(schoolDomain, voucherId, newStatus);
+      if (res.success) {
+        setAlertMsg({ type: "success", text: `Voucher marked as ${newStatus} successfully!` });
+        if (selectedVoucherForModal && selectedVoucherForModal.id === voucherId) {
+          setSelectedVoucherForModal((prev: any) => ({ ...prev, status: newStatus }));
+        }
+        const refreshed = await fetchStaffFullProfile(schoolDomain, staff.id);
+        if (refreshed.success && refreshed.data) {
+          setProfileData(refreshed.data);
+        }
+        if (onStaffUpdated) onStaffUpdated();
+      } else {
+        setAlertMsg({ type: "error", text: res.error || "Failed to update voucher status." });
+      }
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: err.message || "Failed to update voucher status." });
+    } finally {
+      setVoucherProcessingId(null);
+    }
+  };
+
+  const handleDeleteVoucher = async (voucherId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this pending payroll voucher?")) return;
+    setVoucherProcessingId(voucherId);
+    try {
+      const res = await deletePayrollVoucherAction(schoolDomain, voucherId);
+      if (res.success) {
+        setAlertMsg({ type: "success", text: "Payroll voucher removed successfully." });
+        if (selectedVoucherForModal && selectedVoucherForModal.id === voucherId) {
+          setSelectedVoucherForModal(null);
+        }
+        const refreshed = await fetchStaffFullProfile(schoolDomain, staff.id);
+        if (refreshed.success && refreshed.data) {
+          setProfileData(refreshed.data);
+        }
+        if (onStaffUpdated) onStaffUpdated();
+      } else {
+        setAlertMsg({ type: "error", text: res.error || "Failed to delete voucher." });
+      }
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: err.message || "Failed to delete voucher." });
+    } finally {
+      setVoucherProcessingId(null);
+    }
   };
 
   return (
@@ -864,107 +992,276 @@ export default function StaffProfileDrawer({
               )}
 
               {/* TAB 4: REMUNERATION & BANKING */}
-              {activeTab === "payroll" && (
-                <div className="space-y-5">
-                  {/* COMPENSATION CARD */}
-                  <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-sm border border-slate-800">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
-                          Monthly Remuneration Package
-                        </span>
-                        <p className="text-3xl font-black mt-1">
-                          ₦{(profileData?.baseSalary || 0).toLocaleString()}
-                          <span className="text-xs font-normal text-slate-400 ml-1">/ month</span>
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowVoucherForm(!showVoucherForm)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition"
-                      >
-                        Generate Voucher
-                      </button>
-                    </div>
+              {activeTab === "payroll" && (() => {
+                const salaryBreakdown = calculateSalaryBreakdown(profileData?.baseSalary || 0);
 
-                    {/* VOUCHER MODAL / INLINE FORM */}
-                    {showVoucherForm && (
-                      <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
-                        <label className="text-xs font-semibold text-slate-300 block">
-                          Remuneration Amount (₦)
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            value={voucherAmount}
-                            onChange={(e) => setVoucherAmount(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 text-white rounded-lg p-2 text-xs flex-1 font-mono"
-                          />
-                          <button
-                            onClick={handleGenerateVoucher}
-                            disabled={isPending}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition"
-                          >
-                            Submit Voucher
-                          </button>
+                return (
+                  <div className="space-y-5">
+                    {/* CONSOLIDATED REMUNERATION PACKAGE CARD */}
+                    <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm border border-slate-800 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 block mb-1">
+                            Consolidated Monthly Remuneration
+                          </span>
+                          <p className="text-3xl font-black">
+                            ₦{(profileData?.baseSalary || 0).toLocaleString()}
+                            <span className="text-xs font-normal text-slate-400 ml-1.5">/ month gross</span>
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Includes statutory basic pay, housing, transport &amp; teaching utility allowances.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowVoucherForm(!showVoucherForm)}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md self-start"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-indigo-200" />
+                          <span>{showVoucherForm ? "Close Form" : "Generate Monthly Voucher"}</span>
+                        </button>
+                      </div>
+
+                      {/* INLINE VOUCHER FORM */}
+                      {showVoucherForm && (
+                        <div className="pt-4 border-t border-slate-800 space-y-3 animate-in fade-in duration-150">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Voucher Remuneration Amount (₦)
+                              </label>
+                              <input
+                                type="number"
+                                value={voucherAmount}
+                                onChange={(e) => setVoucherAmount(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl p-2.5 text-xs font-mono"
+                                placeholder="e.g. 220000"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Payment Period / Month
+                              </label>
+                              <input
+                                type="text"
+                                value={voucherPeriod}
+                                onChange={(e) => setVoucherPeriod(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl p-2.5 text-xs"
+                                placeholder="e.g. September 2026"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setShowVoucherForm(false)}
+                              className="px-3 py-1.5 text-slate-400 hover:text-white text-xs font-semibold"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleGenerateVoucher}
+                              disabled={isPending}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{isPending ? "Generating..." : "Submit Salary Voucher"}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STATUTORY ALLOWANCE & DEDUCTION BREAKDOWN CHIPS */}
+                      <div className="pt-2 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Basic Salary (60%)</span>
+                          <p className="font-mono font-bold text-slate-200 mt-0.5">₦{salaryBreakdown.basic.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Housing (20%)</span>
+                          <p className="font-mono font-bold text-slate-200 mt-0.5">₦{salaryBreakdown.housing.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Transport (10%)</span>
+                          <p className="font-mono font-bold text-slate-200 mt-0.5">₦{salaryBreakdown.transport.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Utility / Teaching (10%)</span>
+                          <p className="font-mono font-bold text-slate-200 mt-0.5">₦{salaryBreakdown.utilityTeaching.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-rose-950/40 p-2.5 rounded-xl border border-rose-800/40">
+                          <span className="text-[10px] text-rose-300 uppercase font-bold block">Pension (8% BHT)</span>
+                          <p className="font-mono font-bold text-rose-200 mt-0.5">-₦{salaryBreakdown.pension.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-rose-950/40 p-2.5 rounded-xl border border-rose-800/40">
+                          <span className="text-[10px] text-rose-300 uppercase font-bold block">PAYE Tax (Est. 5%)</span>
+                          <p className="font-mono font-bold text-rose-200 mt-0.5">-₦{salaryBreakdown.payeTax.toLocaleString()}</p>
+                        </div>
+                        <div className="col-span-2 bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-700/50 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-emerald-300 uppercase font-black block">Est. Net Take-Home</span>
+                            <p className="font-mono font-black text-emerald-200 text-sm mt-0.5">₦{salaryBreakdown.netPay.toLocaleString()}</p>
+                          </div>
+                          <span className="text-[10px] text-emerald-400/80 font-medium">To Staff Bank</span>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* NIGERIAN BANKING DESTINATION */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                      Electronic Bank Transfer Details
-                    </h4>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <span className="text-slate-400 block mb-0.5 font-medium">Bank Institution</span>
-                        <p className="font-bold text-slate-800">{profileData?.bankName || "Zenith Bank Plc"}</p>
+                    {/* NIGERIAN BANKING DESTINATION */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <Landmark className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                            Direct Bank Electronic Settlement (NUBAN)
+                          </h4>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          <span>CBN Model A Compliant</span>
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block mb-0.5 font-medium">Account Number (NUBAN)</span>
-                        <p className="font-black text-slate-800 font-mono text-sm">
-                          {profileData?.bankAccountNumber || "Pending submission"}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                        <div>
+                          <span className="text-slate-400 block mb-0.5 font-medium">Bank Institution</span>
+                          <p className="font-bold text-slate-800">{profileData?.bankName || "Zenith Bank Plc"}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5 font-medium">Account Number (NUBAN)</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="font-black text-slate-800 font-mono text-sm tracking-wider">
+                              {profileData?.bankAccountNumber || "Pending submission"}
+                            </p>
+                            {profileData?.bankAccountNumber && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyNuban(profileData.bankAccountNumber)}
+                                className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition"
+                                title="Copy Account Number"
+                              >
+                                {copiedNuban ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                          {copiedNuban && <span className="text-[10px] text-emerald-600 font-bold">Copied to clipboard!</span>}
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <span className="text-slate-400 block mb-0.5 font-medium">Beneficiary Account Name</span>
+                          <p className="font-bold text-slate-800">{profileData?.accountName || `${profileData?.firstName} ${profileData?.lastName}`}</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2.5 text-[11px] text-slate-500">
+                        <Shield className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+                        <p>
+                          Direct electronic bank transfer: Salaries are credited directly to the staff member&apos;s verified Nigerian NUBAN account with zero intermediary platform escrow.
                         </p>
                       </div>
-                      <div className="col-span-2">
-                        <span className="text-slate-400 block mb-0.5 font-medium">Account Beneficiary Name</span>
-                        <p className="font-bold text-slate-800">{profileData?.accountName || `${profileData?.firstName} ${profileData?.lastName}`}</p>
+                    </div>
+
+                    {/* HISTORICAL PAYSLIPS / VOUCHERS */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                            Historical Payroll Disbursements &amp; Remuneration Slips
+                          </h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Click any voucher record to inspect full breakdown, settle, or print official payslip
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-slate-400">
+                          {profileData?.PayrollRecord?.length || 0} record(s)
+                        </span>
                       </div>
+
+                      {profileData?.PayrollRecord?.length > 0 ? (
+                        <div className="divide-y divide-slate-100 text-xs">
+                          {profileData.PayrollRecord.map((p: any) => {
+                            const isDisbursed = p.status === "PAID" || p.status === "DISBURSED";
+                            const isProcessing = voucherProcessingId === p.id;
+
+                            return (
+                              <div
+                                key={p.id}
+                                onClick={() => setSelectedVoucherForModal(p)}
+                                className="py-3 px-2 rounded-xl hover:bg-slate-50/80 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition group"
+                              >
+                                <div className="flex items-start sm:items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                                    isDisbursed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                  }`}>
+                                    ₦
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-black text-slate-800 text-sm">₦{p.amount.toLocaleString()}</span>
+                                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+                                        isDisbursed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                      }`}>
+                                        {p.status}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-slate-400 text-[11px] font-mono mt-0.5">
+                                      <span>Ref: {p.receiptCode || "VOUCHER"}</span>
+                                      <span>•</span>
+                                      <span>{new Date(p.payDate).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 self-end sm:self-center" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedVoucherForModal(p)}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-semibold flex items-center gap-1 transition"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Payslip</span>
+                                  </button>
+                                  {!isDisbursed && (
+                                    <button
+                                      type="button"
+                                      disabled={isProcessing}
+                                      onClick={() => handleUpdateVoucherStatus(p.id, "DISBURSED")}
+                                      className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1 transition disabled:opacity-50"
+                                      title="Mark as Disbursed"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>{isProcessing ? "Updating..." : "Disburse"}</span>
+                                    </button>
+                                  )}
+                                  {!isDisbursed && (
+                                    <button
+                                      type="button"
+                                      disabled={isProcessing}
+                                      onClick={(e) => handleDeleteVoucher(p.id, e)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                                      title="Delete Draft Voucher"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                          <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          <p className="text-xs font-bold text-slate-600">No payroll vouchers generated yet</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Click &quot;Generate Monthly Voucher&quot; above to create the first remuneration record.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {/* RECENT PAYSLIPS / VOUCHERS */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                      Historical Payroll Disbursements
-                    </h4>
-                    {profileData?.PayrollRecord?.length > 0 ? (
-                      <div className="divide-y divide-slate-100 text-xs">
-                        {profileData.PayrollRecord.map((p: any) => (
-                          <div key={p.id} className="py-2.5 flex items-center justify-between">
-                            <div>
-                              <span className="font-black text-slate-800">₦{p.amount.toLocaleString()}</span>
-                              <span className="text-slate-400 font-mono text-[11px] ml-2">
-                                Ref: {p.receiptCode || "VOUCHER"}
-                              </span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
-                              p.status === "PAID" || p.status === "DISBURSED"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-amber-100 text-amber-800"
-                            }`}>
-                              {p.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 py-3 text-center">No payroll records logged yet.</p>
-                    )}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
@@ -980,6 +1277,233 @@ export default function StaffProfileDrawer({
           </button>
         </div>
       </div>
+
+      {/* OFFICIAL PRINTABLE PAYSLIP & SALARY VOUCHER MODAL */}
+      {selectedVoucherForModal && (() => {
+        const vb = calculateSalaryBreakdown(selectedVoucherForModal.amount);
+        const isVoucherDisbursed = selectedVoucherForModal.status === "PAID" || selectedVoucherForModal.status === "DISBURSED";
+        const voucherDate = new Date(selectedVoucherForModal.payDate);
+        const formattedMonth = voucherDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        const hashToken = `0x${(selectedVoucherForModal.id + selectedVoucherForModal.amount).replace(/-/g, "").slice(0, 20).toUpperCase()}`;
+
+        return (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
+            <style dangerouslySetInnerHTML={{
+              __html: `
+                @media print {
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #printable-payslip, #printable-payslip * {
+                    visibility: visible !important;
+                  }
+                  #printable-payslip {
+                    position: fixed !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100vw !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 24px !important;
+                    box-shadow: none !important;
+                    border: 1px solid #cbd5e1 !important;
+                    background: white !important;
+                    z-index: 999999 !important;
+                  }
+                  .no-print {
+                    display: none !important;
+                  }
+                }
+              `
+            }} />
+            <div 
+              id="printable-payslip"
+              className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* MODAL ACTIONS BAR (HIDDEN ON PRINT) */}
+              <div className="no-print p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    Official Salary Advice &amp; Voucher
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isVoucherDisbursed && (
+                    <button
+                      type="button"
+                      disabled={voucherProcessingId === selectedVoucherForModal.id}
+                      onClick={() => handleUpdateVoucherStatus(selectedVoucherForModal.id, "DISBURSED")}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition flex items-center gap-1.5 shadow-sm"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Mark Disbursed</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Payslip</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVoucherForModal(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* PRINTABLE SLIP CONTENT */}
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 text-slate-800">
+                {/* INSTITUTION HEADER */}
+                <div className="text-center border-b-2 border-slate-900 pb-5">
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+                    {schoolName}
+                  </h2>
+                  <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
+                    Faculty Human Resources &amp; Bursary Division • {schoolDomain}.schoolerp.ng
+                  </p>
+                  <div className="inline-block mt-3 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-700">
+                    Official Monthly Payslip &amp; Remuneration Voucher
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 mt-4 px-2 gap-2">
+                    <span><strong>Pay Period:</strong> {formattedMonth}</span>
+                    <span><strong>Voucher Ref:</strong> <code className="font-mono text-slate-700 font-bold">{selectedVoucherForModal.receiptCode || "VOUCHER"}</code></span>
+                    <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+                      isVoucherDisbursed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                    }`}>
+                      {isVoucherDisbursed ? "DISBURSED / SETTLED" : "PENDING DISBURSEMENT"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* STAFF & BANK PARTICULARS GRID */}
+                <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                  <div>
+                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">Staff Full Name</span>
+                    <p className="font-black text-slate-900 text-sm">{profileData?.firstName} {profileData?.lastName}</p>
+                    <p className="text-slate-500 font-mono text-[11px] mt-0.5">ID: {staffEmployeeId}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">Faculty Designation</span>
+                    <p className="font-bold text-slate-800">{profileData?.role}</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{profileData?.department?.name || "General Faculty"}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">TRCN Category &amp; License</span>
+                    <p className="font-bold text-slate-800">{meta.trcn_category || "Category C"}</p>
+                    <p className="text-slate-500 font-mono text-[11px] mt-0.5">{meta.trcn_number || "TRCN Registered"}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">Settlement Bank (NUBAN)</span>
+                    <p className="font-bold text-slate-800">{profileData?.bankName || "Zenith Bank"}</p>
+                    <p className="text-slate-900 font-mono font-black text-xs tracking-wider mt-0.5">
+                      {profileData?.bankAccountNumber || "Pending submission"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* EARNINGS AND DEDUCTIONS TABLE */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full text-left divide-y divide-slate-200">
+                    <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[10px] tracking-wider">
+                      <tr>
+                        <th className="p-3">Remuneration &amp; Allowance Item</th>
+                        <th className="p-3 text-right">Amount (₦)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr>
+                        <td className="p-2.5 font-medium text-slate-700 pl-4">Basic Salary Component (60%)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-800 pr-4">₦{vb.basic.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-medium text-slate-700 pl-4">Housing Allowance (20%)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-800 pr-4">₦{vb.housing.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-medium text-slate-700 pl-4">Transport Allowance (10%)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-800 pr-4">₦{vb.transport.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-medium text-slate-700 pl-4">Teaching &amp; Utility Allowance (10%)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-slate-800 pr-4">₦{vb.utilityTeaching.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-slate-50 font-bold border-t border-slate-200">
+                        <td className="p-2.5 text-slate-900 pl-4 uppercase text-[11px]">Total Gross Remuneration</td>
+                        <td className="p-2.5 text-right font-mono font-black text-slate-900 pr-4">₦{vb.gross.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 text-rose-700 pl-4 font-medium">Contributory Pension Deduction (8% BHT)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-rose-700 pr-4">-₦{vb.pension.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 text-rose-700 pl-4 font-medium">Personal Income Tax (PAYE Statutory)</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-rose-700 pr-4">-₦{vb.payeTax.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-rose-50/50 font-bold">
+                        <td className="p-2.5 text-rose-800 pl-4 uppercase text-[11px]">Total Statutory Deductions</td>
+                        <td className="p-2.5 text-right font-mono font-black text-rose-800 pr-4">-₦{vb.totalDeductions.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-emerald-50 text-emerald-950 font-black border-t-2 border-emerald-600">
+                        <td className="p-3 pl-4 uppercase text-xs tracking-wider">
+                          Net Remuneration Payable (Take-Home)
+                        </td>
+                        <td className="p-3 text-right font-mono text-base font-black text-emerald-800 pr-4">
+                          ₦{vb.netPay.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* AUDIT & SECURITY TOKEN */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-[10px] text-slate-500 font-mono gap-2">
+                  <span>AUDIT TOKEN: <strong>{hashToken}</strong></span>
+                  <span>CBN Model A Direct Electronic Clearing</span>
+                </div>
+
+                {/* SIGNATORIES BLOCK */}
+                <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-300 text-xs">
+                  <div className="space-y-6">
+                    <div className="border-b border-slate-400 w-48"></div>
+                    <div>
+                      <p className="font-bold text-slate-800">Bursar / Accounts Officer</p>
+                      <p className="text-[10px] text-slate-400 uppercase">Authorized Signature &amp; Stamp</p>
+                    </div>
+                  </div>
+                  <div className="space-y-6 text-right flex flex-col items-end">
+                    <div className="border-b border-slate-400 w-48"></div>
+                    <div>
+                      <p className="font-bold text-slate-800">Head of School / Principal</p>
+                      <p className="text-[10px] text-slate-400 uppercase">Approval &amp; Endorsement</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MODAL FOOTER */}
+              <div className="no-print p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+                <span>Official institutional payslip generated for {profileData?.firstName} {profileData?.lastName}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedVoucherForModal(null)}
+                  className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -142,8 +142,8 @@ async function runDirectStaffVerification() {
   });
   console.log(`✅ Clock-In Attendance Recorded: Status ${attRecord.status} for ${staff.firstName} on ${today.toDateString()}`);
 
-  // 6. TEST 4: Remuneration & Payroll Voucher Generation
-  console.log('\n--- TEST 4: Remuneration, Bank Details & Payroll Voucher ---');
+  // 6. TEST 4: Remuneration & Payroll Voucher Generation & Disbursement Lifecycle
+  console.log('\n--- TEST 4: Remuneration, Bank Details & Payroll Voucher Lifecycle ---');
   await prisma.staff.update({
     where: { id: staff.id },
     data: {
@@ -154,7 +154,34 @@ async function runDirectStaffVerification() {
     }
   });
 
-  const voucherCode = `VOUCH-TEST-${Date.now().toString(36).toUpperCase()}`;
+  // Verify NUBAN 10-digit format
+  const validNuban = '1012345678';
+  const invalidNuban = '1012345';
+  const isNubanValid = /^\d{10}$/.test(validNuban);
+  const isInvalidRejected = !/^\d{10}$/.test(invalidNuban);
+  console.log(`✅ NUBAN 10-Digit Validation: Valid(${isNubanValid}), Malformed Rejected(${isInvalidRejected})`);
+  if (!isNubanValid || !isInvalidRejected) throw new Error('NUBAN 10-digit regex failed');
+
+  // Verify Nigerian Educational Salary Breakdown formula
+  const gross = 280000;
+  const basic = Math.round(gross * 0.60);
+  const housing = Math.round(gross * 0.20);
+  const transport = Math.round(gross * 0.10);
+  const utilityTeaching = Math.max(0, gross - (basic + housing + transport));
+  const pension = Math.round((basic + housing + transport) * 0.08);
+  const paye = Math.round(gross * 0.05);
+  const netPay = gross - (pension + paye);
+
+  console.log(`✅ Statutory Salary Breakdown for ₦${gross.toLocaleString()}:`);
+  console.log(`   Basic (60%): ₦${basic.toLocaleString()}`);
+  console.log(`   Housing (20%): ₦${housing.toLocaleString()}`);
+  console.log(`   Transport (10%): ₦${transport.toLocaleString()}`);
+  console.log(`   Utility/Teaching (10%): ₦${utilityTeaching.toLocaleString()}`);
+  console.log(`   Pension Deductions (8% BHT): -₦${pension.toLocaleString()}`);
+  console.log(`   PAYE Tax (Est. 5%): -₦${paye.toLocaleString()}`);
+  console.log(`   Net Take-Home: ₦${netPay.toLocaleString()}`);
+
+  const voucherCode = `VOUCH-202609-${Date.now().toString(36).toUpperCase()}`;
   const payrollVoucher = await prisma.payrollRecord.create({
     data: {
       schoolId: school.id,
@@ -167,6 +194,19 @@ async function runDirectStaffVerification() {
   });
   console.log(`✅ Generated Payroll Voucher: ₦${payrollVoucher.amount.toLocaleString()} (Ref: ${payrollVoucher.receiptCode}, Status: ${payrollVoucher.status})`);
 
+  // Settle / Disburse Voucher (Testing Update Voucher Status Lifecycle)
+  const disbursedVoucher = await prisma.payrollRecord.update({
+    where: { id: payrollVoucher.id },
+    data: {
+      status: 'DISBURSED',
+      updatedAt: new Date(),
+    }
+  });
+  console.log(`✅ Successfully Disbursed Voucher: Status transitioned to "${disbursedVoucher.status}"`);
+  if (disbursedVoucher.status !== 'DISBURSED') {
+    throw new Error(`Expected voucher status DISBURSED, got ${disbursedVoucher.status}`);
+  }
+
   // Verify staff with relations
   const verifiedStaff = await prisma.staff.findUnique({
     where: { id: staff.id },
@@ -176,7 +216,7 @@ async function runDirectStaffVerification() {
       PayrollRecord: { where: { id: payrollVoucher.id } },
     }
   });
-  console.log(`✅ Verified Full Relation Integration: Dept="${verifiedStaff.department.name}", AttStatus="${verifiedStaff.StaffAttendance[0].status}", VoucherAmount=₦${verifiedStaff.PayrollRecord[0].amount}`);
+  console.log(`✅ Verified Full Relation Integration: Dept="${verifiedStaff.department.name}", AttStatus="${verifiedStaff.StaffAttendance[0].status}", VoucherAmount=₦${verifiedStaff.PayrollRecord[0].amount}, Status="${verifiedStaff.PayrollRecord[0].status}"`);
 
   // Clean up temporary test payroll voucher
   await prisma.payrollRecord.delete({ where: { id: payrollVoucher.id } });

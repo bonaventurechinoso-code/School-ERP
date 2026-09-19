@@ -196,7 +196,7 @@ export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: s
         department: true,
         PayrollRecord: {
           orderBy: { payDate: "desc" },
-          take: 6,
+          take: 12,
         },
         StaffAttendance: {
           orderBy: { date: "desc" },
@@ -291,6 +291,13 @@ export async function createStaff(
     const status = data.status || "ONBOARDING";
     if (status === "ONBOARDING") timestampData.onboardingAt = new Date();
     if (status === "ACTIVE") timestampData.activeAt = new Date();
+
+    if (data.bankAccountNumber && data.bankAccountNumber.trim()) {
+      const cleanNuban = data.bankAccountNumber.trim();
+      if (!/^\d{10}$/.test(cleanNuban)) {
+        return { success: false, error: "NUBAN account number must be exactly 10 numerical digits." };
+      }
+    }
 
     const staff = await tenantDb.staff.create({
       data: {
@@ -412,6 +419,13 @@ export async function updateStaffProfile(
     const schoolId = await resolveSchoolId(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
+
+    if (data.bankAccountNumber && data.bankAccountNumber.trim()) {
+      const cleanNuban = data.bankAccountNumber.trim();
+      if (!/^\d{10}$/.test(cleanNuban)) {
+        return { success: false, error: "NUBAN account number must be exactly 10 numerical digits." };
+      }
+    }
 
     const updateData: any = {
       firstName: data.firstName.trim(),
@@ -697,7 +711,8 @@ export async function generateStaffPayrollVoucherAction(
     }
 
     const payDate = payDateStr ? new Date(payDateStr) : new Date();
-    const receiptCode = `VOUCH-${Date.now().toString(36).toUpperCase()}`;
+    const periodPrefix = `${payDate.getFullYear()}${(payDate.getMonth() + 1).toString().padStart(2, "0")}`;
+    const receiptCode = `VOUCH-${periodPrefix}-${Date.now().toString(36).toUpperCase()}`;
 
     const record = await basePrisma.payrollRecord.create({
       data: {
@@ -710,6 +725,7 @@ export async function generateStaffPayrollVoucherAction(
       }
     });
 
+    await invalidateStaffNamespace(schoolId);
     safeRevalidate(`/[schoolDomain]/staff`, "page");
     return { success: true, data: record };
   } catch (error: any) {
@@ -717,3 +733,57 @@ export async function generateStaffPayrollVoucherAction(
     return { success: false, error: error.message || "Failed to generate payroll voucher." };
   }
 }
+
+/**
+ * Update Payroll Voucher Status (e.g. PENDING -> DISBURSED / PAID)
+ */
+export async function updatePayrollVoucherStatusAction(
+  schoolIdentifier: string,
+  voucherId: string,
+  status: "PENDING" | "DISBURSED" | "PAID"
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+
+    const updated = await tenantDb.payrollRecord.update({
+      where: { id: voucherId },
+      data: {
+        status,
+        updatedAt: new Date(),
+      },
+    });
+
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("[updatePayrollVoucherStatusAction] Error:", error);
+    return { success: false, error: error.message || "Failed to update voucher status." };
+  }
+}
+
+/**
+ * Delete a draft/erroneous Payroll Voucher record
+ */
+export async function deletePayrollVoucherAction(
+  schoolIdentifier: string,
+  voucherId: string
+) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+
+    await tenantDb.payrollRecord.delete({
+      where: { id: voucherId },
+    });
+
+    await invalidateStaffNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/staff`, "page");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[deletePayrollVoucherAction] Error:", error);
+    return { success: false, error: error.message || "Failed to delete voucher." };
+  }
+}
+

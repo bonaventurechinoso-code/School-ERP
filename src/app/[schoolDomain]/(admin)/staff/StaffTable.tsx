@@ -243,6 +243,13 @@ export default function StaffTable({
       finalRole = trimmed;
     }
 
+    if (createData.bankAccountNumber && createData.bankAccountNumber.trim()) {
+      if (!/^\d{10}$/.test(createData.bankAccountNumber.trim())) {
+        setFormError("NUBAN account number must be exactly 10 numerical digits.");
+        return;
+      }
+    }
+
     startTransition(async () => {
       const res = await createStaff(schoolDomain, {
         ...createData,
