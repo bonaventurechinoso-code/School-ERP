@@ -21,8 +21,18 @@ import {
   AlertTriangle,
   Layers,
   Loader2,
+  Download,
+  BookOpen,
+  X,
 } from "lucide-react";
-import { BroadsheetStudentRow, BroadsheetStats, executeClassPromotionAction, fetchAnnualBroadsheet } from "./actions";
+import { 
+  BroadsheetStudentRow, 
+  BroadsheetStats, 
+  executeClassPromotionAction, 
+  fetchAnnualBroadsheet,
+  fetchStudentSubjectBreakdown,
+  StudentSubjectBreakdownResponse
+} from "./actions";
 
 interface InitialStudent {
   id: string;
@@ -84,6 +94,10 @@ export default function AnnualBroadsheetClient({
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [promotionFeedback, setPromotionFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
+
+  // Subject Performance Quick Inspector Modal State
+  const [inspectedStudent, setInspectedStudent] = useState<StudentSubjectBreakdownResponse | null>(null);
+  const [isLoadingSubjectModal, setIsLoadingSubjectModal] = useState(false);
 
   // Available classes for selected tier
   const availableClasses = useMemo(() => {
@@ -158,6 +172,69 @@ export default function AnnualBroadsheetClient({
   // Trigger print layout
   const handlePrint = () => {
     window.print();
+  };
+
+  // 1-Click CSV / Spreadsheet Export
+  const handleExportCsv = () => {
+    if (!broadsheet || broadsheet.length === 0) return;
+
+    const headers = [
+      "Rank",
+      "Registration Number",
+      "Student Full Name",
+      "Current Class",
+      "1st Term Avg (%)",
+      "2nd Term Avg (%)",
+      "3rd Term Avg (%)",
+      "Annual Composite Avg (%)",
+      "Annual Grade",
+      "Attendance Rate (%)",
+      "Promotion Status",
+      "Next Class Destination",
+    ];
+
+    const rows = broadsheet.map((r) => [
+      `"${r.positionString}"`,
+      `"${r.admissionNumber}"`,
+      `"${r.name.replace(/"/g, '""')}"`,
+      `"${r.currentClass}"`,
+      r.term1Average,
+      r.term2Average,
+      r.term3Average,
+      r.annualAverage,
+      `"${r.annualGrade}"`,
+      `${r.attendanceRate}%`,
+      `"${r.promotionStatus === "PROMOTED" ? "Promoted" : r.promotionStatus === "PROMOTED_ON_TRIAL" ? "Promoted on Trial" : "Repeat Grade"}"`,
+      `"${r.isGraduation ? "Graduated / Alumni" : r.nextClass || `Repeats ${r.currentClass}`}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeSession = selectedSession.replace(/[^a-zA-Z0-9_-]/g, "-");
+    const safeClass = selectedClass.replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${schoolName}_Broadsheet_${safeClass}_${safeSession}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Open Subject Breakdown Modal
+  const handleOpenSubjectInspector = async (studentId: string) => {
+    setIsLoadingSubjectModal(true);
+    try {
+      const res = await fetchStudentSubjectBreakdown(schoolId || schoolDomain, studentId, selectedSession);
+      if (res.success) {
+        setInspectedStudent(res);
+      }
+    } catch (err) {
+      console.error("Failed to inspect student subjects:", err);
+    } finally {
+      setIsLoadingSubjectModal(false);
+    }
   };
 
   // Handle mass promotion execution
@@ -311,8 +388,18 @@ export default function AnnualBroadsheetClient({
 
             </div>
 
-            {/* Actions: Print & Promotion */}
+            {/* Actions: Print, Export & Promotion */}
             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 font-bold text-xs shadow-2xs transition cursor-pointer"
+                title="Download formatted CSV spreadsheet for Ministry of Education & Academic Board"
+              >
+                <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Export CSV</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrint}
@@ -599,15 +686,27 @@ export default function AnnualBroadsheetClient({
                             )}
                           </td>
 
-                          {/* Action Button */}
+                          {/* Action Buttons */}
                           <td className="px-5 py-3.5 text-right print:hidden">
-                            <Link
-                              href={`/${schoolDomain}/transcripts/${student.id}`}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-500 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700 text-xs font-bold transition shadow-2xs"
-                            >
-                              <span>View Transcript</span>
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </Link>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSubjectInspector(student.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-400 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-xs font-semibold transition cursor-pointer shadow-2xs"
+                                title="Inspect Continuous Assessment & Subject Breakdown"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Subjects</span>
+                              </button>
+
+                              <Link
+                                href={`/${schoolDomain}/transcripts/${student.id}`}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-500 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700 text-xs font-bold transition shadow-2xs"
+                              >
+                                <span>Transcript</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -823,6 +922,89 @@ export default function AnnualBroadsheetClient({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 5. Subject Performance Quick Inspector Modal */}
+      {inspectedStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-5 animate-in zoom-in-95 duration-200 my-8">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    {inspectedStudent.student?.name}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                    <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{inspectedStudent.student?.admissionNumber}</span>
+                    <span>•</span>
+                    <span>{inspectedStudent.student?.currentClass}</span>
+                    <span>•</span>
+                    <span className="font-bold text-blue-600">Annual Composite: {inspectedStudent.student?.overallAverage}% ({inspectedStudent.student?.overallGrade})</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setInspectedStudent(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs whitespace-nowrap">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th className="px-3.5 py-2.5">Code</th>
+                    <th className="px-3.5 py-2.5">Subject</th>
+                    <th className="px-3 py-2.5 text-center">CA1 (20)</th>
+                    <th className="px-3 py-2.5 text-center">CA2 (20)</th>
+                    <th className="px-3 py-2.5 text-center">Exam (60)</th>
+                    <th className="px-3 py-2.5 text-center">1st Term</th>
+                    <th className="px-3 py-2.5 text-center">2nd Term</th>
+                    <th className="px-3 py-2.5 text-center">3rd Term</th>
+                    <th className="px-3.5 py-2.5 text-center">Annual %</th>
+                    <th className="px-3.5 py-2.5 text-center">Grade</th>
+                    <th className="px-3.5 py-2.5 text-right">Remark</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {inspectedStudent.subjects.map((sub, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                      <td className="px-3.5 py-2.5 font-mono text-slate-400 font-semibold">{sub.code}</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white">{sub.name}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300 font-mono">{sub.ca1}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300 font-mono">{sub.ca2}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300 font-mono">{sub.exam}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{sub.term1Total}%</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{sub.term2Total}%</td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{sub.term3Total}%</td>
+                      <td className="px-3.5 py-2.5 text-center font-extrabold text-slate-900 dark:text-white">{sub.annualAverage}%</td>
+                      <td className="px-3.5 py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{sub.grade}</td>
+                      <td className="px-3.5 py-2.5 text-right text-slate-600 dark:text-slate-400 italic">{sub.remark}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
+              <span>Continuous Assessment weights: 40% Continuous Assessment (CA1 + CA2) + 60% Termly Exam</span>
+              <button
+                type="button"
+                onClick={() => setInspectedStudent(null)}
+                className="px-4 py-1.5 rounded-xl bg-slate-900 dark:bg-zinc-800 text-white font-bold hover:bg-slate-800 transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

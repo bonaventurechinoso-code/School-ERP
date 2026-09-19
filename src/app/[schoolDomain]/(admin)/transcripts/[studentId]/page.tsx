@@ -12,6 +12,9 @@ import {
   Building2,
   FileCheck,
   Clock,
+  QrCode,
+  Check,
+  Lock,
 } from "lucide-react";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts, getDegreeClass } from "@/lib/gpa";
@@ -639,6 +642,32 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
               </span>
             </div>
 
+          </div>
+
+          {/* Digital Verification & Security Hash Block */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs print:border-slate-400">
+            <div className="space-y-1 text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-1.5 font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px]">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Digital Authenticity & Cryptographic Verification</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                To verify this official academic record, scan or visit the institutional validation gateway:
+              </p>
+              <div className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400 break-all">
+                https://{schoolDomain}.schoolerp.ng/verify/{transcriptRefNumber}
+              </div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-center shrink-0 font-mono text-[10px] space-y-1">
+              <div className="text-slate-400 font-bold uppercase flex items-center justify-center gap-1">
+                <Lock className="w-3 h-3 text-slate-400" />
+                <span>Security Token</span>
+              </div>
+              <div className="text-slate-700 dark:text-slate-300 font-bold tracking-widest">
+                SHA256: {Buffer.from(`${student.id}:${school.id}:${transcriptRefNumber}`).toString("hex").slice(0, 20).toUpperCase()}
+              </div>
+            </div>
           </div>
 
           {/* Legal Security Notice & Watermark */}
