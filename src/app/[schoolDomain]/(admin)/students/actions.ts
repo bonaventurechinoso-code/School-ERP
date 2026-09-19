@@ -1231,3 +1231,215 @@ export async function updateStudentKyc(
     return { success: false, error: error.message || "Failed to update student KYC records." };
   }
 }
+
+/**
+ * Fetch a student's full financial profile: invoices, manual payment proofs, payments, and feeStatus.
+ */
+export async function fetchStudentFinancials(
+  schoolId: string,
+  studentId: string,
+  tierContext?: string
+) {
+  try {
+    const tenantDb = await resolveDbForAction(schoolId, tierContext);
+
+    const student = await tenantDb.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        admissionNumber: true,
+        currentClass: true,
+        feeStatus: true,
+        tier: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!student) {
+      return { success: false, error: "Student not found." };
+    }
+
+    const [invoices, paymentProofs, payments] = await Promise.all([
+      tenantDb.invoice.findMany({
+        where: { studentId },
+        orderBy: { dueDate: "desc" },
+        include: {
+          feeTemplate: { select: { name: true, billingType: true } },
+          payments: { orderBy: { paymentDate: "desc" } },
+          paymentProofs: { orderBy: { submittedAt: "desc" } },
+        },
+      }).catch(async () => {
+        return basePrisma.invoice.findMany({
+          where: { studentId },
+          orderBy: { dueDate: "desc" },
+          include: {
+            feeTemplate: { select: { name: true, billingType: true } },
+            payments: { orderBy: { paymentDate: "desc" } },
+            paymentProofs: { orderBy: { submittedAt: "desc" } },
+          },
+        });
+      }),
+      basePrisma.paymentProof.findMany({
+        where: { studentId },
+        orderBy: { submittedAt: "desc" },
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              description: true,
+              amountDue: true,
+              amountPaid: true,
+              status: true,
+            },
+          },
+        },
+      }).catch(() => []),
+      tenantDb.payment.findMany({
+        where: { studentId },
+        orderBy: { paymentDate: "desc" },
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              description: true,
+            },
+          },
+        },
+      }).catch(async () => {
+        return basePrisma.payment.findMany({
+          where: { studentId },
+          orderBy: { paymentDate: "desc" },
+          include: {
+            invoice: {
+              select: {
+                id: true,
+                description: true,
+              },
+            },
+          },
+        });
+      }),
+    ]);
+
+    const totalInvoiced = invoices.reduce((sum: number, inv: any) => sum + (inv.amountDue || 0), 0);
+    const totalPaid = invoices.reduce((sum: number, inv: any) => sum + (inv.amountPaid || 0), 0);
+    const outstandingBalance = Math.max(0, totalInvoiced - totalPaid);
+    const pendingProofsCount = paymentProofs.filter((p: any) => p.status === "PENDING").length;
+
+    return {
+      success: true,
+      student,
+      feeStatus: student.feeStatus || (outstandingBalance === 0 && totalInvoiced > 0 ? "PAID" : "UNPAID"),
+      summary: {
+        totalInvoiced,
+        totalPaid,
+        outstandingBalance,
+        pendingProofsCount,
+        invoicesCount: invoices.length,
+        paymentProofsCount: paymentProofs.length,
+        paymentsCount: payments.length,
+      },
+      invoices,
+      paymentProofs,
+      payments,
+    };
+  } catch (error: any) {
+    console.error("[fetchStudentFinancials error]:", error);
+    return { success: false, error: error?.message || "Failed to load student financial profile." };
+  }
+}
+
+/**
+ * Record a manual / direct bank payment against a student invoice.
+ */
+export async function recordManualStudentPayment(
+  schoolId: string,
+  invoiceId: string,
+  amount: number,
+  method: string = "MANUAL_TRANSFER",
+  tierContext?: string
+) {
+  try {
+    if (!amount || amount <= 0) {
+      return { success: false, error: "Payment amount must be greater than zero." };
+    }
+
+    const tenantDb = await resolveDbForAction(schoolId, tierContext);
+
+    // Fetch the target invoice
+    const invoice = await tenantDb.invoice.findUnique({
+      where: { id: invoiceId },
+    }).catch(async () => {
+      return basePrisma.invoice.findUnique({ where: { id: invoiceId } });
+    });
+
+    if (!invoice) {
+      return { success: false, error: "Target invoice not found." };
+    }
+
+    const remainingBalance = Math.max(0, invoice.amountDue - invoice.amountPaid);
+    if (amount > remainingBalance) {
+      return {
+        success: false,
+        error: `Payment amount (₦${amount.toLocaleString()}) exceeds the invoice's remaining balance (₦${remainingBalance.toLocaleString()}).`,
+      };
+    }
+
+    // Process payment atomically
+    await basePrisma.$transaction(async (tx) => {
+      // 1. Create Payment record
+      await tx.payment.create({
+        data: {
+          schoolId,
+          studentId: invoice.studentId,
+          invoiceId: invoice.id,
+          amountPaid: amount,
+          paymentDate: new Date(),
+          method: method.toUpperCase(),
+        },
+      });
+
+      // 2. Update Invoice
+      const newAmountPaid = invoice.amountPaid + amount;
+      const newStatus = newAmountPaid >= invoice.amountDue ? "PAID" : "PARTIAL";
+
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          amountPaid: newAmountPaid,
+          status: newStatus,
+          paidAt: newStatus === "PAID" ? new Date() : invoice.paidAt,
+        },
+      });
+
+      // 3. Recalculate Student feeStatus
+      const openInvoices = await tx.invoice.findMany({
+        where: {
+          studentId: invoice.studentId,
+          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        },
+      });
+
+      const updatedFeeStatus = openInvoices.length === 0 ? "PAID" : "PARTIAL";
+
+      await tx.student.update({
+        where: { id: invoice.studentId },
+        data: { feeStatus: updatedFeeStatus },
+      });
+    });
+
+    await invalidateStudentNamespace(schoolId, tierContext);
+    safeRevalidatePath("/[schoolDomain]/students", "page");
+    safeRevalidatePath("/[schoolDomain]/finance", "page");
+
+    return {
+      success: true,
+      message: `Successfully recorded ₦${amount.toLocaleString()} payment via ${method}.`,
+    };
+  } catch (error: any) {
+    console.error("[recordManualStudentPayment error]:", error);
+    return { success: false, error: error?.message || "Failed to record payment." };
+  }
+}
+

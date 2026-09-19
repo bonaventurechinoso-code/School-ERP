@@ -152,6 +152,8 @@ export default function StudentTable({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const [filterClass, setFilterClass] = useState<string>("ALL");
+  const [filterFeeStatus, setFilterFeeStatus] = useState<string>("ALL");
+  const [selectedDrawerTab, setSelectedDrawerTab] = useState<"BIO" | "GUARDIAN" | "DOCS" | "LIFECYCLE" | "FINANCE">("BIO");
   const classOptions = getClassOptionsForTier(activeTier, tiers, classrooms);
   const graduatingInfo = getGraduatingClassForTier(activeTier, tiers, classrooms);
   const targetGraduatingClass = bulkClass || (filterClass !== "ALL" ? filterClass : graduatingInfo.primaryClass);
@@ -416,6 +418,14 @@ export default function StudentTable({
 
   const filteredStudents = studentList.filter(s => {
     if (filterClass !== "ALL" && !matchesClass(s.currentClass, filterClass)) return false;
+    if (filterFeeStatus !== "ALL") {
+      const studentFee = s.feeStatus || "UNPAID";
+      if (filterFeeStatus === "UNPAID_ANY") {
+        if (studentFee !== "UNPAID" && studentFee !== "OVERDUE" && studentFee !== "PARTIAL") return false;
+      } else if (studentFee !== filterFeeStatus) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -607,22 +617,41 @@ export default function StudentTable({
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <label htmlFor="filter-by-class" className="text-sm font-medium text-slate-700 dark:text-zinc-300">Filter by Class:</label>
-          <select 
-            id="filter-by-class"
-            className="border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-sm bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 w-full sm:w-auto min-w-[200px]"
-            value={filterClass}
-            onChange={(e) => handleClassFilterChange(e.target.value)}
-          >
-            <option value="ALL">All Classes</option>
-            {classOptions.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </select>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <div className="flex items-center gap-2">
+            <label htmlFor="filter-by-class" className="text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">Class:</label>
+            <select 
+              id="filter-by-class"
+              className="border border-slate-300 dark:border-zinc-700 rounded-xl p-2 text-xs font-semibold bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 min-w-[140px]"
+              value={filterClass}
+              onChange={(e) => handleClassFilterChange(e.target.value)}
+            >
+              <option value="ALL">All Classes</option>
+              {classOptions.map((cls) => (
+                <option key={cls} value={cls}>
+                  {cls}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="filter-by-fee" className="text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">Fee Status:</label>
+            <select
+              id="filter-by-fee"
+              className="border border-slate-300 dark:border-zinc-700 rounded-xl p-2 text-xs font-semibold bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 min-w-[160px]"
+              value={filterFeeStatus}
+              onChange={(e) => setFilterFeeStatus(e.target.value)}
+            >
+              <option value="ALL">All Fee Statuses</option>
+              <option value="PAID">Fully Paid</option>
+              <option value="PENDING_VERIFICATION">Pending Bank Verification</option>
+              <option value="PARTIAL">Partially Paid</option>
+              <option value="UNPAID">Unpaid</option>
+              <option value="UNPAID_ANY">Any Outstanding Balance</option>
+            </select>
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <button 
@@ -957,6 +986,7 @@ export default function StudentTable({
               <th className="px-6 py-4 font-semibold">Student Name</th>
               <th className="px-6 py-4 font-semibold">Current Class</th>
               <th className="px-6 py-4 font-semibold">Guardian Name</th>
+              <th className="px-6 py-4 font-semibold">Fee Status</th>
               <th className="px-6 py-4 font-semibold">Status</th>
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
@@ -964,7 +994,7 @@ export default function StudentTable({
           <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-500 dark:text-zinc-500 text-base italic">
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-500 dark:text-zinc-500 text-base italic">
                   No students found in the roster.
                 </td>
               </tr>
@@ -1003,6 +1033,28 @@ export default function StudentTable({
                   {student.currentClass || student.tier?.name || "—"}
                 </td>
                 <td className="px-6 py-4 text-slate-500 dark:text-zinc-400">{student.parentName || "—"}</td>
+                <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDrawerTab("FINANCE");
+                      setSelectedStudent(student);
+                    }}
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1.5 hover:opacity-90 shadow-2xs ${
+                      student.feeStatus === "PAID"
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        : student.feeStatus === "PENDING_VERIFICATION"
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
+                        : student.feeStatus === "PARTIAL"
+                        ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                        : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    }`}
+                    title="Click to view full financial ledger"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                    <span>{student.feeStatus ? student.feeStatus.replace("_", " ") : "UNPAID"}</span>
+                  </button>
+                </td>
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                   <select 
                     disabled={isPending}
@@ -1091,9 +1143,32 @@ export default function StudentTable({
                     <h4 className="font-bold text-slate-900 dark:text-white text-base truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                       {student.firstName} {student.lastName}
                     </h4>
-                    <p className="font-mono text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                      ID: {student.admissionNumber || "Not Assigned"}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="font-mono text-xs text-slate-500 dark:text-zinc-400">
+                        ID: {student.admissionNumber || "Not Assigned"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDrawerTab("FINANCE");
+                          setSelectedStudent(student);
+                        }}
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1 ${
+                          student.feeStatus === "PAID"
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            : student.feeStatus === "PENDING_VERIFICATION"
+                            ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
+                            : student.feeStatus === "PARTIAL"
+                            ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                            : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                        }`}
+                        title="Click to view & audit fees"
+                      >
+                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                        <span>{student.feeStatus ? student.feeStatus.replace("_", " ") : "UNPAID"}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1220,7 +1295,11 @@ export default function StudentTable({
           schoolId={schoolId}
           tiers={tiers}
           activeTier={activeTier}
-          onClose={() => setSelectedStudent(null)} 
+          initialTab={selectedDrawerTab}
+          onClose={() => {
+            setSelectedStudent(null);
+            setSelectedDrawerTab("BIO");
+          }} 
           onStudentUpdated={(updated) => {
             setSelectedStudent(updated);
             setStudentList((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
