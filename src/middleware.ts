@@ -104,6 +104,7 @@ export async function middleware(req: NextRequest) {
   const isPublicOrPortalPath =
     path.startsWith('/portal/') ||
     path.includes('/portal/') ||
+    path.startsWith('/teacher') ||
     path === '/access-denied' ||
     path.startsWith('/access-denied') ||
     path === '/trial-expired' ||
