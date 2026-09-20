@@ -36,10 +36,10 @@ async function verifyFinanceModule() {
   }
   const financeHtml = await financeRes.text();
 
-  const hasTitle = financeHtml.includes("Fee Tracking &amp; Finance") || financeHtml.includes("Fee Tracking & Finance");
-  console.log(`Contains 'Fee Tracking & Finance' header: ${hasTitle}`);
+  const hasTitle = financeHtml.includes("Bursary") || financeHtml.includes("Fee Tracking &amp; Finance") || financeHtml.includes("Fee Tracking & Finance");
+  console.log(`Contains 'Bursary' header: ${hasTitle}`);
   if (!hasTitle) {
-    throw new Error("FAIL: Finance header not found!");
+    throw new Error("FAIL: Bursary header not found!");
   }
 
   const hasTiers = financeHtml.includes("Secondary School") && financeHtml.includes("Primary School");

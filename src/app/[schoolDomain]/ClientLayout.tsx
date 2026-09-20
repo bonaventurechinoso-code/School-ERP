@@ -46,7 +46,7 @@ export default function ClientLayout({
       { label: "Students", href: `/${schoolDomain}/students`, icon: Users },
       { label: "Enrollment", href: `/${schoolDomain}/admissions`, icon: UserPlus },
       { label: "Staff", href: `/${schoolDomain}/staff`, icon: Briefcase },
-      { label: "Finance", href: `/${schoolDomain}/finance`, icon: CreditCard },
+      { label: "Bursary", href: `/${schoolDomain}/finance`, icon: CreditCard },
     ];
 
     return candidates.filter((item) => {

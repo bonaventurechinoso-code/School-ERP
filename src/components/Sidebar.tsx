@@ -146,7 +146,7 @@ export default function Sidebar({
       { label: "Academic Records", href: `/${schoolDomain}/transcripts`, icon: BookOpen },
       { label: "Communications", href: `/${schoolDomain}/communications`, icon: MessageSquare },
       { label: "Payment Verifications", href: `/${schoolDomain}/finance/verifications`, icon: FileCheck2 },
-      { label: "Finance & Invoices", href: `/${schoolDomain}/finance`, icon: CreditCard },
+      { label: "Bursary", href: `/${schoolDomain}/finance`, icon: CreditCard },
       { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
     ],
     [schoolDomain]

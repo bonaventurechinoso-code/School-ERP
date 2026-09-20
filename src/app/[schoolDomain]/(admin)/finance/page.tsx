@@ -145,7 +145,7 @@ export default async function FinancePage({
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-            Fee Tracking & Finance
+            Bursary
           </h2>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
             Manage invoices, record payments, and track institutional cash flow across all educational tiers.
