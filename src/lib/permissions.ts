@@ -194,6 +194,19 @@ export function checkRouteAuthorization(
     return { allowed: true, category, effectiveRoleName };
   }
 
+  // Dedicated Bursar Portal
+  if (pathname === "/bursar" || pathname.startsWith("/bursar/")) {
+    if (category === "FINANCIAL") {
+      return { allowed: true, category, effectiveRoleName };
+    }
+    return {
+      allowed: false,
+      reason: `Access Denied: The Bursar Portal is strictly restricted to School Bursars, Accountants, and Executive Leadership. (${effectiveRoleName})`,
+      category,
+      effectiveRoleName,
+    };
+  }
+
   // 1. Finance & Ledgers
   if (pathname.includes("/finance")) {
     if (category === "FINANCIAL") {

@@ -18,6 +18,7 @@ import {
   Building2,
   Landmark,
   FileCheck2,
+  Coins,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
@@ -147,6 +148,7 @@ export default function Sidebar({
       { label: "Communications", href: `/${schoolDomain}/communications`, icon: MessageSquare },
       { label: "Payment Verifications", href: `/${schoolDomain}/finance/verifications`, icon: FileCheck2 },
       { label: "Bursary", href: `/${schoolDomain}/finance`, icon: CreditCard },
+      { label: "Bursar Portal", href: "/bursar", icon: Coins },
       { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
     ],
     [schoolDomain]

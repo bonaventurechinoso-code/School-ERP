@@ -105,6 +105,7 @@ export async function middleware(req: NextRequest) {
     path.startsWith('/portal/') ||
     path.includes('/portal/') ||
     path.startsWith('/teacher') ||
+    path.startsWith('/bursar') ||
     path === '/access-denied' ||
     path.startsWith('/access-denied') ||
     path === '/trial-expired' ||

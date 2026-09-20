@@ -72,8 +72,19 @@ export default function TenantLoginPage() {
 
         // Role-based smart routing
         const canonicalRole = (role || "").toUpperCase();
+        const staffRoleStr = (data.staffRole || "").toUpperCase();
+        const isBursarRole =
+          canonicalRole === "BURSAR" ||
+          canonicalRole === "ACCOUNTANT" ||
+          staffRoleStr.includes("BURSAR") ||
+          staffRoleStr.includes("ACCOUNTANT") ||
+          staffRoleStr.includes("CASHIER") ||
+          staffRoleStr.includes("FINANCE");
+
         if (canonicalRole === "STUDENT") {
           router.push(`/${targetDomain}/portal/student`);
+        } else if (isBursarRole) {
+          router.push("/bursar");
         } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
           router.push(`/${targetDomain}/portal/staff`);
         } else {

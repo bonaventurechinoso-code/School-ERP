@@ -318,7 +318,7 @@ export default function FeePaymentCheckout({
                     <li>Open your bank mobile app (Opay, Access, GTBank, Kuda, etc.) and transfer.</li>
                     <li>Type your admission number (<strong>{student?.admissionNumber || "ADA-0143"}</strong>) into the narration/remarks box.</li>
                     <li>Take a screenshot of the debit alert or transfer receipt.</li>
-                    <li>Return here and click <strong>"I Have Paid - Upload Proof"</strong> below.</li>
+                    <li>Return here and click <strong>&quot;I Have Paid - Upload Proof&quot;</strong> below.</li>
                   </ol>
                 </div>
 
@@ -523,7 +523,7 @@ export default function FeePaymentCheckout({
                 <span>Status: Awaiting Bursar Confirmation</span>
               </div>
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                The school bursar will verify this against the school's bank statement. Once confirmed, your official receipt will be generated.
+                The school bursar will verify this against the school&apos;s bank statement. Once confirmed, your official receipt will be generated.
               </p>
             </div>
 

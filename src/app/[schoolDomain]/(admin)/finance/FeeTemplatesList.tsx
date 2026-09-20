@@ -307,7 +307,7 @@ export default function FeeTemplatesList({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {isolatedFeeTemplates.length === 0 && (
           <div className="col-span-full p-12 text-center text-slate-500 dark:text-zinc-500 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm italic text-sm">
-            No fee templates created yet for {tierConfig.label}. Click "New Fee Template" to build tuition or fee schedules.
+            No fee templates created yet for {tierConfig.label}. Click &quot;New Fee Template&quot; to build tuition or fee schedules.
           </div>
         )}
         

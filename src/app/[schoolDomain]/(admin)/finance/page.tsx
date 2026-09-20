@@ -5,6 +5,7 @@ import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenan
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import FinanceDashboard from "./FinanceDashboard";
 import { fetchInvoicesPaginated, fetchTransactionsPaginated } from "./actions";
+import { Coins } from "lucide-react";
 
 export default async function FinancePage({ 
   params: paramsPromise,
@@ -144,9 +145,18 @@ export default async function FinancePage({
       
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-            Bursary
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
+              Bursary
+            </h2>
+            <Link
+              href="/bursar"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm shadow-indigo-600/20 transition shrink-0"
+            >
+              <Coins className="w-3.5 h-3.5" />
+              <span>Open Bursar Workstation</span>
+            </Link>
+          </div>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
             Manage invoices, record payments, and track institutional cash flow across all educational tiers.
           </p>

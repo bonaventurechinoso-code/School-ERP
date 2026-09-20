@@ -251,10 +251,22 @@ function UniversalLoginPageContent() {
         router.refresh();
 
         const user = sessionPayload;
+        const canonicalRole = (user?.role || "").toUpperCase();
+        const staffRoleStr = (user?.staffRole || "").toUpperCase();
+        const isBursarRole =
+          canonicalRole === "BURSAR" ||
+          canonicalRole === "ACCOUNTANT" ||
+          staffRoleStr.includes("BURSAR") ||
+          staffRoleStr.includes("ACCOUNTANT") ||
+          staffRoleStr.includes("CASHIER") ||
+          staffRoleStr.includes("FINANCE");
+
         if (user?.role === "SUPER_ADMIN") {
           router.push("/admin");
         } else if (user?.role === "STUDENT") {
           router.push(`/${user.schoolDomain || targetDomain || "portal"}/portal/student`);
+        } else if (isBursarRole) {
+          router.push("/bursar");
         } else if (user?.schoolDomain) {
           router.push(`/${user.schoolDomain}/dashboard`);
         } else if (targetDomain) {
