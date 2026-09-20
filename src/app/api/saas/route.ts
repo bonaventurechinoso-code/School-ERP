@@ -36,18 +36,65 @@ export async function GET(req: NextRequest) {
     // 2. Compute 30-day window for transactions
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // 3. Fetch all tenants with their plans, wallets, and subscriptions
-    let tenants = await prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        plan: true,
-        subscriptions: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          include: { plan: true },
+    const tenantSelect = {
+      id: true,
+      schoolName: true,
+      subdomain: true,
+      customDomain: true,
+      adminEmail: true,
+      contactPhone: true,
+      institutionTypes: true,
+      status: true,
+      kycStatus: true,
+      paystackSubaccountCode: true,
+      paystackSplitCode: true,
+      isImpersonationAllowed: true,
+      suspendedReason: true,
+      suspendedAt: true,
+      createdAt: true,
+      paystackSettlementBank: true,
+      plan: {
+        select: {
+          id: true,
+          name: true,
+          priceNgn: true,
+          billingCycle: true,
+          commissionPercent: true,
         },
       },
-    });
+      subscriptions: {
+        take: 1,
+        orderBy: { createdAt: "desc" as const },
+        select: {
+          status: true,
+          amountDue: true,
+          endsAt: true,
+          trialEndsAt: true,
+          plan: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    };
+
+    // 3. Concurrently fetch all tenants and pre-aggregated 30-day collections
+    let [tenants, thirtyDayAggregates] = await Promise.all([
+      prisma.tenant.findMany({
+        orderBy: { createdAt: "desc" },
+        select: tenantSelect,
+      }),
+      prisma.walletTransaction.groupBy({
+        by: ["tenantId"],
+        _sum: { amount: true },
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          type: "CREDIT",
+        },
+      }),
+    ]);
 
     if (tenants.length === 0) {
       const defaultPlan = await prisma.plan.findFirst();
@@ -76,40 +123,21 @@ export async function GET(req: NextRequest) {
 
       tenants = await prisma.tenant.findMany({
         orderBy: { createdAt: "desc" },
-        include: {
-          plan: true,
-          subscriptions: {
-            take: 1,
-            orderBy: { createdAt: "desc" },
-            include: { plan: true },
-          },
-        },
+        select: tenantSelect,
       });
     }
 
-    // 4. Compute 30-day collections and 2% commissions for each tenant
-    const formattedTenants = await Promise.all(
-      tenants.map(async (t) => {
-        // Query tuition collections in the last 30 days
-        const recentTxns = await prisma.walletTransaction.findMany({
-          where: {
-            tenantId: t.id,
-            createdAt: { gte: thirtyDaysAgo },
-            type: "CREDIT",
-          },
-          select: { amount: true },
-        });
+    // 4. Map aggregated 30-day collections in O(1) time without sequential DB queries
+    const collectionsMap = new Map<string, number>();
+    for (const agg of thirtyDayAggregates) {
+      collectionsMap.set(agg.tenantId, Number(agg._sum.amount || 0));
+    }
 
-        const raw30DaysCollection = recentTxns.reduce(
-          (sum, tx) => sum + Number(tx.amount || 0),
-          0
-        );
-
-        // Commission rate from plan or default to 2.0%
-        const commissionRate = t.plan?.commissionPercent ?? 2.0;
-        const raw30DaysCommission = Math.round(
-          (raw30DaysCollection * (commissionRate / 100)) * 100
-        ) / 100;
+    const formattedTenants = tenants.map((t) => {
+      const raw30DaysCollection = collectionsMap.get(t.id) || 0;
+      const commissionRate = t.plan?.commissionPercent ?? 2.0;
+      const raw30DaysCommission =
+        Math.round(raw30DaysCollection * (commissionRate / 100) * 100) / 100;
 
         return {
           id: t.id,
@@ -152,8 +180,7 @@ export async function GET(req: NextRequest) {
               }
             : null,
         };
-      })
-    );
+      });
 
     return NextResponse.json({
       success: true,

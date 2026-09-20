@@ -174,6 +174,7 @@ model Student {
   reportCards       ReportCard[]
 
   @@index([schoolId, status]) // Performance index for tenant queries
+  @@index([schoolId, currentClass])
   @@index([schoolId, tierId, status, createdAt(sort: Desc)])
   @@index([schoolId, currentClass, status])
   @@index([schoolId, createdAt(sort: Desc)])
@@ -280,6 +281,8 @@ model Staff {
 
   @@unique([schoolId, email]) // Ensure unique staff emails per school
   @@index([schoolId, status])
+  @@index([schoolId, role])
+  @@index([schoolId, email])
   @@index([schoolId, role, status])
   @@index([schoolId, departmentId])
   @@index([schoolId, createdAt(sort: Desc)])
@@ -552,6 +555,7 @@ model StudentAttendance {
   @@unique([schoolId, studentId, date])
   @@index([schoolId, date])
   @@index([schoolId, date, status])
+  @@index([schoolId, studentId, date])
 }
 
 model StaffAttendance {
@@ -572,6 +576,7 @@ model StaffAttendance {
   @@unique([schoolId, staffId, date])
   @@index([schoolId, date])
   @@index([schoolId, date, status])
+  @@index([schoolId, staffId, date])
 }
 
 // ------------------------------------------------------
@@ -914,6 +919,10 @@ model Tenant {
   updatedAt              DateTime       @updatedAt
   wallets                Wallet[]
   subscriptions          Subscription[]
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([planId])
 }
 
 model Wallet {
@@ -945,6 +954,10 @@ model WalletTransaction {
   paystackReference String?
   settlementStatus String?  @default("settled")
   createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt, type])
+  @@index([walletId])
+  @@index([createdAt(sort: Desc)])
 }
 
 model Subscription {
@@ -961,6 +974,9 @@ model Subscription {
   amountPaid               Decimal   @default(0) @db.Decimal(12,2)
   paystackSubscriptionCode String?
   createdAt                DateTime  @default(now())
+
+  @@index([tenantId, status])
+  @@index([planId])
 }
 
 model PlatformWallet {
@@ -977,6 +993,8 @@ model PlatformTransaction {
   amount    Decimal  @db.Decimal(12,2)
   reference String   @unique
   createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt(sort: Desc)])
 }
 
 model AuditLog {

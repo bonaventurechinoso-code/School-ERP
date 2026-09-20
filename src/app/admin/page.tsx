@@ -12,22 +12,23 @@ import { basePrisma } from "@/lib/tenant-prisma";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const [schoolsCount, studentsCount, staffCount, platformWallet] =
+  const [schoolsCount, studentsCount, staffCount, platformWallet, recentSchools] =
     await Promise.all([
       basePrisma.school.count(),
       basePrisma.student.count(),
       basePrisma.staff.count(),
-      basePrisma.platformWallet.findFirst(),
+      basePrisma.platformWallet.findFirst({ select: { totalRevenue: true } }),
+      basePrisma.school.findMany({
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          subdomain: true,
+          _count: { select: { students: true } },
+        },
+      }),
     ]);
-
-  const recentSchools = await basePrisma.school.findMany({
-    take: 5,
-    orderBy: { createdAt: "desc" },
-    include: {
-      academicTiers: true,
-      _count: { select: { students: true } },
-    },
-  });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-200">

@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { cache } from "react";
+
 export interface TeacherContext {
   staffId: string;
   staffName: string;
@@ -18,24 +20,40 @@ export interface TeacherContext {
   assignedSubjects: string[];
 }
 
+const staffContextSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  role: true,
+  department: { select: { name: true } },
+  Timetable: {
+    select: {
+      course: { select: { name: true } },
+      classroom: { select: { name: true } },
+    },
+  },
+} as const;
+
 /**
- * 1. Resolves authenticated teacher context scoped securely via PostgreSQL Staff.id & schoolId
+ * 1. Resolves authenticated teacher context scoped securely via PostgreSQL Staff.id & schoolId.
+ * React cache() ensures duplicate calls within the same request lifecycle execute once.
  */
-export async function getTeacherContext(): Promise<TeacherContext | null> {
+const resolveTeacherContextMemo = cache(async (): Promise<TeacherContext | null> => {
   const session = await getSession();
 
   let school: any = null;
   if (session?.schoolDomain) {
     school = await basePrisma.school.findUnique({
       where: { subdomain: session.schoolDomain },
-      include: { academicTiers: true },
+      select: { id: true, name: true, subdomain: true },
     });
   }
 
   if (!school) {
     school = await basePrisma.school.findFirst({
       where: { isActive: true },
-      include: { academicTiers: true },
+      select: { id: true, name: true, subdomain: true },
     });
   }
 
@@ -46,12 +64,7 @@ export async function getTeacherContext(): Promise<TeacherContext | null> {
   if (session?.email) {
     staff = await basePrisma.staff.findFirst({
       where: { schoolId: school.id, email: session.email },
-      include: {
-        department: true,
-        Timetable: {
-          include: { course: true, classroom: true },
-        },
-      },
+      select: staffContextSelect,
     });
   }
 
@@ -61,24 +74,14 @@ export async function getTeacherContext(): Promise<TeacherContext | null> {
         schoolId: school.id,
         role: { in: ["Class Teacher", "TEACHER", "Teacher", "Subject Teacher", "Lecturer", "Educator"] },
       },
-      include: {
-        department: true,
-        Timetable: {
-          include: { course: true, classroom: true },
-        },
-      },
+      select: staffContextSelect,
     });
   }
 
   if (!staff) {
     staff = await basePrisma.staff.findFirst({
       where: { schoolId: school.id },
-      include: {
-        department: true,
-        Timetable: {
-          include: { course: true, classroom: true },
-        },
-      },
+      select: staffContextSelect,
     });
   }
 
@@ -115,10 +118,15 @@ export async function getTeacherContext(): Promise<TeacherContext | null> {
     assignedClasses: Array.from(assignedClassesSet),
     assignedSubjects: Array.from(assignedSubjectsSet),
   };
+});
+
+export async function getTeacherContext(): Promise<TeacherContext | null> {
+  return resolveTeacherContextMemo();
 }
 
 /**
- * 2. Module 1 - My Class: Homeroom metrics, student counts, gender ratio, attendance rate
+ * 2. Module 1 - My Class: Homeroom metrics, student counts, gender ratio, attendance rate.
+ * Uses Promise.all and explicit projection to minimize payload and execution latency.
  */
 export async function getMyClassOverview() {
   const ctx = await getTeacherContext();
@@ -126,41 +134,65 @@ export async function getMyClassOverview() {
 
   const primaryClass = ctx.assignedClasses[0] || "JSS 1";
 
-  // Fetch all students in this homeroom class
-  const students = await basePrisma.student.findMany({
-    where: {
-      schoolId: ctx.schoolId,
-      status: { in: ["ENROLLED", "ACTIVE"] },
-      OR: [
-        { currentClass: { equals: primaryClass } },
-        { currentClass: { contains: primaryClass } },
-      ],
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      admissionNumber: true,
-      currentClass: true,
-      parentPhone: true,
-      dynamicFields: true,
-    },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-  });
-
-  // Today's attendance records for this class
   const today = new Date();
   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const currentDay = daysOfWeek[today.getDay()];
 
+  // Fetch students and upcoming lessons concurrently
+  const [students, upcomingLessons] = await Promise.all([
+    basePrisma.student.findMany({
+      where: {
+        schoolId: ctx.schoolId,
+        status: { in: ["ENROLLED", "ACTIVE"] },
+        OR: [
+          { currentClass: { equals: primaryClass } },
+          { currentClass: { contains: primaryClass } },
+        ],
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        admissionNumber: true,
+        currentClass: true,
+        parentPhone: true,
+        dynamicFields: true,
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }),
+    basePrisma.timetable.findMany({
+      where: {
+        schoolId: ctx.schoolId,
+        staffId: ctx.staffId,
+        dayOfWeek: currentDay,
+      },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        course: { select: { name: true } },
+        classroom: { select: { name: true } },
+      },
+      orderBy: { startTime: "asc" },
+    }),
+  ]);
+
+  // Today's attendance records for this class (only select status)
   const studentIds = students.map((s) => s.id);
-  const attendanceToday = await basePrisma.studentAttendance.findMany({
-    where: {
-      schoolId: ctx.schoolId,
-      studentId: { in: studentIds },
-      date: { gte: startOfDay, lte: endOfDay },
-    },
-  });
+  const attendanceToday = studentIds.length > 0
+    ? await basePrisma.studentAttendance.findMany({
+        where: {
+          schoolId: ctx.schoolId,
+          studentId: { in: studentIds },
+          date: { gte: startOfDay, lte: endOfDay },
+        },
+        select: {
+          status: true,
+        },
+      })
+    : [];
 
   const presentCount = attendanceToday.filter((a) => a.status === "PRESENT").length;
   const lateCount = attendanceToday.filter((a) => a.status === "LATE").length;
@@ -175,23 +207,6 @@ export async function getMyClassOverview() {
     if (g.startsWith("M")) maleCount++;
     else if (g.startsWith("F")) femaleCount++;
     else maleCount++;
-  });
-
-  // Upcoming lessons today from Timetable
-  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const currentDay = daysOfWeek[today.getDay()];
-
-  const upcomingLessons = await basePrisma.timetable.findMany({
-    where: {
-      schoolId: ctx.schoolId,
-      staffId: ctx.staffId,
-      dayOfWeek: currentDay,
-    },
-    include: {
-      course: true,
-      classroom: true,
-    },
-    orderBy: { startTime: "asc" },
   });
 
   return {
@@ -254,6 +269,11 @@ export async function getTeacherAttendanceData(dateStr?: string, className?: str
       schoolId: ctx.schoolId,
       studentId: { in: studentIds },
       date: { gte: startOfDay, lte: endOfDay },
+    },
+    select: {
+      studentId: true,
+      status: true,
+      notes: true,
     },
   });
 
@@ -359,6 +379,13 @@ export async function getTeacherGradebookData(
       className: selectedClass,
       subject: selectedSubject,
       term,
+    },
+    select: {
+      studentId: true,
+      ca1: true,
+      ca2: true,
+      exam: true,
+      totalScore: true,
     },
   });
 
@@ -601,9 +628,13 @@ export async function getTeacherTimetable() {
       schoolId: ctx.schoolId,
       staffId: ctx.staffId,
     },
-    include: {
-      course: true,
-      classroom: true,
+    select: {
+      id: true,
+      dayOfWeek: true,
+      startTime: true,
+      endTime: true,
+      course: { select: { name: true, code: true } },
+      classroom: { select: { name: true } },
     },
     orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
   });
@@ -685,30 +716,46 @@ export async function getTeacherStudents(searchQuery?: string, classFilter?: str
 }
 
 /**
- * 8. Module 7 - Messages: Internal school notices & teacher-to-parent conversations
+ * 8. Module 7 - Messages: Internal school notices & teacher-to-parent conversations.
+ * Uses Promise.all to fetch notices and direct logs concurrently.
  */
 export async function getTeacherMessages() {
   const ctx = await getTeacherContext();
   if (!ctx) throw new Error("Unauthorized");
 
-  // School bulletins/notices
-  const notices = await basePrisma.notice.findMany({
-    where: {
-      schoolId: ctx.schoolId,
-      targetAudience: { in: ["ALL", "STAFF"] },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
-
-  // Direct message logs
-  const directLogs = await basePrisma.messageLog.findMany({
-    where: {
-      schoolId: ctx.schoolId,
-    },
-    orderBy: { sentAt: "desc" },
-    take: 15,
-  });
+  // School bulletins/notices & Direct message logs concurrently via Promise.all
+  const [notices, directLogs] = await Promise.all([
+    basePrisma.notice.findMany({
+      where: {
+        schoolId: ctx.schoolId,
+        targetAudience: { in: ["ALL", "STAFF"] },
+      },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        priority: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+    basePrisma.messageLog.findMany({
+      where: {
+        schoolId: ctx.schoolId,
+      },
+      select: {
+        id: true,
+        recipientEmail: true,
+        recipientType: true,
+        subject: true,
+        body: true,
+        sentAt: true,
+      },
+      orderBy: { sentAt: "desc" },
+      take: 15,
+    }),
+  ]);
 
   return {
     teacher: ctx,

@@ -50,13 +50,17 @@ export function buildCacheKey(options: CacheKeyOptions): string {
   return `${baseNamespace}:${querySegment}`;
 }
 
+// Global in-memory cache for ultra-fast L1 lookups & seamless Redis offline fallback
+const l1MemoryCache = new Map<string, { data: any; expiresAt: number }>();
+
 /**
- * Cache-Aside Pattern Implementation:
- * 1. Checks Redis cache using structured namespace key.
- * 2. If found, transparently decompresses and returns data.
- * 3. If cache miss or Redis is unavailable/erroring, invokes fallback fetchFn.
- * 4. Automatically compresses payload (if > threshold) and stores in Redis with sliding TTL.
- * 5. Returns data to caller seamlessly.
+ * Two-Tier Cache-Aside Pattern Implementation:
+ * 1. Checks L1 in-memory cache (< 0.05ms)
+ * 2. Checks L2 Redis cache using structured namespace key (< 2ms)
+ * 3. If found, transparently decompresses and refreshes L1 cache.
+ * 4. If cache miss, invokes fallback fetchFn from DB.
+ * 5. Caches payload in both L1 (Memory) and L2 (Redis with sliding TTL).
+ * 6. Returns data to caller seamlessly.
  */
 export async function cacheAside<T>(options: CacheAsideOptions<T>): Promise<T> {
   const {
@@ -66,12 +70,22 @@ export async function cacheAside<T>(options: CacheAsideOptions<T>): Promise<T> {
     compressThresholdBytes = 1024,
   } = options;
 
-  // 1. Try reading from cache
+  const now = Date.now();
+
+  // 1. Check L1 Memory Cache
+  const l1Entry = l1MemoryCache.get(key);
+  if (l1Entry && l1Entry.expiresAt > now) {
+    return l1Entry.data as T;
+  }
+
+  // 2. Try reading from L2 Redis cache
   try {
     const cachedData = await safeRedisGet(key);
     if (cachedData !== null) {
       const decompressed = decompressPayload<T>(cachedData);
       if (decompressed !== null && decompressed !== undefined) {
+        // Populate L1 cache
+        l1MemoryCache.set(key, { data: decompressed, expiresAt: now + ttlSeconds * 1000 });
         return decompressed;
       }
     }
@@ -79,11 +93,12 @@ export async function cacheAside<T>(options: CacheAsideOptions<T>): Promise<T> {
     // Suppress and seamlessly proceed to direct DB fetch
   }
 
-  // 2. Fetch directly from DB via provided fetch function
+  // 3. Fetch directly from DB via provided fetch function
   const freshData = await fetchFn();
 
-  // 3. Cache the newly fetched data in the background
+  // 4. Cache newly fetched data in both L1 and L2
   if (freshData !== undefined && freshData !== null) {
+    l1MemoryCache.set(key, { data: freshData, expiresAt: now + ttlSeconds * 1000 });
     try {
       const compressedPayload = compressPayload(freshData, compressThresholdBytes);
       // Run asynchronously without awaiting to minimize request latency
