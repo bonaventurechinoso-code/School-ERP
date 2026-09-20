@@ -75,7 +75,7 @@ export function TeacherProfileClient({
         <div>
           <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold text-xs mb-1">
             <UserCheck className="w-3.5 h-3.5" />
-            <span>Faculty File Management</span>
+            <span>Staff File Management</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
             Teacher Profile & Credentials
@@ -140,7 +140,7 @@ export function TeacherProfileClient({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    Faculty Email
+                    Staff Email
                   </label>
                   <input
                     type="email"

@@ -45,7 +45,7 @@ export default async function TenantStaffPortalPage({
     ? `${initialData.staffProfile.firstName} ${initialData.staffProfile.lastName}`
     : session?.email
     ? session.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    : "Faculty Educator";
+    : "Staff Educator";
   const staffRole = initialData.staffProfile?.role || session?.staffRole || "Class Teacher";
 
   return (

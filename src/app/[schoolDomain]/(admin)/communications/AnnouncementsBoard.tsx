@@ -136,7 +136,7 @@ export default function AnnouncementsBoard({
         return (
           <span className="inline-flex items-center gap-1 text-slate-600 dark:text-zinc-300 text-xs font-semibold">
             <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>Faculty & Staff Only</span>
+            <span>School Staff Only</span>
           </span>
         );
       case "STUDENTS":
@@ -221,7 +221,7 @@ export default function AnnouncementsBoard({
               className="border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
             >
               <option value="ALL">All Audiences</option>
-              <option value="STAFF">Faculty & Staff Only</option>
+              <option value="STAFF">School Staff Only</option>
               <option value="STUDENTS">Students & Parents</option>
             </select>
           </div>
@@ -312,7 +312,7 @@ export default function AnnouncementsBoard({
               {[
                 { id: "ALL", label: "All Institution", desc: "Visible to staff, students & portal visitors", icon: Globe },
                 { id: "STUDENTS", label: "Students & Parents", desc: "Enrolled pupils, students, and guardians", icon: Users },
-                { id: "STAFF", label: "Faculty & Staff Only", desc: "Internal personnel, teachers, and admins", icon: Briefcase },
+                { id: "STAFF", label: "School Staff Only", desc: "Internal personnel, teachers, and admins", icon: Briefcase },
               ].map((aud) => {
                 const Icon = aud.icon;
                 const isSelected = formData.targetAudience === aud.id;

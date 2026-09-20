@@ -194,7 +194,7 @@ export default function AttendanceView({
             }`}
           >
             <Briefcase className="w-4 h-4" />
-            <span>Staff & Faculty ({staff.length})</span>
+            <span>School Staff ({staff.length})</span>
           </button>
         </div>
 

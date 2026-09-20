@@ -481,7 +481,7 @@ export default function StaffPortalClient({
   // Lesson Note Handlers
   const handleSaveLessonNote = (status: "DRAFT" | "SUBMITTED") => {
     if (!staffProfile?.id) {
-      alert("Faculty profile not resolved. Please contact administrator.");
+      alert("Staff profile not resolved. Please contact administrator.");
       return;
     }
     if (!lessonFormData.topic || !lessonFormData.objectives) {
@@ -528,7 +528,7 @@ export default function StaffPortalClient({
   // Leave Request Handler
   const handleSaveLeaveRequest = () => {
     if (!staffProfile?.id) {
-      alert("Faculty profile not resolved. Please contact administrator.");
+      alert("Staff profile not resolved. Please contact administrator.");
       return;
     }
     if (!leaveFormData.reason.trim()) {
@@ -581,7 +581,7 @@ export default function StaffPortalClient({
           { id: "gradebook", label: "Gradebook & Assessments", icon: Award },
           { id: "schedule", label: "Teaching Schedule", icon: Calendar },
           { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen },
-          { id: "leaves", label: "Faculty Leave Requests", icon: Clock },
+          { id: "leaves", label: "Staff Leave Requests", icon: Clock },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
@@ -615,7 +615,7 @@ export default function StaffPortalClient({
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold mb-3 border border-emerald-500/30">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>{staffRole} • Active Faculty</span>
+                  <span>{staffRole} • Active Staff</span>
                 </div>
                 <h2 className="text-2xl sm:text-4xl font-black tracking-tight mb-2">
                   Welcome, {staffName}
@@ -896,7 +896,7 @@ export default function StaffPortalClient({
             <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
               <span><strong>Class / Arm:</strong> {selectedClass}</span>
               <span><strong>Date:</strong> {attendanceDate}</span>
-              <span><strong>Faculty:</strong> {staffName} ({staffRole})</span>
+              <span><strong>Staff Member:</strong> {staffName} ({staffRole})</span>
             </div>
           </div>
 
@@ -1812,10 +1812,10 @@ export default function StaffPortalClient({
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <Clock className="w-5 h-5 text-indigo-600" />
-                <span>Faculty Leave Applications & Absence</span>
+                <span>Staff Leave Applications & Absence</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                Apply for statutory faculty leave, assign relief teachers for class coverage, and track approval status.
+                Apply for statutory staff leave, assign relief teachers for class coverage, and track approval status.
               </p>
             </div>
             <button
@@ -1894,7 +1894,7 @@ export default function StaffPortalClient({
                     <tr>
                       <th className="px-6 py-3.5">Leave Type</th>
                       <th className="px-6 py-3.5">Duration</th>
-                      <th className="px-6 py-3.5">Relief Faculty</th>
+                      <th className="px-6 py-3.5">Relief Staff / Teacher</th>
                       <th className="px-6 py-3.5">Reason</th>
                       <th className="px-6 py-3.5 text-center">Status</th>
                       <th className="px-6 py-3.5">Admin Remarks</th>
@@ -2180,7 +2180,7 @@ export default function StaffPortalClient({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
-                    Faculty Leave Application
+                    Staff Leave Application
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
                     Formal notice for statutory or medical absence

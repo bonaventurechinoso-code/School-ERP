@@ -169,7 +169,7 @@ export default function TimetableView({
               onChange={(e) => setFilterTeacher(e.target.value)}
               className="w-full border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
             >
-              <option value="ALL">All Faculty ({staff.length})</option>
+              <option value="ALL">All Teachers ({staff.length})</option>
               {staff.map((s) => (
                 <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
               ))}
@@ -280,7 +280,7 @@ export default function TimetableView({
               onChange={e => setFormData({...formData, staffId: e.target.value})}
             >
               <option value="">Select Teacher...</option>
-              {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName} ({s.role || "Faculty"})</option>)}
+              {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName} ({s.role || "Teacher"})</option>)}
             </select>
           </div>
 

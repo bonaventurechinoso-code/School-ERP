@@ -127,7 +127,7 @@ export default async function StaffPage({
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-            Staff Directory & Faculty Management
+            Staff Directory & Personnel Management
           </h2>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
             Manage teachers, administrative officers, TRCN credentials, and daily attendance register.
@@ -168,19 +168,19 @@ export default async function StaffPage({
           <p className="text-3xl font-black text-slate-800">{totalActive}</p>
         </div>
 
-        {/* Teachers / Faculty */}
+        {/* Teaching Staff */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-indigo-500">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Faculty & Teachers</span>
+            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TEACHING STAFF</span>
             <UserCheck className="w-4 h-4 text-indigo-500" />
           </div>
           <p className="text-3xl font-black text-slate-800">{teachersCount}</p>
         </div>
 
-        {/* Administrative & Support */}
+        {/* Non-Teaching Staff */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-blue-500">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Admin & Support</span>
+            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">NON-TEACHING STAFF</span>
             <Briefcase className="w-4 h-4 text-blue-500" />
           </div>
           <p className="text-3xl font-black text-slate-800">{adminsCount}</p>

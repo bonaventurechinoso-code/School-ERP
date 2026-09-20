@@ -72,8 +72,8 @@ export default function StaffDepartmentModal({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black">Academic & Admin Departments</h3>
-              <p className="text-xs text-slate-400">Group faculty and assign departmental responsibilities.</p>
+              <h3 className="text-base font-black">Staff Units & Academic Departments</h3>
+              <p className="text-xs text-slate-400">Group teaching and non-teaching staff into academic units.</p>
             </div>
           </div>
           <button
@@ -98,7 +98,7 @@ export default function StaffDepartmentModal({
           {/* CREATE FORM */}
           <form onSubmit={handleCreate} className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-              Create New Department
+              Create New Unit / Department
             </label>
             <div className="flex gap-2">
               <input

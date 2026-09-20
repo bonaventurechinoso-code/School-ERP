@@ -1268,7 +1268,7 @@ export default function StaffProfileDrawer({
 
         {/* BOTTOM DRAWER FOOTER */}
         <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>{schoolName} • Faculty Management Portal</span>
+          <span>{schoolName} • Staff Management Portal</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition"
@@ -1368,7 +1368,7 @@ export default function StaffProfileDrawer({
                     {schoolName}
                   </h2>
                   <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
-                    Faculty Human Resources &amp; Bursary Division • {schoolDomain}.schoolerp.ng
+                    Human Resources &amp; Bursary Division • {schoolDomain}.schoolerp.ng
                   </p>
                   <div className="inline-block mt-3 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-700">
                     Official Monthly Payslip &amp; Remuneration Voucher
@@ -1392,9 +1392,9 @@ export default function StaffProfileDrawer({
                     <p className="text-slate-500 font-mono text-[11px] mt-0.5">ID: {staffEmployeeId}</p>
                   </div>
                   <div>
-                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">Faculty Designation</span>
+                    <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">Staff Designation</span>
                     <p className="font-bold text-slate-800">{profileData?.role}</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">{profileData?.department?.name || "General Faculty"}</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{profileData?.department?.name || "General Staff"}</p>
                   </div>
                   <div>
                     <span className="text-slate-400 block mb-0.5 font-medium uppercase text-[10px]">TRCN Category &amp; License</span>

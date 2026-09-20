@@ -79,7 +79,7 @@ export default async function HRPayrollPage({
               <h3 className="text-lg font-bold text-slate-800">Add Academic Department</h3>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              Group faculty and non-teaching personnel into academic departments (e.g., Mathematics, Sciences, Admin).
+              Group teaching and non-teaching staff into academic units & departments (e.g., Mathematics, Sciences, Admin).
             </p>
           </div>
 

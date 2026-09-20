@@ -71,7 +71,7 @@ export default function MessageLogView({
       name: "Term-End Resumption Notice",
       subject: "Official Notice: Resumption Date for Upcoming Academic Term",
       recipientType: "ALL",
-      body: "Dear Parents, Students, and Faculty,\n\nPlease be informed that academic activities for the upcoming term will officially resume on Monday at 07:45 AM prompt. All students are expected to report in complete, approved school uniforms with required learning materials.\n\nWe look forward to a successful and productive academic session."
+      body: "Dear Parents, Students, and Staff,\n\nPlease be informed that academic activities for the upcoming term will officially resume on Monday at 07:45 AM prompt. All students are expected to report in complete, approved school uniforms with required learning materials.\n\nWe look forward to a successful and productive academic session."
     },
     {
       name: "PTA General Meeting Invitation",
@@ -274,7 +274,7 @@ export default function MessageLogView({
               <option value="ALL">All Recipients</option>
               <option value="STUDENT">Students</option>
               <option value="PARENT">Parents / Guardians</option>
-              <option value="STAFF">Faculty & Staff</option>
+              <option value="STAFF">School Staff</option>
             </select>
           </div>
 
@@ -361,7 +361,7 @@ export default function MessageLogView({
               >
                 <option value="STUDENT">Student</option>
                 <option value="PARENT">Parent / Guardian</option>
-                <option value="STAFF">Faculty / Staff Member</option>
+                <option value="STAFF">Staff Member</option>
               </select>
             </div>
 
@@ -383,7 +383,7 @@ export default function MessageLogView({
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Faculty & Staff">
+                <optgroup label="School Staff">
                   {staff.map((st) => (
                     <option key={st.id} value={st.id}>
                       {st.firstName} {st.lastName} ({st.role}) – {st.email}

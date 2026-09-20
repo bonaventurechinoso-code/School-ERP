@@ -16,7 +16,7 @@ export default async function MyClassPage() {
   } catch {
     overview = {
       teacher: {
-        staffName: "Faculty Educator",
+        staffName: "Class Teacher",
         staffRole: "Class Teacher",
         schoolName: "Greenwood Academy",
       },

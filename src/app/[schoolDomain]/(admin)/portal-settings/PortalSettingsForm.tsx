@@ -131,9 +131,9 @@ export default function PortalSettingsForm({
     },
     {
       key: "staff",
-      title: "Faculty & Staff Sign-In",
+      title: "Staff & Teacher Sign-In",
       description: "Dedicated portal login gateway for teachers, administrative staff, and management.",
-      badge: "Faculty",
+      badge: "Staff",
       badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800",
       icon: ShieldCheck,
       path: `/${subdomain}/login`,

@@ -138,7 +138,7 @@ export default async function PublicGuestPortalPage({
               href={`/${school.subdomain}/login`}
               className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
             >
-              <span>Faculty & Administrator Sign In</span>
+              <span>Staff & Administrator Sign In</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -301,7 +301,7 @@ export default async function PublicGuestPortalPage({
                 href={`/${school.subdomain}/login`}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/20 transition backdrop-blur-xs font-semibold"
               >
-                <span>Staff & Faculty Sign In</span>
+                <span>Staff & Teacher Sign In</span>
               </Link>
               <span className="text-slate-600 hidden sm:inline">•</span>
               <Link 

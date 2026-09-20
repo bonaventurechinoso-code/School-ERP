@@ -323,7 +323,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
 
           <div>
             <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
-              Academic Faculty / Tier
+              Academic Tier / Level
             </span>
             <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
               {tierName}

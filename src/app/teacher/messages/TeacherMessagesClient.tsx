@@ -250,7 +250,7 @@ export function TeacherMessagesClient({
                 >
                   <option value="PARENT">Parent / Guardian</option>
                   <option value="STUDENT">Student</option>
-                  <option value="STAFF">Colleague Faculty</option>
+                  <option value="STAFF">Colleague Teacher / Staff</option>
                 </select>
               </div>
 
