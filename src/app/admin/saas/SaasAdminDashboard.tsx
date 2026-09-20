@@ -26,7 +26,9 @@ import {
   X,
   Lock,
   Info,
+  Calendar,
 } from "lucide-react";
+
 import {
   toggleTenantStatus,
   seedBaselinePlans,
@@ -77,6 +79,9 @@ interface TenantItem {
   collection30Days?: number;
   commission30Days?: number;
   commissionPercent?: number;
+  monthlyRate?: number;
+  nextRenewalDate?: string | null;
+  subscriptionStatus?: string;
   plan: {
     id: string;
     name: string;
@@ -91,6 +96,7 @@ interface TenantItem {
     trialEndsAt: string | null;
   } | null;
 }
+
 
 interface MetricsData {
   platformWallet: {
@@ -599,14 +605,14 @@ export default function SaasAdminDashboard({
             </span>
             <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-zinc-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              CBN Model A Settlement Routing Active
+              100% Manual Subscription Framework (0% Transaction Fees)
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1.5">
-            Super Admin Tenant & Settlement Console
+            Super Admin SaaS Subscription Console
           </h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Manage institutional tenants, Paystack split routing, and Nigerian settlement bank destinations
+            Manage institutional tenants, flat monthly SaaS portal subscriptions, and platform corporate collection account
           </p>
         </div>
 
@@ -632,7 +638,7 @@ export default function SaasAdminDashboard({
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. MANDATORY CBN MODEL A DISCLAIMER BANNER                                */}
+      {/* 1. MANDATORY 0% FEE COMPLIANCE BANNER                                     */}
       {/* ========================================================================= */}
       <div className="p-4 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-zinc-900 shadow-xs flex items-start gap-3.5">
         <div className="w-9 h-9 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
@@ -641,19 +647,19 @@ export default function SaasAdminDashboard({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-200">
-              CBN Regulatory Compliance Architecture
+              100% Manual SaaS Subscription & Payment Verification Framework
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
-              Model A Certified
+              0% Transaction Fees
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
-            <strong className="text-blue-700 dark:text-blue-400">Model A Compliance Mode:</strong> Funds are routed directly via Paystack split-payment features to the specified settlement bank accounts below. The platform does not hold user balances.
+            <strong className="text-blue-700 dark:text-blue-400">Strict Scope Boundary:</strong> The platform does not process school fees or take transaction percentages (0% charges). Schools collect student tuition independently outside the platform directly to their school bank accounts. The platform handles and tracks only the tenant&apos;s flat monthly SaaS portal subscription manually.
           </p>
         </div>
       </div>
 
-      {/* Top Level Financial & Status KPIs (Model A Compliant: Read-only Mirror) */}
+      {/* Top Level Financial & Status KPIs (Flat SaaS Management) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Platform Revenue */}
         <div className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative overflow-hidden group hover:border-slate-300 dark:hover:border-zinc-700 transition">
@@ -671,16 +677,16 @@ export default function SaasAdminDashboard({
             </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 flex items-center gap-1">
               <Coins className="w-3.5 h-3.5 text-emerald-500" />
-              Cumulative commissions & subscription settlements
+              Cumulative flat SaaS portal subscriptions
             </p>
           </div>
         </div>
 
-        {/* Platform Commission Accruals (Read-only Mirror) */}
+        {/* Corporate Account Balance */}
         <div className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative overflow-hidden group hover:border-slate-300 dark:hover:border-zinc-700 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
-              Corporate Split Accrual
+              Corporate Account Balance
             </span>
             <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               <Landmark className="w-4 h-4" />
@@ -743,7 +749,7 @@ export default function SaasAdminDashboard({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. SUPER ADMIN PLATFORM SETTLEMENT BANK CONFIGURATION PANEL              */}
+      {/* 2. SUPER ADMIN PLATFORM SUBSCRIPTION CORPORATE ACCOUNT CONFIGURATION     */}
       {/* ========================================================================= */}
       <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-zinc-800">
@@ -753,10 +759,10 @@ export default function SaasAdminDashboard({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-                Platform SaaS Revenue Bank (Super Admin)
+                Platform Subscription Corporate Account (Super Admin)
               </h2>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                All platform SaaS subscription billing (₦10k/month per school) settles into this verified corporate bank account. School fees remain 100% direct to schools with 0% split fee.
+                Corporate bank account where tenants manually pay their flat monthly software fee. Platform charges 0% transaction fees on school tuition.
               </p>
             </div>
           </div>
@@ -774,6 +780,7 @@ export default function SaasAdminDashboard({
             </span>
           </div>
         </div>
+
 
         {/* Configuration Form */}
         <form onSubmit={handleSavePlatformBank} className="mt-5 space-y-4">
@@ -890,7 +897,7 @@ export default function SaasAdminDashboard({
         </div>
 
         {/* ======================================================================= */}
-        {/* 3. TENANTS TABLE: STRICT CBN MODEL A COLUMN ORDER                       */}
+        {/* 3. TENANTS TABLE: 100% MANUAL SAAS SUBSCRIPTION FRAMEWORK              */}
         {/* ======================================================================= */}
         <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
@@ -902,23 +909,19 @@ export default function SaasAdminDashboard({
                   {/* Column 2 */}
                   <th className="py-3.5 px-4">Plan & Subscription</th>
                   {/* Column 3 */}
-                  <th className="py-3.5 px-4">Fee Collection Mode</th>
-                  {/* Column 4: Editable Settlement Bank */}
-                  <th className="py-3.5 px-4">Settlement Bank</th>
-                  {/* Column 5: Pending Verifications */}
-                  <th className="py-3.5 px-4">Pending Verifications</th>
-                  {/* Column 6: Verified Collections */}
-                  <th className="py-3.5 px-4">Verified Revenue (30d)</th>
-                  {/* Column 7 */}
-                  <th className="py-3.5 px-4">Status</th>
-                  {/* Column 8 */}
+                  <th className="py-3.5 px-4">Monthly Rate</th>
+                  {/* Column 4 */}
+                  <th className="py-3.5 px-4">Subscription Status</th>
+                  {/* Column 5 */}
+                  <th className="py-3.5 px-4">Next Renewal Date</th>
+                  {/* Column 6 */}
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/70">
                 {filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-zinc-500">
+                    <td colSpan={6} className="py-12 text-center text-slate-400 dark:text-zinc-500">
                       <Building2 className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-zinc-700" />
                       <p className="font-semibold text-sm">No tenants match the specified criteria</p>
                       <p className="text-xs text-slate-400 mt-0.5">
@@ -928,19 +931,29 @@ export default function SaasAdminDashboard({
                   </tr>
                 ) : (
                   filteredTenants.map((tenant) => {
-                    const isActive = tenant.status === "ACTIVE";
-                    const isSuspended = tenant.status === "SUSPENDED";
+                    const effectiveStatus = (
+                      tenant.subscriptionStatus ||
+                      tenant.subscription?.status ||
+                      tenant.status ||
+                      "INACTIVE"
+                    ).toUpperCase();
+                    const isActive = effectiveStatus === "ACTIVE";
+                    const isSuspended = effectiveStatus === "SUSPENDED" || tenant.status === "SUSPENDED";
+                    const isPastDue = effectiveStatus === "PAST_DUE";
                     const portalUrl = `/${tenant.subdomain}`;
-                    const effectiveBankName = tenant.settlementBankName || tenant.paystackSettlementBank?.bankName;
-                    const effectiveAccNo = tenant.settlementAccountNumber || tenant.paystackSettlementBank?.accountNumber;
-                    const effectiveAccName = tenant.settlementAccountName || (tenant.paystackSettlementBank as any)?.accountName;
+                    const monthlyRate =
+                      tenant.monthlyRate ||
+                      tenant.subscription?.amountDue ||
+                      tenant.plan?.priceNgn ||
+                      0;
+                    const renewalDateObj = tenant.nextRenewalDate || tenant.subscription?.endsAt;
 
                     return (
                       <tr
                         key={tenant.id}
                         className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition group"
                       >
-                        {/* 1. School & Subdomain */}
+                        {/* 1. SCHOOL & SUBDOMAIN */}
                         <td className="py-4 px-4">
                           <div className="font-bold text-slate-900 dark:text-white text-sm">
                             {tenant.schoolName}
@@ -957,124 +970,53 @@ export default function SaasAdminDashboard({
                           </div>
                         </td>
 
-                        {/* 2. Plan & Subscription */}
+                        {/* 2. PLAN & SUBSCRIPTION */}
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded-md font-semibold text-[11px] bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700">
-                              {tenant.plan?.name || "Unassigned"}
+                              {tenant.plan?.name || "Standard Secondary Tier"}
                             </span>
-                            {tenant.plan && (
-                              <span className="text-slate-500 dark:text-zinc-400 font-medium text-[11px]">
-                                {formatNgn(tenant.plan.priceNgn)} / {tenant.plan.billingCycle}
-                              </span>
-                            )}
+                            <span className="text-slate-500 dark:text-zinc-400 font-medium text-[11px]">
+                              / {tenant.plan?.billingCycle || "monthly"}
+                            </span>
                           </div>
-                          {tenant.subscription && (
-                            <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              <span className="capitalize">{tenant.subscription.status}</span>
-                              {tenant.subscription.trialEndsAt && (
-                                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                                  (Trial until {new Date(tenant.subscription.trialEndsAt).toLocaleDateString()})
-                                </span>
-                              )}
+                          {tenant.subscription?.trialEndsAt && (
+                            <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-medium">
+                              <Clock className="w-3 h-3 text-amber-500" />
+                              <span>Trial until {new Date(tenant.subscription.trialEndsAt).toLocaleDateString()}</span>
                             </div>
                           )}
                         </td>
 
-                        {/* 3. Fee Collection Mode */}
+                        {/* 3. MONTHLY RATE */}
                         <td className="py-4 px-4">
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 font-bold text-[10px] uppercase tracking-wider">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              Manual Transfer
-                            </span>
-                            <div className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500">
-                              100% Direct • 0% Split
-                            </div>
+                          <div className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                            {formatNgn(monthlyRate)}
                           </div>
-                        </td>
-
-                        {/* 4. SETTLEMENT BANK */}
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-2">
-                            {effectiveBankName && effectiveAccNo ? (
-                              <div className="space-y-0.5">
-                                <div className="font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1 text-xs">
-                                  <Landmark className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                  <span>{effectiveBankName}</span>
-                                </div>
-                                <div className="font-mono text-[11px] text-slate-700 dark:text-zinc-300 font-semibold tracking-wider">
-                                  {effectiveAccNo.length >= 6
-                                    ? `${effectiveAccNo.slice(0, 3)}••••${effectiveAccNo.slice(-3)}`
-                                    : effectiveAccNo}
-                                </div>
-                                {effectiveAccName && (
-                                  <div className="text-[10px] text-slate-400 font-medium truncate max-w-[150px]">
-                                    {effectiveAccName}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 text-[11px] font-semibold">
-                                <AlertCircle className="w-3 h-3 shrink-0" />
-                                <span>Not Configured</span>
-                              </div>
-                            )}
-
-                            {/* Configure Bank Edit Trigger Button */}
-                            <button
-                              onClick={() => handleOpenTenantBankConfig(tenant)}
-                              className="inline-flex items-center gap-1 p-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-[10px] transition shrink-0 ml-1"
-                              title="Configure School Bank Account"
-                            >
-                              <Edit2 className="w-3 h-3 text-indigo-500" />
-                              <span>Configure</span>
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* 5. Pending Verifications */}
-                        <td className="py-4 px-4">
-                          {(tenant.pendingVerificationsCount || 0) > 0 ? (
-                            <Link
-                              href={`/${tenant.subdomain}/finance/verifications`}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 font-bold text-xs hover:scale-105 transition"
-                            >
-                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                              <span>{tenant.pendingVerificationsCount} Pending</span>
-                            </Link>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs font-medium">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                              0 Pending
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 6. Last 30 Days Verified Revenue */}
-                        <td className="py-4 px-4">
-                          <div className="font-black text-slate-900 dark:text-white text-sm">
-                            {formatNgn(tenant.collection30Days || 0)}
-                          </div>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase">
-                            Verified Tuition
+                          <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wide">
+                            Flat Software Rate
                           </span>
                         </td>
 
-                        {/* 7. Status */}
+                        {/* 4. SUBSCRIPTION STATUS */}
                         <td className="py-4 px-4">
                           {isActive && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                               <CheckCircle2 className="w-3 h-3" />
-                              Active
+                              ACTIVE
+                            </span>
+                          )}
+                          {isPastDue && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              <Clock className="w-3 h-3" />
+                              PAST DUE
                             </span>
                           )}
                           {isSuspended && (
                             <div>
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
                                 <Ban className="w-3 h-3" />
-                                Suspended
+                                SUSPENDED
                               </span>
                               {tenant.suspendedReason && (
                                 <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 truncate max-w-[140px]" title={tenant.suspendedReason}>
@@ -1083,15 +1025,34 @@ export default function SaasAdminDashboard({
                               )}
                             </div>
                           )}
-                          {tenant.status === "PENDING" && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          {!isActive && !isPastDue && !isSuspended && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
                               <Clock className="w-3 h-3" />
-                              Pending
+                              {effectiveStatus}
                             </span>
                           )}
                         </td>
 
-                        {/* 8. Action Buttons */}
+                        {/* 5. NEXT RENEWAL DATE */}
+                        <td className="py-4 px-4">
+                          <div className="font-mono text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            <span>
+                              {renewalDateObj
+                                ? new Date(renewalDateObj).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "Pending Renewal"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 block mt-0.5">
+                            Manual Invoice Cycle
+                          </span>
+                        </td>
+
+                        {/* 6. ACTIONS */}
                         <td className="py-4 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {/* Portal Access */}
@@ -1173,6 +1134,7 @@ export default function SaasAdminDashboard({
             </table>
           </div>
         </div>
+
       </div>
 
       {/* Activity & Audit Feeds */}
@@ -1191,7 +1153,7 @@ export default function SaasAdminDashboard({
           <div className="mt-4 space-y-2.5">
             {metrics.recentTransactions.length === 0 ? (
               <p className="text-xs text-slate-400 dark:text-zinc-500 py-6 text-center">
-                No platform transactions logged yet. Transactions populate via Paystack splits and fee settlements.
+                No platform transactions logged yet. Records populate via manual flat SaaS subscriptions and renewals.
               </p>
             ) : (
               metrics.recentTransactions.map((tx) => (

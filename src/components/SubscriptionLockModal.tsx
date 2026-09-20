@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useTenant } from "@/lib/tenant-context";
-import { AlertTriangle, PhoneCall, RefreshCcw } from "lucide-react";
-import { usePaystackPayment } from "react-paystack";
+import { AlertTriangle, PhoneCall, Landmark, Copy, Check } from "lucide-react";
 
 export function SubscriptionLockModal() {
   const tenant = useTenant();
   const [isLocked, setIsLocked] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!tenant) return;
@@ -29,49 +28,11 @@ export function SubscriptionLockModal() {
     }
   }, [tenant]);
 
-  const initializePayment = usePaystackPayment({
-    reference: (new Date()).getTime().toString(),
-    email: "admin@" + tenant.subdomain + ".com",
-    amount: 50000 * 100, // Replace with dynamic calculation from your backend
-    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_KEY || "",
-  });
-
-  const handleRenew = async () => {
-    try {
-      setIsProcessing(true);
-      
-      // Hit backend checkout controller to get real initialized params
-      const res = await fetch("/api/v1/payments/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: tenant.id })
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        alert("Failed to initialize payment: " + (data.error || "Unknown error"));
-        setIsProcessing(false);
-        return;
-      }
-
-      // Trigger Paystack modal with backend data
-      initializePayment({
-        onSuccess: (response: any) => {
-           // Success callback - let webhook handle DB, just reload page
-           window.location.reload();
-        },
-        onClose: () => {
-           // Close callback
-           setIsProcessing(false);
-        }
-      });
-      
-    } catch (err) {
-      console.error(err);
-      alert("An error occurred starting the renewal process.");
-    } finally {
-      setIsProcessing(false);
+  const handleCopyAccount = (acc: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(acc);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
   };
 
@@ -81,37 +42,72 @@ export function SubscriptionLockModal() {
   return (
     // Unclosable full-screen backdrop blurring the underlying admin panel layout
     <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
-      <div className="bg-white dark:bg-zinc-950 p-10 rounded-3xl shadow-2xl max-w-xl w-full mx-4 text-center border border-slate-200 dark:border-zinc-800 animate-in zoom-in-95 duration-300">
+      <div className="bg-white dark:bg-zinc-950 p-8 sm:p-10 rounded-3xl shadow-2xl max-w-xl w-full mx-4 text-center border border-slate-200 dark:border-zinc-800 animate-in zoom-in-95 duration-300">
         
         {/* Warning Icon Layer */}
-        <div className="mx-auto w-20 h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mb-6 shadow-inner">
-          <AlertTriangle className="w-10 h-10" />
+        <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mb-5 shadow-inner">
+          <AlertTriangle className="w-8 h-8 sm:w-10 sm:h-10" />
         </div>
         
-        <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">
-          Access Paused for {tenant.name}
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
+          SaaS Access Paused for {tenant.name}
         </h2>
         
-        <p className="text-slate-600 dark:text-slate-400 text-lg mb-10 leading-relaxed font-medium">
-          Your institutional billing cycle has ended. Please renew your subscription to reactivate standard operations for your staff, educators, and student lifecycle portals immediately.
+        <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base mb-6 leading-relaxed font-medium">
+          Your flat monthly SaaS portal subscription has expired. Please manually transfer your subscription fee directly to the platform corporate account below to restore instant system operations.
         </p>
+
+        {/* Platform Manual Transfer Account Details Card */}
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800 text-left mb-6 space-y-2.5">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <Landmark className="w-4 h-4 text-indigo-500" />
+              Platform Corporate Account
+            </span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold">0% Fee Verified</span>
+          </div>
+
+          <div className="flex items-center justify-between bg-white dark:bg-zinc-950 p-3 rounded-xl border border-slate-200/80 dark:border-zinc-800">
+            <div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Bank & Account Number</div>
+              <div className="text-base font-mono font-black text-slate-900 dark:text-white tracking-wide">
+                Wema Bank • 0123456789
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleCopyAccount("0123456789")}
+              className="p-2 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+              title="Copy Account Number"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-zinc-400 italic">
+            *Please include your school subdomain (<strong>{tenant.subdomain}</strong>) as payment reference/narration.
+          </p>
+        </div>
         
         {/* Action Controls */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <button 
-            onClick={handleRenew}
-            disabled={isProcessing}
-            className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-70 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg shadow-amber-600/30 flex items-center justify-center gap-2"
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <a
+            href="mailto:billing@schoolerp.com?subject=SaaS%20Subscription%20Renewal%20Proof"
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
           >
-            {isProcessing ? <RefreshCcw className="w-5 h-5 animate-spin" /> : "Renew Subscription"}
-          </button>
+            Submit Transfer Receipt
+          </a>
           
-          <button className="w-full sm:w-auto bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-700 dark:text-slate-300 px-8 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2">
+          <a
+            href="tel:+2348000000000"
+            className="w-full sm:w-auto bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-700 dark:text-slate-300 px-6 py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+          >
             <PhoneCall className="w-4 h-4" />
-            Contact Platform Support
-          </button>
+            Contact Support
+          </a>
         </div>
       </div>
     </div>
   );
 }
+

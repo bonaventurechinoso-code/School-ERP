@@ -102,7 +102,7 @@ export default async function AdminDashboardPage() {
             ₦{Number(platformWallet?.totalRevenue || 0).toLocaleString()}
           </div>
           <Link href="/admin/billings" className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 inline-flex items-center gap-1 font-semibold hover:underline">
-            View Paystack Ledger <ArrowRight className="w-3 h-3" />
+            View Platform Ledger <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
 
@@ -193,13 +193,13 @@ export default async function AdminDashboardPage() {
                 <TrendingUp className="w-4 h-4" />
                 <span className="text-[11px] font-bold uppercase tracking-wider">Revenue Settlement</span>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium">Paystack Live</span>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Manual Verified</span>
             </div>
             <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
               ₦{Number(platformWallet?.totalRevenue || 0).toLocaleString()} Verified Total
             </p>
             <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-              Automated multi-tenant splits and platform commission settlement.
+              Flat monthly SaaS portal subscriptions (0% fee model).
             </p>
           </div>
           <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">

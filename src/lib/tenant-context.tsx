@@ -26,7 +26,12 @@ export interface TenantData {
   activeTiers?: string[];
   isMultiDbEnabled?: boolean;
   tierDatabases?: Array<{ tierName: string; databaseName: string; databaseUrl: string }>;
+  platformBank?: {
+    bankName: string;
+    accountNumber: string;
+  };
 }
+
 
 // ------------------------------------------------------
 // 2. URL EXTRACTION UTILITY

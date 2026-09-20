@@ -135,7 +135,7 @@ export default async function TenantsPage() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 text-xs font-semibold shadow-xs transition"
           >
             <Building2 className="w-3.5 h-3.5" />
-            Open SaaS Paystack View
+            Open SaaS Console
           </Link>
         </div>
       </div>

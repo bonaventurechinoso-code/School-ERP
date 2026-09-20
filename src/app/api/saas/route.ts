@@ -80,21 +80,11 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    // 3. Concurrently fetch all tenants and pre-aggregated 30-day collections
-    let [tenants, thirtyDayAggregates] = await Promise.all([
-      prisma.tenant.findMany({
-        orderBy: { createdAt: "desc" },
-        select: tenantSelect,
-      }),
-      prisma.walletTransaction.groupBy({
-        by: ["tenantId"],
-        _sum: { amount: true },
-        where: {
-          createdAt: { gte: thirtyDaysAgo },
-          type: "CREDIT",
-        },
-      }),
-    ]);
+    // 3. Fetch all tenants with plan and subscription telemetry
+    let tenants = await prisma.tenant.findMany({
+      orderBy: { createdAt: "desc" },
+      select: tenantSelect,
+    });
 
     if (tenants.length === 0) {
       const defaultPlan = await prisma.plan.findFirst();
@@ -109,14 +99,6 @@ export async function GET(req: NextRequest) {
             institutionTypes: ["PRIMARY", "SECONDARY"],
             planId: defaultPlan?.id || null,
             status: "ACTIVE",
-            paystackSubaccountCode: `ACCT_${s.subdomain.toUpperCase()}_001`,
-            paystackSplitCode: `SPLIT_${s.subdomain.toUpperCase()}_001`,
-            paystackSettlementBank: {
-              bankCode: "044",
-              bankName: "Access Bank",
-              accountNumber: "0123456789",
-              updatedAt: new Date().toISOString(),
-            },
           },
         }).catch(() => {});
       }
@@ -127,60 +109,56 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 4. Map aggregated 30-day collections in O(1) time without sequential DB queries
-    const collectionsMap = new Map<string, number>();
-    for (const agg of thirtyDayAggregates) {
-      collectionsMap.set(agg.tenantId, Number(agg._sum.amount || 0));
-    }
-
     const formattedTenants = tenants.map((t) => {
-      const raw30DaysCollection = collectionsMap.get(t.id) || 0;
-      const commissionRate = t.plan?.commissionPercent ?? 2.0;
-      const raw30DaysCommission =
-        Math.round(raw30DaysCollection * (commissionRate / 100) * 100) / 100;
+      const activeSub = t.subscriptions[0];
+      const monthlyRate = Number(
+        activeSub?.amountDue ?? t.plan?.priceNgn ?? 0
+      );
+      const nextRenewalDate = activeSub?.endsAt
+        ? activeSub.endsAt.toISOString()
+        : null;
+      const subscriptionStatus =
+        activeSub?.status?.toUpperCase() || t.status?.toUpperCase() || "INACTIVE";
 
-        return {
-          id: t.id,
-          schoolName: t.schoolName,
-          subdomain: t.subdomain,
-          customDomain: t.customDomain,
-          adminEmail: t.adminEmail,
-          contactPhone: t.contactPhone,
-          institutionTypes: t.institutionTypes,
-          status: t.status,
-          kycStatus: t.kycStatus,
-          subaccount_code: t.paystackSubaccountCode,
-          paystackSubaccountCode: t.paystackSubaccountCode,
-          paystackSplitCode: t.paystackSplitCode,
-          isImpersonationAllowed: t.isImpersonationAllowed,
-          suspendedReason: t.suspendedReason,
-          suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,
-          createdAt: t.createdAt.toISOString(),
-          computed30DaysCollection: raw30DaysCollection,
-          computed30DaysCommission: raw30DaysCommission,
-          commissionPercent: commissionRate,
-          paystackSettlementBank: t.paystackSettlementBank as any,
-          plan: t.plan
-            ? {
-                id: t.plan.id,
-                name: t.plan.name,
-                priceNgn: t.plan.priceNgn,
-                billingCycle: t.plan.billingCycle,
-                commissionPercent: t.plan.commissionPercent,
-              }
-            : null,
-          subscription: t.subscriptions[0]
-            ? {
-                status: t.subscriptions[0].status,
-                amountDue: Number(t.subscriptions[0].amountDue),
-                endsAt: t.subscriptions[0].endsAt.toISOString(),
-                trialEndsAt: t.subscriptions[0].trialEndsAt
-                  ? t.subscriptions[0].trialEndsAt.toISOString()
-                  : null,
-              }
-            : null,
-        };
-      });
+      return {
+        id: t.id,
+        schoolName: t.schoolName,
+        subdomain: t.subdomain,
+        customDomain: t.customDomain,
+        adminEmail: t.adminEmail,
+        contactPhone: t.contactPhone,
+        institutionTypes: t.institutionTypes,
+        status: t.status,
+        kycStatus: t.kycStatus,
+        subscriptionStatus,
+        monthlyRate,
+        nextRenewalDate,
+        isImpersonationAllowed: t.isImpersonationAllowed,
+        suspendedReason: t.suspendedReason,
+        suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,
+        createdAt: t.createdAt.toISOString(),
+        plan: t.plan
+          ? {
+              id: t.plan.id,
+              name: t.plan.name,
+              priceNgn: t.plan.priceNgn,
+              billingCycle: t.plan.billingCycle,
+              commissionPercent: 0,
+            }
+          : null,
+        subscription: activeSub
+          ? {
+              status: activeSub.status,
+              amountDue: Number(activeSub.amountDue),
+              endsAt: activeSub.endsAt.toISOString(),
+              trialEndsAt: activeSub.trialEndsAt
+                ? activeSub.trialEndsAt.toISOString()
+                : null,
+            }
+          : null,
+      };
+    });
+
 
     return NextResponse.json({
       success: true,

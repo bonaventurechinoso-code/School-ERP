@@ -141,3 +141,47 @@ export async function getCachedSchool(subdomain: string) {
     },
   });
 }
+
+/**
+ * Pre-fetches and caches platform corporate settlement bank configuration directly in Redis.
+ * Used to display corporate subscription payment details across tenant workspaces.
+ */
+export async function getCachedPlatformBank() {
+  const cacheKey = "cache:platform:bank:global";
+
+  return cacheAside({
+    key: cacheKey,
+    ttlSeconds: 3600,
+    fetchFn: async () => {
+      try {
+        const { prisma } = await import("./prisma");
+        let bank = await prisma.platformBankConfig.findUnique({
+          where: { id: "global" },
+        });
+        if (!bank) {
+          bank = await prisma.platformBankConfig.create({
+            data: {
+              id: "global",
+              bankCode: "035",
+              bankName: "Wema Bank",
+              accountNumber: "0123456789",
+            },
+          });
+        }
+        return {
+          bankCode: bank.bankCode || "035",
+          bankName: bank.bankName || "Wema Bank",
+          accountNumber: bank.accountNumber || "0123456789",
+        };
+      } catch (err) {
+        console.error("[CACHE] Failed to fetch platform bank config:", err);
+        return {
+          bankCode: "035",
+          bankName: "Wema Bank",
+          accountNumber: "0123456789",
+        };
+      }
+    },
+  });
+}
+

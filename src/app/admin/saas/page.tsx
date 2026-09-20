@@ -279,6 +279,9 @@ export default async function SaasAdminPage() {
         collection30Days: verifiedTuition30Days,
         commission30Days: 0,
         commissionPercent: 0,
+        monthlyRate: Number(activeSub?.amountDue ?? t.plan?.priceNgn ?? 0),
+        nextRenewalDate: activeSub?.endsAt ? activeSub.endsAt.toISOString() : null,
+        subscriptionStatus: activeSub?.status?.toUpperCase() || t.status?.toUpperCase() || "INACTIVE",
         plan: t.plan
           ? {
               id: t.plan.id,
@@ -301,6 +304,7 @@ export default async function SaasAdminPage() {
       };
     })
   );
+
 
   return (
     <SaasAdminDashboard

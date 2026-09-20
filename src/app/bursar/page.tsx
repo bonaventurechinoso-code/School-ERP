@@ -17,12 +17,13 @@ import {
   Copy,
 } from "lucide-react";
 
-export function formatNaira(amount: number): string {
+function formatNaira(amount: number): string {
   return `₦${(amount || 0).toLocaleString("en-NG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
+
 
 export default async function BursarDashboardPage() {
   const context = await getBursarContext();

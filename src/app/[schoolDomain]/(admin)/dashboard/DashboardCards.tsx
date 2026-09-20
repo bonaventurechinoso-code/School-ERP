@@ -192,7 +192,7 @@ export async function FinancialSummaryCard({
 }) {
   const termlyRevenue = await getTermlyRevenue(schoolId, activeTier);
   const accentColor = primaryColor || "#059669";
-  const targetFinanceUrl = subdomain ? `/${subdomain}/finance/verifications` : "/dashboard/finance";
+  const targetFinanceUrl = subdomain ? `/${subdomain}/finance` : "/dashboard/finance";
 
   return (
     <Link href={targetFinanceUrl} className="block col-span-1 active:scale-[0.98] transition-transform">
@@ -205,7 +205,7 @@ export async function FinancialSummaryCard({
         </div>
         <div className="flex items-center justify-between mb-4 relative z-10 gap-2">
           <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate pr-1">
-            Verified Revenue
+            Term Revenue
           </h3>
           <div 
             className="p-2 sm:p-2.5 rounded-xl shadow-xs shrink-0" 
@@ -218,12 +218,13 @@ export async function FinancialSummaryCard({
           ₦{termlyRevenue.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
         <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-3 block relative z-10">
-          Manually verified in your bank (0% fee)
+          Internal Fee Records (100% Direct to School Bank)
         </span>
       </div>
     </Link>
   );
 }
+
 
 /**
  * 5. Modular Data Card: Events Module

@@ -263,12 +263,37 @@ export default function Sidebar({
         )}
       </nav>
 
-      {/* Bottom Sidebar - Collection Account Mirror Container (Strictly SUPER_ADMIN & SCHOOL_ADMIN) */}
-      {isWalletAuthorized && headerContent && (
-        <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto shrink-0">
-          {headerContent}
+      {/* Bottom Sidebar - Read-Only SaaS Subscription Status Card */}
+      <div className="p-3 border-t border-slate-800/60 bg-slate-900/80 dark:bg-zinc-950/80 mt-auto shrink-0">
+        <div className="bg-slate-50 dark:bg-zinc-900/90 border border-dashed border-slate-300 dark:border-zinc-700 p-3 rounded-lg text-slate-800 dark:text-zinc-200">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+              SaaS Portal Subscription
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+          </div>
+          <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+            Status: {tenant?.subscriptionStatus || "ACTIVE"} (0% Transaction Fees)
+          </div>
+          <div className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 mt-1">
+            Renew via Transfer to: {tenant?.platformBank?.bankName || "Wema Bank"} - {tenant?.platformBank?.accountNumber || "0123456789"}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 font-medium">
+            Next Invoice Date:{" "}
+            {tenant?.subscriptionExpiresAt
+              ? new Date(tenant.subscriptionExpiresAt).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Next Month"}
+          </div>
+          <p className="text-[9px] text-slate-500 dark:text-zinc-500 mt-2 leading-tight italic border-t border-slate-200 dark:border-zinc-800 pt-1.5">
+            *Compliance: Platform processes 0% transaction collections. Schools manage independent external banking paths directly.
+          </p>
         </div>
-      )}
+      </div>
     </aside>
   );
 }
+

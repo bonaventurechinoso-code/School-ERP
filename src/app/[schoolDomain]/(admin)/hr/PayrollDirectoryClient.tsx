@@ -101,14 +101,14 @@ export default function PayrollDirectoryClient({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
         <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between min-h-[180px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase font-bold tracking-wider text-indigo-300">Collection Account (Paystack Mirror)</span>
+            <span className="text-xs uppercase font-bold tracking-wider text-indigo-300">School Operating Reserves (Direct Bank Records)</span>
             <Wallet className="w-5 h-5 text-indigo-400" />
           </div>
           <div className="my-3">
             <div className="text-3xl font-extrabold tracking-tight font-mono">
               ₦{walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-xs text-slate-400 mt-1">Held by Paystack (Titan Trust Bank) · Settles T+1 to institutional bank</div>
+            <div className="text-xs text-slate-400 mt-1">Direct School Account Records · 100% Retained at Institutional Bank</div>
           </div>
           <div>
             <a 

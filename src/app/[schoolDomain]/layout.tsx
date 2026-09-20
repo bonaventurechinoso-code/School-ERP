@@ -4,7 +4,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
 import { getSession } from "@/lib/auth";
-import { getCachedSchool } from "@/lib/cache";
+import { getCachedSchool, getCachedPlatformBank } from "@/lib/cache";
 export default async function TenantLayout({
   children,
   params,
@@ -47,14 +47,17 @@ export default async function TenantLayout({
 
   let school = null;
   let session = null;
+  let platformBank = null;
 
   try {
-    // Parallelize Redis cache metadata pre-fetch and user session authentication
-    [school, session] = await Promise.all([
+    // Parallelize Redis cache metadata pre-fetch, user session authentication, and platform corporate bank details
+    [school, session, platformBank] = await Promise.all([
       getCachedSchool(schoolDomain),
       getSession(),
+      getCachedPlatformBank(),
     ]);
   } catch (error) {
+
     console.error("Tenant metadata / session fetch error:", error);
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -136,10 +139,17 @@ export default async function TenantLayout({
     preciseTier: preciseTier,
     activeTier: activeTierCookie || (school.academicTiers[0]?.name ?? "Primary School"),
     subscriptionPlan: school.subscriptionPlan,
+    subscriptionStatus: school.subscriptionStatus || "ACTIVE",
+    subscriptionExpiresAt: school.subscriptionExpiresAt,
+    platformBank: platformBank || {
+      bankName: "Wema Bank",
+      accountNumber: "0123456789",
+    },
     branding: {
       primaryColor: "#0f172a", // Defaulting to slate-900
     },
   };
+
 
   if (session) {
     tenantData.userRole = session.role;
