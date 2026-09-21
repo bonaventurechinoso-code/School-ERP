@@ -5,6 +5,7 @@ import { useParams, usePathname } from "next/navigation";
 import { Menu, Home, Users, CreditCard, UserPlus, Briefcase } from "lucide-react";
 import AIChatWidget from "@/components/AIChatWidget";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import SubscriptionBell from "@/components/SubscriptionBell";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
 import { checkRouteAuthorization } from "@/lib/permissions";
@@ -99,6 +100,7 @@ export default function ClientLayout({
 
           {/* Top-right utility bar */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <SubscriptionBell />
             <ThemeToggle />
           </div>
         </header>

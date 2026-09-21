@@ -229,6 +229,45 @@ export default function SaasAdminDashboard({
   };
 
   // ===========================================================================
+  // HANDLER: SUPER ADMIN VERIFY OFFLINE SUBSCRIPTION PAYMENT
+  // ===========================================================================
+  const [verifyingTenantId, setVerifyingTenantId] = useState<string | null>(null);
+
+  const handleVerifyPayment = async (tenantId: string, action: "APPROVE" | "REJECT" = "APPROVE") => {
+    setVerifyingTenantId(tenantId);
+    try {
+      const res = await fetch("/api/admin/verify-subscription", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to process payment verification");
+      }
+
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === tenantId
+            ? {
+                ...t,
+                status: data.status,
+                subscriptionStatus: data.subscriptionStatus || data.status,
+                nextRenewalDate: data.nextRenewalDate || t.nextRenewalDate,
+              }
+            : t
+        )
+      );
+
+      showToast("success", data.message || "Payment verified successfully. Subscription activated for 30 days.");
+    } catch (err: any) {
+      showToast("error", err.message || "Failed to verify payment");
+    } finally {
+      setVerifyingTenantId(null);
+    }
+  };
+
+  // ===========================================================================
   // HANDLER: SAVE SUPER ADMIN PLATFORM BANK SETTINGS
   // ===========================================================================
   const handleSavePlatformBank = async (e: React.FormEvent) => {
