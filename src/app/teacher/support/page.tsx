@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import React from "react";
 import { getTeacherSupportTickets } from "../actions";
 import { TeacherSupportClient } from "./TeacherSupportClient";

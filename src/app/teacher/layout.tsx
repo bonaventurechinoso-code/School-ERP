@@ -1,7 +1,9 @@
+export const dynamic = 'force-dynamic';
 import React from "react";
 import { getTeacherContext, TeacherContext } from "./actions";
 import { TeacherShell } from "./TeacherShell";
 import { redirect } from "next/navigation";
+
 
 export const metadata = {
   title: "Teacher Portal | School ERP",
