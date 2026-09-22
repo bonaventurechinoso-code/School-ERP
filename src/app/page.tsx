@@ -13,4 +13,8 @@
  * DO NOT delete or move this file. All landing page UI/logic remains in
  * src/app/(public)/page.tsx — this file is purely a re-export gateway.
  */
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export { default } from './(public)/page';
