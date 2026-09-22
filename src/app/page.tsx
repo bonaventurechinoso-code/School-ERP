@@ -15,6 +15,13 @@
  */
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-export { default } from './(public)/page';
+export default function Page() {
+    return (
+        <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+            <h1 style={{ fontSize: '40px' }}>SchoolERP is Live!</h1>
+            <p style={{ fontSize: '20px' }}>Deploying... please wait 2 mins and refresh.</p>
+            <a href="/login" style={{ color: 'blue', fontSize: '18px' }}>Go to Login</a>
+        </div>
+    );
+}
