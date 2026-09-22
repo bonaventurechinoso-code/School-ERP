@@ -6,11 +6,8 @@ import { isFinanceRole } from "@/lib/permissions";
 import {
   StudentRosterCard,
   StaffStatusCard,
-  ApplicantPipelineCard,
   FinancialSummaryCard,
   EventsStatusCard,
-  PendingVerificationsCard,
-  CollectionBankCard,
   DashboardSkeleton,
 } from "./DashboardCards";
 import DashboardClientHeader from "./DashboardClientHeader";
@@ -50,19 +47,6 @@ export default async function TenantDashboard({
     );
   }
 
-  // Resolve active tier object to immediately supply activeTierId to the pipeline card
-  const activeTierObj = school.academicTiers.find((t) => {
-    if (activeTier) {
-      return (
-        t.name.toLowerCase() === activeTier.toLowerCase() ||
-        t.name.toLowerCase().includes(activeTier.toLowerCase())
-      );
-    }
-    return false;
-  }) || school.academicTiers[0];
-
-  const activeTierId = activeTierObj?.id;
-
   // Pre-fetch classrooms for application modal (backed by Redis cache)
   const classrooms = await getClassroomsForTenant(school.id, activeTier);
 
@@ -84,8 +68,8 @@ export default async function TenantDashboard({
       />
 
       {/* Asynchronous Modular KPI Card Grid with Independent Suspense Boundaries */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
-        
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+
         {/* 1. Student Roster Module */}
         <Suspense fallback={<DashboardSkeleton />}>
           <StudentRosterCard
@@ -105,16 +89,7 @@ export default async function TenantDashboard({
           />
         </Suspense>
 
-        {/* 3. Pending Payment Verifications Module (Links to /finance/verifications) */}
-        <Suspense fallback={<DashboardSkeleton />}>
-          <PendingVerificationsCard
-            schoolId={school.id}
-            subdomain={school.subdomain}
-            primaryColor="#d97706"
-          />
-        </Suspense>
-
-        {/* 4. Verified Revenue Module (Protected) */}
+        {/* 3. Verified Revenue Module (Protected) */}
         {isFinanceAuthorized && (
           <Suspense fallback={<DashboardSkeleton />}>
             <FinancialSummaryCard
@@ -126,7 +101,7 @@ export default async function TenantDashboard({
           </Suspense>
         )}
 
-        {/* 5. Events Module */}
+        {/* 4. Events Module */}
         <Suspense fallback={<DashboardSkeleton />}>
           <EventsStatusCard
             schoolId={school.id}
@@ -136,14 +111,6 @@ export default async function TenantDashboard({
         </Suspense>
 
       </div>
-
-      {/* 6. Direct Collection Bank Widget */}
-      <Suspense fallback={<div className="h-24 bg-white dark:bg-zinc-900 rounded-2xl animate-pulse" />}>
-        <CollectionBankCard
-          schoolId={school.id}
-          subdomain={school.subdomain}
-        />
-      </Suspense>
     </div>
   );
 }
