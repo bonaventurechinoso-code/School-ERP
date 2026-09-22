@@ -83,20 +83,42 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Get hostname from headers (e.g., 'johnali.schoolerp.com', 'localhost:3000', '10.60.230.247:3000')
+  // Get hostname from headers (e.g., 'greenwood.schoolerp.com', 'localhost:3000', '10.60.230.247:3000')
   const hostname = req.headers.get('host') || '';
 
   // Determine if there's a subdomain
   const isIPAddress = /^[0-9\.]+(:[0-9]+)?$/.test(hostname) || /^\[.*\](:[0-9]+)?$/.test(hostname);
   const isLocalhost = hostname.startsWith('localhost') || hostname.includes('127.0.0.1');
 
+  // The root/platform domain as configured in Vercel env vars.
+  // e.g. "yourapp.vercel.app" or "schoolerp.com".
+  // This prevents the middleware from mistaking the app's own Vercel hostname
+  // (e.g. parts[0] = "yourapp" from "yourapp.vercel.app") as a tenant subdomain.
+  const rootDomain = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || '').toLowerCase().replace(/^www\./, '');
+
   let subdomain = '';
   if (isIPAddress || isLocalhost) {
+    // Local / IP dev: read mockTenant query param as the tenant context
     subdomain = url.searchParams.get('mockTenant') || '';
   } else {
-    const parts = hostname.split('.');
-    if (parts.length > 2 || (parts.length === 2 && parts[1].includes('localhost'))) {
-      subdomain = parts[0];
+    const strippedHost = hostname.split(':')[0].toLowerCase(); // drop port if any
+    const normalizedRoot = rootDomain.replace(/^www\./, '');
+
+    // Only extract a subdomain if the hostname is NOT the root platform domain itself.
+    // Guards against: "yourapp.vercel.app" → parts[0]="yourapp" being treated as a tenant.
+    const isRootDomain =
+      !rootDomain ||
+      strippedHost === normalizedRoot ||
+      strippedHost === `www.${normalizedRoot}`;
+
+    if (!isRootDomain) {
+      const parts = strippedHost.split('.');
+      // A valid tenant host has the subdomain as the first segment, e.g.
+      // "greenwood.schoolerp.com" → parts = ["greenwood", "schoolerp", "com"]
+      // Require at least 3 parts so bare two-part domains are not split.
+      if (parts.length >= 3 || (parts.length === 2 && parts[1].includes('localhost'))) {
+        subdomain = parts[0];
+      }
     }
   }
 
@@ -203,7 +225,14 @@ export async function middleware(req: NextRequest) {
       // --- Dynamic Tenant Status & 14-Day Trial Expiration Evaluation ---
       if (effectiveSubdomain) {
         try {
-          const statusUrl = new URL(`/api/tenants/status?subdomain=${effectiveSubdomain}`, req.url);
+          // Use an explicit absolute base URL so the internal fetch() resolves
+          // correctly on Vercel Edge Runtime (req.url origin can be unreliable
+          // during cold starts). Falls back to req.url if env var is not set.
+          const appBaseUrl =
+            process.env.NEXTAUTH_URL ||
+            process.env.NEXT_PUBLIC_APP_URL ||
+            `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+          const statusUrl = new URL(`/api/tenants/status?subdomain=${effectiveSubdomain}`, appBaseUrl);
           const statusRes = await fetch(statusUrl, { cache: 'no-store' });
           if (statusRes.ok) {
             const statusData = await statusRes.json();
