@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import React from "react";
 import { getBursarContext, getBursarDefaultersReport } from "../actions";
 import { basePrisma } from "@/lib/tenant-prisma";
