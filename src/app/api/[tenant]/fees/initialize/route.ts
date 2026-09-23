@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
  * POST /api/[tenant]/fees/initialize
  *
  * DEPRECATED / DISABLED:
- * Direct online payment gateway (Paystack) fee collection for school tuition has been disabled.
+ * Direct online payment gateway fee collection for school tuition has been disabled.
  * The platform strictly operates under 100% Direct Manual Bank Transfer.
  * Schools collect fees directly into their own commercial bank accounts with 0% platform split.
  * Parents transfer via their bank app and upload proof of payment for bursar verification.

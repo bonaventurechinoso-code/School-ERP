@@ -291,7 +291,6 @@ export async function updateTenantSettlementBankAction(
         settlementAccountNumber: cleanAcc,
         settlementAccountName: finalAccountName,
         collectionMode: "MANUAL_BANK_TRANSFER",
-        paystackSettlementBank: bankData,
       },
     });
 

@@ -104,10 +104,10 @@ export function FeesFinanceModule({
               </div>
             </div>
 
-            {/* Model A Wema Bank Settlement Notice */}
+            {/* Direct Bank Settlement Notice */}
             <div className="px-3 py-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 flex items-center gap-2 text-[10px] text-emerald-800 dark:text-emerald-300 font-medium">
               <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Balance held by Wema Bank via Paystack - Settled daily 6am</span>
+              <span>Direct Manual Bank Transfer - Verified by School Bursar</span>
             </div>
 
             {outstandingBalance > 0 && invoices.find((inv) => inv.amountDue > inv.amountPaid) && (
@@ -395,7 +395,7 @@ export function FeesFinanceModule({
       </>
       )}
 
-      {/* 3. Model A Paystack Split Checkout Modal */}
+      {/* 3. Direct Manual Bank Transfer & Proof Upload Modal */}
       {selectedInvoice && (
         <FeePaymentCheckout
           invoice={selectedInvoice}

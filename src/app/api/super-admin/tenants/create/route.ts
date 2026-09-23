@@ -39,25 +39,14 @@ export async function POST(req: NextRequest) {
           institutionTypes,
           planId,
           status: "ACTIVE",
-          paystackSubaccountCode: subaccountCode,
-          paystackSplitCode: splitCode,
+          settlementBankName: settlementBank || "Access Bank",
+          settlementAccountNumber: accountNumber || "0123456789",
+          collectionMode: "MANUAL_BANK_TRANSFER",
         },
       });
 
       await tx.wallet.create({
         data: { tenantId: tenant.id, balance: 0.00 },
-      });
-
-      await tx.subscription.create({
-        data: {
-          tenantId: tenant.id,
-          planId,
-          status: "trialing",
-          startsAt: new Date(),
-          endsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-Day Baseline Trial Window
-          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          amountDue: plan.priceNgn,
-        },
       });
 
       await tx.auditLog.create({

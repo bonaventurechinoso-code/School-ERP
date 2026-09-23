@@ -95,12 +95,12 @@ export default async function SupportPage() {
           </div>
         </div>
 
-        {/* Paystack Gateway */}
+        {/* Manual Direct Settlements */}
         <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-zinc-300">
               <Radio className="w-4 h-4 text-emerald-500" />
-              Paystack Settlements
+              Manual Direct Settlements
             </div>
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           </div>
@@ -108,7 +108,7 @@ export default async function SupportPage() {
             Operational
           </div>
           <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-            Webhook listener responsive (200 OK)
+            0% fee direct bank transfer ledger active
           </div>
         </div>
 

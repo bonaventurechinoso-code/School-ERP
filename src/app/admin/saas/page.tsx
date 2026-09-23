@@ -60,14 +60,10 @@ export default async function SaasAdminPage() {
           institutionTypes: ["PRIMARY", "SECONDARY"],
           planId: defaultPlan?.id || null,
           status: "ACTIVE",
-          paystackSubaccountCode: `ACCT_${s.subdomain.toUpperCase()}_001`,
-          paystackSplitCode: `SPLIT_${s.subdomain.toUpperCase()}_001`,
-          paystackSettlementBank: {
-            bankCode: "044",
-            bankName: "Access Bank",
-            accountNumber: "0123456789",
-            updatedAt: new Date().toISOString(),
-          },
+          settlementBankName: s.settlementBankName || "Access Bank",
+          settlementAccountNumber: s.settlementAccountNumber || "0123456789",
+          settlementAccountName: s.settlementAccountName || s.name,
+          collectionMode: "MANUAL_BANK_TRANSFER",
         },
       }).catch(() => {});
     }
@@ -225,19 +221,16 @@ export default async function SaasAdminPage() {
       const settlementBankName =
         matchingSchool?.settlementBankName ||
         t.settlementBankName ||
-        (t.paystackSettlementBank as any)?.bankName ||
         null;
 
       const settlementAccountNumber =
         matchingSchool?.settlementAccountNumber ||
         t.settlementAccountNumber ||
-        (t.paystackSettlementBank as any)?.accountNumber ||
         null;
 
       const settlementAccountName =
         matchingSchool?.settlementAccountName ||
         t.settlementAccountName ||
-        (t.paystackSettlementBank as any)?.accountName ||
         null;
 
       const collectionMode =
@@ -260,18 +253,14 @@ export default async function SaasAdminPage() {
         settlementAccountName,
         collectionMode,
         pendingVerificationsCount,
-        paystackSubaccountCode: t.paystackSubaccountCode,
-        paystackSplitCode: t.paystackSplitCode,
-        paystackSettlementBank:
-          (t.paystackSettlementBank as any) ||
-          (settlementBankName && settlementAccountNumber
-            ? {
-                bankCode: matchingSchool?.settlementBankCode || "044",
-                bankName: settlementBankName,
-                accountNumber: settlementAccountNumber,
-                accountName: settlementAccountName,
-              }
-            : null),
+        settlementBankDetails: settlementBankName && settlementAccountNumber
+          ? {
+              bankCode: matchingSchool?.settlementBankCode || "044",
+              bankName: settlementBankName,
+              accountNumber: settlementAccountNumber,
+              accountName: settlementAccountName,
+            }
+          : null,
         isImpersonationAllowed: t.isImpersonationAllowed,
         suspendedReason: t.suspendedReason,
         suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,

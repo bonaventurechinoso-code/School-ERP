@@ -26,43 +26,34 @@ export default async function BillingsPage() {
   }
 
   // 2. Fetch Subscription Lifecycle Breakdown
-  const [activeCount, trialingCount, pastDueCount, suspendedCount] =
+  const [activeCount, pendingCount, expiredCount] =
     await Promise.all([
-      prisma.subscription.count({ where: { status: "active" } }),
-      prisma.subscription.count({ where: { status: "trialing" } }),
-      prisma.subscription.count({ where: { status: "past_due" } }),
-      prisma.subscription.count({ where: { status: "suspended" } }),
+      prisma.subscription.count({ where: { status: "ACTIVE" } }),
+      prisma.subscription.count({ where: { status: "PENDING" } }),
+      prisma.subscription.count({ where: { status: "EXPIRED" } }),
     ]);
+  const trialingCount = pendingCount;
+  const pastDueCount = expiredCount;
+  const suspendedCount = 0;
 
   // 3. Fetch Plans with Tenant Subscription Counts
   const plans = await prisma.plan.findMany({
     orderBy: { priceNgn: "asc" },
     include: {
       _count: {
-        select: { tenants: true, subscriptions: true },
+        select: { tenants: true },
       },
     },
   });
 
   // 4. Calculate MRR
   const activeSubs = await prisma.subscription.findMany({
-    where: { status: { in: ["active", "trialing"] } },
-    include: { plan: true },
+    where: { status: "ACTIVE" },
   });
 
   let estimatedMrr = 0;
   for (const sub of activeSubs) {
-    const price = Number(sub.amountDue || sub.plan.priceNgn || 0);
-    const cycle = (sub.plan.billingCycle || "termly").toLowerCase();
-    if (cycle === "monthly") {
-      estimatedMrr += price;
-    } else if (cycle === "termly") {
-      estimatedMrr += Math.round(price / 3.5);
-    } else if (cycle === "yearly") {
-      estimatedMrr += Math.round(price / 12);
-    } else {
-      estimatedMrr += price;
-    }
+    estimatedMrr += Number(sub.amount || 0);
   }
 
   // 5. Fetch Recent Platform Transactions
@@ -99,10 +90,10 @@ export default async function BillingsPage() {
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1">
-            Billings & Paystack Revenue Center
+            Billings &amp; Subscription Revenue Center
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Monitor real-time Paystack split payouts, platform ledger balances, and school subscription lifecycles
+            Monitor verified bank transfer subscriptions, school payment ledgers, and billing lifecycles
           </p>
         </div>
 
@@ -270,7 +261,7 @@ export default async function BillingsPage() {
             <CreditCard className="w-4 h-4 text-emerald-500" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Platform Transaction Records</h3>
           </div>
-          <span className="text-xs text-slate-400">Recent Paystack settlements & fees</span>
+          <span className="text-xs text-slate-400">Recent verified settlements &amp; ledger records</span>
         </div>
 
         <div className="overflow-x-auto">

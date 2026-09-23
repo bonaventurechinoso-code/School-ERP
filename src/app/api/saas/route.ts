@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/saas
  * Returns the platform's corporate settlement bank configuration, alongside
- * the list of tenants containing their subaccount_code, computed 30-day collections,
- * 2% platform commissions, and active paystackSettlementBank metadata.
+ * the list of tenants containing their settlement accounts, computed 30-day collections,
+ * and active settlement bank metadata.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -46,13 +46,14 @@ export async function GET(req: NextRequest) {
       institutionTypes: true,
       status: true,
       kycStatus: true,
-      paystackSubaccountCode: true,
-      paystackSplitCode: true,
+      settlementBankName: true,
+      settlementAccountNumber: true,
+      settlementAccountName: true,
+      collectionMode: true,
       isImpersonationAllowed: true,
       suspendedReason: true,
       suspendedAt: true,
       createdAt: true,
-      paystackSettlementBank: true,
       plan: {
         select: {
           id: true,
@@ -62,25 +63,9 @@ export async function GET(req: NextRequest) {
           commissionPercent: true,
         },
       },
-      subscriptions: {
-        take: 1,
-        orderBy: { createdAt: "desc" as const },
-        select: {
-          status: true,
-          amountDue: true,
-          endsAt: true,
-          trialEndsAt: true,
-          plan: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      },
     };
 
-    // 3. Fetch all tenants with plan and subscription telemetry
+    // 3. Fetch all tenants with plan telemetry
     let tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: "desc" },
       select: tenantSelect,
@@ -99,6 +84,10 @@ export async function GET(req: NextRequest) {
             institutionTypes: ["PRIMARY", "SECONDARY"],
             planId: defaultPlan?.id || null,
             status: "ACTIVE",
+            settlementBankName: s.settlementBankName || "Access Bank",
+            settlementAccountNumber: s.settlementAccountNumber || "0123456789",
+            settlementAccountName: s.settlementAccountName || s.name,
+            collectionMode: "MANUAL_BANK_TRANSFER",
           },
         }).catch(() => {});
       }
@@ -110,15 +99,8 @@ export async function GET(req: NextRequest) {
     }
 
     const formattedTenants = tenants.map((t) => {
-      const activeSub = t.subscriptions[0];
-      const monthlyRate = Number(
-        activeSub?.amountDue ?? t.plan?.priceNgn ?? 0
-      );
-      const nextRenewalDate = activeSub?.endsAt
-        ? activeSub.endsAt.toISOString()
-        : null;
-      const subscriptionStatus =
-        activeSub?.status?.toUpperCase() || t.status?.toUpperCase() || "INACTIVE";
+      const monthlyRate = Number(t.plan?.priceNgn ?? 0);
+      const subscriptionStatus = t.status?.toUpperCase() || "ACTIVE";
 
       return {
         id: t.id,
@@ -132,7 +114,11 @@ export async function GET(req: NextRequest) {
         kycStatus: t.kycStatus,
         subscriptionStatus,
         monthlyRate,
-        nextRenewalDate,
+        nextRenewalDate: null,
+        settlementBankName: t.settlementBankName,
+        settlementAccountNumber: t.settlementAccountNumber,
+        settlementAccountName: t.settlementAccountName,
+        collectionMode: t.collectionMode || "MANUAL_BANK_TRANSFER",
         isImpersonationAllowed: t.isImpersonationAllowed,
         suspendedReason: t.suspendedReason,
         suspendedAt: t.suspendedAt ? t.suspendedAt.toISOString() : null,
@@ -146,16 +132,7 @@ export async function GET(req: NextRequest) {
               commissionPercent: 0,
             }
           : null,
-        subscription: activeSub
-          ? {
-              status: activeSub.status,
-              amountDue: Number(activeSub.amountDue),
-              endsAt: activeSub.endsAt.toISOString(),
-              trialEndsAt: activeSub.trialEndsAt
-                ? activeSub.trialEndsAt.toISOString()
-                : null,
-            }
-          : null,
+        subscription: null,
       };
     });
 
@@ -183,7 +160,7 @@ export async function GET(req: NextRequest) {
  * PATCH /api/saas
  * Updates either:
  *  A. Super Admin Platform Settlement Bank Configuration (global system settings)
- *  B. An individual Tenant's settlement bank configuration (paystackSettlementBank)
+ *  B. An individual Tenant's settlement bank configuration (settlementBankDetails)
  */
 export async function PATCH(req: NextRequest) {
   try {
@@ -254,7 +231,6 @@ export async function PATCH(req: NextRequest) {
           settlementAccountNumber: cleanAcc,
           settlementAccountName: finalAccountName,
           collectionMode: "MANUAL_BANK_TRANSFER",
-          paystackSettlementBank: settlementBankData,
         },
       });
 
@@ -279,7 +255,6 @@ export async function PATCH(req: NextRequest) {
           metadata: {
             schoolName: tenant.schoolName,
             subdomain: tenant.subdomain,
-            previousBank: tenant.paystackSettlementBank,
             newBank: settlementBankData,
           },
         },
@@ -296,7 +271,6 @@ export async function PATCH(req: NextRequest) {
           settlementAccountNumber: cleanAcc,
           settlementAccountName: finalAccountName,
           collectionMode: "MANUAL_BANK_TRANSFER",
-          paystackSettlementBank: settlementBankData,
         },
       });
     }

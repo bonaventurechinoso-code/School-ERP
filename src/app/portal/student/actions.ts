@@ -968,7 +968,7 @@ function shapeFinanceData({
         invoiceDescription: "Departmental Course Registration Dues",
         amountPaid: 85000,
         paymentDate: "Aug 22, 2026",
-        method: "PAYSTACK",
+        method: "TRANSFER",
         status: "VERIFIED",
         receiptNumber: "REC-2026-4411"
       },

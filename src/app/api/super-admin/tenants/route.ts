@@ -41,13 +41,6 @@ export async function GET(req: NextRequest) {
               currency: true,
             },
           },
-          subscriptions: {
-            take: 1,
-            orderBy: { createdAt: "desc" },
-            include: {
-              plan: true,
-            },
-          },
         },
       }),
       prisma.tenant.count({ where }),
@@ -55,7 +48,6 @@ export async function GET(req: NextRequest) {
 
     const formattedTenants = tenants.map((tenant) => {
       const primaryWallet = tenant.wallets[0];
-      const activeSub = tenant.subscriptions[0];
       return {
         id: tenant.id,
         schoolName: tenant.schoolName,
@@ -67,8 +59,8 @@ export async function GET(req: NextRequest) {
         status: tenant.status,
         kycStatus: tenant.kycStatus,
         kycDocs: tenant.kycDocs,
-        paystackSubaccountCode: tenant.paystackSubaccountCode,
-        paystackSplitCode: tenant.paystackSplitCode,
+        settlementBankName: tenant.settlementBankName,
+        settlementAccountNumber: tenant.settlementAccountNumber,
         isImpersonationAllowed: tenant.isImpersonationAllowed,
         suspendedReason: tenant.suspendedReason,
         suspendedAt: tenant.suspendedAt,

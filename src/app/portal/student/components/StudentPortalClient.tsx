@@ -55,8 +55,8 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
   const [financeState, setFinanceState] = useState(finance);
   const [paymentBanner, setPaymentBanner] = useState<string | null>(null);
 
-  // Model A Paystack Split Return Listener:
-  // Detects return redirect from Paystack callback with payment=success
+  // Direct Manual Bank Transfer Return Listener:
+  // Detects return redirect or reference parameter with payment=success
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -66,7 +66,7 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
         const amount = Number(params.get("amount")) || 15000;
         const ref = params.get("reference") || `PAY-${Date.now()}`;
 
-        setPaymentBanner(`Payment of ₦${amount.toLocaleString()} settled successfully via Paystack (Ref: ${ref}). Funds routed directly to school account.`);
+        setPaymentBanner(`Payment of ₦${amount.toLocaleString()} submitted successfully via Direct Bank Transfer (Ref: ${ref}).`);
 
         setFinanceState((prev) => {
           if (prev.invoices.some((inv) => inv.id === invoiceId && (inv.status === "PAID" || inv.amountDue <= inv.amountPaid))) {
@@ -92,7 +92,7 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
             invoiceDescription: invDesc,
             amountPaid: amount,
             paymentDate: new Date().toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }),
-            method: "PAYSTACK",
+            method: "TRANSFER",
             status: "VERIFIED" as const,
             receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
           };
@@ -110,7 +110,7 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
   }, []);
 
   const handlePaymentSuccess = (invoiceId: string, amountPaid: number, reference: string) => {
-    setPaymentBanner(`Payment of ₦${amountPaid.toLocaleString()} settled successfully via Paystack (Ref: ${reference}). Funds routed directly to school account.`);
+    setPaymentBanner(`Payment of ₦${amountPaid.toLocaleString()} submitted successfully via Direct Bank Transfer (Ref: ${reference}).`);
     setFinanceState((prev) => {
       const targetInv = prev.invoices.find((i) => i.id === invoiceId);
       const invDesc = targetInv?.description || "Creche After-School Care & Play Material Levy";
@@ -132,7 +132,7 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
         invoiceDescription: invDesc,
         amountPaid: amountPaid,
         paymentDate: new Date().toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }),
-        method: "PAYSTACK",
+        method: "TRANSFER",
         status: "VERIFIED" as const,
         receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
       };

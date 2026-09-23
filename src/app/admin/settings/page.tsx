@@ -19,8 +19,8 @@ export default async function SettingsPage() {
     orderBy: { priceNgn: "asc" },
   });
 
-  const paystackSecret = process.env.PAYSTACK_SECRET_KEY ? "••••••••••••••••" : "Missing";
-  const platformSubaccount = process.env.PLATFORM_SUBACCOUNT_CODE || "Not Configured";
+  const paymentModel = "100% Manual Offline (0% Processing Fees)";
+  const platformSubaccount = "Direct Settlement (No Gateway Subaccounts)";
 
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
@@ -39,7 +39,7 @@ export default async function SettingsPage() {
             Platform Configuration & Settings
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Modify SaaS tier quotas, platform split commission percentages, and gateway parameters
+            Modify SaaS tier quotas, platform manual payment settings, and banking parameters
           </p>
         </div>
       </div>
@@ -49,13 +49,13 @@ export default async function SettingsPage() {
         <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
             <KeyRound className="w-4 h-4 text-indigo-500" />
-            Paystack Secret Key
+            Payment Gateway Model
           </div>
           <div className="font-mono text-sm font-bold text-slate-800 dark:text-zinc-200">
-            {paystackSecret}
+            {paymentModel}
           </div>
           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
-            <CheckCircle2 className="w-3 h-3" /> Encrypted via Environment
+            <CheckCircle2 className="w-3 h-3" /> Manual Bank Transfer &amp; Admin Verification
           </span>
         </div>
 

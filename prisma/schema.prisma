@@ -23,10 +23,24 @@ enum BillingCycle {
 }
 
 enum SubscriptionStatus {
+  PENDING
   ACTIVE
-  PAST_DUE
-  CANCELED
   EXPIRED
+}
+
+enum PaymentMethod {
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  OTHER
 }
 
 // ------------------------------------------------------
@@ -34,20 +48,24 @@ enum SubscriptionStatus {
 // ------------------------------------------------------
 
 model School {
-  id        String   @id @default(uuid())
-  name      String // e.g., "Green Valley High"
-  subdomain String   @unique // e.g., "greenvalley"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  isActive  Boolean  @default(true)
-  deletedAt DateTime?
-  contactPhone String?
+  id            String         @id @default(uuid())
+  name          String // e.g., "Green Valley High"
+  subdomain     String         @unique // e.g., "greenvalley"
+  slug          String?        @unique // Saved as slug identifier
+  status        String         @default("PENDING_VERIFICATION")
+  subscriptions Subscription[]
+  payments      SchoolPayment[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  isActive      Boolean        @default(true)
+  deletedAt     DateTime?
+  contactPhone  String?
 
-  // Subscription Details
-  subscriptionPlan      SubscriptionPlan   @default(BASIC)
-  billingCycle          BillingCycle       @default(MONTHLY)
-  subscriptionStatus    SubscriptionStatus @default(ACTIVE)
-  subscriptionStartedAt DateTime           @default(now())
+  // Legacy Subscription Details (Nullable for backward compatibility)
+  subscriptionPlan      SubscriptionPlan?   @default(BASIC)
+  billingCycle          BillingCycle?       @default(MONTHLY)
+  subscriptionStatus    SubscriptionStatus? @default(PENDING)
+  subscriptionStartedAt DateTime?           @default(now())
   subscriptionExpiresAt DateTime?
 
   // Trial Lifecycle & Governance Details
@@ -57,8 +75,6 @@ model School {
 
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")
-  paystackSubaccountCode String?
-  paystackSplitCode      String?
 
   // Manual Bank Transfer Direct Settlement Configuration
   settlementBankName     String?
@@ -74,7 +90,7 @@ model School {
   courses           Course[]
   feeTemplates      FeeTemplate[]
   invoices          Invoice[]
-  payments          Payment[]
+  studentPayments   Payment[]
   Timetable         Timetable[]
   StudentAttendance StudentAttendance[]
   StaffAttendance   StaffAttendance[]
@@ -407,7 +423,6 @@ model Invoice {
 
   amountDue         Float
   amountPaid        Float     @default(0)
-  paystackReference String?   @unique
   paidAt            DateTime?
   dueDate           DateTime
   status            String    @default("PENDING") // PENDING, PARTIAL, PAID, OVERDUE, FAILED
@@ -873,7 +888,7 @@ model Session {
 }
 
 // ======================================================
-// MULTI-TENANT SAAS SUPER ADMIN & PAYSTACK INTEGRATION
+// MULTI-TENANT SAAS SUPER ADMIN & MANUAL PAYMENT INTEGRATION
 // ======================================================
 
 model Plan {
@@ -889,7 +904,6 @@ model Plan {
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   tenants           Tenant[]
-  subscriptions     Subscription[]
 }
 
 model Tenant {
@@ -905,9 +919,6 @@ model Tenant {
   status                 String         @default("PENDING") // PENDING, ACTIVE, SUSPENDED
   kycStatus              String         @default("pending")
   kycDocs                Json?
-  paystackSubaccountCode String?
-  paystackSplitCode      String?
-  paystackSettlementBank Json?          // { bankCode, bankName, accountNumber, accountName, updatedAt }
   settlementBankName     String?
   settlementAccountNumber String?
   settlementAccountName  String?
@@ -918,7 +929,6 @@ model Tenant {
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
   wallets                Wallet[]
-  subscriptions          Subscription[]
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -950,8 +960,7 @@ model WalletTransaction {
   reference     String   @unique
   description   String?
   createdBy     String?
-  source           String?  @default("paystack_webhook")
-  paystackReference String?
+  source           String?  @default("manual_transfer")
   settlementStatus String?  @default("settled")
   createdAt     DateTime @default(now())
 
@@ -961,22 +970,31 @@ model WalletTransaction {
 }
 
 model Subscription {
-  id                       String    @id @default(cuid())
-  tenantId                 String
-  tenant                   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  planId                   String
-  plan                     Plan      @relation(fields: [planId], references: [id])
-  status                   String    // trialing, active, past_due, suspended
-  startsAt                 DateTime  @default(now())
-  endsAt                   DateTime
-  trialEndsAt              DateTime?
-  amountDue                Decimal   @db.Decimal(12,2)
-  amountPaid               Decimal   @default(0) @db.Decimal(12,2)
-  paystackSubscriptionCode String?
-  createdAt                DateTime  @default(now())
+  id                 String             @id @default(uuid())
+  schoolId           String
+  school             School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  plan               String             // e.g., "BASIC", "SECONDARY", "ENTERPRISE"
+  amount             Float              // 0% charge logic - flat pricing raw fee
+  status             SubscriptionStatus @default(PENDING)
+  paymentMethod      PaymentMethod      @default(MANUAL)
+  proofOfPaymentUrl  String?            // File upload tracking
+  verifiedByAdmin    Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  expiresAt          DateTime
 
-  @@index([tenantId, status])
-  @@index([planId])
+  @@index([schoolId, status])
+}
+
+model SchoolPayment {
+  id        String        @id @default(uuid())
+  schoolId  String
+  school    School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  amount    Float         // Net amount (0% Gateway fees added)
+  type      PaymentType   @default(SUBSCRIPTION)
+  status    PaymentStatus @default(PENDING_VERIFICATION)
+  createdAt DateTime      @default(now())
+
+  @@index([schoolId, status])
 }
 
 model PlatformWallet {
@@ -1020,12 +1038,11 @@ model PlatformBankConfig {
 model PlatformEarnings {
   id                    String   @id @default(cuid())
   tenantId              String?
-  subaccountCode        String?
   grossAmount           Float
-  platformFee           Float    // 2% split fee
-  schoolNet             Float    // 98% direct settlement
+  platformFee           Float    @default(0) // 0% platform fee in manual model
+  schoolNet             Float    // 100% direct settlement
   reference             String   @unique
-  source                String   @default("paystack_split")
+  source                String   @default("manual")
   settlementDestination String?
   createdAt             DateTime @default(now())
 }

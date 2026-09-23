@@ -413,5 +413,51 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+
+    /**
+     * redirect Callback:
+     * Validates and maps authentication redirection callbacks securely across our
+     * multi-tenant apex (bonaveeict.com.ng) and hosting domains (school-erp-1-mfc3.onrender.com).
+     * Enforces security via process.env.NEXTAUTH_URL while supporting relative URLs,
+     * tenant subdomains (*.bonaveeict.com.ng), and Render deployments.
+     */
+    async redirect({ url, baseUrl }) {
+      const configuredBaseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || baseUrl).replace(/\/$/, "");
+
+      // 1. Relative paths (/dashboard, /greenwood/dashboard, etc.)
+      if (url.startsWith("/")) {
+        return `${configuredBaseUrl}${url}`;
+      }
+
+      try {
+        const targetUrl = new URL(url);
+        const configuredUrl = new URL(configuredBaseUrl);
+        const rootDomain = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "");
+        const renderHost = "school-erp-1-mfc3.onrender.com";
+
+        // 2. Exact origin matches (e.g. https://bonaveeict.com.ng)
+        if (targetUrl.origin === configuredUrl.origin || targetUrl.origin === new URL(baseUrl).origin) {
+          return url;
+        }
+
+        // 3. Allow valid multi-tenant subdomains & platform hosting domains on Render
+        const targetHostname = targetUrl.hostname.toLowerCase();
+        if (
+          targetHostname === rootDomain ||
+          targetHostname === `www.${rootDomain}` ||
+          targetHostname.endsWith(`.${rootDomain}`) ||
+          targetHostname === renderHost ||
+          targetHostname.endsWith(`.${renderHost}`) ||
+          targetHostname.endsWith(".onrender.com")
+        ) {
+          return url;
+        }
+      } catch (err) {
+        console.warn("[NEXTAUTH_REDIRECT_VALIDATION_ERROR]: Unable to parse redirect URL:", url);
+      }
+
+      // Default safe fallback to configured canonical NEXTAUTH_URL
+      return configuredBaseUrl;
+    },
   },
 };

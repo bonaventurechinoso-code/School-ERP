@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { exec } from "child_process";
-import util from "util";
 
-const execAsync = util.promisify(exec);
-
-const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
+const VALID_TIERS = [
+  'NURSERY',
+  'DAYCARE',
+  'PRIMARY',
+  'SECONDARY',
+  'PRIMARY_SECONDARY',
+  'UNIVERSITY',
+  'POLYTECHNIC',
+  'COLLEGE_OF_EDUCATION',
+  'COMBINED_NURSERY_PRIMARY_SECONDARY'
+];
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +21,7 @@ export async function POST(request: Request) {
     // Validate inputs
     if (!schoolName || !adminEmail || !subdomain || !tiers || tiers.length === 0) {
       return NextResponse.json(
-        { error: "Missing required fields or academic tiers." },
+        { error: "Missing required fields or academic tiers.", code: "VALIDATION_FAILED" },
         { status: 400 }
       );
     }
@@ -24,7 +30,7 @@ export async function POST(request: Request) {
     const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
     if (invalidTiers.length > 0) {
       return NextResponse.json(
-        { error: `Invalid academic tier subtypes provided: ${invalidTiers.join(', ')}` },
+        { error: `Invalid academic tier subtypes provided: ${invalidTiers.join(', ')}`, code: "INVALID_TIERS" },
         { status: 400 }
       );
     }
@@ -34,7 +40,7 @@ export async function POST(request: Request) {
 
     if (!formattedSubdomain) {
       return NextResponse.json(
-        { error: "Invalid subdomain." },
+        { error: "Invalid subdomain.", code: "INVALID_SUBDOMAIN" },
         { status: 400 }
       );
     }
@@ -46,19 +52,22 @@ export async function POST(request: Request) {
 
     if (existingSchool) {
       return NextResponse.json(
-        { error: "This URL slug is already taken. Please choose another." },
+        { error: "This URL slug is already taken. Please choose another.", code: "SUBDOMAIN_TAKEN" },
         { status: 409 }
       );
     }
 
-    // Provision the new tenant inside a transaction
+    const now = new Date();
+    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    // Provision combined tenant if requested
     if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
       const subdomains = [
-          { suffix: '-nursery', tier: 'DAYCARE', name: `${schoolName} Nursery` },
-          { suffix: '-primary', tier: 'PRIMARY', name: `${schoolName} Primary` },
-          { suffix: '-secondary', tier: 'SECONDARY', name: `${schoolName} Secondary` }
+        { suffix: '-nursery', tier: 'DAYCARE', name: `${schoolName} Nursery` },
+        { suffix: '-primary', tier: 'PRIMARY', name: `${schoolName} Primary` },
+        { suffix: '-secondary', tier: 'SECONDARY', name: `${schoolName} Secondary` }
       ];
-      
+
       const newSchools = await basePrisma.$transaction(async (tx) => {
         const createdSchools = [];
         for (const sub of subdomains) {
@@ -67,22 +76,47 @@ export async function POST(request: Request) {
             data: {
               name: sub.name,
               subdomain: tenantSubdomain,
-              contactPhone,
+              slug: tenantSubdomain,
+              status: "ACTIVE",
+              contactPhone: contactPhone || null,
               isActive: true,
               isBanned: false,
-              trialStartDate: new Date(),
-              trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              trialStartDate: now,
+              trialEndDate: fourteenDaysOut,
+              collectionMode: "MANUAL_BANK_TRANSFER",
             },
           });
-          
+
           await tx.academicTier.create({
             data: { schoolId: school.id, name: sub.tier, level: 1 }
           });
-          
+
+          // Seed active 14-day manual trial subscription ledger (0% charge)
+          await tx.subscription.create({
+            data: {
+              schoolId: school.id,
+              plan: "14_DAY_TRIAL",
+              amount: 0.0,
+              status: "ACTIVE",
+              paymentMethod: "MANUAL",
+              verifiedByAdmin: true,
+              expiresAt: fourteenDaysOut,
+            },
+          });
+
+          await tx.schoolPayment.create({
+            data: {
+              schoolId: school.id,
+              amount: 0.0,
+              type: "SUBSCRIPTION",
+              status: "VERIFIED",
+            },
+          });
+
           const dept = await tx.department.create({
             data: { schoolId: school.id, name: "Administration" }
           });
-          
+
           await tx.staff.create({
             data: {
               schoolId: school.id,
@@ -92,17 +126,17 @@ export async function POST(request: Request) {
               role: "ADMIN",
               departmentId: dept.id,
               status: "ACTIVE",
-              activeAt: new Date(),
+              activeAt: now,
               password: ""
             }
           });
-          
+
           await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
           createdSchools.push(school);
         }
         return createdSchools;
       });
-      
+
       return NextResponse.json({
         success: true,
         message: "Combined tenants successfully provisioned.",
@@ -111,37 +145,67 @@ export async function POST(request: Request) {
       });
     }
 
-    const now = new Date();
-    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
+    // Standard Tenant Provisioning Transaction
     const newSchool = await basePrisma.$transaction(async (tx) => {
-      // Phase A: Create baseline Tenant management record
-      // 1. Create School
+      // 1. Create School record with instant ACTIVE status
       const school = await tx.school.create({
         data: {
           name: schoolName,
           subdomain: formattedSubdomain,
-          contactPhone,
+          slug: formattedSubdomain,
+          status: "ACTIVE",
+          contactPhone: contactPhone || null,
           isActive: true,
           isBanned: false,
           trialStartDate: now,
           trialEndDate: fourteenDaysOut,
+          collectionMode: "MANUAL_BANK_TRANSFER",
         },
       });
 
-      // 2. Persist exact standardized backend enum keys as subtypes
-      const tierPromises = tiers.map((tierName: string, index: number) => {
-        return tx.academicTier.create({
+      // 2. Persist exact standardized academic tiers matching UI checkboxes
+      for (let i = 0; i < tiers.length; i++) {
+        await tx.academicTier.create({
           data: {
             schoolId: school.id,
-            name: tierName,
-            level: index + 1,
+            name: tiers[i],
+            level: i + 1,
           },
         });
-      });
-      await Promise.all(tierPromises);
+      }
 
-      // 3. Create a default admin account
+      // 3. Automatically seed initial active 14-day manual trial subscription (amount: 0.0)
+      await tx.subscription.create({
+        data: {
+          schoolId: school.id,
+          plan: "14_DAY_TRIAL",
+          amount: 0.0,
+          status: "ACTIVE",
+          paymentMethod: "MANUAL",
+          verifiedByAdmin: true,
+          expiresAt: fourteenDaysOut,
+        },
+      });
+
+      // 4. Seed initial school payment ledger record (amount: 0.0)
+      await tx.schoolPayment.create({
+        data: {
+          schoolId: school.id,
+          amount: 0.0,
+          type: "SUBSCRIPTION",
+          status: "VERIFIED",
+        },
+      });
+
+      // 5. Create default department
+      const dept = await tx.department.create({
+        data: {
+          schoolId: school.id,
+          name: "Administration",
+        }
+      });
+
+      // 6. Create default admin staff account
       await tx.staff.create({
         data: {
           schoolId: school.id,
@@ -149,35 +213,18 @@ export async function POST(request: Request) {
           lastName: "User",
           email: adminEmail,
           role: "ADMIN",
+          departmentId: dept.id,
           status: "ACTIVE",
-          activeAt: new Date(),
+          activeAt: now,
           password: ""
         }
       });
 
-      // 4. Create a default department
-      await tx.department.create({
-        data: {
-          schoolId: school.id,
-          name: "Administration",
-        }
-      });
-
-      // Phase B: Provision an isolated boundary
+      // 7. Provision isolated database boundary
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
 
       return school;
     });
-
-    // Schema Migration Handshake: Programmatically duplicate baseline structures
-    if (process.env.DATABASE_URL) {
-      const dbUrl = new URL(process.env.DATABASE_URL);
-      dbUrl.searchParams.set("schema", `tenant_${formattedSubdomain}`);
-      
-      await execAsync("npx prisma db push --skip-generate", {
-        env: { ...process.env, DATABASE_URL: dbUrl.toString() }
-      });
-    }
 
     return NextResponse.json({
       success: true,
@@ -187,9 +234,13 @@ export async function POST(request: Request) {
     });
 
   } catch (error: any) {
-    console.error("Tenant registration error:", error);
+    console.error("CRITICAL_PROVISIONING_EXCEPTION:", error);
     return NextResponse.json(
-      { error: "Internal server error during provisioning", details: error.message },
+      {
+        error: error.message || "Internal server error during provisioning",
+        code: error.code || "CRITICAL_PROVISIONING_ERROR",
+        meta: error.meta || null,
+      },
       { status: 500 }
     );
   }

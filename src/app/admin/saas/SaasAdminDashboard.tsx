@@ -69,9 +69,7 @@ interface TenantItem {
   settlementAccountName?: string | null;
   collectionMode?: string | null;
   pendingVerificationsCount?: number;
-  paystackSubaccountCode: string | null;
-  paystackSplitCode: string | null;
-  paystackSettlementBank: SettlementBankDetails | null;
+  settlementBankDetails?: SettlementBankDetails | null;
   isImpersonationAllowed: boolean;
   suspendedReason: string | null;
   suspendedAt: string | null;
@@ -343,7 +341,7 @@ export default function SaasAdminDashboard({
   // HANDLER: OPEN TENANT BANK CONFIGURATION
   // ===========================================================================
   const handleOpenTenantBankConfig = (tenant: TenantItem) => {
-    const existingBank = tenant.paystackSettlementBank;
+    const existingBank = tenant.settlementBankDetails;
     const existingBankName = tenant.settlementBankName || existingBank?.bankName || "";
     const matchingBank = NIGERIAN_BANKS.find(
       (b) =>
@@ -430,7 +428,7 @@ export default function SaasAdminDashboard({
                 settlementAccountNumber: cleanAcc,
                 settlementAccountName: cleanName,
                 collectionMode: "MANUAL_BANK_TRANSFER",
-                paystackSettlementBank: updatedBankData,
+                settlementBankDetails: updatedBankData,
               }
             : t
         )
@@ -468,7 +466,7 @@ export default function SaasAdminDashboard({
                   settlementAccountNumber: cleanAcc,
                   settlementAccountName: cleanName,
                   collectionMode: "MANUAL_BANK_TRANSFER",
-                  paystackSettlementBank: actionRes.bankData as any,
+                  settlementBankDetails: actionRes.bankData as any,
                 }
               : t
           )

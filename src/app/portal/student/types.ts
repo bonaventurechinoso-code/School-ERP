@@ -138,7 +138,7 @@ export interface PaymentItem {
   invoiceDescription: string;
   amountPaid: number;
   paymentDate: string;
-  method: "CARD" | "TRANSFER" | "CASH" | "PAYSTACK" | string;
+  method: "CARD" | "TRANSFER" | "CASH" | string;
   status: "VERIFIED" | "PROCESSING" | "FAILED";
   receiptNumber: string;
 }

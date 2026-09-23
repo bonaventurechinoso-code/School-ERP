@@ -38,11 +38,6 @@ export async function PATCH(req: NextRequest) {
       where: { id: tenantId },
       include: {
         plan: true,
-        subscriptions: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          include: { plan: true },
-        },
       },
     });
 
@@ -71,49 +66,47 @@ export async function PATCH(req: NextRequest) {
         },
       });
 
-      // B. Update or create active Subscription record with new renewal timestamp
-      const activeSub = tenant.subscriptions[0];
-      let updatedSubscription;
+      // B. Locate operational School record and create manual Subscription & SchoolPayment
+      const school = await prisma.school.findFirst({
+        where: { subdomain: tenant.subdomain },
+      });
 
-      if (activeSub) {
-        updatedSubscription = await prisma.subscription.update({
-          where: { id: activeSub.id },
+      const amountPaid = Number(tenant.plan?.priceNgn || 50000);
+
+      if (school) {
+        await prisma.subscription.create({
           data: {
-            status: "active",
-            endsAt: thirtyDaysForward,
-            amountPaid: activeSub.amountDue || tenant.plan?.priceNgn || 50000,
+            schoolId: school.id,
+            plan: tenant.plan?.name || "BASIC",
+            amount: amountPaid,
+            status: "ACTIVE",
+            paymentMethod: "MANUAL",
+            verifiedByAdmin: true,
+            expiresAt: thirtyDaysForward,
           },
         });
-      } else {
-        const defaultPlan = tenant.planId
-          ? tenant.plan
-          : await prisma.plan.findFirst();
 
-        updatedSubscription = await prisma.subscription.create({
+        await prisma.schoolPayment.create({
           data: {
-            tenantId: tenant.id,
-            planId: defaultPlan?.id || "standard-plan",
-            status: "active",
-            startsAt: now,
-            endsAt: thirtyDaysForward,
-            amountDue: defaultPlan?.priceNgn || 50000,
-            amountPaid: defaultPlan?.priceNgn || 50000,
+            schoolId: school.id,
+            amount: amountPaid,
+            type: "SUBSCRIPTION",
+            status: "VERIFIED",
+          },
+        });
+
+        await prisma.school.update({
+          where: { id: school.id },
+          data: {
+            status: "ACTIVE",
+            subscriptionStatus: "ACTIVE",
+            subscriptionExpiresAt: thirtyDaysForward,
+            isActive: true,
           },
         });
       }
 
-      // C. Synchronize operational School record
-      await prisma.school.updateMany({
-        where: { subdomain: tenant.subdomain },
-        data: {
-          subscriptionStatus: "ACTIVE",
-          subscriptionExpiresAt: thirtyDaysForward,
-          isActive: true,
-        },
-      });
-
       // D. Record Platform Transaction log for manual subscription fee
-      const amountPaid = Number(updatedSubscription.amountDue || tenant.plan?.priceNgn || 50000);
       await prisma.platformTransaction.create({
         data: {
           tenantId: tenant.id,
@@ -164,20 +157,24 @@ export async function PATCH(req: NextRequest) {
         },
       });
 
-      const activeSub = tenant.subscriptions[0];
-      if (activeSub) {
-        await prisma.subscription.update({
-          where: { id: activeSub.id },
-          data: { status: "past_due" },
+      const school = await prisma.school.findFirst({
+        where: { subdomain: tenant.subdomain },
+      });
+
+      if (school) {
+        await prisma.subscription.updateMany({
+          where: { schoolId: school.id, status: "ACTIVE" },
+          data: { status: "EXPIRED" },
+        });
+
+        await prisma.school.update({
+          where: { id: school.id },
+          data: {
+            status: "PENDING_VERIFICATION",
+            subscriptionStatus: "EXPIRED",
+          },
         });
       }
-
-      await prisma.school.updateMany({
-        where: { subdomain: tenant.subdomain },
-        data: {
-          subscriptionStatus: "PAST_DUE",
-        },
-      });
 
       return NextResponse.json({
         success: true,

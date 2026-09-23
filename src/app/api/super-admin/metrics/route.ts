@@ -23,27 +23,13 @@ export async function GET() {
     // 3. Active Subscriptions & Estimated MRR
     const activeSubs = await prisma.subscription.findMany({
       where: {
-        status: { in: ["active", "trialing"] },
-      },
-      include: {
-        plan: true,
+        status: "ACTIVE",
       },
     });
 
     let estimatedMrr = 0;
     for (const sub of activeSubs) {
-      const price = Number(sub.amountDue || sub.plan.priceNgn || 0);
-      const cycle = (sub.plan.billingCycle || "termly").toLowerCase();
-      if (cycle === "monthly") {
-        estimatedMrr += price;
-      } else if (cycle === "termly") {
-        // Average term length ~3.5 months (3 terms per year)
-        estimatedMrr += Math.round(price / 3.5);
-      } else if (cycle === "yearly") {
-        estimatedMrr += Math.round(price / 12);
-      } else {
-        estimatedMrr += price;
-      }
+      estimatedMrr += Number(sub.amount || 0);
     }
 
     // 4. Aggregated Total Tenant Wallet Balances
