@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Image from "next/image";
 import { useParams, usePathname } from "next/navigation";
 import { Menu, Home, Users, CreditCard, UserPlus, Briefcase } from "lucide-react";
 import AIChatWidget from "@/components/AIChatWidget";
@@ -114,9 +115,11 @@ export default function ClientLayout({
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-zinc-400 sm:pr-56 md:pr-64">
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
               <span>Powered by </span>
-              <img
+              <Image
                 src="/img/business-logo.png"
                 alt="BonaVee ICT"
+                width={20}
+                height={20}
                 className="h-5 w-5 inline-block align-middle object-contain rounded-xs shadow-xs"
               />
             </div>

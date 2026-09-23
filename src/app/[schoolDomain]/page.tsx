@@ -1,5 +1,6 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
 import { 
@@ -248,10 +249,11 @@ export default async function PublicGuestPortalPage({
         <div className="relative w-full min-h-[580px] overflow-hidden bg-slate-950 text-white flex items-center">
           {/* Full Background Image */}
           <div className="absolute inset-0 w-full h-full z-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img 
+            <Image 
               src={heroImageUrl} 
-              className="w-full h-full object-cover" 
+              fill
+              priority
+              className="object-cover" 
               alt={`${school.name} Campus`} 
             />
             <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/75 pointer-events-none" />

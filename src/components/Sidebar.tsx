@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   X,
@@ -194,9 +195,11 @@ export default function Sidebar({
       <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           {tenant?.branding?.logoUrl ? (
-            <img
+            <Image
               src={tenant.branding.logoUrl}
               alt={schoolName}
+              width={36}
+              height={36}
               className="w-9 h-9 rounded-xl object-contain border border-slate-800 shadow-sm shrink-0"
             />
           ) : (

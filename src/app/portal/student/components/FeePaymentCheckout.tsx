@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { InvoiceItem, StudentProfileData } from "../types";
 import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
 import {
@@ -447,11 +448,15 @@ export default function FeePaymentCheckout({
 
                 {proofPreviewUrl ? (
                   <div className="space-y-2">
-                    <img
-                      src={proofPreviewUrl}
-                      alt="Proof Preview"
-                      className="max-h-36 mx-auto rounded-lg shadow-xs object-contain border border-slate-200 dark:border-zinc-700"
-                    />
+                    <div className="relative w-full h-36 mx-auto">
+                      <Image
+                        src={proofPreviewUrl}
+                        alt="Proof Preview"
+                        fill
+                        unoptimized
+                        className="rounded-lg shadow-xs object-contain border border-slate-200 dark:border-zinc-700"
+                      />
+                    </div>
                     <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">
                       Click to choose another image
                     </p>
