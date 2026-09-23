@@ -76,12 +76,12 @@ export default function BillingProofClient({
   platformAccountName,
 }: {
   schoolDomain: string;
-  subscriptionPlan?: string;
-  subscriptionStatus?: string;
+  subscriptionPlan?: string | null;
+  subscriptionStatus?: string | null;
   subscriptionExpiresAt?: string | null;
-  platformBankName?: string;
-  platformAccountNumber?: string;
-  platformAccountName?: string;
+  platformBankName?: string | null;
+  platformAccountNumber?: string | null;
+  platformAccountName?: string | null;
 }) {
   const tenant = useTenant();
   const [form, setForm] = useState<FormData>(INITIAL_FORM);

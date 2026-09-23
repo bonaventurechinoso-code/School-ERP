@@ -89,26 +89,14 @@ export default async function SaasAdminPage() {
   // 6. Compute MRR / ARR
   const activeSubs = await prisma.subscription.findMany({
     where: {
-      status: { in: ["active", "trialing"] },
-    },
-    include: {
-      plan: true,
+      status: "ACTIVE",
     },
   });
 
   let estimatedMrr = 0;
   for (const sub of activeSubs) {
-    const price = Number(sub.amountDue || sub.plan.priceNgn || 0);
-    const cycle = (sub.plan.billingCycle || "termly").toLowerCase();
-    if (cycle === "monthly") {
-      estimatedMrr += price;
-    } else if (cycle === "termly") {
-      estimatedMrr += Math.round(price / 3.5);
-    } else if (cycle === "yearly") {
-      estimatedMrr += Math.round(price / 12);
-    } else {
-      estimatedMrr += price;
-    }
+    const price = Number(sub.amount || 0);
+    estimatedMrr += price;
   }
 
   // 7. Recent Activity Logs & Transactions
@@ -176,26 +164,24 @@ export default async function SaasAdminPage() {
   // 8. Fetch Tenants with 30-Day Collections and Manual Bank Transfer Details
   const rawTenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
-    include: {
-      plan: true,
-      subscriptions: {
-        take: 1,
-        orderBy: { createdAt: "desc" },
-        include: { plan: true },
-      },
-    },
   });
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const tenants = await Promise.all(
     rawTenants.map(async (t) => {
-      const activeSub = t.subscriptions[0];
-
       // Find matching school for operational finance & verifications metrics
       const matchingSchool = await prisma.school.findUnique({
         where: { subdomain: t.subdomain },
+        include: {
+          subscriptions: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+          },
+        },
       });
+
+      const activeSub = matchingSchool?.subscriptions[0];
 
       let pendingVerificationsCount = 0;
       let verifiedTuition30Days = 0;
@@ -258,7 +244,7 @@ export default async function SaasAdminPage() {
               bankCode: matchingSchool?.settlementBankCode || "044",
               bankName: settlementBankName,
               accountNumber: settlementAccountNumber,
-              accountName: settlementAccountName,
+              accountName: settlementAccountName || undefined,
             }
           : null,
         isImpersonationAllowed: t.isImpersonationAllowed,
@@ -268,26 +254,30 @@ export default async function SaasAdminPage() {
         collection30Days: verifiedTuition30Days,
         commission30Days: 0,
         commissionPercent: 0,
-        monthlyRate: Number(activeSub?.amountDue ?? t.plan?.priceNgn ?? 0),
-        nextRenewalDate: activeSub?.endsAt ? activeSub.endsAt.toISOString() : null,
-        subscriptionStatus: activeSub?.status?.toUpperCase() || t.status?.toUpperCase() || "INACTIVE",
-        plan: t.plan
+        monthlyRate: Number(activeSub?.amount ?? 0),
+        nextRenewalDate: activeSub?.expiresAt ? activeSub.expiresAt.toISOString() : null,
+        subscriptionStatus: activeSub?.status || t.status || "INACTIVE",
+        plan: activeSub
           ? {
-              id: t.plan.id,
-              name: t.plan.name,
-              priceNgn: t.plan.priceNgn,
-              billingCycle: t.plan.billingCycle,
+              id: activeSub.id,
+              name: activeSub.plan,
+              priceNgn: activeSub.amount,
+              billingCycle: "monthly",
               commissionPercent: 0,
             }
-          : null,
+          : {
+              id: "baseline-plan",
+              name: "Standard",
+              priceNgn: 0,
+              billingCycle: "monthly",
+              commissionPercent: 0,
+            },
         subscription: activeSub
           ? {
               status: activeSub.status,
-              amountDue: Number(activeSub.amountDue),
-              endsAt: activeSub.endsAt.toISOString(),
-              trialEndsAt: activeSub.trialEndsAt
-                ? activeSub.trialEndsAt.toISOString()
-                : null,
+              amountDue: Number(activeSub.amount),
+              endsAt: activeSub.expiresAt.toISOString(),
+              trialEndsAt: null,
             }
           : null,
       };

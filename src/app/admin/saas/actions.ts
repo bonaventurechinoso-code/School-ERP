@@ -96,19 +96,24 @@ export async function updateTenantPlan(tenantId: string, newPlanId: string) {
       });
 
       // Update active subscription plan reference
-      const activeSub = await tx.subscription.findFirst({
-        where: { tenantId, status: { in: ["active", "trialing"] } },
-        orderBy: { createdAt: "desc" },
+      const matchingSchool = await tx.school.findFirst({
+        where: { subdomain: tenant.subdomain },
       });
-
-      if (activeSub) {
-        await tx.subscription.update({
-          where: { id: activeSub.id },
-          data: {
-            planId: newPlanId,
-            amountDue: plan.priceNgn,
-          },
+      if (matchingSchool) {
+        const activeSub = await tx.subscription.findFirst({
+          where: { schoolId: matchingSchool.id, status: "ACTIVE" },
+          orderBy: { createdAt: "desc" },
         });
+
+        if (activeSub) {
+          await tx.subscription.update({
+            where: { id: activeSub.id },
+            data: {
+              plan: plan.name,
+              amount: plan.priceNgn,
+            },
+          });
+        }
       }
 
       await tx.auditLog.create({

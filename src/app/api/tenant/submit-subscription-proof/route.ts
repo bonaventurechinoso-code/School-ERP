@@ -54,8 +54,8 @@ export async function POST(req: NextRequest) {
 
     const cleanDomain = schoolDomain.trim().toLowerCase();
 
-    // ── Resolve tenant in the SaaS layer ─────────────────────────────────
-    const tenant = await basePrisma.tenant.findFirst({
+    // ── Resolve school & tenant in the SaaS layer ───────────────────────
+    const school = await basePrisma.school.findFirst({
       where: { subdomain: cleanDomain },
       include: {
         subscriptions: {
@@ -65,43 +65,77 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!tenant) {
+    if (!school) {
       return NextResponse.json(
-        { success: false, error: "Tenant record not found for this school domain." },
+        { success: false, error: "School record not found for this domain." },
         { status: 404 }
       );
     }
 
-    // ── Mark tenant as PENDING_VERIFICATION ───────────────────────────────
-    await basePrisma.tenant.update({
-      where: { id: tenant.id },
+    const tenant = await basePrisma.tenant.findFirst({
+      where: { subdomain: cleanDomain },
+    });
+
+    // ── Mark tenant as PENDING_VERIFICATION if exists ─────────────────────
+    if (tenant) {
+      await basePrisma.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          status: "PENDING_VERIFICATION",
+        },
+      });
+    }
+
+    // ── Mark active subscription as PENDING or create one ─────────────────
+    const activeSub = school.subscriptions[0];
+    if (activeSub) {
+      await basePrisma.subscription.update({
+        where: { id: activeSub.id },
+        data: {
+          status: "PENDING",
+          amount: Number(amount),
+          paymentMethod: "MANUAL",
+          verifiedByAdmin: false,
+        },
+      });
+    } else {
+      await basePrisma.subscription.create({
+        data: {
+          schoolId: school.id,
+          status: "PENDING",
+          amount: Number(amount),
+          paymentMethod: "MANUAL",
+          plan: school.subscriptionPlan || "BASIC",
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          verifiedByAdmin: false,
+        },
+      });
+    }
+
+    // ── Record SchoolPayment manual proof entry ───────────────────────────
+    await basePrisma.schoolPayment.create({
       data: {
+        schoolId: school.id,
+        amount: Number(amount),
+        type: "SUBSCRIPTION",
         status: "PENDING_VERIFICATION",
       },
     });
 
-    // ── Mark active subscription as pending ───────────────────────────────
-    const activeSub = tenant.subscriptions[0];
-    if (activeSub) {
-      await basePrisma.subscription.update({
-        where: { id: activeSub.id },
-        data: { status: "pending_verification" },
-      });
-    }
-
     // ── Sync School record — keep portal live during review ───────────────
-    await basePrisma.school.updateMany({
-      where: { subdomain: cleanDomain },
+    await basePrisma.school.update({
+      where: { id: school.id },
       data: { subscriptionStatus: "ACTIVE" },
     });
 
     // ── Log an Audit Trail entry for the proof submission ─────────────────
+    const actorId = tenant?.id || school.id;
     await basePrisma.auditLog
       .create({
         data: {
-          actorId: tenant.id,
+          actorId,
           action: "submit_subscription_proof",
-          tenantId: tenant.id,
+          tenantId: actorId,
           metadata: {
             schoolDomain: cleanDomain,
             reference: reference.trim(),

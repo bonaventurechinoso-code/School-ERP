@@ -70,8 +70,8 @@ export default async function BillingPage({
       {/* Client Component receives all pre-fetched data */}
       <BillingProofClient
         schoolDomain={school.subdomain}
-        subscriptionPlan={school.subscriptionPlan}
-        subscriptionStatus={school.subscriptionStatus}
+        subscriptionPlan={school.subscriptionPlan ?? undefined}
+        subscriptionStatus={school.subscriptionStatus ?? undefined}
         subscriptionExpiresAt={school.subscriptionExpiresAt?.toISOString() ?? null}
         platformBankName={platformBank?.bankName ?? undefined}
         platformAccountNumber={platformBank?.accountNumber ?? undefined}

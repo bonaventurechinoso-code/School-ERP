@@ -9,7 +9,7 @@ export async function GET() {
       orderBy: { priceNgn: "asc" },
       include: {
         _count: {
-          select: { tenants: true, subscriptions: true },
+          select: { tenants: true },
         },
       },
     });

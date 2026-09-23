@@ -82,18 +82,7 @@ export async function GET(req: NextRequest) {
               currency: primaryWallet.currency,
             }
           : { balance: 0, currency: "NGN" },
-        subscription: activeSub
-          ? {
-              id: activeSub.id,
-              status: activeSub.status,
-              startsAt: activeSub.startsAt,
-              endsAt: activeSub.endsAt,
-              trialEndsAt: activeSub.trialEndsAt,
-              amountDue: Number(activeSub.amountDue),
-              amountPaid: Number(activeSub.amountPaid),
-              planName: activeSub.plan.name,
-            }
-          : null,
+        subscription: null,
       };
     });
 
