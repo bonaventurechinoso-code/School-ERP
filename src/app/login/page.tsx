@@ -219,7 +219,9 @@ function UniversalLoginPageContent() {
     setIsSubmitting(true);
     setErrorMsg("");
 
-    const targetDomain = (resolvedTenant || schoolCodeInput).trim().toLowerCase();
+    const trimmedSchoolCode = schoolCodeInput.trim().toLowerCase();
+    const targetDomain = (resolvedTenant || trimmedSchoolCode).trim().toLowerCase();
+    const isCentralLogin = !targetDomain;
 
     try {
       beginTokenWait();
@@ -279,11 +281,24 @@ function UniversalLoginPageContent() {
         const user = sessionPayload;
 
         if (user?.mustChangePassword) {
-          const domain = user.schoolDomain || targetDomain || "york";
+          const domain = targetDomain || user.schoolDomain || "york";
           router.push(`/${domain}/security/change-password?forced=true`);
           return;
         }
 
+        // 1. Central Admin Routing Logic:
+        // If "School Code" is left blank (as indicated by "Optional for Central Admins") or role is SUPER_ADMIN:
+        // Authenticate against root platform database and route directly to the Super Admin Console.
+        if (isCentralLogin || user?.role === "SUPER_ADMIN") {
+          const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
+          router.push(adminTarget);
+          return;
+        }
+
+        // 2. Tenant Workspace Routing Logic:
+        // If "School Code" is filled out (e.g., typing "york"):
+        // Automatically route and log them into that specific tenant's path workspace.
+        const tenantSlug = targetDomain || user?.schoolDomain || trimmedSchoolCode || "york";
         const canonicalRole = (user?.role || "").toUpperCase();
         const staffRoleStr = (user?.staffRole || "").toUpperCase();
         const isBursarRole =
@@ -294,20 +309,15 @@ function UniversalLoginPageContent() {
           staffRoleStr.includes("CASHIER") ||
           staffRoleStr.includes("FINANCE");
 
-        if (user?.role === "SUPER_ADMIN") {
-          router.push("/admin");
-        } else if (user?.role === "STUDENT") {
-          router.push(`/${user.schoolDomain || targetDomain || "portal"}/portal/student`);
+        if (canonicalRole === "STUDENT") {
+          router.push(`/${tenantSlug}/portal/student`);
+        } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
+          router.push(`/${tenantSlug}/portal/staff`);
         } else if (isBursarRole) {
           router.push("/bursar");
-        } else if (user?.schoolDomain) {
-          router.push(`/${user.schoolDomain}/dashboard`);
-        } else if (targetDomain) {
-          router.push(`/${targetDomain}/dashboard`);
-        } else if (callbackUrl && !callbackUrl.includes("/login")) {
-          router.push(callbackUrl);
         } else {
-          router.push("/admin");
+          // School Admin / Principal / Default tenant workspace
+          router.push(`/${tenantSlug}/dashboard`);
         }
       }
     } catch (err: any) {
@@ -360,7 +370,7 @@ function UniversalLoginPageContent() {
       {/* 3. RIGHT SIDEBAR (60% Width) - AUTONOMOUS AUTHENTICATION FORM             */}
       {/* ========================================================================= */}
       <div className="w-full lg:w-[60%] flex items-center justify-center p-4 sm:p-8 lg:p-12">
-        <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 sm:p-8 space-y-6">
+        <div className="w-full max-w-md sm:max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 sm:p-8 space-y-6">
           
           {/* Mobile Header (Shown on mobile screens when Left Sidebar is hidden) */}
           <div className="lg:hidden flex items-center gap-2.5 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
@@ -402,8 +412,8 @@ function UniversalLoginPageContent() {
             </div>
           )}
 
-          {/* 3.C Role Selector Tabs (shadcn/ui style Tab bar) */}
-          <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 select-none">
+          {/* 3.C Role Selector Tabs (Flexible responsive grid, no truncation) */}
+          <div className="w-full grid grid-cols-4 gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-zinc-500 dark:text-zinc-400 select-none overflow-x-auto">
             {ROLE_CONFIGS.map((tab) => {
               const isActive = activeRoleTab === tab.id;
               return (
@@ -414,9 +424,9 @@ function UniversalLoginPageContent() {
                     setActiveRoleTab(tab.id);
                     setErrorMsg("");
                   }}
-                  className={`py-1.5 px-2 rounded-md transition-all text-center truncate ${
+                  className={`w-auto min-w-max sm:w-full py-2 px-2.5 sm:px-4 rounded-lg transition-all text-center whitespace-nowrap flex items-center justify-center font-medium ${
                     isActive
-                      ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 shadow-sm font-semibold"
+                      ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 shadow-xs font-semibold"
                       : "hover:text-zinc-900 dark:hover:text-zinc-100"
                   }`}
                 >
