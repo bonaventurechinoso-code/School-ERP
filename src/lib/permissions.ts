@@ -246,6 +246,11 @@ export function checkRouteAuthorization(
     };
   }
 
+  // Personal Security & Password Settings
+  if (pathname.includes("/settings/security")) {
+    return { allowed: true, category, effectiveRoleName };
+  }
+
   // 3. Public Portal Settings & Bank Configuration
   if (pathname.includes("/settings/bank")) {
     if (category === "FINANCIAL") {

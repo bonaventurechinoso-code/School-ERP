@@ -12,6 +12,7 @@ import {
   LogOut, 
   X,
   FileSpreadsheet,
+  KeyRound,
 } from "lucide-react";
 import { TierPresentationConfig, StudentProfileData } from "../types";
 
@@ -47,6 +48,7 @@ export function NavigationSidebar({
     { id: "COMMUNICATIONS", label: "Live Communications", icon: Megaphone },
     { id: "FINANCE", label: tierConfig.billingTitle, icon: CreditCard },
     { id: "TRANSACTIONS", label: "Transaction History", icon: Receipt },
+    { id: "SECURITY", label: "Security & Password", icon: KeyRound },
   ];
 
   const sidebarContent = (

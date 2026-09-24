@@ -179,9 +179,33 @@ export async function middleware(req: NextRequest) {
     path.startsWith('/trial-expired') ||
     path.includes('/login') ||
     path.includes('/apply') ||
-    path.startsWith('/register');
+    path.startsWith('/register') ||
+    path.includes('/forgot-password') ||
+    path.includes('/reset-password') ||
+    path.includes('/security/change-password');
 
   if (isPublicOrPortalPath) {
+    // Intercept portal visits if user has a pending forced initial password reset
+    if ((path.includes('/portal/') || path.startsWith('/portal/')) && !path.includes('/security/change-password')) {
+      const cookieToken = req.cookies.get('session')?.value;
+      if (cookieToken) {
+        try {
+          const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+          const secret = new TextEncoder().encode(jwtSecret);
+          const verified = await jwtVerify(cookieToken, secret);
+          if (verified.payload?.mustChangePassword) {
+            const tenant = (verified.payload.schoolDomain as string) || subdomain || '';
+            const forcedPath = tenant ? `/${tenant}/security/change-password` : '/security/change-password';
+            const forcedUrl = new URL(forcedPath, req.url);
+            forcedUrl.searchParams.set('forced', 'true');
+            return NextResponse.redirect(forcedUrl);
+          }
+        } catch {
+          // Token decode fail handled by page authentication
+        }
+      }
+    }
+
     if (isIPAddress || isLocalhost) {
       if (subdomain && !url.pathname.startsWith(`/${subdomain}`)) {
         const rewriteUrl = new URL(`/${subdomain}${url.pathname}${url.search}`, req.url);
@@ -216,7 +240,7 @@ export async function middleware(req: NextRequest) {
     let sessionToken = queryToken || authHeader || cookieToken;
 
     const isDev = process.env.NODE_ENV === 'development';
-    const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
+    const devMockRoleSetting = process.env.NEXT_PUBLIC_DEV_MOCK_ROLE;
     const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
 
     const pathSegments = path.split('/').filter(Boolean);
@@ -270,6 +294,16 @@ export async function middleware(req: NextRequest) {
           tenantId: 'mock-dev-tenant',
           schoolDomain: subdomain || 'greenwood',
         };
+      }
+
+      // Intercept entry if user is flagged for forced initial password reset
+      if (payload?.mustChangePassword && !path.includes('/security/change-password')) {
+        const forcedPath = effectiveTenant
+          ? `/${effectiveTenant}/security/change-password`
+          : '/security/change-password';
+        const forcedUrl = new URL(forcedPath, req.url);
+        forcedUrl.searchParams.set('forced', 'true');
+        return NextResponse.redirect(forcedUrl);
       }
 
       // --- Strict Cross-Subdomain & Root Domain Session Isolation Guard ---

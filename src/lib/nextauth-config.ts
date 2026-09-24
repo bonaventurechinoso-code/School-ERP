@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { basePrisma, getTenantClient } from "./tenant-prisma";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "./auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS } from "./session-manager";
+import { isMustChangePassword } from "./security-service";
 
 /**
  * NextAuth.js Configuration for SchoolERP:
@@ -112,6 +113,7 @@ export const authOptions: NextAuthOptions = {
             const normalizedRole = normalizeRole(staff.role);
             const permissions = getDefaultPermissionsForRole(normalizedRole);
             const activeTiers = staff.school.academicTiers.map((t) => t.name);
+            const mustChangePassword = rawPassword === "Password123" || await isMustChangePassword(staff.id);
 
             return {
               id: staff.id,
@@ -125,6 +127,7 @@ export const authOptions: NextAuthOptions = {
               tenantName: staff.school.name,
               activeTiers,
               permissions,
+              mustChangePassword,
             };
           }
         }
@@ -155,6 +158,7 @@ export const authOptions: NextAuthOptions = {
           if (rawPassword === "Password123" || isDev) {
             const activeTiers = student.school.academicTiers.map((t) => t.name);
             const permissions = getDefaultPermissionsForRole("STUDENT");
+            const mustChangePassword = rawPassword === "Password123" || await isMustChangePassword(student.id);
 
             return {
               id: student.id,
@@ -168,6 +172,7 @@ export const authOptions: NextAuthOptions = {
               tenantName: student.school.name,
               activeTiers,
               permissions,
+              mustChangePassword,
             };
           }
         }
@@ -369,6 +374,7 @@ export const authOptions: NextAuthOptions = {
         token.tenantName = (user as any).tenantName || undefined;
         token.activeTiers = (user as any).activeTiers || [];
         token.permissions = (user as any).permissions || [];
+        token.mustChangePassword = (user as any).mustChangePassword || false;
 
         // Wire directly into our database session strategy
         try {
@@ -382,6 +388,7 @@ export const authOptions: NextAuthOptions = {
             staffRole: token.staffRole as string,
             activeTiers: token.activeTiers as string[],
             permissions: token.permissions as string[],
+            mustChangePassword: token.mustChangePassword as boolean,
             userAgent: "NextAuth / " + (account?.provider || "credentials"),
           });
           token.sessionToken = dbSession.sessionToken;
@@ -410,6 +417,7 @@ export const authOptions: NextAuthOptions = {
         session.user.activeTiers = (token.activeTiers as string[]) || [];
         session.user.permissions = (token.permissions as string[]) || [];
         session.user.sessionToken = token.sessionToken as string;
+        (session.user as any).mustChangePassword = token.mustChangePassword || false;
       }
       return session;
     },

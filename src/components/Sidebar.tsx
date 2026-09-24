@@ -20,6 +20,7 @@ import {
   Landmark,
   FileCheck2,
   Coins,
+  KeyRound,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
@@ -151,6 +152,7 @@ export default function Sidebar({
       { label: "Bursary", href: `/${schoolDomain}/finance`, icon: CreditCard },
       { label: "Bursar Portal", href: "/bursar", icon: Coins },
       { label: "Management & Payroll", href: `/${schoolDomain}/hr`, icon: Building2 },
+      { label: "Security & Password", href: `/${schoolDomain}/settings/security`, icon: KeyRound },
     ],
     [schoolDomain]
   );

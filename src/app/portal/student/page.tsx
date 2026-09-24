@@ -1,4 +1,6 @@
 import React from "react";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { fetchStudentPortalWorkspace } from "./actions";
 import { StudentPortalClient } from "./components/StudentPortalClient";
 
@@ -19,6 +21,12 @@ export default async function StudentPortalPage({
   const schoolDomain = searchParams.schoolDomain || searchParams.school || "";
   const tierParam = searchParams.tier;
   const studentLoginId = searchParams.studentId || searchParams.loginId;
+
+  const session = await getSession();
+  if (session?.mustChangePassword) {
+    const targetDomain = schoolDomain || session.schoolDomain || "york";
+    redirect(`/${targetDomain}/security/change-password?forced=true`);
+  }
 
   // Pass through dynamic tenant connection factory and fetch workspace
   const workspaceData = await fetchStudentPortalWorkspace({

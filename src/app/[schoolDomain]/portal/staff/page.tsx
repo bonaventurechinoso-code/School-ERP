@@ -39,6 +39,11 @@ export default async function TenantStaffPortalPage({
     return notFound();
   }
 
+  if (session?.mustChangePassword) {
+    const { redirect } = await import("next/navigation");
+    redirect(`/${schoolDomain}/security/change-password?forced=true`);
+  }
+
   const initialData = await fetchStaffPortalInitialData(school.id, session?.email);
 
   const staffName = initialData.staffProfile

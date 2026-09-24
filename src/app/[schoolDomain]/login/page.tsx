@@ -70,6 +70,12 @@ export default function TenantLoginPage() {
         // Invalidate Next.js client router cache so layouts re-read cookies
         router.refresh();
 
+        // Check if user is logging in using a temporary password (forced initial reset)
+        if (data.mustChangePassword || data.redirectUrl?.includes('change-password')) {
+          router.push(data.redirectUrl || `/${targetDomain}/security/change-password?forced=true`);
+          return;
+        }
+
         // Role-based smart routing
         const canonicalRole = (role || "").toUpperCase();
         const staffRoleStr = (data.staffRole || "").toUpperCase();

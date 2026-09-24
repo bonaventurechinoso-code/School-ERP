@@ -17,6 +17,7 @@ export interface SessionPayload {
   sessionId?: string;
   dbSessionId?: string;
   expiresAt?: Date | string;
+  mustChangePassword?: boolean;
   [key: string]: any;
 }
 

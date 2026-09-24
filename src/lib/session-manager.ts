@@ -55,6 +55,7 @@ export interface CreateSessionParams {
   ipAddress?: string | null;
   userAgent?: string | null;
   sessionToken?: string | null;
+  mustChangePassword?: boolean;
 }
 
 /**
@@ -106,6 +107,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
     staffRole: params.staffRole || undefined,
     activeTiers: params.activeTiers || [],
     permissions: params.permissions || [],
+    mustChangePassword: params.mustChangePassword ?? false,
   })
     .setProtectedHeader({ alg: ALG })
     .setIssuedAt()

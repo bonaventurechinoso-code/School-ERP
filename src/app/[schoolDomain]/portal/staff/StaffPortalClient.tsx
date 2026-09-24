@@ -36,7 +36,9 @@ import {
   Check,
   PlusCircle,
   FileCheck,
+  KeyRound,
 } from "lucide-react";
+import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import {
   saveClassroomAttendance,
   saveClassroomGrades,
@@ -106,7 +108,7 @@ interface StaffPortalClientProps {
   initialStudents: StudentItem[];
   initialLessonNotes?: LessonNoteData[];
   initialLeaveRequests?: LeaveRequestData[];
-  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips";
+  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security";
 }
 
 function formatNaira(amount: number): string {
@@ -130,7 +132,7 @@ export default function StaffPortalClient({
   initialLeaveRequests = [],
   defaultTab = "overview",
 }: StaffPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security">(defaultTab);
   const [isPending, startTransition] = useTransition();
 
   // Tier & Class Filtering
@@ -583,6 +585,7 @@ export default function StaffPortalClient({
           { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen },
           { id: "leaves", label: "Staff Leave Requests", icon: Clock },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt },
+          { id: "security", label: "Security & Password", icon: KeyRound },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -1947,6 +1950,19 @@ export default function StaffPortalClient({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 9: PERSONAL SECURITY & PASSWORD SETTINGS                             */}
+      {/* ========================================================================= */}
+      {activeTab === "security" && (
+        <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
+          <SecurityPasswordForm
+            schoolDomain={schoolDomain}
+            userRole={staffRole || "STAFF"}
+            brandColor="#059669"
+          />
         </div>
       )}
 

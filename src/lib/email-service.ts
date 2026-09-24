@@ -715,3 +715,110 @@ export async function sendBroadcastNoticeEmail(payload: {
   }
 }
 
+/**
+ * Sends a transactional password recovery email containing a secure, time-limited reset link.
+ */
+export async function sendPasswordResetEmail(payload: {
+  school: School | any;
+  recipientEmail: string;
+  recipientName: string;
+  resetUrl: string;
+  expiresMinutes?: number;
+}) {
+  try {
+    const { school, recipientEmail, recipientName, resetUrl, expiresMinutes = 60 } = payload;
+    const tenantName = school?.name || "Institution";
+    const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
+    const messageId = `<reset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Password Reset Request - ${tenantName}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+          .header { background: ${brandColor}; padding: 32px 36px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+          .header p { margin: 6px 0 0 0; opacity: 0.85; font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+          .content { padding: 36px; line-height: 1.6; }
+          .content h2 { margin-top: 0; font-size: 18px; color: #0f172a; font-weight: 600; }
+          .content p { margin: 0 0 16px 0; font-size: 15px; color: #334155; }
+          .security-callout { background-color: #f1f5f9; padding: 18px 20px; border-radius: 10px; margin: 24px 0; border-left: 4px solid ${brandColor}; font-size: 14px; color: #475569; }
+          .action-container { text-align: center; margin: 32px 0; }
+          .button { background-color: ${brandColor}; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+          .link-fallback { word-break: break-all; font-size: 12px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 20px; }
+          .footer { padding: 24px 36px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${tenantName}</h1>
+            <p>Institutional Security Desk</p>
+          </div>
+          <div class="content">
+            <h2>Password Recovery Request</h2>
+            <p>Hello <strong>${recipientName || "User"}</strong>,</p>
+            <p>We received a request to reset the password associated with your account for <strong>${tenantName}</strong>.</p>
+            <p>Click the secure button below to choose a brand-new password:</p>
+            
+            <div class="action-container">
+              <a href="${resetUrl}" class="button" target="_blank" rel="noopener noreferrer">Reset Your Password</a>
+            </div>
+
+            <div class="security-callout">
+              <strong>Security Notice:</strong> This recovery link is strictly time-limited and will automatically expire in <strong>${expiresMinutes} minutes</strong>. If you did not initiate this password reset request, you can safely disregard this email; your current password remains secure.
+            </div>
+
+            <p style="font-size: 13px; color: #64748b;">If the button above does not work, copy and paste this secure link directly into your browser:</p>
+            <div class="link-fallback">${resetUrl}</div>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${tenantName}. All rights reserved.<br/>
+            Automated security dispatch. Please do not reply directly to this message.
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    console.log("----------------------------------------------------------------");
+    console.log(`[PASSWORD_RESET_EMAIL] Dispatched to: ${recipientEmail} for ${tenantName}`);
+    console.log(`Reset Link: ${resetUrl}`);
+    console.log("----------------------------------------------------------------");
+
+    // Persist message record in MessageLog
+    try {
+      if (school?.id) {
+        await basePrisma.messageLog.create({
+          data: {
+            schoolId: school.id,
+            recipientEmail: recipientEmail.toLowerCase().trim(),
+            recipientType: "STAFF",
+            messageType: "EMAIL",
+            subject: `[SECURITY] Password Reset Request - ${tenantName}`,
+            body: `Password recovery initiated. Reset link: ${resetUrl}`,
+            sentAt: new Date(),
+          },
+        });
+      }
+    } catch (logErr) {
+      console.warn("[EMAIL_SERVICE] Notice log warning:", logErr);
+    }
+
+    return {
+      success: true,
+      messageId,
+      html: emailHtml,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to dispatch password reset email:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+

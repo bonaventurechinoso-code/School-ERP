@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { cookies } from "next/headers";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, getSecureCookieOptions } from "@/lib/session-manager";
+import { isMustChangePassword } from "@/lib/security-service";
 
 export async function POST(req: Request) {
   try {
@@ -182,6 +183,7 @@ export async function POST(req: Request) {
     let resolvedStaffRole: string | undefined = undefined;
     let authenticatedUserId = "";
     let authenticatedEmail = email;
+    let mustChangePassword = false;
 
     // A. Check Staff (SCHOOL_ADMIN / STAFF)
     if (!resolvedRole) {
@@ -194,15 +196,20 @@ export async function POST(req: Request) {
 
       if (staff) {
         let isPasswordValid = false;
+        let isTemporary = false;
         if (staff.password) {
           isPasswordValid = await bcrypt.compare(password, staff.password).catch(() => false);
           if (!isPasswordValid && (staff.password === password || password === "Password123")) {
             isPasswordValid = true;
           }
+          if (isPasswordValid && (password === "Password123" || await bcrypt.compare("Password123", staff.password).catch(() => false))) {
+            isTemporary = true;
+          }
         } else {
           // If staff has no password hash set yet (e.g. newly self-registered tenant), accept default initial password Password123
           if (password === "Password123" || password === "") {
             isPasswordValid = true;
+            isTemporary = true;
           }
         }
 
@@ -211,6 +218,8 @@ export async function POST(req: Request) {
           resolvedStaffRole = staff.role;
           authenticatedUserId = staff.id;
           authenticatedEmail = staff.email;
+          const userForced = await isMustChangePassword(staff.id);
+          mustChangePassword = isTemporary || userForced;
         }
       }
     }
@@ -244,10 +253,26 @@ export async function POST(req: Request) {
           );
         }
 
-        // If student matched by email & standard default password
-        if (password === "Password123") {
+        const studentCustomFields = (student.dynamicFields as any) || {};
+        let isPasswordValid = false;
+        let isTemporary = false;
+
+        if (studentCustomFields.password) {
+          isPasswordValid = await bcrypt.compare(password, studentCustomFields.password).catch(() => false);
+          if (isPasswordValid && (password === "Password123" || await bcrypt.compare("Password123", studentCustomFields.password).catch(() => false))) {
+            isTemporary = true;
+          }
+        } else if (password === "Password123") {
+          isPasswordValid = true;
+          isTemporary = true;
+        }
+
+        if (isPasswordValid) {
           resolvedRole = "STUDENT";
           authenticatedUserId = student.id;
+          authenticatedEmail = student.email || `${student.admissionNumber || student.id}@student.portal`;
+          const userForced = await isMustChangePassword(student.id);
+          mustChangePassword = isTemporary || userForced;
         }
       }
     }
@@ -271,10 +296,17 @@ export async function POST(req: Request) {
       staffRole: resolvedStaffRole,
       activeTiers: activeTiers,
       permissions: permissions,
+      mustChangePassword: mustChangePassword,
       ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
       userAgent: req.headers.get("user-agent"),
       sessionToken: distinctSessionToken || crypto.randomUUID(),
     });
+
+    const redirectTarget = mustChangePassword
+      ? `/${tenant.subdomain}/security/change-password?forced=true`
+      : resolvedRole === "STUDENT"
+      ? `/${tenant.subdomain}/portal/student`
+      : `/${tenant.subdomain}/dashboard`;
 
     const response = NextResponse.json({ 
       success: true, 
@@ -284,6 +316,8 @@ export async function POST(req: Request) {
       schoolDomain: tenant.subdomain,
       activeTiers,
       permissions,
+      mustChangePassword,
+      redirectUrl: redirectTarget,
       sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
       token: sessionResult.cookieToken,
       maxAge: SESSION_MAX_AGE_SECONDS,

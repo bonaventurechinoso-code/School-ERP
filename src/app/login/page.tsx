@@ -277,6 +277,13 @@ function UniversalLoginPageContent() {
         router.refresh();
 
         const user = sessionPayload;
+
+        if (user?.mustChangePassword) {
+          const domain = user.schoolDomain || targetDomain || "york";
+          router.push(`/${domain}/security/change-password?forced=true`);
+          return;
+        }
+
         const canonicalRole = (user?.role || "").toUpperCase();
         const staffRoleStr = (user?.staffRole || "").toUpperCase();
         const isBursarRole =
