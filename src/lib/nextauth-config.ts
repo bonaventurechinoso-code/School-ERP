@@ -45,7 +45,7 @@ export const authOptions: NextAuthOptions = {
           isDev &&
           (normalizedEmail === "superadmin@platform.com" ||
             normalizedEmail === "superadmin@school.edu" ||
-            normalizedEmail === "admin@schoolerp.com");
+            normalizedEmail === "admin@bonaveeict.com.ng");
 
         if (platformAdmin || isMasterDevAdmin) {
           let isAuthenticated = false;
@@ -437,7 +437,13 @@ export const authOptions: NextAuthOptions = {
      * tenant subdomains (*.bonaveeict.com.ng), and Render deployments.
      */
     async redirect({ url, baseUrl }) {
-      const configuredBaseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || baseUrl).replace(/\/$/, "");
+      const configuredBaseUrl = (
+        process.env.NEXTAUTH_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.BASE_URL ||
+        baseUrl ||
+        "https://bonaveeict.com.ng"
+      ).replace(/\/$/, "");
 
       // 1. Relative paths (/dashboard, /greenwood/dashboard, etc.)
       if (url.startsWith("/")) {

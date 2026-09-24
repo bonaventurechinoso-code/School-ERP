@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       isDev &&
       (normalizedEmail === "superadmin@platform.com" ||
        normalizedEmail === "superadmin@school.edu" ||
-       normalizedEmail === "admin@schoolerp.com");
+       normalizedEmail === "admin@bonaveeict.com.ng");
 
     if (platformAdmin || isMasterDevAdmin) {
       let isCentralAuthenticated = false;

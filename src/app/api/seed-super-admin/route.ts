@@ -10,7 +10,7 @@ export async function GET() {
     const passwordHash = await bcrypt.hash("Password123", 10);
 
     // 1. Upsert Super Admin Accounts
-    const adminEmails = ["admin@schoolerp.com", "superadmin@platform.com"];
+    const adminEmails = ["admin@bonaveeict.com.ng", "superadmin@platform.com"];
     const seededAdmins = [];
 
     for (const email of adminEmails) {
@@ -60,7 +60,7 @@ export async function GET() {
         id: platformWallet.id,
         balance: platformWallet.balance,
       },
-      nextSteps: "Navigate to /login and sign in with admin@schoolerp.com and Password123",
+      nextSteps: "Navigate to /login and sign in with admin@bonaveeict.com.ng and Password123",
     });
   } catch (error: any) {
     console.error("[SEED_SUPER_ADMIN_ERROR]:", error);

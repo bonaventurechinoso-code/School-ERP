@@ -42,7 +42,7 @@ export interface TenantData {
  * This is an isomorphic function that can be used safely in Middleware,
  * Server Components (via next/headers), or Client Components.
  * 
- * @param host The request host (e.g., "greenvalley.schoolerp.com")
+ * @param host The request host (e.g., "greenvalley.bonaveeict.com.ng")
  * @returns The extracted subdomain or null
  */
 export function extractSubdomainFromHost(host: string | null): string | null {

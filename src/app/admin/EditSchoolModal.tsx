@@ -305,7 +305,7 @@ export default function EditSchoolModal({ school }: EditSchoolProps) {
                       className="w-full p-2.5 text-slate-500 dark:text-zinc-400 text-sm bg-transparent cursor-not-allowed select-none outline-none font-mono"
                     />
                     <span className="px-2.5 py-2 text-xs font-medium text-slate-400 border-l border-slate-200 dark:border-zinc-800">
-                      .schoolerp.com
+                      .bonaveeict.com.ng
                     </span>
                   </div>
                 </div>

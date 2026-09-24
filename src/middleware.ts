@@ -57,8 +57,8 @@ export function extractTenantSubdomain(host: string, searchParams?: URLSearchPar
     return '';
   }
 
-  // 5. Fallback for auxiliary hosting domains (Render or schoolerp.com)
-  const auxiliaryApexDomains = ['schoolerp.com', 'school-erp-1-mfc3.onrender.com'];
+  // 5. Fallback for auxiliary hosting domains (Render)
+  const auxiliaryApexDomains = ['school-erp-1-mfc3.onrender.com'];
   for (const apex of auxiliaryApexDomains) {
     if (strippedHost.endsWith(`.${apex}`)) {
       const sub = strippedHost.slice(0, -(apex.length + 1)).toLowerCase().trim();
@@ -92,8 +92,6 @@ export async function middleware(req: NextRequest) {
     !strippedHost ||
     strippedHost === BASE_TENANT_DOMAIN ||
     strippedHost === `www.${BASE_TENANT_DOMAIN}` ||
-    strippedHost === 'schoolerp.com' ||
-    strippedHost === 'www.schoolerp.com' ||
     (strippedHost.endsWith('.onrender.com') && strippedHost.split('.').length === 3);
 
   // On a local tenant school workspace (e.g. stmark.bonaveeict.com.ng or localhost with mockTenant),
@@ -141,7 +139,7 @@ export async function middleware(req: NextRequest) {
       const isMasterAdminEmail =
         userEmail === 'superadmin@platform.com' ||
         userEmail === 'superadmin@school.edu' ||
-        userEmail === 'admin@schoolerp.com' ||
+        userEmail === 'admin@bonaveeict.com.ng' ||
         userEmail.startsWith('superadmin@');
 
       // EXPLICIT CHECK:
@@ -376,6 +374,7 @@ export async function middleware(req: NextRequest) {
           const appBaseUrl =
             process.env.NEXTAUTH_URL ||
             process.env.NEXT_PUBLIC_APP_URL ||
+            process.env.BASE_URL ||
             `${req.nextUrl.protocol}//${req.nextUrl.host}`;
           const statusUrl = new URL(`/api/tenants/status?subdomain=${effectiveSubdomain}`, appBaseUrl);
           const statusRes = await fetch(statusUrl, { cache: 'no-store' });

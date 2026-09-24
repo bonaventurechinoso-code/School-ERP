@@ -6,7 +6,6 @@ import { basePrisma } from "@/lib/tenant-prisma";
  */
 export const SUPPORTED_BASE_DOMAINS = [
   (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim(),
-  "schoolerp.com",
   "bonaveeict.com.ng",
 ].filter((v, i, a) => a.indexOf(v) === i && Boolean(v));
 
@@ -320,6 +319,7 @@ export async function checkSSLHealth(subdomain: string): Promise<{
 
   // In local development, bypass external TLS
   if (isDev || rootDomain.includes("localhost")) {
+    const baseDevUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
     return {
       verified: true,
       subdomain,
@@ -327,8 +327,8 @@ export async function checkSSLHealth(subdomain: string): Promise<{
       isRegistered: true,
       dnsResolved: true,
       sslReady: true,
-      directFallbackUrl: `http://localhost:3000/${subdomain}/dashboard`,
-      targetDashboardUrl: `http://localhost:3000/${subdomain}/dashboard`,
+      directFallbackUrl: `${baseDevUrl}/${subdomain}/dashboard`,
+      targetDashboardUrl: `${baseDevUrl}/${subdomain}/dashboard`,
       message: "Development environment: local SSL verified."
     };
   }

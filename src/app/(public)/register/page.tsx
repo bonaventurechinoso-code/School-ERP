@@ -73,14 +73,12 @@ export default function RegisterTenantPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const host = window.location.host;
-      if (host.includes("schoolerp.com")) {
-        setRootDisplay("schoolerp.com");
-      } else if (host.includes("bonaveeict.com.ng")) {
+      if (host.includes("bonaveeict.com.ng")) {
         setRootDisplay("bonaveeict.com.ng");
       } else if (host.includes("localhost")) {
         setRootDisplay("localhost:3000");
       } else {
-        setRootDisplay(host);
+        setRootDisplay(process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng");
       }
     }
   }, []);

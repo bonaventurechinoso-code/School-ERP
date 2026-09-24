@@ -22,7 +22,7 @@
 # ==============================================================================
 # Production Platform Hosts (Apex Domains & Dynamic Tenant Subdomains)
 # ==============================================================================
-*.bonaveeict.com.ng, bonaveeict.com.ng, *.schoolerp.com, schoolerp.com {
+*.bonaveeict.com.ng, bonaveeict.com.ng {
     tls {
         on_demand
     }

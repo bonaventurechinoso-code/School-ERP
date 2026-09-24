@@ -655,7 +655,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
                 To verify this official academic record, scan or visit the institutional validation gateway:
               </p>
               <div className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400 break-all">
-                https://{schoolDomain}.schoolerp.ng/verify/{transcriptRefNumber}
+                https://bonaveeict.com.ng/{schoolDomain}/verify/{transcriptRefNumber}
               </div>
             </div>
 

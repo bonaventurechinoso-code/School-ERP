@@ -7,7 +7,7 @@ async function verifySessionTokenFix() {
   console.log("=== STARTING SESSION TOKEN & CLAIM VALIDATION VERIFICATION ===\n");
 
   const testUserId = "test-security-user-001";
-  const testEmail = "security.test@schoolerp.com";
+  const testEmail = "security.test@bonaveeict.com.ng";
 
   // 1. Verify createDatabaseSession JWT creation
   console.log("Step 1: Testing createDatabaseSession token generation...");

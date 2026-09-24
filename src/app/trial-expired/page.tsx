@@ -51,8 +51,8 @@ export default function TrialExpiredPage() {
 
         <div className="mt-8 pt-6 border-t border-slate-800/80 text-xs text-slate-500">
           Need assistance or data migration support? Contact billing at{" "}
-          <a href="mailto:support@schoolerp.com" className="text-blue-400 hover:underline">
-            support@schoolerp.com
+          <a href="mailto:support@bonaveeict.com.ng" className="text-blue-400 hover:underline">
+            support@bonaveeict.com.ng
           </a>
         </div>
       </div>

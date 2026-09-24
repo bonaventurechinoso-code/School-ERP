@@ -1403,7 +1403,7 @@ export default function StaffProfileDrawer({
                     {schoolName}
                   </h2>
                   <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
-                    Human Resources &amp; Bursary Division • {schoolDomain}.schoolerp.ng
+                    Human Resources &amp; Bursary Division • {schoolDomain}.bonaveeict.com.ng
                   </p>
                   <div className="inline-block mt-3 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-700">
                     Official Monthly Payslip &amp; Remuneration Voucher

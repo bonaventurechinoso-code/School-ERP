@@ -117,7 +117,7 @@ export async function POST(req: Request) {
 
     let baseUrl = `${proto}://${hostHeader}`;
     if (!hostHeader) {
-      baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || `https://${BASE_TENANT_DOMAIN}`;
+      baseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || `https://${BASE_TENANT_DOMAIN}`).replace(/\/$/, "");
     }
 
     // Preserve the tenant slug cleanly

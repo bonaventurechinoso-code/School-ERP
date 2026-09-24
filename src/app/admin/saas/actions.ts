@@ -180,10 +180,16 @@ export async function impersonateTenant(tenantId: string) {
       },
     });
 
+    const BASE_PLATFORM_URL = (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.BASE_URL ||
+      "https://bonaveeict.com.ng"
+    ).replace(/\/$/, "");
+
     return {
       success: true,
       message: `Impersonating ${tenant.schoolName}...`,
-      redirectUrl: `/${tenant.subdomain}`,
+      redirectUrl: `${BASE_PLATFORM_URL}/${tenant.subdomain}/dashboard`,
     };
   } catch (err: any) {
     console.error("[impersonateTenant error]:", err);

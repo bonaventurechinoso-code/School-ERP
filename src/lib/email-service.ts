@@ -84,7 +84,7 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
     const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
     const secondaryColor = "#4338ca";
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const portalUrl = `${baseUrl}/${subdomain}/admissions`;
 
     // Ensure or generate secure upload token for applicant credentials submission
@@ -509,7 +509,7 @@ export async function sendAdmissionOfferEmail(
   school: School,
   token: string
 ) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
   const secureLink = `${baseUrl}/${school.subdomain}/admissions/accept?token=${token}`;
   const brandColor = (school as any).branding?.primaryColor || "#0f172a";
 

@@ -38,7 +38,7 @@ async function main() {
   // Seed Platform Admins
   await prisma.platformAdmin.create({
     data: {
-      email: "admin@schoolerp.com",
+      email: "admin@bonaveeict.com.ng",
       password: defaultPasswordHash,
     },
   })

@@ -139,7 +139,7 @@ export default async function AdminDashboardPage() {
             </p>
             <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
               {recentSchools[0]
-                ? `${recentSchools[0].subdomain}.schoolerp.com • ${recentSchools[0]._count.students} students enrolled`
+                ? `${recentSchools[0].subdomain}.bonaveeict.com.ng • ${recentSchools[0]._count.students} students enrolled`
                 : "Active cluster ready for tenant deployments."}
             </p>
           </div>

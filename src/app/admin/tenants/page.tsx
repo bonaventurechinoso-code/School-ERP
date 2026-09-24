@@ -8,10 +8,22 @@ import { basePrisma } from "@/lib/tenant-prisma";
 
 export const dynamic = "force-dynamic";
 
+const BASE_PLATFORM_URL = (
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.BASE_URL ||
+  "https://bonaveeict.com.ng"
+).replace(/\/$/, "");
+
 const getTenantUrl = (subdomain: string) => {
   const cleanSlug = (subdomain || "").trim().toLowerCase();
   if (!cleanSlug) return "#";
-  return `/${cleanSlug}/dashboard`;
+  return `${BASE_PLATFORM_URL}/${cleanSlug}/dashboard`;
+};
+
+const getTenantLoginUrl = (subdomain: string) => {
+  const cleanSlug = (subdomain || "").trim().toLowerCase();
+  if (!cleanSlug) return "#";
+  return `${BASE_PLATFORM_URL}/${cleanSlug}/login`;
 };
 
 function getTierBadge(tierName: string) {
@@ -203,16 +215,20 @@ export default async function TenantsPage() {
                         <div className="flex items-center gap-1.5 font-mono">
                           <Link 
                             href={getTenantUrl(school.subdomain)} 
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors font-medium inline-flex items-center gap-1 group/sublink"
-                            title={`Navigate to /${school.subdomain}/dashboard`}
+                            title={`Navigate to ${BASE_PLATFORM_URL}/${school.subdomain}/dashboard`}
                           >
                             <span>/{school.subdomain}</span>
                             <ExternalLink className="w-3 h-3 opacity-60 group-hover/sublink:opacity-100 transition-opacity" />
                           </Link>
                           <Link 
-                            href={`/${school.subdomain}/login`}
+                            href={getTenantLoginUrl(school.subdomain)}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800"
-                            title={`Open /${school.subdomain}/login`}
+                            title={`Open ${BASE_PLATFORM_URL}/${school.subdomain}/login`}
                           >
                             login
                           </Link>
@@ -295,14 +311,20 @@ export default async function TenantsPage() {
                       <div className="flex items-center gap-2 mt-0.5">
                         <Link 
                           href={getTenantUrl(school.subdomain)} 
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-mono inline-flex items-center gap-1 font-medium"
+                          title={`Navigate to ${BASE_PLATFORM_URL}/${school.subdomain}/dashboard`}
                         >
                           <span>/{school.subdomain}</span>
                           <ExternalLink className="w-3 h-3 opacity-60" />
                         </Link>
                         <Link 
-                          href={`/${school.subdomain}/login`}
+                          href={getTenantLoginUrl(school.subdomain)}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800"
+                          title={`Open ${BASE_PLATFORM_URL}/${school.subdomain}/login`}
                         >
                           login
                         </Link>

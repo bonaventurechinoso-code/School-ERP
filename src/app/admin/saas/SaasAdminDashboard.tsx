@@ -96,6 +96,11 @@ interface TenantItem {
   } | null;
 }
 
+const BASE_PLATFORM_URL = (
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.BASE_URL ||
+  "https://bonaveeict.com.ng"
+).replace(/\/$/, "");
 
 interface MetricsData {
   platformWallet: {
@@ -974,7 +979,7 @@ export default function SaasAdminDashboard({
                     const isActive = effectiveStatus === "ACTIVE";
                     const isSuspended = effectiveStatus === "SUSPENDED" || tenant.status === "SUSPENDED";
                     const isPastDue = effectiveStatus === "PAST_DUE";
-                    const portalUrl = `/${tenant.subdomain}`;
+                    const portalUrl = `${BASE_PLATFORM_URL}/${tenant.subdomain}/dashboard`;
                     const monthlyRate =
                       tenant.monthlyRate ||
                       tenant.subscription?.amountDue ||
@@ -993,9 +998,16 @@ export default function SaasAdminDashboard({
                             {tenant.schoolName}
                           </div>
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 mt-0.5">
-                            <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
-                              {tenant.subdomain}
-                            </span>
+                            <Link
+                              href={portalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold hover:underline inline-flex items-center gap-1"
+                              title={`Navigate to ${portalUrl}`}
+                            >
+                              <span>/{tenant.subdomain}</span>
+                              <ExternalLink className="w-3 h-3 opacity-60" />
+                            </Link>
                             <span>•</span>
                             <span className="truncate max-w-[170px]">{tenant.adminEmail}</span>
                           </div>

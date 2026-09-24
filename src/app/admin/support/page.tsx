@@ -212,7 +212,7 @@ export default async function SupportPage() {
                       {t.schoolName}
                     </span>
                     <p className="font-mono text-[11px] text-slate-500 dark:text-zinc-400">
-                      {t.subdomain}.schoolerp.com • {t.adminEmail}
+                      {t.subdomain}.bonaveeict.com.ng • {t.adminEmail}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

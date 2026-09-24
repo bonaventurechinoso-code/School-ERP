@@ -92,7 +92,7 @@ export function SubscriptionLockModal() {
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <a
-            href="mailto:billing@schoolerp.com?subject=SaaS%20Subscription%20Renewal%20Proof"
+            href="mailto:billing@bonaveeict.com.ng?subject=SaaS%20Subscription%20Renewal%20Proof"
             className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
           >
             Submit Transfer Receipt

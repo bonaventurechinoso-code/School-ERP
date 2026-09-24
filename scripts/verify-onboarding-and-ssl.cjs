@@ -5,7 +5,6 @@ const prisma = new PrismaClient();
 
 const SUPPORTED_BASE_DOMAINS = [
   (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim(),
-  "schoolerp.com",
   "bonaveeict.com.ng",
 ].filter((v, i, a) => a.indexOf(v) === i && Boolean(v));
 
@@ -110,19 +109,11 @@ async function run() {
   console.log("bonaveeict.com.ng ->", apexCheck1);
   if (!apexCheck1.allowed) throw new Error("Expected bonaveeict.com.ng to be allowed for SSL");
 
-  const apexCheck2 = await verifyTenantDomainForSSL("schoolerp.com");
-  console.log("schoolerp.com ->", apexCheck2);
-  if (!apexCheck2.allowed) throw new Error("Expected schoolerp.com to be allowed for SSL");
-
   // 2. Active Tenant Greenwood Check
   console.log("\n[TEST 2] Verifying Greenwood Tenant Subdomain SSL permissions...");
   const tenantCheck1 = await verifyTenantDomainForSSL("greenwood.bonaveeict.com.ng");
   console.log("greenwood.bonaveeict.com.ng ->", tenantCheck1);
   if (!tenantCheck1.allowed) throw new Error("Expected greenwood tenant to be allowed");
-
-  const tenantCheck2 = await verifyTenantDomainForSSL("greenwood.schoolerp.com");
-  console.log("greenwood.schoolerp.com ->", tenantCheck2);
-  if (!tenantCheck2.allowed) throw new Error("Expected greenwood on schoolerp.com to be allowed");
 
   // 3. Unregistered Subdomain Denial (DDoS Protection)
   console.log("\n[TEST 3] Verifying Unregistered Subdomain Denial (Certificate Abuse Prevention)...");
