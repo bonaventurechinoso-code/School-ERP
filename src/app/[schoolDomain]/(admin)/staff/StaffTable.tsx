@@ -147,6 +147,26 @@ export default function StaffTable({
   const [customRole, setCustomRole] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Searchable bank dropdown for Create Staff form
+  const [bankCreateSearch, setBankCreateSearch] = useState("");
+  const [bankCreateDropdownOpen, setBankCreateDropdownOpen] = useState(false);
+  const bankCreateDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredCreateBanks = NIGERIAN_BANKS.filter((b) =>
+    b.toLowerCase().includes(bankCreateSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (bankCreateDropdownRef.current && !bankCreateDropdownRef.current.contains(e.target as Node)) {
+        setBankCreateDropdownOpen(false);
+        setBankCreateSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   // Refresh roster
   const refreshRoster = (query?: string, role?: string, dept?: string) => {
     const q = query !== undefined ? query : searchQuery;
@@ -788,17 +808,60 @@ export default function StaffTable({
                 className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white font-mono"
               />
             </div>
-            <div>
+            {/* Searchable Bank Dropdown */}
+            <div ref={bankCreateDropdownRef}>
               <label className="block font-semibold text-slate-600 mb-1">Bank Name</label>
-              <select
-                value={createData.bankName}
-                onChange={(e) => setCreateData({ ...createData, bankName: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-              >
-                {NIGERIAN_BANKS.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setBankCreateDropdownOpen((o) => !o); setBankCreateSearch(""); }}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white text-xs flex items-center justify-between text-left"
+                >
+                  <span>{createData.bankName || "Select bank..."}</span>
+                  <span className="text-slate-400 text-xs">&#9660;</span>
+                </button>
+
+                {bankCreateDropdownOpen && (
+                  <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+                    <div className="p-1.5 border-b border-slate-100">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={bankCreateSearch}
+                          onChange={(e) => setBankCreateSearch(e.target.value)}
+                          placeholder="Search bank..."
+                          className="w-full pl-6 pr-2 py-1 text-xs rounded border border-slate-200 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <ul className="max-h-48 overflow-y-auto">
+                      {filteredCreateBanks.length === 0 ? (
+                        <li className="px-3 py-2 text-xs text-slate-400 text-center">No banks found.</li>
+                      ) : (
+                        filteredCreateBanks.map((b) => (
+                          <li
+                            key={b}
+                            onClick={() => {
+                              setCreateData({ ...createData, bankName: b });
+                              setBankCreateDropdownOpen(false);
+                              setBankCreateSearch("");
+                            }}
+                            className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-indigo-50 transition ${
+                              createData.bankName === b
+                                ? "bg-indigo-50 font-bold text-indigo-700"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            {b}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="block font-semibold text-slate-600 mb-1">Account No. (NUBAN)</label>

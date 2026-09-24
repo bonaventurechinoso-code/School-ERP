@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { Transaction, Invoice, Student } from "@prisma/client";
 import { formatNaira } from "./FinanceDashboard";
 import { createBankDepositAction, matchDepositToInvoiceAction } from "./actions";
@@ -82,6 +82,26 @@ export default function BankReconciliationView({
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Searchable bank dropdown for the deposit modal
+  const [bankDepositSearch, setBankDepositSearch] = useState("");
+  const [bankDepositDropdownOpen, setBankDepositDropdownOpen] = useState(false);
+  const bankDepositDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredDepositBanks = NIGERIAN_BANKS.filter((b) =>
+    b.toLowerCase().includes(bankDepositSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (bankDepositDropdownRef.current && !bankDepositDropdownRef.current.contains(e.target as Node)) {
+        setBankDepositDropdownOpen(false);
+        setBankDepositSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // Helper to determine if transaction is reconciled
   const isReconciled = (t: Transaction) => {
@@ -578,22 +598,62 @@ export default function BankReconciliationView({
             <form onSubmit={handleCreateDeposit} className="space-y-4 text-xs">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Bank Name */}
-                <div>
+                {/* Searchable Bank Institution Dropdown */}
+                <div ref={bankDepositDropdownRef}>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Bank Institution
                   </label>
-                  <select
-                    value={depositForm.bankName}
-                    onChange={(e) => setDepositForm({ ...depositForm, bankName: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {NIGERIAN_BANKS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { setBankDepositDropdownOpen((o) => !o); setBankDepositSearch(""); }}
+                      className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between text-xs"
+                    >
+                      <span>{depositForm.bankName || "Select bank..."}</span>
+                      <span className="text-slate-400 text-xs">&#9660;</span>
+                    </button>
+
+                    {bankDepositDropdownOpen && (
+                      <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg overflow-hidden">
+                        <div className="p-2 border-b border-slate-100 dark:border-zinc-700">
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              autoFocus
+                              type="text"
+                              value={bankDepositSearch}
+                              onChange={(e) => setBankDepositSearch(e.target.value)}
+                              placeholder="Search bank name..."
+                              className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <ul className="max-h-48 overflow-y-auto">
+                          {filteredDepositBanks.length === 0 ? (
+                            <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                          ) : (
+                            filteredDepositBanks.map((b) => (
+                              <li
+                                key={b}
+                                onClick={() => {
+                                  setDepositForm({ ...depositForm, bankName: b });
+                                  setBankDepositDropdownOpen(false);
+                                  setBankDepositSearch("");
+                                }}
+                                className={`px-3 py-2 text-xs cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/40 transition ${
+                                  depositForm.bankName === b
+                                    ? "bg-blue-50 dark:bg-blue-950/40 font-bold text-blue-700 dark:text-blue-300"
+                                    : "text-slate-800 dark:text-zinc-200"
+                                }`}
+                              >
+                                {b}
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Account Number */}

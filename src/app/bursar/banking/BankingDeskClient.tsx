@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useRef, useEffect } from "react";
 import {
   Building2,
   CheckCircle2,
@@ -11,6 +11,7 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  Search,
 } from "lucide-react";
 import { BursarContext, updateSchoolSettlementBank } from "../actions";
 
@@ -40,6 +41,26 @@ export function BankingDeskClient({ context }: { context: BursarContext }) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ success?: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Searchable bank dropdown
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredBanks = NIGERIAN_BANKS.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (bankDropdownRef.current && !bankDropdownRef.current.contains(e.target as Node)) {
+        setBankDropdownOpen(false);
+        setBankSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handleBankSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = NIGERIAN_BANKS.find((b) => b.name === e.target.value);
@@ -169,21 +190,63 @@ export function BankingDeskClient({ context }: { context: BursarContext }) {
             )}
 
             <form onSubmit={handleSave} className="space-y-4">
-              <div>
+              {/* Searchable Bank Dropdown */}
+              <div ref={bankDropdownRef}>
                 <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1">
                   Bank Name *
                 </label>
-                <select
-                  value={bankName}
-                  onChange={handleBankSelect}
-                  className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {NIGERIAN_BANKS.map((b) => (
-                    <option key={b.code} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => { setBankDropdownOpen((o) => !o); setBankSearch(""); }}
+                    className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between"
+                  >
+                    <span>{bankName}</span>
+                    <span className="text-slate-400 text-xs">&#9660;</span>
+                  </button>
+
+                  {bankDropdownOpen && (
+                    <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-slate-100 dark:border-zinc-700">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            autoFocus
+                            type="text"
+                            value={bankSearch}
+                            onChange={(e) => setBankSearch(e.target.value)}
+                            placeholder="Search bank name..."
+                            className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      <ul className="max-h-52 overflow-y-auto">
+                        {filteredBanks.length === 0 ? (
+                          <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                        ) : (
+                          filteredBanks.map((b) => (
+                            <li
+                              key={b.code}
+                              onClick={() => {
+                                setBankName(b.name);
+                                setBankCode(b.code);
+                                setBankDropdownOpen(false);
+                                setBankSearch("");
+                              }}
+                              className={`px-3 py-2 text-xs cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition ${
+                                bankName === b.name
+                                  ? "bg-indigo-50 dark:bg-indigo-950/40 font-bold text-indigo-700 dark:text-indigo-300"
+                                  : "text-slate-800 dark:text-zinc-200"
+                              }`}
+                            >
+                              {b.name}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
