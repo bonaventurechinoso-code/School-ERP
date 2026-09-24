@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { exec } from "child_process";
 import util from "util";
+import bcrypt from "bcryptjs";
+import { ensureSecurityTables } from "@/lib/security-service";
 
 const execAsync = util.promisify(exec);
 
@@ -10,7 +12,7 @@ const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECO
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { schoolName, adminEmail, contactPhone, subdomain, tiers } = body;
+    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password } = body;
 
     // Validate inputs
     if (!schoolName || !adminEmail || !subdomain || !tiers || tiers.length === 0) {
@@ -51,6 +53,24 @@ export async function POST(request: Request) {
       );
     }
 
+    await ensureSecurityTables();
+
+    let adminPasswordToSave = "Password123";
+    let isUserProvidedPassword = false;
+
+    if (password && typeof password === "string" && password.trim().length > 0) {
+      if (password.length < 8) {
+        return NextResponse.json(
+          { error: "Password must be at least 8 characters long." },
+          { status: 400 }
+        );
+      }
+      adminPasswordToSave = password;
+      isUserProvidedPassword = true;
+    }
+
+    const adminPasswordHash = await bcrypt.hash(adminPasswordToSave, 10);
+
     // Provision the new tenant inside a transaction
     const newSchool = await basePrisma.$transaction(async (tx) => {
       // Phase A: Create baseline Tenant management record
@@ -76,7 +96,7 @@ export async function POST(request: Request) {
       await Promise.all(tierPromises);
 
       // 3. Create a default admin account
-      await tx.staff.create({
+      const staff = await tx.staff.create({
         data: {
           schoolId: school.id,
           firstName: "Admin",
@@ -85,8 +105,16 @@ export async function POST(request: Request) {
           role: "ADMIN",
           status: "ACTIVE",
           activeAt: new Date(),
+          password: adminPasswordHash,
         }
       });
+
+      await tx.$executeRawUnsafe(`
+        INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (user_id)
+        DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
+      `, staff.id, school.id, !isUserProvidedPassword);
 
       // 4. Create a default department
       await tx.department.create({

@@ -106,8 +106,22 @@ export default function RegisterTenantPage() {
     e.preventDefault();
     setErrorMsg("");
     if (step === 1) {
-      if (!formData.schoolName || !formData.adminEmail || !formData.subdomain) {
-        setErrorMsg("Please fill in all required fields.");
+      if (!formData.schoolName || !formData.adminEmail || !formData.subdomain || !formData.password || !formData.confirmPassword) {
+        setErrorMsg("Please fill in all required fields including password.");
+        return;
+      }
+      if (formData.password.length < 8) {
+        setErrorMsg("Administrative password must be at least 8 characters long.");
+        return;
+      }
+      const hasLetter = /[a-zA-Z]/.test(formData.password);
+      const hasNumber = /[0-9]/.test(formData.password);
+      if (!hasLetter || !hasNumber) {
+        setErrorMsg("Administrative password must be alphanumeric (contain at least one letter and at least one number).");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setErrorMsg("Passwords do not match. Please verify that both password entries are identical.");
         return;
       }
       setStep(2);
@@ -466,6 +480,7 @@ export default function RegisterTenantPage() {
                       <label className="block text-sm font-semibold text-slate-700 mb-1">Admin Email *</label>
                       <input 
                         required
+                        name="adminEmail"
                         type="email" 
                         className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                         placeholder="admin@school.edu"
@@ -477,6 +492,7 @@ export default function RegisterTenantPage() {
                       <label className="block text-sm font-semibold text-slate-700 mb-1">Contact Phone</label>
                       <input 
                         type="tel" 
+                        name="contactPhone"
                         inputMode="numeric" 
                         pattern="[0-9+]*" 
                         className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
@@ -485,6 +501,80 @@ export default function RegisterTenantPage() {
                         onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
                       />
                     </div>
+                  </div>
+
+                  {/* Administrative Password Setup Right Below Email */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Create Administrative Password *
+                      </label>
+                      <div className="relative">
+                        <input 
+                          required
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="At least 8 alphanumeric chars"
+                          className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                          value={formData.password}
+                          onChange={e => setFormData({ ...formData, password: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Confirm Password *
+                      </label>
+                      <div className="relative">
+                        <input 
+                          required
+                          name="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          placeholder="Re-enter password"
+                          className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                          value={formData.confirmPassword}
+                          onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Real-time Validation Indicators */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
+                    <span className={`inline-flex items-center gap-1 transition-colors ${
+                      formData.password.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
+                    }`}>
+                      {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                    </span>
+                    <span className={`inline-flex items-center gap-1 transition-colors ${
+                      (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 font-semibold" : "text-slate-400"
+                    }`}>
+                      {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric (letters + numbers)
+                    </span>
+                    {formData.confirmPassword.length > 0 && (
+                      <span className={`inline-flex items-center gap-1 font-semibold ${
+                        formData.password === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                      }`}>
+                        {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex justify-end pt-4">
@@ -548,11 +638,12 @@ export default function RegisterTenantPage() {
                       {/* Create Admin Password */}
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">
-                          Create Admin Password *
+                          Create Administrative Password *
                         </label>
                         <div className="relative">
                           <input 
                             required
+                            name="password"
                             type={showPassword ? "text" : "password"}
                             placeholder="At least 8 alphanumeric chars"
                             className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
@@ -578,6 +669,7 @@ export default function RegisterTenantPage() {
                         <div className="relative">
                           <input 
                             required
+                            name="confirmPassword"
                             type={showConfirmPassword ? "text" : "password"}
                             placeholder="Re-enter password"
                             className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
