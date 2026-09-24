@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
+import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
+import { setAuthToken } from "@/lib/api-client";
 
 interface RegistrationResult {
   success: boolean;
@@ -32,6 +34,9 @@ interface RegistrationResult {
   subdomainDashboardUrl: string;
   redirectUrl: string;
   trialDays: number;
+  token?: string;
+  sessionToken?: string;
+  sessionPayload?: any;
 }
 
 export default function RegisterTenantPage() {
@@ -152,7 +157,12 @@ export default function RegisterTenantPage() {
 
             // Execute secure redirect
             setTimeout(() => {
-              const targetUrl = data.subdomainDashboardUrl || data.dashboardUrl;
+              const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+              const baseTarget = isLocal ? data.dashboardUrl : (data.subdomainDashboardUrl || data.dashboardUrl);
+              const hasQuery = baseTarget.includes("?");
+              const targetUrl = data.token
+                ? `${baseTarget}${hasQuery ? "&" : "?"}token=${encodeURIComponent(data.token)}`
+                : baseTarget;
               window.location.href = targetUrl;
             }, 1200);
             return;
@@ -179,7 +189,12 @@ export default function RegisterTenantPage() {
       setSslVerified(true);
       setConfiguringStatusText("SSL certificate verified! Redirecting to secure school dashboard...");
       setTimeout(() => {
-        const targetUrl = data.subdomainDashboardUrl || data.dashboardUrl;
+        const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+        const baseTarget = isLocal ? data.dashboardUrl : (data.subdomainDashboardUrl || data.dashboardUrl);
+        const hasQuery = baseTarget.includes("?");
+        const targetUrl = data.token
+          ? `${baseTarget}${hasQuery ? "&" : "?"}token=${encodeURIComponent(data.token)}`
+          : baseTarget;
         window.location.href = targetUrl;
       }, 1200);
       return;
@@ -220,6 +235,17 @@ export default function RegisterTenantPage() {
         setIsSubmitting(false);
         setIsConfiguring(false);
         return;
+      }
+
+      // Persist authenticated tenant session in client storage so UI is immediately authenticated
+      if (data.sessionPayload) {
+        persistStoredSession(data.sessionPayload);
+        if (data.token) {
+          setAuthToken(data.token, data.token);
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
+        }
       }
 
       // Block immediate redirect and synchronize with reverse proxy SSL handshake

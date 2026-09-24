@@ -21,68 +21,6 @@ export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const path = url.pathname;
 
-  // 1. MASTER SAAS CONTROLLER / SUPER-ADMIN ACCESS LOCKDOWN:
-  // Explicitly hard-gate /admin and /super-admin routes behind SUPER_ADMIN role verification.
-  const isGlobalAdminPath =
-    path === '/admin' ||
-    path.startsWith('/admin/') ||
-    path === '/super-admin' ||
-    path.startsWith('/super-admin/');
-
-  if (isGlobalAdminPath) {
-    let sessionToken = req.cookies.get('session')?.value;
-    if (!sessionToken) {
-      const authHeader = req.headers.get('authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        sessionToken = authHeader.substring(7);
-      }
-    }
-    const isDev = process.env.NODE_ENV === 'development';
-
-    if (!sessionToken) {
-      const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    try {
-      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-      const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jwtVerify(sessionToken, secret);
-
-      const userRole = ((payload.role as string) || '').trim().toUpperCase();
-      const userEmail = ((payload.email as string) || '').trim().toLowerCase();
-
-      // Master administrator designated emails allowed to bypass tenant checks and route into global admin
-      const isMasterAdminEmail =
-        userEmail === 'superadmin@platform.com' ||
-        userEmail === 'superadmin@school.edu' ||
-        userEmail === 'admin@schoolerp.com' ||
-        userEmail.startsWith('superadmin@');
-
-      // EXPLICIT CHECK:
-      // Allow if verified role is SUPER_ADMIN, OR if running in development mode and session belongs to designated master administrator
-      if (userRole === 'SUPER_ADMIN' || (isDev && isMasterAdminEmail)) {
-        return NextResponse.next();
-      }
-
-      // HARD GATED: Block non-super admin roles (TENANT_ADMIN, DEMO_USER, SCHOOL_ADMIN, STAFF, STUDENT)
-      const deniedUrl = new URL('/access-denied', req.url);
-      deniedUrl.searchParams.set('role', userRole || 'GUEST');
-      deniedUrl.searchParams.set(
-        'message',
-        'Access Denied: This console is strictly restricted to Platform Super-Administrators. Standard tenant admins, demo users, staff, and students cannot access master platform governance.'
-      );
-      return NextResponse.redirect(deniedUrl);
-    } catch (err) {
-      const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.delete('session');
-      return response;
-    }
-  }
-
   // 1. Extract hostname from incoming headers (Render/Node reverse proxy passes x-forwarded-host)
   const rawHost = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
   const strippedHost = rawHost.split(':')[0].toLowerCase().trim();
@@ -152,6 +90,77 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // On a local tenant school workspace (e.g. stmark.bonaveeict.com.ng or localhost with mockTenant),
+  // navigating to /admin or /[schoolDomain]/admin is a tenant workspace action, NOT the SaaS platform super-admin console.
+  if (subdomain && !isApexOrPlatformHost && (path === '/admin' || path === `/${subdomain}/admin`)) {
+    const dashboardTarget = url.pathname.startsWith(`/${subdomain}`) ? `/${subdomain}/dashboard` : '/dashboard';
+    return NextResponse.redirect(new URL(dashboardTarget, req.url));
+  }
+
+  // MASTER SAAS CONTROLLER / SUPER-ADMIN ACCESS LOCKDOWN:
+  // Explicitly hard-gate /admin and /super-admin routes behind SUPER_ADMIN role verification
+  // strictly on the master platform apex domain.
+  const isGlobalAdminPath =
+    (!subdomain || isApexOrPlatformHost) &&
+    (path === '/admin' ||
+     path.startsWith('/admin/') ||
+     path === '/super-admin' ||
+     path.startsWith('/super-admin/'));
+
+  if (isGlobalAdminPath) {
+    let sessionToken = req.cookies.get('session')?.value;
+    if (!sessionToken) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        sessionToken = authHeader.substring(7);
+      }
+    }
+    const isDev = process.env.NODE_ENV === 'development';
+
+    if (!sessionToken) {
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', path);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    try {
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const { payload } = await jwtVerify(sessionToken, secret);
+
+      const userRole = ((payload.role as string) || '').trim().toUpperCase();
+      const userEmail = ((payload.email as string) || '').trim().toLowerCase();
+
+      // Master administrator designated emails allowed to bypass tenant checks and route into global admin
+      const isMasterAdminEmail =
+        userEmail === 'superadmin@platform.com' ||
+        userEmail === 'superadmin@school.edu' ||
+        userEmail === 'admin@schoolerp.com' ||
+        userEmail.startsWith('superadmin@');
+
+      // EXPLICIT CHECK:
+      // Allow if verified role is SUPER_ADMIN, OR if running in development mode and session belongs to designated master administrator
+      if (userRole === 'SUPER_ADMIN' || (isDev && isMasterAdminEmail)) {
+        return NextResponse.next();
+      }
+
+      // HARD GATED: Block non-super admin roles (TENANT_ADMIN, DEMO_USER, SCHOOL_ADMIN, STAFF, STUDENT)
+      const deniedUrl = new URL('/access-denied', req.url);
+      deniedUrl.searchParams.set('role', userRole || 'GUEST');
+      deniedUrl.searchParams.set(
+        'message',
+        'Access Denied: This console is strictly restricted to Platform Super-Administrators. Standard tenant admins, demo users, staff, and students cannot access master platform governance.'
+      );
+      return NextResponse.redirect(deniedUrl);
+    } catch (err) {
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', path);
+      const response = NextResponse.redirect(loginUrl);
+      response.cookies.delete('session');
+      return response;
+    }
+  }
+
   // Bypass dedicated portals, public pages, and auth endpoints from administrative interception
   const isPublicOrPortalPath =
     path.startsWith('/portal/') ||
@@ -199,6 +208,13 @@ export async function middleware(req: NextRequest) {
         sessionToken = authHeader.substring(7);
       }
     }
+    if (!sessionToken) {
+      const queryToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
+      if (queryToken) {
+        sessionToken = queryToken;
+      }
+    }
+
     const isDev = process.env.NODE_ENV === 'development';
     const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
     const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
@@ -289,6 +305,18 @@ export async function middleware(req: NextRequest) {
       const authResult = checkRouteAuthorization(path, rawRole, staffRole);
 
       if (!authResult.allowed) {
+        // If guest / unauthenticated, redirect to login instead of throwing an access denied error
+        if (authResult.category === 'GUEST') {
+          const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
+          const loginUrl = new URL(targetPath, req.url);
+          if (effectiveTenant && (isIPAddress || isLocalhost)) {
+            loginUrl.searchParams.set('mockTenant', effectiveTenant);
+          }
+          const res = NextResponse.redirect(loginUrl);
+          res.cookies.delete('session');
+          return res;
+        }
+
         // 1. If student attempted to access administrative area, direct to student portal with notice
         if (authResult.category === 'STUDENT') {
           const studentPortalUrl = new URL('/portal/student', req.url);
@@ -341,18 +369,48 @@ export async function middleware(req: NextRequest) {
   }
   // --- End Auth Check ---
 
+  let response = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
+
   if (isIPAddress || isLocalhost) {
     if (subdomain && !url.pathname.startsWith(`/${subdomain}`)) {
       const rewriteUrl = new URL(`/${subdomain}${url.pathname}${url.search}`, req.url);
-      return NextResponse.rewrite(rewriteUrl);
+      response = NextResponse.rewrite(rewriteUrl, {
+        request: {
+          headers: req.headers,
+        },
+      });
     }
-    return NextResponse.next();
-  }
-
-  if (subdomain && subdomain !== 'www' && subdomain !== 'app' && !url.pathname.startsWith(`/${subdomain}`)) {
+  } else if (subdomain && subdomain !== 'www' && subdomain !== 'app' && !url.pathname.startsWith(`/${subdomain}`)) {
     const rewriteUrl = new URL(`/${subdomain}${url.pathname}${url.search}`, req.url);
-    return NextResponse.rewrite(rewriteUrl);
+    response = NextResponse.rewrite(rewriteUrl, {
+      request: {
+        headers: req.headers,
+      },
+    });
   }
 
-  return NextResponse.next();
+  // If session token was provided via query parameter during onboarding redirect, persist cookie
+  const incomingToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
+  if (incomingToken) {
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProd && configuredRoot && configuredRoot.includes('.') && !configuredRoot.includes('localhost')
+      ? `.${configuredRoot}`
+      : undefined;
+
+    response.cookies.set('session', incomingToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      domain: cookieDomain,
+      maxAge: 30 * 60,
+    });
+  }
+
+  return response;
 }
+

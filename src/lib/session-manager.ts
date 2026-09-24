@@ -19,9 +19,9 @@ const ALG = "HS256";
 /**
  * Cookie security directives strictly enforced across all environments.
  */
-export function getSecureCookieOptions(maxAge: number = SESSION_MAX_AGE_SECONDS) {
+export function getSecureCookieOptions(maxAge: number = SESSION_MAX_AGE_SECONDS, domainRoot?: string) {
   const isProd = process.env.NODE_ENV === "production";
-  const configuredRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").split(":")[0].trim();
+  const configuredRoot = (domainRoot || process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").split(":")[0].trim();
 
   // In production, bind cookie to parent domain so sessions persist across apex and all dynamic tenant subdomains
   const cookieDomain = isProd && configuredRoot && configuredRoot.includes(".") && !configuredRoot.includes("localhost")

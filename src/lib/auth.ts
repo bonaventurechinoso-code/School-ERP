@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import * as jose from "jose";
 
-export type UserRole = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "STAFF" | "STUDENT";
+export type UserRole = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "TENANT_ADMIN" | "STAFF" | "STUDENT";
 
 export interface SessionPayload {
   userId: string;
@@ -23,12 +23,22 @@ export interface SessionPayload {
 export function normalizeRole(rawRole: string): UserRole {
   const upper = (rawRole || "").trim().toUpperCase();
   if (upper === "SUPER_ADMIN") return "SUPER_ADMIN";
-  if (upper === "SCHOOL_ADMIN" || upper === "ADMIN") return "SCHOOL_ADMIN";
+  if (
+    upper === "SCHOOL_ADMIN" ||
+    upper === "TENANT_ADMIN" ||
+    upper === "SCHOOL_OWNER" ||
+    upper === "TENANT_OWNER" ||
+    upper === "ADMIN_EXECUTIVE" ||
+    upper === "ADMIN" ||
+    upper.includes("ADMIN")
+  ) {
+    return "SCHOOL_ADMIN";
+  }
   if (upper === "STUDENT") return "STUDENT";
   return "STAFF"; // Default/fallback for TEACHER, BURSAR, SUPERVISOR, STAFF
 }
 
-export function getDefaultPermissionsForRole(role: UserRole): string[] {
+export function getDefaultPermissionsForRole(role: UserRole | string): string[] {
   switch (role) {
     case "SUPER_ADMIN":
       return [
@@ -41,6 +51,8 @@ export function getDefaultPermissionsForRole(role: UserRole): string[] {
         "manage:finances"
       ];
     case "SCHOOL_ADMIN":
+    case "TENANT_ADMIN":
+    case "ADMIN":
       return [
         "manage:school",
         "manage:tiers",

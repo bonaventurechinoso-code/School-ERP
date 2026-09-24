@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { triggerSSLProvisioning, warmAndVerifySSLHandshake } from "@/lib/ssl-provisioning";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import {
+  createDatabaseSession,
+  SESSION_MAX_AGE_SECONDS,
+  SESSION_COOKIE_NAME,
+  getSecureCookieOptions,
+} from "@/lib/session-manager";
+import { getDefaultPermissionsForRole } from "@/lib/auth";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -128,13 +136,13 @@ export async function POST(request: Request) {
           });
 
           const defaultPasswordHash = await bcrypt.hash("Password123", 10);
-          await tx.staff.create({
+          const staff = await tx.staff.create({
             data: {
               schoolId: school.id,
               firstName: "Admin",
               lastName: "User",
               email: adminEmail,
-              role: "ADMIN",
+              role: "TENANT_ADMIN",
               departmentId: dept.id,
               status: "ACTIVE",
               activeAt: now,
@@ -143,7 +151,7 @@ export async function POST(request: Request) {
           });
 
           await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
-          createdSchools.push(school);
+          createdSchools.push({ school, staff });
         }
         return createdSchools;
       });
@@ -152,17 +160,37 @@ export async function POST(request: Request) {
       const combinedSubdomain = `${formattedSubdomain}-primary`;
       const sslSyncResult = await warmAndVerifySSLHandshake(combinedSubdomain, rootDomain, proto);
 
-      return NextResponse.json({
+      const primarySchool = newSchools[0].school;
+      const primaryStaff = newSchools[0].staff;
+
+      // Automatically issue authenticated database session for newly created Tenant Administrator
+      const distinctSessionToken = crypto.randomUUID();
+      const sessionResult = await createDatabaseSession({
+        userId: primaryStaff.id,
+        email: adminEmail,
+        tenantId: primarySchool.id,
+        schoolDomain: combinedSubdomain,
+        tenantName: primarySchool.name,
+        role: "TENANT_ADMIN",
+        staffRole: "Tenant Administrator",
+        activeTiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+        permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+        ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
+        userAgent: request.headers.get("user-agent"),
+        sessionToken: distinctSessionToken,
+      });
+
+      const response = NextResponse.json({
         success: true,
         message: "Combined tenants successfully provisioned.",
         tenant: {
-          id: newSchools[0].id,
-          name: newSchools[0].name,
+          id: primarySchool.id,
+          name: primarySchool.name,
           subdomain: combinedSubdomain,
           slug: combinedSubdomain,
-          status: newSchools[0].status,
-          trialStartDate: newSchools[0].trialStartDate,
-          trialEndDate: newSchools[0].trialEndDate,
+          status: primarySchool.status,
+          trialStartDate: primarySchool.trialStartDate,
+          trialEndDate: primarySchool.trialEndDate,
         },
         subdomain: combinedSubdomain,
         schoolName,
@@ -176,10 +204,33 @@ export async function POST(request: Request) {
         subdomainLoginUrl: `${proto}://${combinedSubdomain}.${rootDomain}/login`,
         dashboardUrl: `/${combinedSubdomain}/dashboard`,
         subdomainDashboardUrl: `${proto}://${combinedSubdomain}.${rootDomain}/dashboard`,
-        redirectUrl: `/${combinedSubdomain}/login`,
+        redirectUrl: `/${combinedSubdomain}/dashboard`,
+        sessionToken: sessionResult.sessionToken,
+        token: sessionResult.cookieToken,
+        sessionPayload: {
+          userId: primaryStaff.id,
+          email: adminEmail,
+          tenantId: primarySchool.id,
+          schoolDomain: combinedSubdomain,
+          tenantName: primarySchool.name,
+          role: "TENANT_ADMIN",
+          staffRole: "Tenant Administrator",
+          activeTiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+          sessionToken: sessionResult.sessionToken,
+          token: sessionResult.cookieToken,
+        },
         trialDays: 14,
         sslStatus: sslSyncResult.sslReady ? "SSL_READY" : "AWAITING_HANDSHAKE",
       });
+
+      response.cookies.set(
+        SESSION_COOKIE_NAME,
+        sessionResult.cookieToken,
+        getSecureCookieOptions(SESSION_MAX_AGE_SECONDS, rootDomain)
+      );
+
+      return response;
     }
 
     // Standard Tenant Provisioning Transaction
@@ -242,15 +293,15 @@ export async function POST(request: Request) {
         }
       });
 
-      // 6. Create default admin staff account with default initial password
+      // 6. Create default admin staff account with explicit TENANT_ADMIN role
       const defaultPasswordHash = await bcrypt.hash("Password123", 10);
-      await tx.staff.create({
+      const staff = await tx.staff.create({
         data: {
           schoolId: school.id,
           firstName: "Admin",
           lastName: "User",
           email: adminEmail,
-          role: "ADMIN",
+          role: "TENANT_ADMIN",
           departmentId: dept.id,
           status: "ACTIVE",
           activeAt: now,
@@ -261,24 +312,41 @@ export async function POST(request: Request) {
       // 7. Provision isolated database boundary
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
 
-      return school;
+      return { school, staff };
     });
 
     // Synchronize SSL generation with onboarding pipeline:
     // Trigger reverse proxy TLS binding and await initial handshake confirmation
     const sslSyncResult = await warmAndVerifySSLHandshake(formattedSubdomain, rootDomain, proto);
 
-    return NextResponse.json({
+    // Automatically issue authenticated database session for newly created Tenant Administrator
+    const distinctSessionToken = crypto.randomUUID();
+    const sessionResult = await createDatabaseSession({
+      userId: newSchool.staff.id,
+      email: adminEmail,
+      tenantId: newSchool.school.id,
+      schoolDomain: formattedSubdomain,
+      tenantName: newSchool.school.name,
+      role: "TENANT_ADMIN",
+      staffRole: "Tenant Administrator",
+      activeTiers: tiers,
+      permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+      ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
+      userAgent: request.headers.get("user-agent"),
+      sessionToken: distinctSessionToken,
+    });
+
+    const response = NextResponse.json({
       success: true,
       message: "Tenant successfully provisioned.",
       tenant: {
-        id: newSchool.id,
-        name: newSchool.name,
+        id: newSchool.school.id,
+        name: newSchool.school.name,
         subdomain: formattedSubdomain,
         slug: formattedSubdomain,
-        status: newSchool.status,
-        trialStartDate: newSchool.trialStartDate,
-        trialEndDate: newSchool.trialEndDate,
+        status: newSchool.school.status,
+        trialStartDate: newSchool.school.trialStartDate,
+        trialEndDate: newSchool.school.trialEndDate,
       },
       subdomain: formattedSubdomain,
       schoolName,
@@ -292,10 +360,33 @@ export async function POST(request: Request) {
       subdomainLoginUrl: `${proto}://${formattedSubdomain}.${rootDomain}/login`,
       dashboardUrl: `/${formattedSubdomain}/dashboard`,
       subdomainDashboardUrl: `${proto}://${formattedSubdomain}.${rootDomain}/dashboard`,
-      redirectUrl: `/${formattedSubdomain}/login`,
+      redirectUrl: `/${formattedSubdomain}/dashboard`,
+      sessionToken: sessionResult.sessionToken,
+      token: sessionResult.cookieToken,
+      sessionPayload: {
+        userId: newSchool.staff.id,
+        email: adminEmail,
+        tenantId: newSchool.school.id,
+        schoolDomain: formattedSubdomain,
+        tenantName: newSchool.school.name,
+        role: "TENANT_ADMIN",
+        staffRole: "Tenant Administrator",
+        activeTiers: tiers,
+        permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+        sessionToken: sessionResult.sessionToken,
+        token: sessionResult.cookieToken,
+      },
       trialDays: 14,
       sslStatus: sslSyncResult.sslReady ? "SSL_READY" : "AWAITING_HANDSHAKE",
     });
+
+    response.cookies.set(
+      SESSION_COOKIE_NAME,
+      sessionResult.cookieToken,
+      getSecureCookieOptions(SESSION_MAX_AGE_SECONDS, rootDomain)
+    );
+
+    return response;
 
   } catch (error: any) {
     console.error("CRITICAL_PROVISIONING_EXCEPTION:", error);

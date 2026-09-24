@@ -35,11 +35,11 @@ export function classifyRole(role?: string | null, staffRole?: string | null): R
   }
 
   // 3. Executive / School Leadership
-  // e.g. Proprietor, Principal, Headmaster, Headmistress, Head Teacher, Vice Chancellor, Rector, Provost, Registrar, SCHOOL_ADMIN, TENANT_ADMIN
+  // e.g. Proprietor, Principal, Headmaster, Headmistress, Head Teacher, Vice Chancellor, Rector, Provost, Registrar, SCHOOL_ADMIN, TENANT_ADMIN, SCHOOL_OWNER
   if (
     combined.includes("PROPRIETOR") ||
     combined.includes("PROPRIETRESS") ||
-    combined.includes("PRINCIPAL") && !combined.includes("VICE PRINCIPAL (ACADEMIC)") ||
+    (combined.includes("PRINCIPAL") && !combined.includes("VICE PRINCIPAL (ACADEMIC)")) ||
     combined.includes("HEADMASTER") ||
     combined.includes("HEADMISTRESS") ||
     combined.includes("HEAD TEACHER") ||
@@ -49,8 +49,13 @@ export function classifyRole(role?: string | null, staffRole?: string | null): R
     combined.includes("REGISTRAR") ||
     combined.includes("SCHOOL_ADMIN") ||
     combined.includes("TENANT_ADMIN") ||
+    combined.includes("SCHOOL_OWNER") ||
+    combined.includes("TENANT_OWNER") ||
+    combined.includes("ADMIN_EXECUTIVE") ||
+    combined.includes("ADMINISTRATOR") ||
     combined.includes("DIRECTOR") ||
-    combined === "ADMIN"
+    combined === "ADMIN" ||
+    combined.split(/[\s_-]+/).includes("ADMIN")
   ) {
     return "ADMIN_EXECUTIVE";
   }
@@ -161,13 +166,22 @@ export function checkRouteAuthorization(
   const category = classifyRole(role, staffRole);
   const effectiveRoleName = staffRole || role || "Guest";
 
-  // Master Global Admin Route Isolation
-  if (
-    pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
-    pathname === "/super-admin" ||
-    pathname.startsWith("/super-admin/")
-  ) {
+  // Master Global Admin Route Isolation:
+  // Strictly reserved for platform super-admin on the platform apex console (/admin or /super-admin).
+  // Note: Local tenant school workspaces (e.g., /[schoolDomain]/(admin) or /dashboard) must NOT be blocked.
+  const isGlobalConsolePath =
+    (pathname === "/admin" ||
+     pathname.startsWith("/admin/") ||
+     pathname === "/super-admin" ||
+     pathname.startsWith("/super-admin/")) &&
+    !pathname.includes("/dashboard") &&
+    !pathname.includes("/portal-settings") &&
+    !pathname.includes("/finance") &&
+    !pathname.includes("/students") &&
+    !pathname.includes("/staff") &&
+    !pathname.includes("/admissions");
+
+  if (isGlobalConsolePath) {
     if (category === "SUPER_ADMIN") {
       return { allowed: true, category, effectiveRoleName };
     }
@@ -189,7 +203,8 @@ export function checkRouteAuthorization(
     };
   }
 
-  // Super Admin and Top Executive have unrestricted access to all school modules
+  // Super Admin and Tenant Administrative Executives (Tenant Admin, School Owner, Principal, etc.)
+  // have full unrestricted access to all local tenant school workspaces and dashboard modules.
   if (category === "SUPER_ADMIN" || category === "ADMIN_EXECUTIVE") {
     return { allowed: true, category, effectiveRoleName };
   }
