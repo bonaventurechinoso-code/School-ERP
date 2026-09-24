@@ -4,6 +4,8 @@ import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenan
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import * as jose from "jose";
+import bcrypt from "bcryptjs";
+import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
@@ -191,6 +193,7 @@ export async function createStudent(
     firstName: string; lastName: string; email: string; status: string; tierId: string; dynamicFields?: any;
     admissionNumber?: string; currentClass?: string; dateOfBirth?: Date; stateOfOrigin?: string;
     parentName?: string; parentOccupation?: string; parentEmail?: string; parentPhone?: string; parentWhatsApp?: string;
+    password?: string;
   },
   tierContext?: string
 ) {
@@ -214,6 +217,20 @@ export async function createStudent(
   const tenantDb = await resolveDbForAction(schoolId, tierContext, data.tierId);
   
   try {
+    let passwordToSave = "Welcome123";
+    let isTemporary = true;
+
+    if (data.password && typeof data.password === "string" && data.password.trim().length > 0) {
+      const validation = validatePasswordStrength(data.password.trim());
+      if (!validation.valid) {
+        return { success: false, error: validation.error || "Password does not meet complexity requirements." };
+      }
+      passwordToSave = data.password.trim();
+      isTemporary = false;
+    }
+
+    const hashedPassword = await bcrypt.hash(passwordToSave, 10);
+
     const timestampData: any = {};
     if (data.status === "PROSPECT") timestampData.prospectAt = new Date();
     if (data.status === "APPLICANT") timestampData.applicantAt = new Date();
@@ -231,7 +248,9 @@ export async function createStudent(
       });
     }
 
-    await tenantDb.student.create({
+    const currentDynamic = (data.dynamicFields as any) || {};
+
+    const createdStudent = await tenantDb.student.create({
       data: {
         schoolId,
         tierId: data.tierId,
@@ -239,7 +258,11 @@ export async function createStudent(
         lastName: data.lastName,
         email: data.email || null,
         status: data.status,
-        dynamicFields: data.dynamicFields || null,
+        dynamicFields: {
+          ...currentDynamic,
+          password: hashedPassword,
+          isTemporaryPassword: isTemporary,
+        },
         admissionNumber: finalAdmissionNumber,
         currentClass: data.currentClass || null,
         dateOfBirth: data.dateOfBirth || null,
@@ -252,6 +275,9 @@ export async function createStudent(
         ...timestampData
       }
     });
+
+    // Record user security status: if custom typed, must_change_password=false; if default Welcome123, true
+    await setUserMustChangePassword(createdStudent.id, schoolId, isTemporary);
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);

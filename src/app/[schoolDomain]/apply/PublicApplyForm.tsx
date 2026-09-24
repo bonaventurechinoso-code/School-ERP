@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition, useEffect } from "react";
 import { AcademicTier } from "@prisma/client";
-import { GraduationCap, ArrowRight, Loader2, CheckCircle2, CheckCircle } from "lucide-react";
+import { GraduationCap, ArrowRight, Loader2, CheckCircle2, CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatTierLabel } from "@/lib/guestPortalUtils";
@@ -39,7 +39,12 @@ export default function PublicApplyForm({
     facultyOrSchool: "",
     intendedCourseOrProgramme: "",
     tierId: initialTierId,
+    password: "",
+    confirmPassword: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const selectedTier = tiers.find(t => t.id === formData.tierId);
   const selectedTierName = selectedTier?.name || "";
@@ -83,6 +88,25 @@ export default function PublicApplyForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    if (formData.password.length < 8) {
+      setFormError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(formData.password);
+    const hasNumber = /[0-9]/.test(formData.password);
+    if (!hasLetter || !hasNumber) {
+      setFormError("Password must be alphanumeric (contain at least one letter and at least one number).");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setFormError("Create Account Password and Confirm Password do not match.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         const res = await fetch("/api/v1/admissions/public-submit", {
@@ -95,10 +119,10 @@ export default function PublicApplyForm({
           setIsSuccess(true);
         } else {
           const err = await res.json();
-          alert("Error: " + err.error);
+          setFormError(err.error || "Failed to submit application.");
         }
       } catch (error) {
-        alert("An error occurred during submission.");
+        setFormError("An error occurred during submission. Please try again.");
       }
     });
   };
@@ -255,12 +279,16 @@ export default function PublicApplyForm({
               ) : (
                 /* K-12 Layout */
                 <>
-                  <div className={panelStyles}>
+                    <div className={panelStyles}>
                     <h3 className={sectionHeaderStyles}>Student Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="md:col-span-2">
                         <label className={labelStyles}>Student Full Name *</label>
                         <input required type="text" placeholder="e.g. Timmy Doe" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.applicantName} onChange={e => setFormData({...formData, applicantName: e.target.value})} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={labelStyles}>Student / Account Email *</label>
+                        <input required type="email" placeholder="student@example.com" className={inputStyles} style={{ '--tw-ring-color': brandColor } as React.CSSProperties} value={formData.studentEmail} onChange={e => setFormData({...formData, studentEmail: e.target.value})} />
                       </div>
                       <div className="md:col-span-2">
                         <label className={labelStyles}>Target Grade/Class *</label>
@@ -293,10 +321,95 @@ export default function PublicApplyForm({
                   </div>
                 </>
               )}
+
+              {/* Student Portal Account Security Panel */}
+              <div className={panelStyles}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <h3 className={sectionHeaderStyles}>Student Portal Account Security</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
+                  Create a secure password to access your student portal and track your application status.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className={labelStyles}>Create Account Password *</label>
+                    <div className="relative">
+                      <input 
+                        required
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Min. 8 alphanumeric characters"
+                        className={`${inputStyles} pr-10`}
+                        style={{ '--tw-ring-color': brandColor } as React.CSSProperties}
+                        value={formData.password}
+                        onChange={e => setFormData({...formData, password: e.target.value})}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelStyles}>Confirm Password *</label>
+                    <div className="relative">
+                      <input 
+                        required
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Re-enter password"
+                        className={`${inputStyles} pr-10`}
+                        style={{ '--tw-ring-color': brandColor } as React.CSSProperties}
+                        value={formData.confirmPassword}
+                        onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real-time validation badges */}
+                <div className="flex flex-wrap items-center gap-3 text-xs pt-4">
+                  <span className={`inline-flex items-center gap-1 font-semibold ${
+                    formData.password.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                  }`}>
+                    {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                  </span>
+                  <span className={`inline-flex items-center gap-1 font-semibold ${
+                    (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                  }`}>
+                    {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric
+                  </span>
+                  {formData.confirmPassword.length > 0 && (
+                    <span className={`inline-flex items-center gap-1 font-semibold ${
+                      formData.password === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                    }`}>
+                      {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                    </span>
+                  )}
+                </div>
+              </div>
             </>
           )}
 
         </div>
+
+        {formError && (
+          <div className="p-4 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 rounded-xl text-sm font-semibold border border-rose-200 dark:border-rose-900">
+            {formError}
+          </div>
+        )}
 
         <div className="pt-8 flex justify-end">
           <button 

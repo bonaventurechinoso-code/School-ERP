@@ -40,6 +40,9 @@ import {
   UserCheck,
   Phone,
   Briefcase,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 
 export interface StaffTableProps {
@@ -143,7 +146,11 @@ export default function StaffTable({
     qualification: "B.Ed (Bachelor of Education)",
     trcnNumber: "",
     trcnStatus: "REGISTERED",
+    password: "",
+    confirmPassword: "",
   });
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false);
   const [customRole, setCustomRole] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -271,6 +278,21 @@ export default function StaffTable({
       }
     }
 
+    if (createData.password.trim() || createData.confirmPassword.trim()) {
+      if (createData.password.length < 8) {
+        setFormError("Password must be at least 8 characters long.");
+        return;
+      }
+      if (!/[a-zA-Z]/.test(createData.password) || !/[0-9]/.test(createData.password)) {
+        setFormError("Password must be alphanumeric (contain at least one letter and at least one number).");
+        return;
+      }
+      if (createData.password !== createData.confirmPassword) {
+        setFormError("Account password and confirm password do not match.");
+        return;
+      }
+    }
+
     startTransition(async () => {
       const res = await createStaff(schoolDomain, {
         ...createData,
@@ -294,6 +316,8 @@ export default function StaffTable({
           qualification: "B.Ed (Bachelor of Education)",
           trcnNumber: "",
           trcnStatus: "REGISTERED",
+          password: "",
+          confirmPassword: "",
         });
         setCustomRole("");
         refreshRoster();
@@ -874,6 +898,83 @@ export default function StaffTable({
                 className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white font-mono"
               />
             </div>
+
+            {/* Staff Account Password Fields */}
+            <div className="md:col-span-4 border-t border-slate-200/80 pt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Staff Account Credentials
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  (Default temporary password: <strong>Welcome123</strong> with forced reset on initial login)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Create Account Password</label>
+                  <div className="relative">
+                    <input
+                      type={showCreatePassword ? "text" : "password"}
+                      placeholder="Enter password or leave blank for Welcome123"
+                      value={createData.password}
+                      onChange={(e) => setCreateData({ ...createData, password: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2 pr-9 font-medium bg-white text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePassword(!showCreatePassword)}
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+                    >
+                      {showCreatePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <input
+                      type={showCreateConfirmPassword ? "text" : "password"}
+                      placeholder="Confirm account password"
+                      value={createData.confirmPassword}
+                      onChange={(e) => setCreateData({ ...createData, confirmPassword: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2 pr-9 font-medium bg-white text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+                    >
+                      {showCreateConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation Badges */}
+              {(createData.password.length > 0 || createData.confirmPassword.length > 0) && (
+                <div className="flex flex-wrap items-center gap-3 text-[11px] pt-2">
+                  <span className={`inline-flex items-center gap-1 ${
+                    createData.password.length >= 8 ? "text-emerald-600 font-bold" : "text-slate-400"
+                  }`}>
+                    {createData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${
+                    (/[a-zA-Z]/.test(createData.password) && /[0-9]/.test(createData.password)) ? "text-emerald-600 font-bold" : "text-slate-400"
+                  }`}>
+                    {(/[a-zA-Z]/.test(createData.password) && /[0-9]/.test(createData.password)) ? "✓" : "•"} Alphanumeric
+                  </span>
+                  {createData.confirmPassword.length > 0 && (
+                    <span className={`inline-flex items-center gap-1 font-bold ${
+                      createData.password === createData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                    }`}>
+                      {createData.password === createData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-end">
               <button
                 type="submit"

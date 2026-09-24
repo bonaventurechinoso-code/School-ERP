@@ -6,6 +6,8 @@ import { sendAdmissionOfferEmail } from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import bcrypt from "bcryptjs";
+import { setUserMustChangePassword } from "@/lib/security-service";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -248,8 +250,15 @@ export async function enrollApplicantAction(payload: {
       },
     });
 
+    const leadDocuments = (lead.documents as any) || {};
+    const leadPasswordHash = leadDocuments.passwordHash;
+    const defaultPasswordHash = await bcrypt.hash("Welcome123", 10);
+    const finalPasswordHash = leadPasswordHash || defaultPasswordHash;
+    const isTemporary = !leadPasswordHash;
+
     let newStudent;
     if (existingStudent) {
+      const existingDynamic = (existingStudent.dynamicFields as any) || {};
       newStudent = await tierDb.student.update({
         where: { id: existingStudent.id },
         data: {
@@ -257,8 +266,14 @@ export async function enrollApplicantAction(payload: {
           enrolledAt: new Date(),
           tierId: isolatedTierId,
           currentClass: lead.targetGrade || existingStudent.currentClass,
+          dynamicFields: {
+            ...existingDynamic,
+            password: existingDynamic.password || finalPasswordHash,
+            isTemporaryPassword: existingDynamic.isTemporaryPassword ?? isTemporary,
+          },
         },
       });
+      await setUserMustChangePassword(existingStudent.id, lead.schoolId, existingDynamic.isTemporaryPassword ?? isTemporary);
     } else {
       newStudent = await tierDb.student.create({
         data: {
@@ -274,8 +289,13 @@ export async function enrollApplicantAction(payload: {
           admissionNumber,
           status: "ENROLLED",
           enrolledAt: new Date(),
+          dynamicFields: {
+            password: finalPasswordHash,
+            isTemporaryPassword: isTemporary,
+          },
         },
       });
+      await setUserMustChangePassword(newStudent.id, lead.schoolId, isTemporary);
     }
 
     // 4. Update the central AdmissionLead record

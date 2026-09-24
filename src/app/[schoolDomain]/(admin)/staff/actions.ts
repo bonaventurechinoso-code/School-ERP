@@ -2,6 +2,8 @@
 
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcryptjs";
+import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
@@ -280,12 +282,27 @@ export async function createStaff(
     appointmentType?: string;
     emergencyName?: string;
     emergencyPhone?: string;
+    password?: string;
   }
 ) {
   try {
     const schoolId = await resolveSchoolId(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
+
+    let staffPasswordToSave = "Welcome123";
+    let isTemporary = true;
+
+    if (data.password && typeof data.password === "string" && data.password.trim().length > 0) {
+      const validation = validatePasswordStrength(data.password.trim());
+      if (!validation.valid) {
+        return { success: false, error: validation.error || "Password does not meet complexity requirements." };
+      }
+      staffPasswordToSave = data.password.trim();
+      isTemporary = false;
+    }
+
+    const hashedPassword = await bcrypt.hash(staffPasswordToSave, 10);
 
     const timestampData: any = {};
     const status = data.status || "ONBOARDING";
@@ -305,6 +322,7 @@ export async function createStaff(
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         email: data.email.trim().toLowerCase(),
+        password: hashedPassword,
         role: data.role.trim(),
         status,
         departmentId: data.departmentId || null,
@@ -315,6 +333,9 @@ export async function createStaff(
         ...timestampData,
       }
     });
+
+    // Record user security status: if custom typed, must_change_password=false; if default Welcome123, true
+    await setUserMustChangePassword(staff.id, schoolId, isTemporary);
 
     // Save metadata if any provided
     if (data.phone || data.trcnNumber || data.qualification || data.nin || data.whatsapp) {

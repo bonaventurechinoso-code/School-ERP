@@ -19,7 +19,7 @@ import {
 } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
-import { User, X, GraduationCap, ShieldAlert, Layers, ArrowRight, CheckCircle2 } from "lucide-react";
+import { User, X, GraduationCap, ShieldAlert, Layers, ArrowRight, CheckCircle2, Lock, Eye, EyeOff } from "lucide-react";
 import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
 type StudentWithTier = Student & { tier?: AcademicTier | null };
@@ -147,8 +147,12 @@ export default function StudentTable({
     parentName: "",
     parentPhone: "",
     parentEmail: "",
+    password: "",
+    confirmPassword: "",
     dynamicFields: {} as Record<string, any> 
   });
+  const [showStudentPassword, setShowStudentPassword] = useState(false);
+  const [showStudentConfirmPassword, setShowStudentConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const [filterClass, setFilterClass] = useState<string>("ALL");
@@ -214,6 +218,8 @@ export default function StudentTable({
       parentName: "",
       parentPhone: "",
       parentEmail: "",
+      password: "",
+      confirmPassword: "",
       dynamicFields: {} 
     });
     setShowForm(true);
@@ -238,6 +244,8 @@ export default function StudentTable({
       parentName: student.parentName || "",
       parentPhone: student.parentPhone || "",
       parentEmail: (student as any).parentEmail || "",
+      password: "",
+      confirmPassword: "",
       dynamicFields: parsedFields
     });
     setShowForm(true);
@@ -253,6 +261,22 @@ export default function StudentTable({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (!editingStudentId && (formData.password.trim() || formData.confirmPassword.trim())) {
+      if (formData.password.length < 8) {
+        setErrorMsg("Password must be at least 8 characters long.");
+        return;
+      }
+      if (!/[a-zA-Z]/.test(formData.password) || !/[0-9]/.test(formData.password)) {
+        setErrorMsg("Password must be alphanumeric (contain at least one letter and at least one number).");
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setErrorMsg("Create Account Password and Confirm Password do not match.");
+        return;
+      }
+    }
+
     startTransition(async () => {
       const payload = {
         ...formData,
@@ -261,6 +285,7 @@ export default function StudentTable({
         admissionNumber: formData.admissionNumber || undefined,
         stateOfOrigin: formData.stateOfOrigin || undefined,
         parentEmail: formData.parentEmail || undefined,
+        password: formData.password ? formData.password.trim() : undefined,
         dynamicFields: formData.dynamicFields
       };
       
@@ -927,6 +952,85 @@ export default function StudentTable({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* 4. Student Account Credentials (Enrollment Only) */}
+              {!editingStudentId && (
+                <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2 pb-1">
+                    <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                      Student Account Credentials
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Set initial password for student learning portal (Default: <strong>Welcome123</strong> with forced reset on initial login).
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Create Account Password</label>
+                      <div className="relative">
+                        <input 
+                          type={showStudentPassword ? "text" : "password"}
+                          placeholder="Leave blank for Welcome123"
+                          className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pr-10 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                          value={formData.password}
+                          onChange={e => setFormData({...formData, password: e.target.value})}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStudentPassword(!showStudentPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        >
+                          {showStudentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Confirm Password</label>
+                      <div className="relative">
+                        <input 
+                          type={showStudentConfirmPassword ? "text" : "password"}
+                          placeholder="Confirm password"
+                          className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pr-10 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                          value={formData.confirmPassword}
+                          onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStudentConfirmPassword(!showStudentConfirmPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        >
+                          {showStudentConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(formData.password.length > 0 || formData.confirmPassword.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-3 text-xs pt-1">
+                      <span className={`inline-flex items-center gap-1 font-semibold ${
+                        formData.password.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                      }`}>
+                        {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                      </span>
+                      <span className={`inline-flex items-center gap-1 font-semibold ${
+                        (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                      }`}>
+                        {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric
+                      </span>
+                      {formData.confirmPassword.length > 0 && (
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          formData.password === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                        }`}>
+                          {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </form>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
+import bcrypt from "bcryptjs";
+import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +16,8 @@ export async function POST(request: NextRequest) {
       parentContact, 
       parentEmail, 
       tierId, 
-      targetGrade 
+      targetGrade,
+      password,
     } = data;
 
     if (!schoolDomain || !applicantName || !tierId || !targetGrade) {
@@ -22,8 +25,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Lookup tenant ID from slug
-    const school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain }
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: schoolDomain.toLowerCase().trim() },
+          { slug: schoolDomain.toLowerCase().trim() },
+        ],
+      },
     });
 
     if (!school) {
@@ -31,6 +39,24 @@ export async function POST(request: NextRequest) {
     }
 
     const tenantDb = getTenantClient(school.id);
+
+    // Process & Hash Password
+    let passwordToSave = "Welcome123";
+    let isTemporary = true;
+
+    if (password && typeof password === "string" && password.trim().length > 0) {
+      const validation = validatePasswordStrength(password.trim());
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error || "Password does not meet security requirements." },
+          { status: 400 }
+        );
+      }
+      passwordToSave = password.trim();
+      isTemporary = false;
+    }
+
+    const hashedPassword = await bcrypt.hash(passwordToSave, 10);
 
     // Insert new application explicitly as INQUIRY
     const newLead = await tenantDb.admissionLead.create({
@@ -40,15 +66,73 @@ export async function POST(request: NextRequest) {
         studentEmail,
         studentPhone,
         parentName,
-        parentContact: parentContact || "N/A", // Ensure backward compatibility or required schema field
+        parentContact: parentContact || "N/A",
         parentPhone: parentContact || null,
         parentEmail,
         tierId,
         targetGrade,
         source: "Website",
-        status: "INQUIRY", // Force explicitly to INQUIRY
+        status: "INQUIRY",
+        documents: {
+          passwordHash: hashedPassword,
+        },
       }
     });
+
+    // Provision or sync Student portal user record
+    const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();
+    if (accountEmail) {
+      try {
+        let existingStudent = await tenantDb.student.findFirst({
+          where: {
+            schoolId: school.id,
+            email: { equals: accountEmail, mode: "insensitive" },
+          },
+        });
+
+        if (existingStudent) {
+          const currentFields = (existingStudent.dynamicFields as any) || {};
+          await tenantDb.student.update({
+            where: { id: existingStudent.id },
+            data: {
+              dynamicFields: {
+                ...currentFields,
+                password: hashedPassword,
+                isTemporaryPassword: isTemporary,
+              },
+            },
+          });
+          await setUserMustChangePassword(existingStudent.id, school.id, isTemporary);
+        } else {
+          const nameParts = applicantName.trim().split(" ");
+          const firstName = nameParts[0] || "Student";
+          const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+          const createdStudent = await tenantDb.student.create({
+            data: {
+              schoolId: school.id,
+              tierId,
+              firstName,
+              lastName,
+              email: accountEmail,
+              status: "APPLICANT",
+              currentClass: targetGrade,
+              parentName: parentName || null,
+              parentPhone: parentContact || null,
+              parentEmail: parentEmail || null,
+              applicantAt: new Date(),
+              dynamicFields: {
+                password: hashedPassword,
+                isTemporaryPassword: isTemporary,
+              },
+            },
+          });
+          await setUserMustChangePassword(createdStudent.id, school.id, isTemporary);
+        }
+      } catch (studentErr) {
+        console.warn("[public-submit] Warning while provisioning student account record:", studentErr);
+      }
+    }
 
     // Trigger initial inquiry email automation
     triggerInquiryNotification({
