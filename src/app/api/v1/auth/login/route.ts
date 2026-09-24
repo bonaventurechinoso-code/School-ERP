@@ -165,8 +165,13 @@ export async function POST(req: Request) {
     }
 
     // 3. DUAL-KEY TENANT VERIFICATION
-    const tenant = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain },
+    const tenant = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: schoolDomain.toLowerCase().trim() },
+          { slug: schoolDomain.toLowerCase().trim() },
+        ],
+      },
       include: {
         academicTiers: {
           orderBy: { level: "asc" },
@@ -189,7 +194,7 @@ export async function POST(req: Request) {
     if (!resolvedRole) {
       const staff = await basePrisma.staff.findFirst({
         where: { 
-          email: email, 
+          email: { equals: normalizedEmail, mode: "insensitive" }, 
           schoolId: tenant.id 
         },
       });

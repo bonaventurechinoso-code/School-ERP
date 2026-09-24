@@ -80,9 +80,16 @@ export const authOptions: NextAuthOptions = {
         }
 
         // B. Check Tenant Staff (Bursar, Principal, Headmaster, Class Teacher, Professor, Lecturer, etc.)
-        const staffQuery: any = { email: normalizedEmail };
+        const staffQuery: any = { 
+          email: { equals: normalizedEmail, mode: "insensitive" } 
+        };
         if (requestedDomain) {
-          staffQuery.school = { subdomain: requestedDomain };
+          staffQuery.school = {
+            OR: [
+              { subdomain: requestedDomain.toLowerCase().trim() },
+              { slug: requestedDomain.toLowerCase().trim() },
+            ],
+          };
         }
 
         const staff = await basePrisma.staff.findFirst({
