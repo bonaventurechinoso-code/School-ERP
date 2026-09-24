@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Landmark,
@@ -66,6 +66,28 @@ export default function BankModuleClient({
   const [selectedBankCode, setSelectedBankCode] = useState(initialPlatformBank.bankCode || "035");
   const [accountNumber, setAccountNumber] = useState(initialPlatformBank.accountNumber || "0123456789");
   const [accountName, setAccountName] = useState(initialPlatformBank.accountName || "BonaVee ICT Corporate");
+
+  // Searchable bank dropdown state
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredBanks = NIGERIAN_BANKS.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+  const selectedBankName = NIGERIAN_BANKS.find((b) => b.code === selectedBankCode)?.name ?? "Select bank...";
+
+  // Close bank dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankDropdownRef.current && !bankDropdownRef.current.contains(e.target as Node)) {
+        setBankDropdownOpen(false);
+        setBankSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const [isSavingBank, startSavingBank] = useTransition();
   const [isProcessingSub, startProcessingSub] = useTransition();
@@ -226,17 +248,17 @@ export default function BankModuleClient({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-              Bank Module
+              Bank
             </span>
             <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
-              Platform Corporate Banking &amp; Manual Subscriptions
+              Corporate Banking &amp; Subscription Management
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1">
-            Bank Module &amp; Subscription Processing Station
+            Bank &amp; Subscription Management
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Manage corporate bank accounts, verify manual tenant software subscriptions, and record settlements under a 0% transaction fee model
+            Configure the platform corporate bank account, verify school subscription payments, and record incoming deposits.
           </p>
         </div>
 
@@ -246,27 +268,22 @@ export default function BankModuleClient({
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition"
           >
             <PlusCircle className="w-4 h-4" />
-            Record Direct Deposit
+            Record Deposit
           </button>
         </div>
       </div>
 
-      {/* 100% MANUAL SUBSCRIPTION & 0% TRANSACTION FEE COMPLIANCE BANNER */}
+      {/* Platform Info Banner */}
       <div className="p-4 sm:p-5 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-zinc-900 shadow-xs flex items-start gap-4">
         <div className="w-10 h-10 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-200">
-              100% Manual Subscription Model • 0% Transaction Fee Architecture
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-              Zero Transaction Fees (0.00%)
-            </span>
-          </div>
+          <span className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-200">
+            Manual Subscription Platform
+          </span>
           <p className="text-xs sm:text-sm font-medium text-slate-700 dark:text-zinc-300 leading-relaxed">
-            <strong className="text-blue-700 dark:text-blue-400">Fixed Zero-Fee Policy:</strong> The platform does not compute, deduct, or withhold processing percentages from school tuition or software subscriptions. All school fee collections occur independently outside the platform directly into the institutions&apos; bank accounts. Tenant institutions pay flat software fees manually via corporate bank transfer.
+            Schools pay their software subscriptions manually via bank transfer. Each payment is verified here and the subscription is activated or extended instantly.
           </p>
         </div>
       </div>
@@ -323,21 +340,21 @@ export default function BankModuleClient({
           </p>
         </div>
 
-        {/* Platform Transaction Fee Rate */}
+        {/* Billing Model */}
         <div className="p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Transaction Fee Rate
+              Billing Model
             </span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
               <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-3">
-            0.00%
+            Manual
           </div>
           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-            100% Flat manual billing model
+            Bank transfer · verified by admin
           </p>
         </div>
       </div>
@@ -354,7 +371,7 @@ export default function BankModuleClient({
                 Platform Subscription Corporate Account
               </h2>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                Corporate bank account where tenants manually pay their flat monthly software fee. Platform charges 0% transaction fees on school tuition.
+                The bank account where schools send their subscription payments. Update or change these details any time.
               </p>
             </div>
           </div>
@@ -383,26 +400,65 @@ export default function BankModuleClient({
         {/* Configuration Form */}
         <form onSubmit={handleSaveBank} className="mt-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            {/* Bank Dropdown Selection (Includes Raenest) */}
-            <div className="md:col-span-5 space-y-1.5">
+            {/* Searchable Bank Selection */}
+            <div className="md:col-span-5 space-y-1.5" ref={bankDropdownRef}>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
-                Settlement Bank Selection
+                Settlement Bank
               </label>
               <div className="relative">
-                <select
-                  value={selectedBankCode}
-                  onChange={(e) => setSelectedBankCode(e.target.value)}
-                  className="w-full text-xs font-semibold py-2.5 px-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition appearance-none cursor-pointer"
+                {/* Trigger button showing selected bank */}
+                <button
+                  type="button"
+                  onClick={() => { setBankDropdownOpen((o) => !o); setBankSearch(""); }}
+                  className="w-full text-xs font-semibold py-2.5 px-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition text-left flex items-center justify-between"
                 >
-                  {NIGERIAN_BANKS.map((bank) => (
-                    <option key={bank.code} value={bank.code}>
-                      {bank.name} ({bank.code})
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
-                  ▼
-                </div>
+                  <span>{selectedBankName}</span>
+                  <span className="text-slate-400 text-xs">▼</span>
+                </button>
+
+                {/* Dropdown panel */}
+                {bankDropdownOpen && (
+                  <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg overflow-hidden">
+                    {/* Search input */}
+                    <div className="p-2 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={bankSearch}
+                          onChange={(e) => setBankSearch(e.target.value)}
+                          placeholder="Search bank name..."
+                          className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    {/* Filtered list */}
+                    <ul className="max-h-52 overflow-y-auto">
+                      {filteredBanks.length === 0 ? (
+                        <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                      ) : (
+                        filteredBanks.map((bank) => (
+                          <li
+                            key={bank.code}
+                            onClick={() => {
+                              setSelectedBankCode(bank.code);
+                              setBankDropdownOpen(false);
+                              setBankSearch("");
+                            }}
+                            className={`px-3 py-2 text-xs cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition ${
+                              selectedBankCode === bank.code
+                                ? "bg-indigo-50 dark:bg-indigo-950/40 font-bold text-indigo-700 dark:text-indigo-300"
+                                : "text-slate-800 dark:text-zinc-200"
+                            }`}
+                          >
+                            {bank.name}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -439,7 +495,7 @@ export default function BankModuleClient({
 
           <div className="flex items-center justify-between pt-2">
             <p className="text-[11px] text-slate-400">
-              * Supports all licensed commercial banks, microfinance banks, and digital institutions (including Raenest, Moniepoint, Wema, etc.).
+              * Supports all Nigerian commercial banks, microfinance banks, and digital institutions (including Raenest, Moniepoint, Wema, etc.).
             </p>
             <button
               type="submit"
@@ -459,10 +515,10 @@ export default function BankModuleClient({
           <div>
             <h2 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" />
-              Tenant Manual Subscription Processing Station
+              Tenant Subscriptions
             </h2>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-              Verify offline bank transfer receipts, update subscription active dates, and compute net revenue at 0% fees
+              Review and verify bank transfer payments from schools to activate or extend their subscriptions.
             </p>
           </div>
 
@@ -499,9 +555,8 @@ export default function BankModuleClient({
                 <th className="px-4 py-3">Tenant School</th>
                 <th className="px-4 py-3">Subdomain</th>
                 <th className="px-4 py-3">Plan / Tier</th>
-                <th className="px-4 py-3">Flat Monthly Rate</th>
-                <th className="px-4 py-3">Fee Deducted</th>
-                <th className="px-4 py-3">Renewal Status</th>
+                <th className="px-4 py-3">Subscription Fee</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -531,9 +586,6 @@ export default function BankModuleClient({
                     </td>
                     <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">
                       {formatCurrency(t.planPrice)}
-                    </td>
-                    <td className="px-4 py-3.5 font-bold text-emerald-600 dark:text-emerald-400">
-                      ₦0.00 (0%)
                     </td>
                     <td className="px-4 py-3.5">
                       <span
@@ -572,7 +624,7 @@ export default function BankModuleClient({
       <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
         <h2 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
           <Clock className="w-5 h-5 text-indigo-600" />
-          Recent Corporate Subscription Deposits (0% Deductions)
+          Recent Deposits
         </h2>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
@@ -581,10 +633,8 @@ export default function BankModuleClient({
               <tr>
                 <th className="px-4 py-3">Reference</th>
                 <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Amount Deposited</th>
-                <th className="px-4 py-3">Processing Fee</th>
-                <th className="px-4 py-3">Net Balance Credited</th>
-                <th className="px-4 py-3">Timestamp</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3 text-right">Status</th>
               </tr>
             </thead>
@@ -603,12 +653,6 @@ export default function BankModuleClient({
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-600 dark:text-zinc-400">
                       {tx.type}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(tx.amount)}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-emerald-600 dark:text-emerald-400">
-                      ₦0.00 (0%)
                     </td>
                     <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
                       {formatCurrency(tx.amount)}
@@ -726,7 +770,7 @@ export default function BankModuleClient({
                 onClick={handleConfirmVerification}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm transition disabled:opacity-50"
               >
-                {isProcessingSub ? "Verifying..." : "Confirm & Activate (0% Fee)"}
+                {isProcessingSub ? "Verifying..." : "Confirm & Activate Subscription"}
               </button>
             </div>
           </div>
@@ -799,7 +843,7 @@ export default function BankModuleClient({
               </div>
 
               <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-xs text-emerald-800 dark:text-emerald-300">
-                100% of this amount will be added to the platform corporate balance. No processing fees (0%) will be deducted.
+                The full amount will be added to the platform corporate balance.
               </div>
             </div>
 
@@ -817,7 +861,7 @@ export default function BankModuleClient({
                 onClick={handleConfirmDeposit}
                 className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm transition disabled:opacity-50"
               >
-                {isProcessingDeposit ? "Recording..." : "Record Deposit (0% Fee)"}
+                {isProcessingDeposit ? "Recording..." : "Record Deposit"}
               </button>
             </div>
           </div>

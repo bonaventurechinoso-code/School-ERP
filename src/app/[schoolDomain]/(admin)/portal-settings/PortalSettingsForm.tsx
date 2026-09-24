@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition, useRef } from "react";
 import { updatePortalSettings } from "./actions";
 import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
 import { 
@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   Info,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Search,
 } from "lucide-react";
 
 export interface PortalSettingsFormProps {
@@ -82,6 +83,26 @@ export default function PortalSettingsForm({
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+
+  // Searchable bank dropdown
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredBanks = NIGERIAN_BANKS.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankDropdownRef.current && !bankDropdownRef.current.contains(e.target as Node)) {
+        setBankDropdownOpen(false);
+        setBankSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -575,23 +596,67 @@ export default function PortalSettingsForm({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Bank Selector */}
-              <div>
+              {/* Searchable Bank Selector */}
+              <div ref={bankDropdownRef}>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1.5">
                   Commercial Bank Name <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={bankName}
-                  onChange={handleBankChange}
-                  className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 outline-none transition"
-                >
-                  <option value="">-- Select Registered Commercial Bank --</option>
-                  {NIGERIAN_BANKS.map((b) => (
-                    <option key={b.code} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  {/* Trigger button */}
+                  <button
+                    type="button"
+                    onClick={() => { setBankDropdownOpen((o) => !o); setBankSearch(""); }}
+                    className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 text-sm text-left flex items-center justify-between bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 outline-none transition"
+                  >
+                    <span className={bankName ? "text-slate-900 dark:text-white" : "text-slate-400"}>
+                      {bankName || "-- Select Registered Commercial Bank --"}
+                    </span>
+                    <span className="text-slate-400 text-xs">&#9660;</span>
+                  </button>
+
+                  {/* Dropdown panel */}
+                  {bankDropdownOpen && (
+                    <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-slate-100 dark:border-zinc-800">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            autoFocus
+                            type="text"
+                            value={bankSearch}
+                            onChange={(e) => setBankSearch(e.target.value)}
+                            placeholder="Search bank name..."
+                            className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      <ul className="max-h-52 overflow-y-auto">
+                        {filteredBanks.length === 0 ? (
+                          <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                        ) : (
+                          filteredBanks.map((b) => (
+                            <li
+                              key={b.code}
+                              onClick={() => {
+                                setBankName(b.name);
+                                setBankCode(b.code);
+                                setBankDropdownOpen(false);
+                                setBankSearch("");
+                              }}
+                              className={`px-3 py-2 text-xs cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition ${
+                                bankName === b.name
+                                  ? "bg-indigo-50 dark:bg-indigo-950/40 font-bold text-indigo-700 dark:text-indigo-300"
+                                  : "text-slate-800 dark:text-zinc-200"
+                              }`}
+                            >
+                              {b.name}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
                   CBN-licensed commercial bank or national financial institution.
                 </p>

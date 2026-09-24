@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
 import { updateSchoolBankDetails } from "./actions";
 import {
@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Copy,
   Info,
+  Search,
 } from "lucide-react";
 
 interface BankSettingsClientProps {
@@ -43,6 +44,26 @@ export default function BankSettingsClient({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Searchable bank dropdown
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
+  const bankDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredBanks = NIGERIAN_BANKS.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankDropdownRef.current && !bankDropdownRef.current.contains(e.target as Node)) {
+        setBankDropdownOpen(false);
+        setBankSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleBankChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedName = e.target.value;
@@ -157,26 +178,66 @@ export default function BankSettingsClient({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 1. Nigerian Bank Dropdown */}
-            <div className="space-y-1.5">
+            {/* Searchable Nigerian Bank Dropdown */}
+            <div className="space-y-1.5" ref={bankDropdownRef}>
               <label htmlFor="bank-select" className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                 Bank Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <select
+                {/* Trigger button */}
+                <button
+                  type="button"
                   id="bank-select"
-                  required
-                  value={bankName}
-                  onChange={handleBankChange}
-                  className="flex h-11 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                  onClick={() => { setBankDropdownOpen((o) => !o); setBankSearch(""); }}
+                  className="flex h-11 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition items-center justify-between"
                 >
-                  <option value="">Select a Nigerian Commercial or Microfinance Bank</option>
-                  {NIGERIAN_BANKS.map((b) => (
-                    <option key={b.code} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                  <span className={bankName ? "" : "text-slate-400"}>{bankName || "Select a Nigerian bank"}</span>
+                  <span className="text-slate-400 text-xs">&#9660;</span>
+                </button>
+
+                {/* Dropdown panel */}
+                {bankDropdownOpen && (
+                  <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={bankSearch}
+                          onChange={(e) => setBankSearch(e.target.value)}
+                          placeholder="Search bank name..."
+                          className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <ul className="max-h-52 overflow-y-auto">
+                      {filteredBanks.length === 0 ? (
+                        <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                      ) : (
+                        filteredBanks.map((b) => (
+                          <li
+                            key={b.code}
+                            onClick={() => {
+                              setBankName(b.name);
+                              setBankCode(b.code);
+                              setErrorMsg(null);
+                              setBankDropdownOpen(false);
+                              setBankSearch("");
+                            }}
+                            className={`px-3 py-2 text-xs cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/40 transition ${
+                              bankName === b.name
+                                ? "bg-blue-50 dark:bg-blue-950/40 font-bold text-blue-700 dark:text-blue-300"
+                                : "text-slate-800 dark:text-zinc-200"
+                            }`}
+                          >
+                            {b.name}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -40,7 +40,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Building2,
   },
   {
-    name: "Bank Module",
+    name: "Bank",
     href: "/admin/bank",
     icon: Landmark,
   },
