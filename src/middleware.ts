@@ -96,16 +96,18 @@ export async function middleware(req: NextRequest) {
   const appUrlHost = process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL).hostname.toLowerCase().replace(/^www\./, '').trim() : '';
   const renderHostingDomain = 'school-erp-1-mfc3.onrender.com';
 
+  const platformApexDomains = [
+    configuredRoot,
+    'bonaveeict.com.ng',
+    'schoolerp.com',
+    renderHostingDomain,
+    appUrlHost
+  ].filter(Boolean);
+
   // 4. Strict check for Apex / Platform Domains (NEVER treated as a tenant)
   const isApexOrPlatformHost =
     !strippedHost ||
-    strippedHost === configuredRoot ||
-    strippedHost === `www.${configuredRoot}` ||
-    strippedHost === 'bonaveeict.com.ng' ||
-    strippedHost === 'www.bonaveeict.com.ng' ||
-    strippedHost === renderHostingDomain ||
-    strippedHost === `www.${renderHostingDomain}` ||
-    (appUrlHost && (strippedHost === appUrlHost || strippedHost === `www.${appUrlHost}`)) ||
+    platformApexDomains.some(d => strippedHost === d || strippedHost === `www.${d}`) ||
     (strippedHost.endsWith('.onrender.com') && strippedHost.split('.').length === 3);
 
   let subdomain = '';
@@ -123,14 +125,15 @@ export async function middleware(req: NextRequest) {
       }
     }
   } else {
-    // Extract tenant subdomain strictly relative to configuredRoot or Render host
-    if (configuredRoot && strippedHost.endsWith(`.${configuredRoot}`)) {
-      subdomain = strippedHost.slice(0, -(configuredRoot.length + 1));
-    } else if (appUrlHost && strippedHost.endsWith(`.${appUrlHost}`)) {
-      subdomain = strippedHost.slice(0, -(appUrlHost.length + 1));
-    } else if (strippedHost.endsWith(`.${renderHostingDomain}`)) {
-      subdomain = strippedHost.slice(0, -(renderHostingDomain.length + 1));
-    } else {
+    // Extract tenant subdomain strictly relative to supported base domains or Render host
+    for (const apex of platformApexDomains) {
+      if (strippedHost.endsWith(`.${apex}`)) {
+        subdomain = strippedHost.slice(0, -(apex.length + 1));
+        break;
+      }
+    }
+
+    if (!subdomain) {
       const parts = strippedHost.split('.');
       if (parts.length >= 3 && !strippedHost.endsWith('.onrender.com')) {
         subdomain = parts[0];
@@ -200,12 +203,16 @@ export async function middleware(req: NextRequest) {
     const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
     const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
 
+    const pathSegments = path.split('/').filter(Boolean);
+    const pathTenant = pathSegments.length > 0 && !['admin', 'super-admin', 'portal', 'api', 'access-denied', 'trial-expired', 'login', 'register', 'choice'].includes(pathSegments[0]) ? pathSegments[0] : '';
+    const effectiveTenant = subdomain || pathTenant;
+
     if (!sessionToken && !mockRoleConfig) {
-      // Redirect to tenant login or access-denied
-      const targetPath = subdomain ? `/${subdomain}/login` : '/access-denied';
+      // Redirect to tenant login or portal login instead of access-denied
+      const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
       const loginUrl = new URL(targetPath, req.url);
-      if (subdomain && (isIPAddress || isLocalhost)) {
-        loginUrl.searchParams.set('mockTenant', subdomain);
+      if (effectiveTenant && (isIPAddress || isLocalhost)) {
+        loginUrl.searchParams.set('mockTenant', effectiveTenant);
       }
       return NextResponse.redirect(loginUrl);
     }
@@ -319,10 +326,13 @@ export async function middleware(req: NextRequest) {
       req.headers.set('x-session-token', resolvedSessionToken);
     } catch (err) {
       // Token is invalid or expired
-      const targetPath = subdomain ? `/${subdomain}/login` : '/access-denied';
+      const pathSegments = path.split('/').filter(Boolean);
+      const pathTenant = pathSegments.length > 0 && !['admin', 'super-admin', 'portal', 'api', 'access-denied', 'trial-expired', 'login', 'register', 'choice'].includes(pathSegments[0]) ? pathSegments[0] : '';
+      const effectiveTenant = subdomain || pathTenant;
+      const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
       const loginUrl = new URL(targetPath, req.url);
-      if (subdomain && (isIPAddress || isLocalhost)) {
-        loginUrl.searchParams.set('mockTenant', subdomain);
+      if (effectiveTenant && (isIPAddress || isLocalhost)) {
+        loginUrl.searchParams.set('mockTenant', effectiveTenant);
       }
       const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('session');

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
+import { triggerSSLProvisioning } from "@/lib/ssl-provisioning";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -59,6 +60,14 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+    const rawHost = hostHeader.split(":")[0].toLowerCase().trim();
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const defaultRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim();
+    const rootDomain = rawHost && (rawHost.endsWith("schoolerp.com") || rawHost.endsWith("bonaveeict.com.ng"))
+      ? (rawHost.endsWith("schoolerp.com") ? "schoolerp.com" : "bonaveeict.com.ng")
+      : defaultRoot;
 
     // Provision combined tenant if requested
     if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
@@ -137,11 +146,35 @@ export async function POST(request: Request) {
         return createdSchools;
       });
 
+      // Trigger non-blocking SSL & DNS provisioning for primary subdomain
+      triggerSSLProvisioning(`${formattedSubdomain}-primary`).catch((err) =>
+        console.warn("[SSL_PROVISIONING_COMBINED_WARN]:", err?.message)
+      );
+
       return NextResponse.json({
         success: true,
         message: "Combined tenants successfully provisioned.",
-        tenant: newSchools[0],
-        redirectUrl: `/${formattedSubdomain}-primary/dashboard`
+        tenant: {
+          id: newSchools[0].id,
+          name: newSchools[0].name,
+          subdomain: `${formattedSubdomain}-primary`,
+          slug: `${formattedSubdomain}-primary`,
+          status: newSchools[0].status,
+          trialStartDate: newSchools[0].trialStartDate,
+          trialEndDate: newSchools[0].trialEndDate,
+        },
+        subdomain: `${formattedSubdomain}-primary`,
+        schoolName,
+        adminEmail,
+        portalUrl: `/${formattedSubdomain}-primary`,
+        subdomainUrl: `${proto}://${formattedSubdomain}-primary.${rootDomain}`,
+        fullDirectPortalUrl: `${proto}://${rootDomain}/${formattedSubdomain}-primary`,
+        loginUrl: `/${formattedSubdomain}-primary/login`,
+        subdomainLoginUrl: `${proto}://${formattedSubdomain}-primary.${rootDomain}/login`,
+        dashboardUrl: `/${formattedSubdomain}-primary/dashboard`,
+        redirectUrl: `/${formattedSubdomain}-primary/login`,
+        trialDays: 14,
+        sslStatus: "AUTOMATED_PROVISIONING_TRIGGERED",
       });
     }
 
@@ -226,11 +259,35 @@ export async function POST(request: Request) {
       return school;
     });
 
+    // Trigger non-blocking SSL & DNS provisioning for the tenant subdomain
+    triggerSSLProvisioning(formattedSubdomain).catch((err) =>
+      console.warn("[SSL_PROVISIONING_STANDARD_WARN]:", err?.message)
+    );
+
     return NextResponse.json({
       success: true,
       message: "Tenant successfully provisioned.",
-      tenant: newSchool,
-      redirectUrl: `/${formattedSubdomain}/dashboard`
+      tenant: {
+        id: newSchool.id,
+        name: newSchool.name,
+        subdomain: formattedSubdomain,
+        slug: formattedSubdomain,
+        status: newSchool.status,
+        trialStartDate: newSchool.trialStartDate,
+        trialEndDate: newSchool.trialEndDate,
+      },
+      subdomain: formattedSubdomain,
+      schoolName,
+      adminEmail,
+      portalUrl: `/${formattedSubdomain}`,
+      subdomainUrl: `${proto}://${formattedSubdomain}.${rootDomain}`,
+      fullDirectPortalUrl: `${proto}://${rootDomain}/${formattedSubdomain}`,
+      loginUrl: `/${formattedSubdomain}/login`,
+      subdomainLoginUrl: `${proto}://${formattedSubdomain}.${rootDomain}/login`,
+      dashboardUrl: `/${formattedSubdomain}/dashboard`,
+      redirectUrl: `/${formattedSubdomain}/login`,
+      trialDays: 14,
+      sslStatus: "AUTOMATED_PROVISIONING_TRIGGERED",
     });
 
   } catch (error: any) {

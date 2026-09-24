@@ -1,0 +1,42 @@
+# ==============================================================================
+# Multi-Tenant School ERP - Reverse Proxy & Dynamic On-Demand TLS Configuration
+# ==============================================================================
+# Resolves 'ERR_SSL_UNRECOGNIZED_NAME_ALERT' by dynamically provisioning certificates
+# for all registered school subdomains via Caddy's On-Demand TLS and Wildcard routing.
+# ==============================================================================
+
+{
+    # Global TLS Options
+    on_demand_tls {
+        # Query internal Next.js API to verify if domain is an active registered tenant
+        ask http://127.0.0.1:3000/api/ssl/ask
+        # Rate-limiting: Max 10 cert issuances per 10 minutes to protect Let's Encrypt quota
+        interval 10m
+        burst 10
+    }
+
+    # Admin API for dynamic config management
+    admin 127.0.0.1:2019
+}
+
+# ==============================================================================
+# Production Platform Hosts (Apex Domains & Dynamic Tenant Subdomains)
+# ==============================================================================
+*.bonaveeict.com.ng, bonaveeict.com.ng, *.schoolerp.com, schoolerp.com {
+    tls {
+        on_demand
+    }
+
+    # Enable compression
+    encode zstd gzip
+
+    # Reverse proxy to Next.js application layer
+    reverse_proxy 127.0.0.1:3000 {
+        # Preserve original host for multi-tenant subdomain extraction in middleware
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
