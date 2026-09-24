@@ -43,6 +43,7 @@ import {
   getBankByCode,
   SettlementBankDetails,
 } from "@/lib/nigerian-banks";
+import { formatCurrency } from "@/lib/format-utils";
 
 interface PlanItem {
   id: string;
@@ -605,12 +606,8 @@ export default function SaasAdminDashboard({
     return matchesStatus && matchesSearch;
   });
 
-  const formatNgn = (amt?: number) => {
-    return new Intl.NumberFormat("en-NG", {
-      style: "currency",
-      currency: "NGN",
-      maximumFractionDigits: 0,
-    }).format(amt || 0);
+  const formatNgn = (amt?: number | string | null) => {
+    return formatCurrency(amt);
   };
 
   return (

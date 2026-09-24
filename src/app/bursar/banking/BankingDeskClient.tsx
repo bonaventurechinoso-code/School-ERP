@@ -29,6 +29,7 @@ const NIGERIAN_BANKS = [
   { name: "Opay (Paycom)", code: "999992" },
   { name: "PalmPay", code: "999991" },
   { name: "Moniepoint MFB", code: "50515" },
+  { name: "Raenest", code: "RAENEST" },
 ];
 
 export function BankingDeskClient({ context }: { context: BursarContext }) {

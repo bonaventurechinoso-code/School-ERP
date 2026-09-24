@@ -66,6 +66,7 @@ const NIGERIAN_BANKS = [
   "Ecobank Nigeria",
   "Wema Bank",
   "Monnify / OPay",
+  "Raenest",
 ];
 
 const QUALIFICATIONS = [

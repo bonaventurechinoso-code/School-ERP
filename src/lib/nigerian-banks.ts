@@ -30,6 +30,7 @@ export const NIGERIAN_BANKS: NigerianBank[] = [
   { name: "TAJ Bank", code: "302" },
   { name: "Jaiz Bank", code: "301" },
   { name: "VFD Microfinance Bank", code: "566" },
+  { name: "Raenest", code: "RAENEST" },
 ];
 
 export interface SettlementBankDetails {

@@ -8,6 +8,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { basePrisma } from "@/lib/tenant-prisma";
+import { formatCurrency } from "@/lib/format-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function AdminDashboardPage() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-3">
-            ₦{Number(platformWallet?.totalRevenue || 0).toLocaleString()}
+            {formatCurrency(platformWallet?.totalRevenue ? Number(platformWallet.totalRevenue) : 0)}
           </div>
           <Link href="/admin/billings" className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 inline-flex items-center gap-1 font-semibold hover:underline">
             View Platform Ledger <ArrowRight className="w-3 h-3" />
@@ -196,7 +197,7 @@ export default async function AdminDashboardPage() {
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Manual Verified</span>
             </div>
             <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-              ₦{Number(platformWallet?.totalRevenue || 0).toLocaleString()} Verified Total
+              {formatCurrency(platformWallet?.totalRevenue ? Number(platformWallet.totalRevenue) : 0)} Verified Total
             </p>
             <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
               Flat monthly SaaS portal subscriptions (0% fee model).

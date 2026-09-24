@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatCurrency } from "@/lib/format-utils";
 import Link from "next/link";
 import {
   CreditCard,
@@ -68,12 +69,8 @@ export default async function BillingsPage() {
     _count: true,
   });
 
-  const formatNgn = (amt: number) => {
-    return new Intl.NumberFormat("en-NG", {
-      style: "currency",
-      currency: "NGN",
-      maximumFractionDigits: 0,
-    }).format(amt);
+  const formatNgn = (amt?: number | string | null) => {
+    return formatCurrency(amt);
   };
 
   return (

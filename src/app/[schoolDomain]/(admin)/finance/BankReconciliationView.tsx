@@ -47,6 +47,7 @@ const NIGERIAN_BANKS = [
   "Monnify Virtual Account",
   "NIP Direct Bank Transfer",
   "Remita Direct Debit",
+  "Raenest",
 ];
 
 export default function BankReconciliationView({

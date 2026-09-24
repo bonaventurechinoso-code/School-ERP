@@ -16,6 +16,7 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
+  Landmark,
 } from "lucide-react";
 
 interface NavItem {
@@ -37,6 +38,11 @@ const NAV_ITEMS: NavItem[] = [
     name: "Tenants",
     href: "/admin/tenants",
     icon: Building2,
+  },
+  {
+    name: "Bank Module",
+    href: "/admin/bank",
+    icon: Landmark,
   },
   {
     name: "Billings",
@@ -118,8 +124,8 @@ export default function SuperAdminSidebar() {
 
       {/* Navigation Links */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        <div className="px-3 pt-2 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-          Platform Management
+        <div className="px-3 pt-2 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+          PLATFORM ADMINISTRATION
         </div>
 
         {NAV_ITEMS.map((item) => {

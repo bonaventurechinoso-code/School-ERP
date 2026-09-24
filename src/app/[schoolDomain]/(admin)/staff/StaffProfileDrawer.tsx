@@ -109,6 +109,7 @@ const NIGERIAN_BANKS = [
   "Wema Bank",
   "Kuda Bank",
   "Monnify / OPay",
+  "Raenest",
 ];
 
 const QUALIFICATIONS = [
