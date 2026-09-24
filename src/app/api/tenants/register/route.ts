@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { triggerSSLProvisioning } from "@/lib/ssl-provisioning";
+import bcrypt from "bcryptjs";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -126,6 +127,7 @@ export async function POST(request: Request) {
             data: { schoolId: school.id, name: "Administration" }
           });
 
+          const defaultPasswordHash = await bcrypt.hash("Password123", 10);
           await tx.staff.create({
             data: {
               schoolId: school.id,
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
               departmentId: dept.id,
               status: "ACTIVE",
               activeAt: now,
-              password: ""
+              password: defaultPasswordHash
             }
           });
 
@@ -238,7 +240,8 @@ export async function POST(request: Request) {
         }
       });
 
-      // 6. Create default admin staff account
+      // 6. Create default admin staff account with default initial password
+      const defaultPasswordHash = await bcrypt.hash("Password123", 10);
       await tx.staff.create({
         data: {
           schoolId: school.id,
@@ -249,7 +252,7 @@ export async function POST(request: Request) {
           departmentId: dept.id,
           status: "ACTIVE",
           activeAt: now,
-          password: ""
+          password: defaultPasswordHash
         }
       });
 
