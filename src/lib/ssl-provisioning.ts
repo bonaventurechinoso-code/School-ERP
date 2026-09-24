@@ -215,3 +215,79 @@ export async function triggerSSLProvisioning(subdomain: string): Promise<{
     message: `Automated SSL provisioning cycle completed for ${targetFqdn}`,
   };
 }
+
+/**
+ * Health check evaluator used during frontend onboarding propagation window.
+ * Verifies tenant existence in DB and checks whether the subdomain's SSL handshake has completed.
+ */
+export async function checkSSLHealth(subdomain: string): Promise<{
+  verified: boolean;
+  subdomain: string;
+  domain: string;
+  isRegistered: boolean;
+  dnsResolved: boolean;
+  sslReady: boolean;
+  directFallbackUrl: string;
+  message: string;
+}> {
+  const rootDomain = SUPPORTED_BASE_DOMAINS[0] || "bonaveeict.com.ng";
+  const targetFqdn = `${subdomain}.${rootDomain}`;
+  const directFallback = `https://${rootDomain}/${subdomain}`;
+
+  // 1. Verify tenant in database
+  const school = await basePrisma.school.findUnique({
+    where: { subdomain },
+    select: { id: true, subdomain: true, isActive: true, isBanned: true }
+  });
+
+  if (!school || school.isBanned || !school.isActive) {
+    return {
+      verified: false,
+      subdomain,
+      domain: targetFqdn,
+      isRegistered: !!school,
+      dnsResolved: false,
+      sslReady: false,
+      directFallbackUrl: directFallback,
+      message: "Tenant is either not registered or inactive."
+    };
+  }
+
+  // 2. Check DNS / Handshake status
+  let dnsResolved = false;
+  try {
+    const addresses = await dns.promises.resolve4(targetFqdn);
+    dnsResolved = !!(addresses && addresses.length > 0);
+  } catch {
+    dnsResolved = false;
+  }
+
+  // 3. Test TLS handshake
+  let sslReady = false;
+  if (dnsResolved) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`https://${targetFqdn}/api/tenants/status?subdomain=${subdomain}`, {
+        method: "HEAD",
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      sslReady = res.ok || res.status < 500;
+    } catch {
+      sslReady = false;
+    }
+  }
+
+  return {
+    verified: true,
+    subdomain,
+    domain: targetFqdn,
+    isRegistered: true,
+    dnsResolved,
+    sslReady,
+    directFallbackUrl: directFallback,
+    message: sslReady ? "SSL certificate is active and bound to hostname." : "SSL propagation or TLS handshake in progress."
+  };
+}
+

@@ -10,9 +10,9 @@
     on_demand_tls {
         # Query internal Next.js API to verify if domain is an active registered tenant
         ask http://127.0.0.1:3000/api/ssl/ask
-        # Rate-limiting: Max 10 cert issuances per 10 minutes to protect Let's Encrypt quota
-        interval 10m
-        burst 10
+        # High-capacity burst rate-limiting to prevent throttling during new tenant onboarding
+        interval 2m
+        burst 100
     }
 
     # Admin API for dynamic config management
