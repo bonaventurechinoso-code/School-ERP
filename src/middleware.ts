@@ -17,6 +17,61 @@ export const config = {
   ],
 };
 
+export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonaveeict.com.ng').toLowerCase().replace(/^www\./, '').split(':')[0].trim();
+
+/**
+ * Cleanly extracts tenant subdomains specifically against the .bonaveeict.com.ng suffix.
+ */
+export function extractTenantSubdomain(host: string, searchParams?: URLSearchParams): string {
+  const strippedHost = (host || '').split(':')[0].toLowerCase().trim();
+
+  // 1. Explicit mockTenant override (used for local development / testing)
+  const mockOverride = searchParams?.get('mockTenant');
+  if (mockOverride) {
+    return mockOverride.toLowerCase().trim();
+  }
+
+  // 2. Local development: e.g. stpeter.localhost:3000
+  if (strippedHost.endsWith('.localhost')) {
+    const localParts = strippedHost.split('.');
+    if (localParts.length >= 2 && localParts[0] !== 'localhost') {
+      return localParts[0].toLowerCase().trim();
+    }
+    return '';
+  }
+  if (strippedHost === 'localhost' || strippedHost === '127.0.0.1' || /^[0-9\.]+$/.test(strippedHost)) {
+    return '';
+  }
+
+  // 3. Official Platform Apex: bonaveeict.com.ng or www.bonaveeict.com.ng is NEVER treated as a tenant
+  if (strippedHost === BASE_TENANT_DOMAIN || strippedHost === `www.${BASE_TENANT_DOMAIN}`) {
+    return '';
+  }
+
+  // 4. Primary production extraction: cleanly split specifically against the .bonaveeict.com.ng suffix
+  if (strippedHost.endsWith(`.${BASE_TENANT_DOMAIN}`)) {
+    const sub = strippedHost.slice(0, -(BASE_TENANT_DOMAIN.length + 1)).toLowerCase().trim();
+    if (sub && !['www', 'app', 'api', 'admin', 'mail'].includes(sub)) {
+      return sub;
+    }
+    return '';
+  }
+
+  // 5. Fallback for auxiliary hosting domains (Render or schoolerp.com)
+  const auxiliaryApexDomains = ['schoolerp.com', 'school-erp-1-mfc3.onrender.com'];
+  for (const apex of auxiliaryApexDomains) {
+    if (strippedHost.endsWith(`.${apex}`)) {
+      const sub = strippedHost.slice(0, -(apex.length + 1)).toLowerCase().trim();
+      if (sub && !['www', 'app', 'api', 'admin', 'mail'].includes(sub)) {
+        return sub;
+      }
+      return '';
+    }
+  }
+
+  return '';
+}
+
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const path = url.pathname;
@@ -29,66 +84,17 @@ export async function middleware(req: NextRequest) {
   const isIPAddress = /^[0-9\.]+$/.test(strippedHost) || /^\[.*\]$/.test(strippedHost);
   const isLocalhost = strippedHost === 'localhost' || strippedHost === '127.0.0.1' || strippedHost.endsWith('.localhost');
 
-  // 3. Resolve configured Root Domain and Render Hosting Apex
-  const configuredRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonaveeict.com.ng').toLowerCase().replace(/^www\./, '').trim();
-  const appUrlHost = process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL).hostname.toLowerCase().replace(/^www\./, '').trim() : '';
-  const renderHostingDomain = 'school-erp-1-mfc3.onrender.com';
+  // 3. Cleanly extract tenant subdomain specifically against .bonaveeict.com.ng
+  const subdomain = extractTenantSubdomain(rawHost, url.searchParams);
 
-  const platformApexDomains = [
-    configuredRoot,
-    'bonaveeict.com.ng',
-    'schoolerp.com',
-    renderHostingDomain,
-    appUrlHost
-  ].filter(Boolean);
-
-  // 4. Strict check for Apex / Platform Domains (NEVER treated as a tenant)
+  // 4. Identify if current host is the master platform apex domain
   const isApexOrPlatformHost =
     !strippedHost ||
-    platformApexDomains.some(d => strippedHost === d || strippedHost === `www.${d}`) ||
+    strippedHost === BASE_TENANT_DOMAIN ||
+    strippedHost === `www.${BASE_TENANT_DOMAIN}` ||
+    strippedHost === 'schoolerp.com' ||
+    strippedHost === 'www.schoolerp.com' ||
     (strippedHost.endsWith('.onrender.com') && strippedHost.split('.').length === 3);
-
-  let subdomain = '';
-
-  if (isApexOrPlatformHost) {
-    // Platform Root Apex: check if mockTenant query param was explicitly supplied for testing
-    subdomain = url.searchParams.get('mockTenant') || '';
-  } else if (isIPAddress || isLocalhost) {
-    // Local development: read mockTenant query param or local subdomain
-    subdomain = url.searchParams.get('mockTenant') || '';
-    if (!subdomain && strippedHost.endsWith('.localhost')) {
-      const localParts = strippedHost.split('.');
-      if (localParts.length >= 2 && localParts[0] !== 'localhost') {
-        subdomain = localParts[0];
-      }
-    }
-  } else {
-    // Extract tenant subdomain strictly relative to supported base domains or Render host
-    for (const apex of platformApexDomains) {
-      if (strippedHost.endsWith(`.${apex}`)) {
-        subdomain = strippedHost.slice(0, -(apex.length + 1));
-        break;
-      }
-    }
-
-    if (!subdomain) {
-      const parts = strippedHost.split('.');
-      if (parts.length >= 3 && !strippedHost.endsWith('.onrender.com')) {
-        subdomain = parts[0];
-      }
-    }
-
-    // Filter out standard non-tenant subdomains
-    if (['www', 'app', 'api', 'admin', 'mail'].includes(subdomain.toLowerCase())) {
-      subdomain = '';
-    }
-
-    // Allow mockTenant query param override if explicitly supplied
-    const mockOverride = url.searchParams.get('mockTenant');
-    if (mockOverride) {
-      subdomain = mockOverride;
-    }
-  }
 
   // On a local tenant school workspace (e.g. stmark.bonaveeict.com.ng or localhost with mockTenant),
   // navigating to /admin or /[schoolDomain]/admin is a tenant workspace action, NOT the SaaS platform super-admin console.
@@ -201,19 +207,13 @@ export async function middleware(req: NextRequest) {
   const isTenantAdminPath = tenantAdminSegments.some(segment => path.includes(segment));
 
   if (isTenantAdminPath) {
-    let sessionToken = req.cookies.get('session')?.value;
-    if (!sessionToken) {
-      const authHeader = req.headers.get('authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        sessionToken = authHeader.substring(7);
-      }
-    }
-    if (!sessionToken) {
-      const queryToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
-      if (queryToken) {
-        sessionToken = queryToken;
-      }
-    }
+    // Resolve candidate session tokens:
+    // Prioritize query token (from onboarding redirect) over potentially stale root-domain cookies
+    const queryToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
+    const authHeader = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    const cookieToken = req.cookies.get('session')?.value;
+
+    let sessionToken = queryToken || authHeader || cookieToken;
 
     const isDev = process.env.NODE_ENV === 'development';
     const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
@@ -225,9 +225,9 @@ export async function middleware(req: NextRequest) {
 
     if (!sessionToken && !mockRoleConfig) {
       // Redirect to tenant login or portal login instead of access-denied
-      const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
+      const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
       const loginUrl = new URL(targetPath, req.url);
-      if (effectiveTenant && (isIPAddress || isLocalhost)) {
+      if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
         loginUrl.searchParams.set('mockTenant', effectiveTenant);
       }
       return NextResponse.redirect(loginUrl);
@@ -243,7 +243,20 @@ export async function middleware(req: NextRequest) {
           const verified = await jwtVerify(sessionToken, secret);
           payload = verified.payload;
         } catch (tokenErr) {
-          if (!mockRoleConfig) throw tokenErr;
+          // If the cookie token was invalid/expired but queryToken was also available, attempt queryToken
+          if (queryToken && sessionToken !== queryToken) {
+            try {
+              const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+              const secret = new TextEncoder().encode(jwtSecret);
+              const verifiedQuery = await jwtVerify(queryToken, secret);
+              payload = verifiedQuery.payload;
+              sessionToken = queryToken;
+            } catch {
+              if (!mockRoleConfig) throw tokenErr;
+            }
+          } else if (!mockRoleConfig) {
+            throw tokenErr;
+          }
         }
       }
 
@@ -259,10 +272,60 @@ export async function middleware(req: NextRequest) {
         };
       }
 
+      // --- Strict Cross-Subdomain & Root Domain Session Isolation Guard ---
+      // If on a tenant subdomain, ensure the active session belongs to this specific tenant!
+      // Prevent root domain session states or sibling tenant sessions from bleeding across subdomains.
+      if (effectiveTenant && payload) {
+        const payloadDomain = ((payload.schoolDomain as string) || '').toLowerCase().trim();
+        const payloadRole = ((payload.role as string) || '').toUpperCase().trim();
+        const isSuperAdmin = payloadRole === 'SUPER_ADMIN';
+
+        // If the session does not belong to this tenant and is not a platform Super Admin:
+        if (!isSuperAdmin && (!payloadDomain || payloadDomain !== effectiveTenant.toLowerCase())) {
+          // If a query token was provided for this specific tenant, switch to it:
+          if (queryToken && sessionToken !== queryToken) {
+            try {
+              const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+              const secret = new TextEncoder().encode(jwtSecret);
+              const verifiedQuery = await jwtVerify(queryToken, secret);
+              const queryPayloadDomain = ((verifiedQuery.payload.schoolDomain as string) || '').toLowerCase().trim();
+              const queryRole = ((verifiedQuery.payload.role as string) || '').toUpperCase().trim();
+              if (queryPayloadDomain === effectiveTenant.toLowerCase() || queryRole === 'SUPER_ADMIN') {
+                payload = verifiedQuery.payload;
+                sessionToken = queryToken;
+              } else {
+                throw new Error("Query token tenant mismatch");
+              }
+            } catch {
+              const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
+              const loginUrl = new URL(targetPath, req.url);
+              if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
+                loginUrl.searchParams.set('mockTenant', effectiveTenant);
+              }
+              const res = NextResponse.redirect(loginUrl);
+              res.cookies.delete('session');
+              return res;
+            }
+          } else {
+            // Mismatched foreign/root cookie without matching query token:
+            // Clear the bleeding foreign cookie and redirect to this tenant's login portal,
+            // NEVER throwing the "Security Guard Activated" block page!
+            const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
+            const loginUrl = new URL(targetPath, req.url);
+            if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
+              loginUrl.searchParams.set('mockTenant', effectiveTenant);
+            }
+            const res = NextResponse.redirect(loginUrl);
+            res.cookies.delete('session');
+            return res;
+          }
+        }
+      }
+
       // Resolve effective tenant context
       let effectiveSubdomain = subdomain;
       if (!effectiveSubdomain) {
-        if (payload.schoolDomain) {
+        if (payload?.schoolDomain) {
           effectiveSubdomain = payload.schoolDomain as string;
         } else {
           const segments = path.split('/').filter(Boolean);
@@ -299,17 +362,17 @@ export async function middleware(req: NextRequest) {
       }
 
       // --- Strict Role-Based Access Control (RBAC) Matrix ---
-      const rawRole = (payload.role as string) || '';
-      const staffRole = (payload.staffRole as string) || '';
+      const rawRole = (payload?.role as string) || '';
+      const staffRole = (payload?.staffRole as string) || '';
 
       const authResult = checkRouteAuthorization(path, rawRole, staffRole);
 
       if (!authResult.allowed) {
         // If guest / unauthenticated, redirect to login instead of throwing an access denied error
         if (authResult.category === 'GUEST') {
-          const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
+          const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
           const loginUrl = new URL(targetPath, req.url);
-          if (effectiveTenant && (isIPAddress || isLocalhost)) {
+          if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
             loginUrl.searchParams.set('mockTenant', effectiveTenant);
           }
           const res = NextResponse.redirect(loginUrl);
@@ -338,28 +401,28 @@ export async function middleware(req: NextRequest) {
       }
 
       const resolvedSessionToken =
-        (payload.sessionToken as string) ||
-        (payload.sessionId as string) ||
-        (payload.jti as string) ||
-        (payload.token as string) ||
-        (payload.id as string) ||
+        (payload?.sessionToken as string) ||
+        (payload?.sessionId as string) ||
+        (payload?.jti as string) ||
+        (payload?.token as string) ||
+        (payload?.id as string) ||
         sessionToken ||
         '';
 
       // Inject cryptographically verified session claims into downstream request headers
-      req.headers.set('x-user-id', (payload.userId as string) || '');
+      req.headers.set('x-user-id', (payload?.userId as string) || '');
       req.headers.set('x-user-role', rawRole);
       req.headers.set('x-staff-role', staffRole);
-      req.headers.set('x-tenant-id', (payload.tenantId as string) || '');
+      req.headers.set('x-tenant-id', (payload?.tenantId as string) || '');
       req.headers.set('x-session-token', resolvedSessionToken);
     } catch (err) {
       // Token is invalid or expired
       const pathSegments = path.split('/').filter(Boolean);
       const pathTenant = pathSegments.length > 0 && !['admin', 'super-admin', 'portal', 'api', 'access-denied', 'trial-expired', 'login', 'register', 'choice'].includes(pathSegments[0]) ? pathSegments[0] : '';
       const effectiveTenant = subdomain || pathTenant;
-      const targetPath = effectiveTenant ? `/${effectiveTenant}/login` : '/login';
+      const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
       const loginUrl = new URL(targetPath, req.url);
-      if (effectiveTenant && (isIPAddress || isLocalhost)) {
+      if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
         loginUrl.searchParams.set('mockTenant', effectiveTenant);
       }
       const response = NextResponse.redirect(loginUrl);
@@ -393,24 +456,22 @@ export async function middleware(req: NextRequest) {
     });
   }
 
-  // If session token was provided via query parameter during onboarding redirect, persist cookie
+  // If session token was provided via query parameter during onboarding redirect, persist strictly as Host-Only cookie
   const incomingToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
   if (incomingToken) {
     const isProd = process.env.NODE_ENV === 'production';
-    const cookieDomain = isProd && configuredRoot && configuredRoot.includes('.') && !configuredRoot.includes('localhost')
-      ? `.${configuredRoot}`
-      : undefined;
 
     response.cookies.set('session', incomingToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
       path: '/',
-      domain: cookieDomain,
+      domain: undefined, // Strictly Host-Only cookie scoped to this exact subdomain
       maxAge: 30 * 60,
     });
   }
 
   return response;
 }
+
 

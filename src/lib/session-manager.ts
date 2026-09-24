@@ -16,24 +16,28 @@ const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-developmen
 const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 const ALG = "HS256";
 
+export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").split(":")[0].trim();
+
 /**
  * Cookie security directives strictly enforced across all environments.
+ * Omitting the 'domain' attribute enforces RFC 6265 Host-Only cookies,
+ * ensuring that cookies set on a tenant subdomain (e.g., stpeter.bonaveeict.com.ng)
+ * are strictly restricted to that host and NEVER bleed across sibling tenants
+ * or to the apex platform domain.
  */
-export function getSecureCookieOptions(maxAge: number = SESSION_MAX_AGE_SECONDS, domainRoot?: string) {
+export function getSecureCookieOptions(maxAge: number = SESSION_MAX_AGE_SECONDS, targetHost?: string) {
   const isProd = process.env.NODE_ENV === "production";
-  const configuredRoot = (domainRoot || process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").split(":")[0].trim();
 
-  // In production, bind cookie to parent domain so sessions persist across apex and all dynamic tenant subdomains
-  const cookieDomain = isProd && configuredRoot && configuredRoot.includes(".") && !configuredRoot.includes("localhost")
-    ? `.${configuredRoot}`
-    : undefined;
-
+  // Strict host-only cookie scoping:
+  // Leaving domain undefined instructs browsers to enforce RFC 6265 Host-Only scoping,
+  // preventing cookie leakage across sibling tenant subdomains (e.g. stpeter vs umawa)
+  // and eliminating root-domain session contamination.
   return {
     httpOnly: true,
     secure: isProd,
     sameSite: "lax" as const,
     path: "/",
-    domain: cookieDomain,
+    domain: undefined,
     maxAge: maxAge,
   };
 }

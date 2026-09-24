@@ -8,6 +8,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
   SESSION_COOKIE_NAME,
   getSecureCookieOptions,
+  BASE_TENANT_DOMAIN,
 } from "@/lib/session-manager";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 
@@ -73,10 +74,7 @@ export async function POST(request: Request) {
     const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
     const rawHost = hostHeader.split(":")[0].toLowerCase().trim();
     const proto = request.headers.get("x-forwarded-proto") || "https";
-    const defaultRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim();
-    const rootDomain = rawHost && (rawHost.endsWith("schoolerp.com") || rawHost.endsWith("bonaveeict.com.ng"))
-      ? (rawHost.endsWith("schoolerp.com") ? "schoolerp.com" : "bonaveeict.com.ng")
-      : defaultRoot;
+    const rootDomain = BASE_TENANT_DOMAIN; // Strictly "bonaveeict.com.ng"
 
     // Provision combined tenant if requested
     if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
@@ -227,7 +225,7 @@ export async function POST(request: Request) {
       response.cookies.set(
         SESSION_COOKIE_NAME,
         sessionResult.cookieToken,
-        getSecureCookieOptions(SESSION_MAX_AGE_SECONDS, rootDomain)
+        getSecureCookieOptions(SESSION_MAX_AGE_SECONDS)
       );
 
       return response;
@@ -383,7 +381,7 @@ export async function POST(request: Request) {
     response.cookies.set(
       SESSION_COOKIE_NAME,
       sessionResult.cookieToken,
-      getSecureCookieOptions(SESSION_MAX_AGE_SECONDS, rootDomain)
+      getSecureCookieOptions(SESSION_MAX_AGE_SECONDS)
     );
 
     return response;
