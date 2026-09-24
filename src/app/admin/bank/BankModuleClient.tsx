@@ -72,9 +72,35 @@ export default function BankModuleClient({
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const bankDropdownRef = useRef<HTMLDivElement>(null);
 
-  const filteredBanks = NIGERIAN_BANKS.filter((b) =>
-    b.name.toLowerCase().includes(bankSearch.toLowerCase())
-  );
+  const query = (bankSearch || "").trim().toLowerCase();
+  const filteredBanks = (NIGERIAN_BANKS || []).filter((b) => {
+    if (!b || !b.name) return false;
+    if (!query) return true;
+    const name = b.name.toLowerCase();
+    const code = (b.code || "").toLowerCase();
+
+    // Direct matches
+    if (name.includes(query) || code.includes(query)) return true;
+
+    // Multi-token match for delimiter / space queries (e.g. "kredi / raenest", "kredi mfb")
+    const tokens = query.split(/[\s/,\-_|]+/).filter(Boolean);
+    if (tokens.length > 1 && tokens.some((t) => name.includes(t) || code.includes(t))) {
+      return true;
+    }
+
+    // Partner alias lookup: Kredi Money MFB <-> Raenest
+    const isKrediOrRaenest =
+      name.includes("kredi") ||
+      name.includes("raenest") ||
+      code === "50200" ||
+      code === "raenest";
+
+    if (isKrediOrRaenest && (query.includes("kredi") || query.includes("raenest") || query.includes("50200"))) {
+      return true;
+    }
+
+    return false;
+  });
   const selectedBankName = NIGERIAN_BANKS.find((b) => b.code === selectedBankCode)?.name ?? "Select bank...";
 
   // Close bank dropdown when clicking outside
@@ -360,7 +386,7 @@ export default function BankModuleClient({
       </div>
 
       {/* SECTION 1: SUPER ADMIN PLATFORM SUBSCRIPTION CORPORATE ACCOUNT CONFIGURATION */}
-      <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative overflow-hidden">
+      <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs relative">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-zinc-800">
           <div className="flex items-start gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
@@ -418,25 +444,31 @@ export default function BankModuleClient({
 
                 {/* Dropdown panel */}
                 {bankDropdownOpen && (
-                  <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg overflow-hidden">
-                    {/* Search input */}
-                    <div className="p-2 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="absolute z-50 mt-1.5 w-full min-w-[280px] rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl">
+                    {/* Search input container */}
+                    <div className="p-2 border-b border-slate-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-t-xl">
                       <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           autoFocus
                           type="text"
                           value={bankSearch}
                           onChange={(e) => setBankSearch(e.target.value)}
-                          placeholder="Search bank name..."
-                          className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="Search bank name or code..."
+                          className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
                         />
                       </div>
                     </div>
-                    {/* Filtered list */}
-                    <ul className="max-h-52 overflow-y-auto">
+
+                    {/* Filtered list with explicit minimum dimensions and visible text colors */}
+                    <ul className="min-h-[140px] max-h-60 overflow-y-auto divide-y divide-slate-100/50 dark:divide-zinc-800/50 rounded-b-xl">
                       {filteredBanks.length === 0 ? (
-                        <li className="px-3 py-3 text-xs text-slate-400 text-center">No banks found.</li>
+                        <li className="min-h-[140px] px-4 py-8 text-xs text-slate-400 dark:text-zinc-500 text-center flex flex-col items-center justify-center gap-1.5 select-none bg-slate-50/50 dark:bg-zinc-950/40">
+                          <span className="font-semibold text-slate-700 dark:text-zinc-300">No banks found</span>
+                          <span className="text-[11px] text-slate-400 dark:text-zinc-500">
+                            {bankSearch.trim() ? `No results matching "${bankSearch.trim()}"` : "All banks are currently listed"}
+                          </span>
+                        </li>
                       ) : (
                         filteredBanks.map((bank) => (
                           <li
@@ -446,13 +478,16 @@ export default function BankModuleClient({
                               setBankDropdownOpen(false);
                               setBankSearch("");
                             }}
-                            className={`px-3 py-2 text-xs cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition ${
+                            className={`min-h-[40px] px-3.5 py-2.5 text-xs font-medium cursor-pointer transition flex items-center justify-between ${
                               selectedBankCode === bank.code
-                                ? "bg-indigo-50 dark:bg-indigo-950/40 font-bold text-indigo-700 dark:text-indigo-300"
-                                : "text-slate-800 dark:text-zinc-200"
+                                ? "bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-700 dark:text-indigo-300"
+                                : "text-slate-900 dark:text-zinc-100 hover:bg-slate-50 dark:hover:bg-zinc-800/60"
                             }`}
                           >
-                            {bank.name}
+                            <span className="truncate pr-2">{bank.name}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 shrink-0">
+                              {bank.code}
+                            </span>
                           </li>
                         ))
                       )}
