@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { triggerSSLProvisioning } from "@/lib/ssl-provisioning";
+import { triggerSSLProvisioning, warmAndVerifySSLHandshake } from "@/lib/ssl-provisioning";
 import bcrypt from "bcryptjs";
 
 const VALID_TIERS = [
@@ -148,10 +148,9 @@ export async function POST(request: Request) {
         return createdSchools;
       });
 
-      // Trigger non-blocking SSL & DNS provisioning for primary subdomain
-      triggerSSLProvisioning(`${formattedSubdomain}-primary`).catch((err) =>
-        console.warn("[SSL_PROVISIONING_COMBINED_WARN]:", err?.message)
-      );
+      // Synchronize SSL generation with onboarding pipeline
+      const combinedSubdomain = `${formattedSubdomain}-primary`;
+      const sslSyncResult = await warmAndVerifySSLHandshake(combinedSubdomain, rootDomain, proto);
 
       return NextResponse.json({
         success: true,
@@ -159,24 +158,27 @@ export async function POST(request: Request) {
         tenant: {
           id: newSchools[0].id,
           name: newSchools[0].name,
-          subdomain: `${formattedSubdomain}-primary`,
-          slug: `${formattedSubdomain}-primary`,
+          subdomain: combinedSubdomain,
+          slug: combinedSubdomain,
           status: newSchools[0].status,
           trialStartDate: newSchools[0].trialStartDate,
           trialEndDate: newSchools[0].trialEndDate,
         },
-        subdomain: `${formattedSubdomain}-primary`,
+        subdomain: combinedSubdomain,
         schoolName,
         adminEmail,
-        portalUrl: `/${formattedSubdomain}-primary`,
-        subdomainUrl: `${proto}://${formattedSubdomain}-primary.${rootDomain}`,
-        fullDirectPortalUrl: `${proto}://${rootDomain}/${formattedSubdomain}-primary`,
-        loginUrl: `/${formattedSubdomain}-primary/login`,
-        subdomainLoginUrl: `${proto}://${formattedSubdomain}-primary.${rootDomain}/login`,
-        dashboardUrl: `/${formattedSubdomain}-primary/dashboard`,
-        redirectUrl: `/${formattedSubdomain}-primary/login`,
+        sslReady: sslSyncResult.sslReady,
+        targetFqdn: sslSyncResult.targetFqdn,
+        portalUrl: `/${combinedSubdomain}`,
+        subdomainUrl: `${proto}://${combinedSubdomain}.${rootDomain}`,
+        fullDirectPortalUrl: `${proto}://${rootDomain}/${combinedSubdomain}`,
+        loginUrl: `/${combinedSubdomain}/login`,
+        subdomainLoginUrl: `${proto}://${combinedSubdomain}.${rootDomain}/login`,
+        dashboardUrl: `/${combinedSubdomain}/dashboard`,
+        subdomainDashboardUrl: `${proto}://${combinedSubdomain}.${rootDomain}/dashboard`,
+        redirectUrl: `/${combinedSubdomain}/login`,
         trialDays: 14,
-        sslStatus: "AUTOMATED_PROVISIONING_TRIGGERED",
+        sslStatus: sslSyncResult.sslReady ? "SSL_READY" : "AWAITING_HANDSHAKE",
       });
     }
 
@@ -262,10 +264,9 @@ export async function POST(request: Request) {
       return school;
     });
 
-    // Trigger non-blocking SSL & DNS provisioning for the tenant subdomain
-    triggerSSLProvisioning(formattedSubdomain).catch((err) =>
-      console.warn("[SSL_PROVISIONING_STANDARD_WARN]:", err?.message)
-    );
+    // Synchronize SSL generation with onboarding pipeline:
+    // Trigger reverse proxy TLS binding and await initial handshake confirmation
+    const sslSyncResult = await warmAndVerifySSLHandshake(formattedSubdomain, rootDomain, proto);
 
     return NextResponse.json({
       success: true,
@@ -282,15 +283,18 @@ export async function POST(request: Request) {
       subdomain: formattedSubdomain,
       schoolName,
       adminEmail,
+      sslReady: sslSyncResult.sslReady,
+      targetFqdn: sslSyncResult.targetFqdn,
       portalUrl: `/${formattedSubdomain}`,
       subdomainUrl: `${proto}://${formattedSubdomain}.${rootDomain}`,
       fullDirectPortalUrl: `${proto}://${rootDomain}/${formattedSubdomain}`,
       loginUrl: `/${formattedSubdomain}/login`,
       subdomainLoginUrl: `${proto}://${formattedSubdomain}.${rootDomain}/login`,
       dashboardUrl: `/${formattedSubdomain}/dashboard`,
+      subdomainDashboardUrl: `${proto}://${formattedSubdomain}.${rootDomain}/dashboard`,
       redirectUrl: `/${formattedSubdomain}/login`,
       trialDays: 14,
-      sslStatus: "AUTOMATED_PROVISIONING_TRIGGERED",
+      sslStatus: sslSyncResult.sslReady ? "SSL_READY" : "AWAITING_HANDSHAKE",
     });
 
   } catch (error: any) {

@@ -217,8 +217,69 @@ export async function triggerSSLProvisioning(subdomain: string): Promise<{
 }
 
 /**
+ * Synchronous initial warm-up & verification hook called during registration.
+ * Pings the reverse proxy / web server over HTTPS to trigger dynamic cert issuance
+ * and waits up to maxTimeoutMs for the handshake to bind before returning to the onboarding flow.
+ */
+export async function warmAndVerifySSLHandshake(
+  subdomain: string,
+  rootDomain: string,
+  proto: string = "https",
+  maxTimeoutMs: number = 5000
+): Promise<{ sslReady: boolean; targetFqdn: string; message: string }> {
+  const isDev = process.env.NODE_ENV === "development";
+  const targetFqdn = `${subdomain}.${rootDomain}`;
+
+  // Local development bypass (no external TLS needed on localhost)
+  if (isDev || rootDomain.includes("localhost")) {
+    return { sslReady: true, targetFqdn, message: "Localhost development mode (TLS bypassed)." };
+  }
+
+  const pingUrl = `https://${targetFqdn}/api/tenants/status?subdomain=${subdomain}`;
+  const startTime = Date.now();
+
+  console.log(`[SSL_SYNC_INIT]: Triggering and awaiting reverse proxy SSL handshake for ${pingUrl}`);
+
+  // Notify custom SSL webhook if configured
+  if (process.env.SSL_PROVISION_WEBHOOK) {
+    fetch(process.env.SSL_PROVISION_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: targetFqdn, subdomain }),
+    }).catch(e => console.warn("[SSL_WEBHOOK_WARN]:", e.message));
+  }
+
+  // Attempt initial HTTPS connection with retries
+  while (Date.now() - startTime < maxTimeoutMs) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(pingUrl, {
+        method: "GET",
+        signal: controller.signal,
+        headers: { "x-ssl-handshake-ping": "1" },
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok || res.status === 200 || res.status === 307 || res.status === 308) {
+        console.log(`[SSL_SYNC_SUCCESS]: Reverse proxy successfully bound SSL certificate for ${targetFqdn}`);
+        return { sslReady: true, targetFqdn, message: `SSL certificate active on ${targetFqdn}` };
+      }
+    } catch (handshakeErr: any) {
+      console.log(`[SSL_SYNC_WAITING]: Handshake pending for ${targetFqdn} (${handshakeErr?.code || handshakeErr?.message}). Retrying...`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  console.log(`[SSL_SYNC_BUFFER]: Initial window ended for ${targetFqdn}. Transitioning to frontend polling verification.`);
+  return { sslReady: false, targetFqdn, message: `SSL generation initiated for ${targetFqdn}` };
+}
+
+/**
  * Health check evaluator used during frontend onboarding propagation window.
- * Verifies tenant existence in DB and checks whether the subdomain's SSL handshake has completed.
+ * Verifies tenant existence in DB and performs a live HTTPS ping check against the new subdomain.
  */
 export async function checkSSLHealth(subdomain: string): Promise<{
   verified: boolean;
@@ -228,11 +289,14 @@ export async function checkSSLHealth(subdomain: string): Promise<{
   dnsResolved: boolean;
   sslReady: boolean;
   directFallbackUrl: string;
+  targetDashboardUrl: string;
   message: string;
 }> {
+  const isDev = process.env.NODE_ENV === "development";
   const rootDomain = SUPPORTED_BASE_DOMAINS[0] || "bonaveeict.com.ng";
   const targetFqdn = `${subdomain}.${rootDomain}`;
-  const directFallback = `https://${rootDomain}/${subdomain}`;
+  const directFallback = `https://${rootDomain}/${subdomain}/dashboard`;
+  const targetDashboard = `https://${targetFqdn}/dashboard`;
 
   // 1. Verify tenant in database
   const school = await basePrisma.school.findUnique({
@@ -249,11 +313,27 @@ export async function checkSSLHealth(subdomain: string): Promise<{
       dnsResolved: false,
       sslReady: false,
       directFallbackUrl: directFallback,
+      targetDashboardUrl: targetDashboard,
       message: "Tenant is either not registered or inactive."
     };
   }
 
-  // 2. Check DNS / Handshake status
+  // In local development, bypass external TLS
+  if (isDev || rootDomain.includes("localhost")) {
+    return {
+      verified: true,
+      subdomain,
+      domain: targetFqdn,
+      isRegistered: true,
+      dnsResolved: true,
+      sslReady: true,
+      directFallbackUrl: `http://localhost:3000/${subdomain}/dashboard`,
+      targetDashboardUrl: `http://localhost:3000/${subdomain}/dashboard`,
+      message: "Development environment: local SSL verified."
+    };
+  }
+
+  // 2. Check DNS resolution for the internal subdomain
   let dnsResolved = false;
   try {
     const addresses = await dns.promises.resolve4(targetFqdn);
@@ -262,21 +342,27 @@ export async function checkSSLHealth(subdomain: string): Promise<{
     dnsResolved = false;
   }
 
-  // 3. Test TLS handshake
+  // 3. Perform quick internal ping check against the new subdomain over secure https://
   let sslReady = false;
-  if (dnsResolved) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`https://${targetFqdn}/api/tenants/status?subdomain=${subdomain}`, {
-        method: "HEAD",
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      sslReady = res.ok || res.status < 500;
-    } catch {
-      sslReady = false;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const pingUrl = `https://${targetFqdn}/api/tenants/status?subdomain=${subdomain}`;
+
+    const res = await fetch(pingUrl, {
+      method: "GET",
+      signal: controller.signal,
+      headers: { "x-ssl-health-check": "1" }
+    });
+    clearTimeout(timeoutId);
+
+    // If HTTP status is 200 or redirect 307/308, the TLS handshake succeeded and certificate is bound!
+    if (res.ok || res.status === 200 || res.status === 307 || res.status === 308) {
+      sslReady = true;
     }
+  } catch (err: any) {
+    // Handshake in progress or unrecognized name alert
+    sslReady = false;
   }
 
   return {
@@ -287,7 +373,11 @@ export async function checkSSLHealth(subdomain: string): Promise<{
     dnsResolved,
     sslReady,
     directFallbackUrl: directFallback,
-    message: sslReady ? "SSL certificate is active and bound to hostname." : "SSL propagation or TLS handshake in progress."
+    targetDashboardUrl: targetDashboard,
+    message: sslReady
+      ? "SSL certificate verified and bound to subdomain."
+      : "Awaiting reverse proxy SSL handshake completion."
   };
 }
+
 
