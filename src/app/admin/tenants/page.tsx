@@ -1,29 +1,17 @@
-import { createSchool, toggleSchoolStatus } from "../actions";
+import { toggleSchoolStatus } from "../actions";
 import Link from "next/link";
 import DeleteSchoolForm from "../DeleteSchoolForm";
 import EditSchoolModal from "../EditSchoolModal";
-import { PhoneInput } from "@/components/PhoneInput";
-import { Server, Users, ShieldCheck, Settings, Plus, Building2, CheckCircle2, AlertCircle } from "lucide-react";
+import RegisterSchoolForm from "./RegisterSchoolForm";
+import { Server, Users, ShieldCheck, Settings, Plus, Building2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { basePrisma } from "@/lib/tenant-prisma";
 
 export const dynamic = "force-dynamic";
 
-const ACADEMIC_TIERS_OPTIONS = [
-  { id: "DAYCARE", label: "Daycare / Nursery" },
-  { id: "PRIMARY", label: "Primary School" },
-  { id: "SECONDARY", label: "Secondary School" },
-  { id: "PRIMARY_SECONDARY", label: "Combined Primary & Secondary School" },
-  { id: "COMBINED_NURSERY_PRIMARY_SECONDARY", label: "Combined Nursery, Primary & Secondary" },
-  { id: "UNIVERSITY", label: "Higher Ed: University" },
-  { id: "POLYTECHNIC", label: "Higher Ed: Polytechnic" },
-  { id: "COLLEGE_OF_EDUCATION", label: "Higher Ed: College of Education" }
-];
-
 const getTenantUrl = (subdomain: string) => {
-  if (process.env.NODE_ENV === "development") {
-    return `/dashboard?mockTenant=${subdomain}`;
-  }
-  return `https://${subdomain}.schoolerp.com/dashboard`;
+  const cleanSlug = (subdomain || "").trim().toLowerCase();
+  if (!cleanSlug) return "#";
+  return `/${cleanSlug}/dashboard`;
 };
 
 function getTierBadge(tierName: string) {
@@ -174,62 +162,8 @@ export default async function TenantsPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        {/* NEW TENANT FORM */}
-        <section className="p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-4 2xl:col-span-3 relative bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 rounded-t-2xl"></div>
-          <h3 className="text-lg font-bold mb-5 tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <Plus className="w-4 h-4 text-indigo-500" />
-            Register New School
-          </h3>
-          <form action={createSchool} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">School Name *</label>
-              <input type="text" name="name" className="w-full bg-slate-50/50 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="e.g., Riverside High" required />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Subdomain *</label>
-              <div className="flex items-center rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-shadow">
-                <input type="text" name="subdomain" className="w-full bg-slate-50/50 dark:bg-zinc-950/50 text-slate-900 dark:text-zinc-100 p-2.5 text-xs outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="riverside" required />
-                <span className="bg-slate-100 dark:bg-zinc-800 px-2.5 py-2.5 text-slate-500 dark:text-zinc-400 text-xs font-medium border-l border-slate-200 dark:border-zinc-800">.schoolerp.com</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Admin Email *</label>
-              <input type="email" name="adminEmail" className="w-full bg-slate-50/50 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="admin@riverside.edu" required />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Create Master Administrative Password *</label>
-              <input type="password" name="password" className="w-full bg-slate-50/50 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="Minimum 8 characters" required />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Confirm Password *</label>
-              <input type="password" name="confirmPassword" className="w-full bg-slate-50/50 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="Re-enter password" required />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">Contact Phone</label>
-              <PhoneInput name="contactPhone" maxLength={14} className="w-full bg-slate-50/50 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition outline-none placeholder-slate-400 dark:placeholder-zinc-600" placeholder="+155500000000" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">Academic Tiers *</label>
-              <div className="space-y-2 p-3 rounded-xl bg-slate-50/80 dark:bg-zinc-800/30 border border-slate-200/80 dark:border-zinc-800/80 max-h-44 overflow-y-auto">
-                {ACADEMIC_TIERS_OPTIONS.map(tier => (
-                  <label key={tier.id} className="flex items-start space-x-2.5 text-xs text-slate-700 dark:text-zinc-300 cursor-pointer group hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                    <div className="pt-0.5">
-                      <input type="checkbox" name="tiers" value={tier.id} className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                    </div>
-                    <span className="font-medium">{tier.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <button type="submit" className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-3 rounded-xl font-bold hover:bg-slate-800 dark:hover:bg-slate-100 text-xs transition-all mt-3 flex justify-center items-center gap-2">
-              Provision Workspace
-            </button>
-          </form>
-        </section>
-
-        {/* TENANTS DIRECTORY */}
-        <section className="p-4 sm:p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-8 2xl:col-span-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col">
+        {/* TENANTS DIRECTORY (MAIN PANEL) */}
+        <section className="p-4 sm:p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-8 2xl:col-span-9 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 flex flex-col order-2 xl:order-1">
           <div className="flex items-center justify-between mb-4 sm:mb-5">
             <h3 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               <Server className="w-4 h-4 text-blue-500" />
@@ -266,9 +200,23 @@ export default async function TenantsPage() {
                     <tr key={school.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors bg-white dark:bg-zinc-900 group">
                       <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{school.name}</td>
                       <td className="px-3 py-3.5">
-                        <a href={getTenantUrl(school.subdomain)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors font-mono font-medium">
-                          {school.subdomain}
-                        </a>
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <Link 
+                            href={getTenantUrl(school.subdomain)} 
+                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors font-medium inline-flex items-center gap-1 group/sublink"
+                            title={`Navigate to /${school.subdomain}/dashboard`}
+                          >
+                            <span>/{school.subdomain}</span>
+                            <ExternalLink className="w-3 h-3 opacity-60 group-hover/sublink:opacity-100 transition-opacity" />
+                          </Link>
+                          <Link 
+                            href={`/${school.subdomain}/login`}
+                            className="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800"
+                            title={`Open /${school.subdomain}/login`}
+                          >
+                            login
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-3 py-3.5">
                         <div className="flex flex-wrap gap-1">
@@ -344,12 +292,21 @@ export default async function TenantsPage() {
                       <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">
                         {school.name}
                       </h4>
-                      <a 
-                        href={getTenantUrl(school.subdomain)} 
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-mono inline-block mt-0.5"
-                      >
-                        {school.subdomain}.schoolerp.com
-                      </a>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Link 
+                          href={getTenantUrl(school.subdomain)} 
+                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-mono inline-flex items-center gap-1 font-medium"
+                        >
+                          <span>/{school.subdomain}</span>
+                          <ExternalLink className="w-3 h-3 opacity-60" />
+                        </Link>
+                        <Link 
+                          href={`/${school.subdomain}/login`}
+                          className="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800"
+                        >
+                          login
+                        </Link>
+                      </div>
                     </div>
                     <span className={`inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-xs ${school.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'}`}>
                       {school.isActive ? "ACTIVE" : "SUSPENDED"}
@@ -377,6 +334,16 @@ export default async function TenantsPage() {
               ))
             )}
           </div>
+        </section>
+
+        {/* REGISTER NEW SCHOOL (CONTAINER ON THE RIGHT SIDE) */}
+        <section className="p-5 md:p-6 rounded-2xl shadow-sm border xl:col-span-4 2xl:col-span-3 relative bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 transition-colors duration-200 order-1 xl:order-2 h-fit">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 rounded-t-2xl"></div>
+          <h3 className="text-lg font-bold mb-5 tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <Plus className="w-4 h-4 text-indigo-500" />
+            + Register New School
+          </h3>
+          <RegisterSchoolForm />
         </section>
       </div>
     </div>
