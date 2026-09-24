@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock } from "lucide-react";
+import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock, Eye, EyeOff } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
 import { setAuthToken } from "@/lib/api-client";
@@ -57,7 +57,12 @@ export default function RegisterTenantPage() {
     adminEmail: "",
     contactPhone: "",
     subdomain: "",
+    password: "",
+    confirmPassword: "",
   });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
   const [registrationData, setRegistrationData] = useState<RegistrationResult | null>(null);
@@ -211,6 +216,23 @@ export default function RegisterTenantPage() {
       return;
     }
 
+    if (!formData.password || formData.password.length < 8) {
+      setErrorMsg("Admin password must be at least 8 characters long.");
+      return;
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(formData.password);
+    const hasNumber = /[0-9]/.test(formData.password);
+    if (!hasLetter || !hasNumber) {
+      setErrorMsg("Admin password must be alphanumeric (contain at least one letter and at least one number).");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMsg("Passwords do not match. Please verify that both password entries are identical.");
+      return;
+    }
+
     setIsSubmitting(true);
     setIsConfiguring(true);
     setElapsedSeconds(0);
@@ -223,7 +245,11 @@ export default function RegisterTenantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
+          schoolName: formData.schoolName,
+          adminEmail: formData.adminEmail,
+          contactPhone: formData.contactPhone,
+          subdomain: formData.subdomain,
+          password: formData.password,
           tiers: selectedTiers,
         }),
       });
@@ -469,10 +495,13 @@ export default function RegisterTenantPage() {
                 </form>
               )}
 
-              {/* STEP 2: ACADEMIC TIER ALLOCATION */}
+              {/* STEP 2: ACADEMIC TIER ALLOCATION & ADMIN CREDENTIALS */}
               {step === 2 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                  <p className="text-slate-600 font-medium">Select the academic tiers your institution operates. You can select multiple.</p>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 mb-1">Academic Tier Allocation</h3>
+                    <p className="text-slate-600 text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
+                  </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {availableTiers.map(tier => {
@@ -481,7 +510,7 @@ export default function RegisterTenantPage() {
                         <div 
                           key={tier.id}
                           onClick={() => handleTierToggle(tier.id)}
-                          className={`cursor-pointer p-5 rounded-2xl border-2 transition-all duration-200 flex items-start gap-4 ${
+                          className={`cursor-pointer p-4 md:p-5 rounded-2xl border-2 transition-all duration-200 flex items-start gap-3.5 ${
                             isSelected ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm"
                           }`}
                         >
@@ -495,12 +524,98 @@ export default function RegisterTenantPage() {
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className={`font-bold truncate ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{tier.label}</h4>
-                            <p className={`text-xs md:text-sm mt-1 leading-tight md:leading-normal ${isSelected ? "text-blue-700" : "text-slate-500"}`}>{tier.desc}</p>
+                            <h4 className={`font-bold truncate text-sm md:text-base ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{tier.label}</h4>
+                            <p className={`text-xs mt-0.5 leading-tight ${isSelected ? "text-blue-700" : "text-slate-500"}`}>{tier.desc}</p>
                           </div>
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* Administrator Security Credentials Section */}
+                  <div className="pt-6 border-t border-slate-200/90 space-y-4">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-blue-600" />
+                        <span>Administrator Security Credentials</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Set a secure password for your administrator account ({formData.adminEmail || "admin email"}).
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Create Admin Password */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Create Admin Password *
+                        </label>
+                        <div className="relative">
+                          <input 
+                            required
+                            type={showPassword ? "text" : "password"}
+                            placeholder="At least 8 alphanumeric chars"
+                            className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                            value={formData.password}
+                            onChange={e => setFormData({ ...formData, password: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm Password */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Confirm Password *
+                        </label>
+                        <div className="relative">
+                          <input 
+                            required
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Re-enter password"
+                            className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                            value={formData.confirmPassword}
+                            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                          >
+                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Real-time Validation Badges */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
+                      <span className={`inline-flex items-center gap-1 transition-colors ${
+                        formData.password.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      }`}>
+                        {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                      </span>
+                      <span className={`inline-flex items-center gap-1 transition-colors ${
+                        (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      }`}>
+                        {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric (letters + numbers)
+                      </span>
+                      {formData.confirmPassword.length > 0 && (
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          formData.password === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex justify-between pt-6 border-t border-slate-100">

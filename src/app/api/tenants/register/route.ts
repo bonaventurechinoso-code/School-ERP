@@ -11,6 +11,7 @@ import {
   BASE_TENANT_DOMAIN,
 } from "@/lib/session-manager";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
+import { ensureSecurityTables } from "@/lib/security-service";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -27,7 +28,7 @@ const VALID_TIERS = [
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { schoolName, adminEmail, contactPhone, subdomain, tiers } = body;
+    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password } = body;
 
     // Validate inputs
     if (!schoolName || !adminEmail || !subdomain || !tiers || tiers.length === 0) {
@@ -36,6 +37,24 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    await ensureSecurityTables();
+
+    let adminPasswordToSave = "Password123";
+    let isUserProvidedPassword = false;
+
+    if (password && typeof password === "string" && password.trim().length > 0) {
+      if (password.length < 8) {
+        return NextResponse.json(
+          { error: "Password must be at least 8 characters long.", code: "INVALID_PASSWORD" },
+          { status: 400 }
+        );
+      }
+      adminPasswordToSave = password;
+      isUserProvidedPassword = true;
+    }
+
+    const adminPasswordHash = await bcrypt.hash(adminPasswordToSave, 10);
 
     // Validate standard backend enum metadata
     const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
@@ -133,7 +152,6 @@ export async function POST(request: Request) {
             data: { schoolId: school.id, name: "Administration" }
           });
 
-          const defaultPasswordHash = await bcrypt.hash("Password123", 10);
           const staff = await tx.staff.create({
             data: {
               schoolId: school.id,
@@ -144,9 +162,16 @@ export async function POST(request: Request) {
               departmentId: dept.id,
               status: "ACTIVE",
               activeAt: now,
-              password: defaultPasswordHash
+              password: adminPasswordHash,
             }
           });
+
+          await tx.$executeRawUnsafe(`
+            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
+          `, staff.id, school.id, !isUserProvidedPassword);
 
           await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
           createdSchools.push({ school, staff });
@@ -292,7 +317,6 @@ export async function POST(request: Request) {
       });
 
       // 6. Create default admin staff account with explicit TENANT_ADMIN role
-      const defaultPasswordHash = await bcrypt.hash("Password123", 10);
       const staff = await tx.staff.create({
         data: {
           schoolId: school.id,
@@ -303,9 +327,16 @@ export async function POST(request: Request) {
           departmentId: dept.id,
           status: "ACTIVE",
           activeAt: now,
-          password: defaultPasswordHash
+          password: adminPasswordHash,
         }
       });
+
+      await tx.$executeRawUnsafe(`
+        INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (user_id)
+        DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
+      `, staff.id, school.id, !isUserProvidedPassword);
 
       // 7. Provision isolated database boundary
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
