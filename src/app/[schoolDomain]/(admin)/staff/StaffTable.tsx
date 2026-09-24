@@ -912,11 +912,12 @@ export default function StaffTable({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Create Account Password</label>
+                  <label className="block font-semibold text-slate-600 mb-1">Set Default Account Password</label>
                   <div className="relative">
                     <input
+                      name="password"
                       type={showCreatePassword ? "text" : "password"}
-                      placeholder="Enter password or leave blank for Welcome123"
+                      placeholder="Set Default Account Password or leave blank for Welcome123"
                       value={createData.password}
                       onChange={(e) => setCreateData({ ...createData, password: e.target.value })}
                       className="w-full border border-slate-300 rounded-lg p-2 pr-9 font-medium bg-white text-xs"
@@ -934,6 +935,7 @@ export default function StaffTable({
                   <label className="block font-semibold text-slate-600 mb-1">Confirm Password</label>
                   <div className="relative">
                     <input
+                      name="confirmPassword"
                       type={showCreateConfirmPassword ? "text" : "password"}
                       placeholder="Confirm account password"
                       value={createData.confirmPassword}

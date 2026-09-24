@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { provisionTierDatabases } from "@/lib/tenant-db-provisioner";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
+import bcrypt from "bcryptjs";
+import { ensureSecurityTables } from "@/lib/security-service";
 
 const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION', 'COMBINED_NURSERY_PRIMARY_SECONDARY'];
 
@@ -12,12 +14,29 @@ export async function createSchool(formData: FormData) {
   let subdomain = formData.get("subdomain") as string;
   const adminEmail = formData.get("adminEmail") as string;
   const contactPhone = formData.get("contactPhone") as string;
+  const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
   const tiers = formData.getAll("tiers") as string[];
 
   if (!name || !subdomain || !adminEmail || tiers.length === 0) {
     console.error("Missing required fields or academic tiers.");
     return;
   }
+
+  await ensureSecurityTables();
+
+  let passwordToSave = "Password123";
+  let isCustom = false;
+  if (password && typeof password === "string" && password.trim().length > 0) {
+    if (confirmPassword && password !== confirmPassword) {
+      console.error("Passwords do not match.");
+      return;
+    }
+    passwordToSave = password.trim();
+    isCustom = true;
+  }
+
+  const hashedPassword = await bcrypt.hash(passwordToSave, 10);
 
   const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
   if (invalidTiers.length > 0) {
@@ -57,7 +76,7 @@ export async function createSchool(formData: FormData) {
             data: { name: "Administration", schoolId: school.id }
           });
           
-          await tx.staff.create({
+          const staff = await tx.staff.create({
             data: {
               schoolId: school.id,
               firstName: "Admin",
@@ -66,9 +85,16 @@ export async function createSchool(formData: FormData) {
               role: "ADMIN",
               departmentId: dept.id,
               status: "ACTIVE",
-              password: ""
+              password: hashedPassword
             }
           });
+
+          await tx.$executeRawUnsafe(`
+            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
+          `, staff.id, school.id, !isCustom);
         }
       });
     } else {
@@ -90,7 +116,7 @@ export async function createSchool(formData: FormData) {
              data: { name: "Administration", schoolId: school.id }
            });
            
-           await tx.staff.create({
+           const staff = await tx.staff.create({
              data: {
                schoolId: school.id,
                firstName: "Admin",
@@ -99,9 +125,16 @@ export async function createSchool(formData: FormData) {
                role: "ADMIN",
                departmentId: dept.id,
                status: "ACTIVE",
-               password: ""
+               password: hashedPassword
              }
            });
+
+           await tx.$executeRawUnsafe(`
+             INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (user_id)
+             DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
+           `, staff.id, school.id, !isCustom);
         });
 
         // Trigger automated multi-database provisioning for selected tiers

@@ -507,7 +507,7 @@ export default function RegisterTenantPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Create Administrative Password *
+                        Create Master Administrative Password *
                       </label>
                       <div className="relative">
                         <input 
@@ -638,7 +638,7 @@ export default function RegisterTenantPage() {
                       {/* Create Admin Password */}
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1">
-                          Create Administrative Password *
+                          Create Master Administrative Password *
                         </label>
                         <div className="relative">
                           <input 
