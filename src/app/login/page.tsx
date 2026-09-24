@@ -163,26 +163,52 @@ function UniversalLoginPageContent() {
       return;
     }
 
-    // Rule 1: Parse hostname for tenant subdomain
-    const hostname = window.location.hostname.toLowerCase();
-    const parts = hostname.split(".");
+    // Rule 2: Parse hostname for tenant subdomain
+    const hostname = window.location.hostname.toLowerCase().replace(/^www\./, "");
+    const configuredRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim();
+    const renderHostingDomain = "school-erp-1-mfc3.onrender.com";
 
-    // Localhost subdomain: e.g. greenwood.localhost
-    if (parts.length === 2 && parts[1] === "localhost" && parts[0] !== "localhost") {
-      setResolvedTenant(parts[0]);
+    // Platform Root Apex / Localhost without subdomain: strictly no tenant
+    if (
+      hostname === configuredRoot ||
+      hostname === "bonaveeict.com.ng" ||
+      hostname === renderHostingDomain ||
+      (hostname.endsWith(".onrender.com") && hostname.split(".").length === 3) ||
+      hostname === "localhost" ||
+      hostname === "127.0.0.1"
+    ) {
+      setResolvedTenant(null);
       return;
     }
 
-    // Production domain subdomain: e.g. greenwood.schoolerp.ng
-    if (parts.length > 2) {
-      const candidate = parts[0];
-      if (candidate !== "www" && candidate !== "app" && candidate !== "mail" && candidate !== "api") {
-        setResolvedTenant(candidate);
+    // Localhost subdomain: e.g. greenwood.localhost
+    if (hostname.endsWith(".localhost")) {
+      const localParts = hostname.split(".");
+      if (localParts.length >= 2 && localParts[0] !== "localhost") {
+        setResolvedTenant(localParts[0]);
         return;
       }
     }
 
-    // Rule 2: Root domain with no query parameters
+    // Production domain subdomain: e.g. greenwood.bonaveeict.com.ng
+    if (configuredRoot && hostname.endsWith(`.${configuredRoot}`)) {
+      const sub = hostname.slice(0, -(configuredRoot.length + 1));
+      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
+        setResolvedTenant(sub);
+        return;
+      }
+    }
+
+    // Render subdomain: e.g. greenwood.school-erp-1-mfc3.onrender.com
+    if (hostname.endsWith(`.${renderHostingDomain}`)) {
+      const sub = hostname.slice(0, -(renderHostingDomain.length + 1));
+      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
+        setResolvedTenant(sub);
+        return;
+      }
+    }
+
+    // Fallback: Root domain with no query parameters
     setResolvedTenant(null);
   }, [searchParams]);
 
