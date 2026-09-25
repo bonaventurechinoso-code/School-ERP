@@ -57,7 +57,7 @@ export default function RegisterTenantPage() {
     adminEmail: "",
     contactPhone: "",
     subdomain: "",
-    password: "",
+    adminPassword: "",
     confirmPassword: "",
   });
 
@@ -104,15 +104,15 @@ export default function RegisterTenantPage() {
     e.preventDefault();
     setErrorMsg("");
     if (step === 1) {
-      if (!formData.schoolName || !formData.adminEmail || !formData.subdomain || !formData.password || !formData.confirmPassword) {
+      if (!formData.schoolName || !formData.adminEmail || !formData.subdomain || !formData.adminPassword || !formData.confirmPassword) {
         setErrorMsg("Please fill in all required fields including password.");
         return;
       }
-      if (formData.password.length < 8) {
+      if (formData.adminPassword.length < 8) {
         setErrorMsg("Admin password must be at least 8 characters long.");
         return;
       }
-      if (formData.password !== formData.confirmPassword) {
+      if (formData.adminPassword !== formData.confirmPassword) {
         setErrorMsg("Passwords do not match. Please verify that both password entries are identical.");
         return;
       }
@@ -222,12 +222,12 @@ export default function RegisterTenantPage() {
       return;
     }
 
-    if (!formData.password || formData.password.length < 8) {
+    if (!formData.adminPassword || formData.adminPassword.length < 8) {
       setErrorMsg("Admin password must be at least 8 characters long.");
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (formData.adminPassword !== formData.confirmPassword) {
       setErrorMsg("Passwords do not match. Please verify that both password entries are identical.");
       return;
     }
@@ -248,7 +248,8 @@ export default function RegisterTenantPage() {
           adminEmail: formData.adminEmail,
           contactPhone: formData.contactPhone,
           subdomain: formData.subdomain,
-          password: formData.password,
+          adminPassword: formData.adminPassword,
+          password: formData.adminPassword,
           tiers: selectedTiers,
         }),
       });
@@ -476,18 +477,19 @@ export default function RegisterTenantPage() {
                   {/* Admin Password & Confirm Password Setup Right Under Admin Email */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      <label htmlFor="adminPassword" className="block text-sm font-semibold text-slate-700 mb-1">
                         Admin Password *
                       </label>
                       <div className="relative">
                         <input 
                           required
-                          name="password"
+                          id="adminPassword"
+                          name="adminPassword"
                           type={showPassword ? "text" : "password"}
                           placeholder="Min. 8 characters"
                           className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                          value={formData.password}
-                          onChange={e => setFormData({ ...formData, password: e.target.value })}
+                          value={formData.adminPassword}
+                          onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
                         />
                         <button
                           type="button"
@@ -501,12 +503,13 @@ export default function RegisterTenantPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700 mb-1">
                         Confirm Password *
                       </label>
                       <div className="relative">
                         <input 
                           required
+                          id="confirmPassword"
                           name="confirmPassword"
                           type={showConfirmPassword ? "text" : "password"}
                           placeholder="Confirm password"
@@ -529,15 +532,15 @@ export default function RegisterTenantPage() {
                   {/* Real-time Validation Indicators */}
                   <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
                     <span className={`inline-flex items-center gap-1 transition-colors ${
-                      formData.password.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      formData.adminPassword.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
                     }`}>
-                      {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
+                      {formData.adminPassword.length >= 8 ? "✓" : "•"} Min. 8 characters
                     </span>
                     {formData.confirmPassword.length > 0 && (
                       <span className={`inline-flex items-center gap-1 font-semibold ${
-                        formData.password === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                        formData.adminPassword === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
                       }`}>
-                        {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                        {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
                       </span>
                     )}
                   </div>
@@ -599,94 +602,6 @@ export default function RegisterTenantPage() {
                         </div>
                       );
                     })}
-                  </div>
-
-                  {/* Administrator Security Credentials Section */}
-                  <div className="pt-6 border-t border-slate-200/90 space-y-4">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-blue-600" />
-                        <span>Administrator Security Credentials</span>
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Set a secure password for your administrator account ({formData.adminEmail || "admin email"}).
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Create Admin Password */}
-                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">
-                          Create Master Administrative Password *
-                        </label>
-                        <div className="relative">
-                          <input 
-                            required
-                            name="password"
-                            type={showPassword ? "text" : "password"}
-                            placeholder="At least 8 alphanumeric chars"
-                            className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
-                            value={formData.password}
-                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                          >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Confirm Password */}
-                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">
-                          Confirm Password *
-                        </label>
-                        <div className="relative">
-                          <input 
-                            required
-                            name="confirmPassword"
-                            type={showConfirmPassword ? "text" : "password"}
-                            placeholder="Re-enter password"
-                            className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
-                            value={formData.confirmPassword}
-                            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                          >
-                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Real-time Validation Badges */}
-                    <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
-                      <span className={`inline-flex items-center gap-1 transition-colors ${
-                        formData.password.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
-                      </span>
-                      <span className={`inline-flex items-center gap-1 transition-colors ${
-                        (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric (letters + numbers)
-                      </span>
-                      {formData.confirmPassword.length > 0 && (
-                        <span className={`inline-flex items-center gap-1 font-semibold ${
-                          formData.password === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
-                        }`}>
-                          {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
-                        </span>
-                      )}
-                    </div>
                   </div>
 
                   <div className="flex justify-between pt-6 border-t border-slate-100">

@@ -29,7 +29,7 @@ const VALID_TIERS = [
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password } = body;
+    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password, adminPassword } = body;
 
     // Validate inputs
     if (!schoolName || !adminEmail || !subdomain || !tiers || tiers.length === 0) {
@@ -41,17 +41,18 @@ export async function POST(request: Request) {
 
     await ensureSecurityTables();
 
+    const effectiveAdminPassword = adminPassword || password;
     let adminPasswordToSave = "Password123";
     let isUserProvidedPassword = false;
 
-    if (password && typeof password === "string" && password.trim().length > 0) {
-      if (password.trim().length < 8) {
+    if (effectiveAdminPassword && typeof effectiveAdminPassword === "string" && effectiveAdminPassword.trim().length > 0) {
+      if (effectiveAdminPassword.trim().length < 8) {
         return NextResponse.json(
           { error: "Admin password must be at least 8 characters long.", code: "INVALID_PASSWORD" },
           { status: 400 }
         );
       }
-      adminPasswordToSave = password.trim();
+      adminPasswordToSave = effectiveAdminPassword.trim();
       isUserProvidedPassword = true;
     }
 
@@ -158,7 +159,7 @@ export async function POST(request: Request) {
             update: {
               passwordHash: adminPasswordHash,
               role: "SCHOOL_ADMIN",
-              mustChangePassword: !isUserProvidedPassword,
+              mustChangePassword: false,
               status: "ACTIVE",
             },
             create: {
@@ -166,7 +167,7 @@ export async function POST(request: Request) {
               email: adminEmail,
               passwordHash: adminPasswordHash,
               role: "SCHOOL_ADMIN",
-              mustChangePassword: !isUserProvidedPassword,
+              mustChangePassword: false,
               status: "ACTIVE",
             },
           });
@@ -189,7 +190,7 @@ export async function POST(request: Request) {
             VALUES ($1, $2, $3, NOW())
             ON CONFLICT (user_id)
             DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-          `, staff.id, school.id, !isUserProvidedPassword);
+          `, staff.id, school.id, false);
 
           await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
           createdSchools.push({ school, staff });
@@ -339,7 +340,7 @@ export async function POST(request: Request) {
         update: {
           passwordHash: adminPasswordHash,
           role: "SCHOOL_ADMIN",
-          mustChangePassword: !isUserProvidedPassword,
+          mustChangePassword: false,
           status: "ACTIVE",
         },
         create: {
@@ -347,7 +348,7 @@ export async function POST(request: Request) {
           email: adminEmail,
           passwordHash: adminPasswordHash,
           role: "SCHOOL_ADMIN",
-          mustChangePassword: !isUserProvidedPassword,
+          mustChangePassword: false,
           status: "ACTIVE",
         },
       });
@@ -370,7 +371,7 @@ export async function POST(request: Request) {
         VALUES ($1, $2, $3, NOW())
         ON CONFLICT (user_id)
         DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-      `, staff.id, school.id, !isUserProvidedPassword);
+      `, staff.id, school.id, false);
 
       // 7. Provision isolated database boundary
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
