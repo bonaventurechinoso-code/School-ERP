@@ -189,10 +189,9 @@ export async function middleware(req: NextRequest) {
   if (effectiveTenantSlug && !isSuperAdmin) {
     try {
       const appBaseUrl =
-        process.env.NEXTAUTH_URL ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.BASE_URL ||
-        `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+        (isLocalhost || isIPAddress)
+          ? req.nextUrl.origin
+          : (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin);
       const statusUrl = new URL(`/api/tenants/status?slug=${encodeURIComponent(effectiveTenantSlug)}`, appBaseUrl);
       const statusRes = await fetch(statusUrl, { cache: 'no-store' });
 

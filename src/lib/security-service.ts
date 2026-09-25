@@ -291,10 +291,35 @@ export async function verifyPasswordResetToken(rawToken: string, schoolDomain?: 
       }
     }
 
+    // Resolve email from user record
+    let userEmail: string | undefined = undefined;
+    const staff = await basePrisma.staff.findUnique({
+      where: { id: tokenRecord.userId },
+      select: { email: true },
+    });
+    if (staff) {
+      userEmail = staff.email;
+    } else {
+      const student = await basePrisma.student.findUnique({
+        where: { id: tokenRecord.userId },
+        select: { email: true },
+      });
+      if (student) {
+        userEmail = student.email;
+      } else {
+        const user = await basePrisma.user.findUnique({
+          where: { id: tokenRecord.userId },
+          select: { email: true },
+        });
+        if (user) userEmail = user.email;
+      }
+    }
+
     return {
       valid: true,
       schoolId: tokenRecord.schoolId,
       userId: tokenRecord.userId,
+      email: userEmail,
     };
   }
 

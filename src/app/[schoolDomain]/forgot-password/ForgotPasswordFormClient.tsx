@@ -106,7 +106,7 @@ export default function ForgotPasswordFormClient({
                 If an account associated with <span className="text-white font-medium">{submittedEmail}</span> is registered with {schoolName}, you will receive a password reset link within a few moments.
               </p>
               <p className="text-[11px] text-slate-500">
-                The recovery link is strictly valid for 60 minutes. Be sure to check your spam/junk folder.
+                The recovery link is strictly valid for 15 minutes. Be sure to check your spam/junk folder.
               </p>
             </div>
 

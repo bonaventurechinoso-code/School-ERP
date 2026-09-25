@@ -5,6 +5,7 @@ import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import Image from "next/image";
 import Link from "next/link";
 import { ShieldCheck, ArrowLeft } from "lucide-react";
+import { getSession } from "@/lib/auth";
 
 export default async function ChangePasswordPage({
   params: paramsPromise,
@@ -16,6 +17,8 @@ export default async function ChangePasswordPage({
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isForced = searchParams.forced === "true" || searchParams.forced === "1";
+  const session = await getSession();
+  const effectiveRole = searchParams.role || session?.role || session?.staffRole;
 
   const school = await basePrisma.school.findFirst({
     where: {
@@ -64,7 +67,7 @@ export default async function ChangePasswordPage({
           schoolDomain={school.subdomain}
           isForcedReset={isForced}
           brandColor={brandColor}
-          userRole={searchParams.role}
+          userRole={effectiveRole}
         />
       </div>
     </div>
