@@ -109,13 +109,7 @@ export default function RegisterTenantPage() {
         return;
       }
       if (formData.password.length < 8) {
-        setErrorMsg("Administrative password must be at least 8 characters long.");
-        return;
-      }
-      const hasLetter = /[a-zA-Z]/.test(formData.password);
-      const hasNumber = /[0-9]/.test(formData.password);
-      if (!hasLetter || !hasNumber) {
-        setErrorMsg("Administrative password must be alphanumeric (contain at least one letter and at least one number).");
+        setErrorMsg("Admin password must be at least 8 characters long.");
         return;
       }
       if (formData.password !== formData.confirmPassword) {
@@ -230,13 +224,6 @@ export default function RegisterTenantPage() {
 
     if (!formData.password || formData.password.length < 8) {
       setErrorMsg("Admin password must be at least 8 characters long.");
-      return;
-    }
-
-    const hasLetter = /[a-zA-Z]/.test(formData.password);
-    const hasNumber = /[0-9]/.test(formData.password);
-    if (!hasLetter || !hasNumber) {
-      setErrorMsg("Admin password must be alphanumeric (contain at least one letter and at least one number).");
       return;
     }
 
@@ -473,46 +460,31 @@ export default function RegisterTenantPage() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Admin Email *</label>
-                      <input 
-                        required
-                        name="adminEmail"
-                        type="email" 
-                        className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        placeholder="admin@school.edu"
-                        value={formData.adminEmail} 
-                        onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Contact Phone</label>
-                      <input 
-                        type="tel" 
-                        name="contactPhone"
-                        inputMode="numeric" 
-                        pattern="[0-9+]*" 
-                        className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                        placeholder="+1 (555) 000-0000"
-                        value={formData.contactPhone} 
-                        onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Admin Email *</label>
+                    <input 
+                      required
+                      name="adminEmail"
+                      type="email" 
+                      className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                      placeholder="admin@school.edu"
+                      value={formData.adminEmail} 
+                      onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
+                    />
                   </div>
 
-                  {/* Administrative Password Setup Right Below Email */}
+                  {/* Admin Password & Confirm Password Setup Right Under Admin Email */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Create Master Administrative Password *
+                        Admin Password *
                       </label>
                       <div className="relative">
                         <input 
                           required
                           name="password"
                           type={showPassword ? "text" : "password"}
-                          placeholder="At least 8 alphanumeric chars"
+                          placeholder="Min. 8 characters"
                           className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                           value={formData.password}
                           onChange={e => setFormData({ ...formData, password: e.target.value })}
@@ -537,7 +509,7 @@ export default function RegisterTenantPage() {
                           required
                           name="confirmPassword"
                           type={showConfirmPassword ? "text" : "password"}
-                          placeholder="Re-enter password"
+                          placeholder="Confirm password"
                           className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                           value={formData.confirmPassword}
                           onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
@@ -561,11 +533,6 @@ export default function RegisterTenantPage() {
                     }`}>
                       {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
                     </span>
-                    <span className={`inline-flex items-center gap-1 transition-colors ${
-                      (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 font-semibold" : "text-slate-400"
-                    }`}>
-                      {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric (letters + numbers)
-                    </span>
                     {formData.confirmPassword.length > 0 && (
                       <span className={`inline-flex items-center gap-1 font-semibold ${
                         formData.password === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
@@ -573,6 +540,20 @@ export default function RegisterTenantPage() {
                         {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
                       </span>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Contact Phone</label>
+                    <input 
+                      type="tel" 
+                      name="contactPhone"
+                      inputMode="numeric" 
+                      pattern="[0-9+]*" 
+                      className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                      placeholder="+1 (555) 000-0000"
+                      value={formData.contactPhone} 
+                      onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
+                    />
                   </div>
 
                   <div className="flex justify-end pt-4">

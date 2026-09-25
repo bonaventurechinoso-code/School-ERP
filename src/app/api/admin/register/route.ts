@@ -60,10 +60,9 @@ export async function POST(request: Request) {
     let isUserProvidedPassword = false;
 
     if (password && typeof password === "string" && password.trim().length > 0) {
-      const validation = validatePasswordStrength(password.trim());
-      if (!validation.valid) {
+      if (password.trim().length < 8) {
         return NextResponse.json(
-          { error: validation.error || "Password does not meet complexity requirements." },
+          { error: "Admin password must be at least 8 characters long." },
           { status: 400 }
         );
       }
