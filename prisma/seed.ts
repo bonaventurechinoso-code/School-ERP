@@ -63,6 +63,7 @@ async function main() {
       data: {
         name: s.name,
         subdomain: s.subdomain,
+        slug: s.subdomain,
         isActive: true,
       },
     })
