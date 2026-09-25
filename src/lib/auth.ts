@@ -1,13 +1,22 @@
 import { cookies } from "next/headers";
 import * as jose from "jose";
 
-export type UserRole = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "TENANT_ADMIN" | "STAFF" | "STUDENT";
+export enum Role {
+  SUPER_ADMIN = "SUPER_ADMIN",
+  SCHOOL_ADMIN = "SCHOOL_ADMIN",
+  TEACHER = "TEACHER",
+  STUDENT = "STUDENT",
+  PARENT = "PARENT",
+  BURSAR = "BURSAR",
+}
+
+export type UserRole = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "STUDENT" | "PARENT" | "BURSAR" | "STAFF" | "TENANT_ADMIN";
 
 export interface SessionPayload {
   userId: string;
   email?: string;
   tenantId: string;
-  role: UserRole | string;
+  role: Role | UserRole | string;
   staffRole?: string;
   schoolDomain: string;
   tenantName?: string;
@@ -21,9 +30,9 @@ export interface SessionPayload {
   [key: string]: any;
 }
 
-export function normalizeRole(rawRole: string): UserRole {
+export function normalizeRole(rawRole: string): Role | string {
   const upper = (rawRole || "").trim().toUpperCase();
-  if (upper === "SUPER_ADMIN") return "SUPER_ADMIN";
+  if (upper === "SUPER_ADMIN") return Role.SUPER_ADMIN;
   if (
     upper === "SCHOOL_ADMIN" ||
     upper === "TENANT_ADMIN" ||
@@ -33,14 +42,18 @@ export function normalizeRole(rawRole: string): UserRole {
     upper === "ADMIN" ||
     upper.includes("ADMIN")
   ) {
-    return "SCHOOL_ADMIN";
+    return Role.SCHOOL_ADMIN;
   }
-  if (upper === "STUDENT") return "STUDENT";
-  return "STAFF"; // Default/fallback for TEACHER, BURSAR, SUPERVISOR, STAFF
+  if (upper === "STUDENT") return Role.STUDENT;
+  if (upper === "BURSAR") return Role.BURSAR;
+  if (upper === "PARENT") return Role.PARENT;
+  if (upper === "TEACHER" || upper === "STAFF") return Role.TEACHER;
+  return Role.TEACHER;
 }
 
-export function getDefaultPermissionsForRole(role: UserRole | string): string[] {
-  switch (role) {
+export function getDefaultPermissionsForRole(role: Role | UserRole | string): string[] {
+  const upper = (role || "").toString().toUpperCase();
+  switch (upper) {
     case "SUPER_ADMIN":
       return [
         "manage:all",
@@ -64,6 +77,16 @@ export function getDefaultPermissionsForRole(role: UserRole | string): string[] 
         "manage:academics",
         "view:reports"
       ];
+    case "BURSAR":
+      return [
+        "manage:finances",
+        "manage:fees",
+        "manage:invoices",
+        "manage:payments",
+        "verify:payments",
+        "view:reports"
+      ];
+    case "TEACHER":
     case "STAFF":
       return [
         "view:classes",
@@ -78,6 +101,13 @@ export function getDefaultPermissionsForRole(role: UserRole | string): string[] 
         "view:grades",
         "view:transcripts",
         "view:attendance"
+      ];
+    case "PARENT":
+      return [
+        "view:student_grades",
+        "view:student_attendance",
+        "view:invoices",
+        "make:payment"
       ];
     default:
       return [];

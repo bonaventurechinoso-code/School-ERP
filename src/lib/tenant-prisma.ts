@@ -53,23 +53,25 @@ const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTi
  * Standard models requiring schoolId isolation
  */
 const TENANT_MODELS = [
-  'Student', 'Staff', 'Classroom', 'Course', 'FeeTemplate', 
-  'Invoice', 'Payment', 'Timetable', 'StudentAttendance', 
+  'User', 'Student', 'Staff', 'Classroom', 'Course', 'FeeTemplate', 
+  'Invoice', 'Payment', 'PaymentProof', 'Timetable', 'StudentAttendance', 
   'StaffAttendance', 'Exam', 'ExamResult', 'GradeRecord',
   'AcademicRecord', 'ReportCard', 'Notice', 'MessageLog', 
   'AcademicTier', 'Department', 'PayrollRecord', 'Transaction', 
-  'AdmissionLead', 'TenantTierDatabase'
+  'AdmissionLead', 'TenantTierDatabase', 'PasswordResetToken', 'RefreshToken'
 ];
 
 /**
- * Applies tenant isolation extension to any PrismaClient
+ * Applies tenant isolation extension to any PrismaClient.
+ * Injects a global where: { schoolId } constraint across all tenant queries.
+ * Authenticated SuperAdmins bypass tenant scoping with isSuperAdmin = true.
  */
-export function applyTenantIsolation(client: PrismaClient, schoolId: string) {
+export function applyTenantIsolation(client: PrismaClient, schoolId: string, isSuperAdmin: boolean = false) {
   return client.$extends({
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          if (TENANT_MODELS.includes(model as string)) {
+          if (!isSuperAdmin && TENANT_MODELS.includes(model as string) && schoolId) {
             if (operation === 'create' || operation === 'createMany') {
               if (args.data) {
                 if (Array.isArray(args.data)) {
@@ -77,6 +79,20 @@ export function applyTenantIsolation(client: PrismaClient, schoolId: string) {
                 } else {
                   (args as any).data = { ...(args.data as any), schoolId };
                 }
+              }
+            } else if (operation === 'findUnique' || operation === 'findUniqueOrThrow') {
+              // Convert findUnique to findFirst with schoolId filter to enforce cross-tenant data boundary
+              const modelDelegate = (client as any)[model];
+              if (modelDelegate && typeof modelDelegate.findFirst === 'function') {
+                const combinedWhere = { ...((args as any).where || {}), schoolId };
+                const res = await modelDelegate.findFirst({
+                  ...args,
+                  where: combinedWhere,
+                });
+                if (!res && operation === 'findUniqueOrThrow') {
+                  throw new Error(`Record in ${model} not found for tenant ${schoolId}`);
+                }
+                return res;
               }
             } else {
               if ((args as any).where) {
@@ -260,6 +276,19 @@ export function getTenantClient(schoolId: string, tierContext?: string | TierCon
   // If tierContext is provided synchronously, return client isolated on basePrisma or async resolver
   // To preserve backwards compatibility with synchronous calls:
   return applyTenantIsolation(basePrisma, schoolId);
+}
+
+/**
+ * Returns a tenant-isolated Prisma client or unrestricted SuperAdmin client.
+ */
+export function getScopedPrisma(options?: { schoolId?: string; isSuperAdmin?: boolean }) {
+  if (options?.isSuperAdmin) {
+    return basePrisma;
+  }
+  if (options?.schoolId) {
+    return applyTenantIsolation(basePrisma, options.schoolId, false);
+  }
+  return basePrisma;
 }
 
 /**

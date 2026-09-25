@@ -9,6 +9,7 @@ export async function GET() {
       create: {
         name: "Demo School",
         subdomain: "demo",
+        slug: "demo",
         isActive: true,
       },
     });

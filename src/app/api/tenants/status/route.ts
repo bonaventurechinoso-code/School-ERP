@@ -4,18 +4,24 @@ import { basePrisma } from "@/lib/tenant-prisma";
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const subdomain = url.searchParams.get("subdomain")?.toLowerCase().trim();
+    const identifier = (url.searchParams.get("slug") || url.searchParams.get("subdomain") || "").toLowerCase().trim();
 
-    if (!subdomain) {
-      return NextResponse.json({ error: "Subdomain parameter is required." }, { status: 400 });
+    if (!identifier) {
+      return NextResponse.json({ error: "Tenant slug or subdomain parameter is required." }, { status: 400 });
     }
 
-    const school = await basePrisma.school.findUnique({
-      where: { subdomain },
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { slug: identifier },
+          { subdomain: identifier },
+        ],
+      },
       select: {
         id: true,
         name: true,
         subdomain: true,
+        slug: true,
         isActive: true,
         isBanned: true,
         trialStartDate: true,

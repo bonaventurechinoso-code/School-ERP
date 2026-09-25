@@ -67,10 +67,11 @@ export default function RegisterSchoolForm() {
       return;
     }
 
-    const hasLetter = /[a-zA-Z]/.test(formData.password);
+    const hasUppercase = /[A-Z]/.test(formData.password);
     const hasNumber = /[0-9]/.test(formData.password);
-    if (!hasLetter || !hasNumber) {
-      setErrorMsg("Master administrative password must be alphanumeric (letters and numbers).");
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(formData.password);
+    if (!hasUppercase || !hasNumber || !hasSpecial) {
+      setErrorMsg("Master administrative password must contain at least 1 uppercase letter, 1 numeric digit, and 1 special character.");
       return;
     }
 

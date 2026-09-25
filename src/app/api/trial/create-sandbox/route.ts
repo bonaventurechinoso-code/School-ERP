@@ -58,6 +58,7 @@ async function provisionOrGetTrialSandbox() {
       data: {
         name: SANDBOX_SCHOOL_NAME,
         subdomain: SANDBOX_SUBDOMAIN,
+        slug: SANDBOX_SUBDOMAIN,
         isActive: true,
         isBanned: false,
         trialStartDate: now,

@@ -26,7 +26,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await completePasswordReset(token, newPassword);
+    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    const result = await completePasswordReset(token, newPassword, clientIp);
 
     if (!result.success) {
       return NextResponse.json(

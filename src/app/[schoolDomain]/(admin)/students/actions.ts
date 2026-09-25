@@ -229,7 +229,7 @@ export async function createStudent(
       isTemporary = false;
     }
 
-    const hashedPassword = await bcrypt.hash(passwordToSave, 10);
+    const hashedPassword = await bcrypt.hash(passwordToSave, 12);
 
     const timestampData: any = {};
     if (data.status === "PROSPECT") timestampData.prospectAt = new Date();
@@ -258,10 +258,11 @@ export async function createStudent(
         lastName: data.lastName,
         email: data.email || null,
         status: data.status,
+        mustChangePassword: true,
         dynamicFields: {
           ...currentDynamic,
           password: hashedPassword,
-          isTemporaryPassword: isTemporary,
+          isTemporaryPassword: true,
         },
         admissionNumber: finalAdmissionNumber,
         currentClass: data.currentClass || null,
@@ -276,8 +277,25 @@ export async function createStudent(
       }
     });
 
-    // Record user security status: if custom typed, must_change_password=false; if default Welcome123, true
-    await setUserMustChangePassword(createdStudent.id, schoolId, isTemporary);
+    // Record user security status: auto-populate default password and assign mustChangePassword: true
+    await setUserMustChangePassword(createdStudent.id, schoolId, true);
+
+    if (data.email && data.email.trim()) {
+      await basePrisma.user.upsert({
+        where: { schoolId_email: { schoolId, email: data.email.trim().toLowerCase() } },
+        update: { passwordHash: hashedPassword, mustChangePassword: true },
+        create: {
+          id: createdStudent.id,
+          schoolId,
+          email: data.email.trim().toLowerCase(),
+          passwordHash: hashedPassword,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          role: "STUDENT",
+          mustChangePassword: true,
+        },
+      }).catch(() => {});
+    }
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);

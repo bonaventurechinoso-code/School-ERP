@@ -11,7 +11,8 @@ import {
   BASE_TENANT_DOMAIN,
 } from "@/lib/session-manager";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
-import { ensureSecurityTables } from "@/lib/security-service";
+import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
+import { logAuditEvent } from "@/lib/audit-logger";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -44,17 +45,18 @@ export async function POST(request: Request) {
     let isUserProvidedPassword = false;
 
     if (password && typeof password === "string" && password.trim().length > 0) {
-      if (password.length < 8) {
+      const validation = validatePasswordStrength(password.trim());
+      if (!validation.valid) {
         return NextResponse.json(
-          { error: "Password must be at least 8 characters long.", code: "INVALID_PASSWORD" },
+          { error: validation.error || "Password does not meet complexity requirements.", code: "INVALID_PASSWORD" },
           { status: 400 }
         );
       }
-      adminPasswordToSave = password;
+      adminPasswordToSave = password.trim();
       isUserProvidedPassword = true;
     }
 
-    const adminPasswordHash = await bcrypt.hash(adminPasswordToSave, 10);
+    const adminPasswordHash = await hashPassword(adminPasswordToSave);
 
     // Validate standard backend enum metadata
     const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
@@ -163,7 +165,25 @@ export async function POST(request: Request) {
               status: "ACTIVE",
               activeAt: now,
               password: adminPasswordHash,
+              mustChangePassword: !isUserProvidedPassword,
             }
+          });
+
+          await tx.user.upsert({
+            where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
+            update: {
+              passwordHash: adminPasswordHash,
+              role: "SCHOOL_ADMIN",
+              mustChangePassword: !isUserProvidedPassword,
+            },
+            create: {
+              id: staff.id,
+              schoolId: school.id,
+              email: adminEmail,
+              passwordHash: adminPasswordHash,
+              role: "SCHOOL_ADMIN",
+              mustChangePassword: !isUserProvidedPassword,
+            },
           });
 
           await tx.$executeRawUnsafe(`
@@ -316,7 +336,6 @@ export async function POST(request: Request) {
         }
       });
 
-      // 6. Create default admin staff account with explicit TENANT_ADMIN role
       const staff = await tx.staff.create({
         data: {
           schoolId: school.id,
@@ -328,7 +347,25 @@ export async function POST(request: Request) {
           status: "ACTIVE",
           activeAt: now,
           password: adminPasswordHash,
+          mustChangePassword: !isUserProvidedPassword,
         }
+      });
+
+      await tx.user.upsert({
+        where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
+        update: {
+          passwordHash: adminPasswordHash,
+          role: "SCHOOL_ADMIN",
+          mustChangePassword: !isUserProvidedPassword,
+        },
+        create: {
+          id: staff.id,
+          schoolId: school.id,
+          email: adminEmail,
+          passwordHash: adminPasswordHash,
+          role: "SCHOOL_ADMIN",
+          mustChangePassword: !isUserProvidedPassword,
+        },
       });
 
       await tx.$executeRawUnsafe(`

@@ -75,10 +75,11 @@ export default function ResetPasswordClient({
 
   // Validation rules
   const hasMinLength = newPassword.length >= 8;
-  const hasLetter = /[a-zA-Z]/.test(newPassword);
+  const hasUppercase = /[A-Z]/.test(newPassword);
   const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(newPassword);
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
-  const isFormValid = hasMinLength && hasLetter && hasNumber && passwordsMatch;
+  const isFormValid = hasMinLength && hasUppercase && hasNumber && hasSpecial && passwordsMatch;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,8 +90,18 @@ export default function ResetPasswordClient({
       return;
     }
 
-    if (!hasLetter || !hasNumber) {
-      setFormError("New password must be alphanumeric (contain both letters and numbers).");
+    if (!hasUppercase) {
+      setFormError("New password must contain at least 1 uppercase letter.");
+      return;
+    }
+
+    if (!hasNumber) {
+      setFormError("New password must contain at least 1 numeric digit.");
+      return;
+    }
+
+    if (!hasSpecial) {
+      setFormError("New password must contain at least 1 special character (e.g. !@#$%^&*).");
       return;
     }
 
@@ -289,9 +300,17 @@ export default function ResetPasswordClient({
                 <CheckCircle2 className={`w-3.5 h-3.5 ${hasMinLength ? "" : "opacity-40"}`} />
                 <span>At least 8 characters</span>
               </div>
-              <div className={`flex items-center gap-1.5 ${hasLetter && hasNumber ? "text-emerald-400" : "text-slate-500"}`}>
-                <CheckCircle2 className={`w-3.5 h-3.5 ${hasLetter && hasNumber ? "" : "opacity-40"}`} />
-                <span>Alphanumeric (contains letters & numbers)</span>
+              <div className={`flex items-center gap-1.5 ${hasUppercase ? "text-emerald-400" : "text-slate-500"}`}>
+                <CheckCircle2 className={`w-3.5 h-3.5 ${hasUppercase ? "" : "opacity-40"}`} />
+                <span>At least 1 uppercase letter</span>
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasNumber ? "text-emerald-400" : "text-slate-500"}`}>
+                <CheckCircle2 className={`w-3.5 h-3.5 ${hasNumber ? "" : "opacity-40"}`} />
+                <span>At least 1 numeric digit</span>
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasSpecial ? "text-emerald-400" : "text-slate-500"}`}>
+                <CheckCircle2 className={`w-3.5 h-3.5 ${hasSpecial ? "" : "opacity-40"}`} />
+                <span>At least 1 special character (!@#$%^&*)</span>
               </div>
               <div className={`flex items-center gap-1.5 ${passwordsMatch ? "text-emerald-400" : "text-slate-500"}`}>
                 <CheckCircle2 className={`w-3.5 h-3.5 ${passwordsMatch ? "" : "opacity-40"}`} />

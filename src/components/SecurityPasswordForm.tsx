@@ -35,11 +35,12 @@ export default function SecurityPasswordForm({
 
   // Real-time validation criteria
   const hasMinLength = newPassword.length >= 8;
-  const hasLetter = /[a-zA-Z]/.test(newPassword);
+  const hasUppercase = /[A-Z]/.test(newPassword);
   const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(newPassword);
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
   const isDifferentFromCurrent = !currentPassword || newPassword !== currentPassword;
-  const isFormValid = hasMinLength && hasLetter && hasNumber && passwordsMatch && isDifferentFromCurrent;
+  const isFormValid = hasMinLength && hasUppercase && hasNumber && hasSpecial && passwordsMatch && isDifferentFromCurrent;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,8 +57,18 @@ export default function SecurityPasswordForm({
       return;
     }
 
-    if (!hasLetter || !hasNumber) {
-      setErrorMsg("New password must be alphanumeric (contain both letters and numbers).");
+    if (!hasUppercase) {
+      setErrorMsg("New password must contain at least 1 uppercase letter.");
+      return;
+    }
+
+    if (!hasNumber) {
+      setErrorMsg("New password must contain at least 1 numeric digit.");
+      return;
+    }
+
+    if (!hasSpecial) {
+      setErrorMsg("New password must contain at least 1 special character (e.g. !@#$%^&*).");
       return;
     }
 
@@ -79,6 +90,7 @@ export default function SecurityPasswordForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           currentPassword,
+          oldPassword: currentPassword,
           newPassword,
           confirmPassword,
         }),
@@ -257,16 +269,24 @@ export default function SecurityPasswordForm({
         {/* Validation Checklist */}
         <div className="p-3.5 bg-slate-50 dark:bg-zinc-950/60 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-2 text-xs">
           <span className="font-semibold text-slate-600 dark:text-zinc-400 block mb-1">
-            Password Security Rules:
+            Enterprise Password Rules:
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div className={`flex items-center gap-2 ${hasMinLength ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
               <CheckCircle2 className={`w-3.5 h-3.5 ${hasMinLength ? "stroke-[2.5]" : "opacity-40"}`} />
               <span>At least 8 characters</span>
             </div>
-            <div className={`flex items-center gap-2 ${hasLetter && hasNumber ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
-              <CheckCircle2 className={`w-3.5 h-3.5 ${hasLetter && hasNumber ? "stroke-[2.5]" : "opacity-40"}`} />
-              <span>Alphanumeric (letters & numbers)</span>
+            <div className={`flex items-center gap-2 ${hasUppercase ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
+              <CheckCircle2 className={`w-3.5 h-3.5 ${hasUppercase ? "stroke-[2.5]" : "opacity-40"}`} />
+              <span>1 uppercase letter (A-Z)</span>
+            </div>
+            <div className={`flex items-center gap-2 ${hasNumber ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
+              <CheckCircle2 className={`w-3.5 h-3.5 ${hasNumber ? "stroke-[2.5]" : "opacity-40"}`} />
+              <span>1 numeric digit (0-9)</span>
+            </div>
+            <div className={`flex items-center gap-2 ${hasSpecial ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
+              <CheckCircle2 className={`w-3.5 h-3.5 ${hasSpecial ? "stroke-[2.5]" : "opacity-40"}`} />
+              <span>1 special character (!@#$)</span>
             </div>
             <div className={`flex items-center gap-2 ${passwordsMatch ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-zinc-500"}`}>
               <CheckCircle2 className={`w-3.5 h-3.5 ${passwordsMatch ? "stroke-[2.5]" : "opacity-40"}`} />

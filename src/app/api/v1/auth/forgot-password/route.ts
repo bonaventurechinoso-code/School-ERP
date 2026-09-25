@@ -101,19 +101,21 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3. Generate secure time-limited token (60 mins)
+    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+
+    // 3. Generate secure time-limited token (strict 15-minute expiration timestamp)
     const resetToken = await createPasswordResetToken({
       schoolId: school.id,
       email: normalizedEmail,
       userId,
       userType,
-      expiresMinutes: 60,
+      expiresMinutes: 15,
+      ip: clientIp,
     });
 
     // 4. Compile recovery link preserving the tenant slug
     const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
     const proto = req.headers.get("x-forwarded-proto") || "https";
-    const rawHost = hostHeader.split(":")[0].toLowerCase().trim();
 
     let baseUrl = `${proto}://${hostHeader}`;
     if (!hostHeader) {
@@ -121,7 +123,8 @@ export async function POST(req: Request) {
     }
 
     // Preserve the tenant slug cleanly
-    const resetUrl = `${baseUrl}/${school.subdomain}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const targetSlug = school.slug || school.subdomain;
+    const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     // 5. Transmit transactional email via mail delivery service
     await sendPasswordResetEmail({
@@ -129,7 +132,7 @@ export async function POST(req: Request) {
       recipientEmail: normalizedEmail,
       recipientName: userName,
       resetUrl,
-      expiresMinutes: 60,
+      expiresMinutes: 15,
     });
 
     return NextResponse.json({

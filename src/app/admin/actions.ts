@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { provisionTierDatabases } from "@/lib/tenant-db-provisioner";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
-import bcrypt from "bcryptjs";
-import { ensureSecurityTables } from "@/lib/security-service";
+import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 
 const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION', 'COMBINED_NURSERY_PRIMARY_SECONDARY'];
 
@@ -32,11 +31,16 @@ export async function createSchool(formData: FormData) {
       console.error("Passwords do not match.");
       return;
     }
+    const validation = validatePasswordStrength(password.trim());
+    if (!validation.valid) {
+      console.error("Password does not meet complexity requirements:", validation.error);
+      return;
+    }
     passwordToSave = password.trim();
     isCustom = true;
   }
 
-  const hashedPassword = await bcrypt.hash(passwordToSave, 10);
+  const hashedPassword = await hashPassword(passwordToSave);
 
   const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
   if (invalidTiers.length > 0) {
@@ -65,6 +69,7 @@ export async function createSchool(formData: FormData) {
             data: {
               name: sub.name,
               subdomain: tenantSubdomain,
+              slug: tenantSubdomain,
               isActive: true,
               academicTiers: {
                 create: { name: sub.tier, level: 1 }
@@ -85,8 +90,26 @@ export async function createSchool(formData: FormData) {
               role: "ADMIN",
               departmentId: dept.id,
               status: "ACTIVE",
-              password: hashedPassword
+              password: hashedPassword,
+              mustChangePassword: !isCustom,
             }
+          });
+
+          await tx.user.upsert({
+            where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
+            update: {
+              passwordHash: hashedPassword,
+              role: "SCHOOL_ADMIN",
+              mustChangePassword: !isCustom,
+            },
+            create: {
+              id: staff.id,
+              schoolId: school.id,
+              email: adminEmail,
+              passwordHash: hashedPassword,
+              role: "SCHOOL_ADMIN",
+              mustChangePassword: !isCustom,
+            },
           });
 
           await tx.$executeRawUnsafe(`
@@ -104,6 +127,7 @@ export async function createSchool(formData: FormData) {
              data: {
                name,
                subdomain,
+               slug: subdomain,
                isActive: true,
                academicTiers: {
                  create: tiers.map((tierName, idx) => ({ name: tierName, level: idx + 1 }))
@@ -125,8 +149,26 @@ export async function createSchool(formData: FormData) {
                role: "ADMIN",
                departmentId: dept.id,
                status: "ACTIVE",
-               password: hashedPassword
+               password: hashedPassword,
+               mustChangePassword: !isCustom,
              }
+           });
+
+           await tx.user.upsert({
+             where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
+             update: {
+               passwordHash: hashedPassword,
+               role: "SCHOOL_ADMIN",
+               mustChangePassword: !isCustom,
+             },
+             create: {
+               id: staff.id,
+               schoolId: school.id,
+               email: adminEmail,
+               passwordHash: hashedPassword,
+               role: "SCHOOL_ADMIN",
+               mustChangePassword: !isCustom,
+             },
            });
 
            await tx.$executeRawUnsafe(`

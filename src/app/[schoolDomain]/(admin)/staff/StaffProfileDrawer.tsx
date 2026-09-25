@@ -113,6 +113,93 @@ const NIGERIAN_BANKS = [
   "Raenest",
 ];
 
+function BankDrawerDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [bankDrawerSearch, setBankDrawerSearch] = React.useState("");
+  const [bankDrawerOpen, setBankDrawerOpen] = React.useState(false);
+  const bankDrawerRef = React.useRef<HTMLDivElement>(null);
+  const filtered = NIGERIAN_BANKS.filter((b) =>
+    b.toLowerCase().includes(bankDrawerSearch.toLowerCase())
+  );
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        bankDrawerRef.current &&
+        !bankDrawerRef.current.contains(e.target as Node)
+      ) {
+        setBankDrawerOpen(false);
+        setBankDrawerSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={bankDrawerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setBankDrawerOpen((o) => !o);
+          setBankDrawerSearch("");
+        }}
+        className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white text-xs flex items-center justify-between text-left"
+      >
+        <span>{value || "Select bank..."}</span>
+        <span className="text-slate-400 text-xs">&#9660;</span>
+      </button>
+      {bankDrawerOpen && (
+        <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+          <div className="p-1.5 border-b border-slate-100">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+              <input
+                autoFocus
+                type="text"
+                value={bankDrawerSearch}
+                onChange={(e) => setBankDrawerSearch(e.target.value)}
+                placeholder="Search bank..."
+                className="w-full pl-6 pr-2 py-1 text-xs rounded border border-slate-200 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <ul className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-xs text-slate-400 text-center">
+                No banks found.
+              </li>
+            ) : (
+              filtered.map((b) => (
+                <li
+                  key={b}
+                  onClick={() => {
+                    onChange(b);
+                    setBankDrawerOpen(false);
+                    setBankDrawerSearch("");
+                  }}
+                  className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-indigo-50 transition ${
+                    value === b
+                      ? "bg-indigo-50 font-bold text-indigo-700"
+                      : "text-slate-700"
+                  }`}
+                >
+                  {b}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const QUALIFICATIONS = [
   "N.C.E (Nigeria Certificate in Education)",
   "B.Ed (Bachelor of Education)",
@@ -687,48 +774,10 @@ export default function StaffProfileDrawer({
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">Bank Name</label>
-                    {/* Searchable bank dropdown */}
-                    {(() => {
-                      const [bankDrawerSearch, setBankDrawerSearch] = React.useState("");
-                      const [bankDrawerOpen, setBankDrawerOpen] = React.useState(false);
-                      const bankDrawerRef = React.useRef<HTMLDivElement>(null);
-                      const filtered = NIGERIAN_BANKS.filter((b) => b.toLowerCase().includes(bankDrawerSearch.toLowerCase()));
-                      React.useEffect(() => {
-                        const handler = (e: MouseEvent) => {
-                          if (bankDrawerRef.current && !bankDrawerRef.current.contains(e.target as Node)) {
-                            setBankDrawerOpen(false); setBankDrawerSearch("");
-                          }
-                        };
-                        document.addEventListener("mousedown", handler);
-                        return () => document.removeEventListener("mousedown", handler);
-                      }, []);
-                      return (
-                        <div ref={bankDrawerRef} className="relative">
-                          <button type="button" onClick={() => { setBankDrawerOpen(o => !o); setBankDrawerSearch(""); }}
-                            className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white text-xs flex items-center justify-between text-left">
-                            <span>{formData.bankName || "Select bank..."}</span>
-                            <span className="text-slate-400 text-xs">&#9660;</span>
-                          </button>
-                          {bankDrawerOpen && (
-                            <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-                              <div className="p-1.5 border-b border-slate-100">
-                                <div className="relative">
-                                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                                  <input autoFocus type="text" value={bankDrawerSearch} onChange={(e) => setBankDrawerSearch(e.target.value)}
-                                    placeholder="Search bank..." className="w-full pl-6 pr-2 py-1 text-xs rounded border border-slate-200 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                                </div>
-                              </div>
-                              <ul className="max-h-48 overflow-y-auto">
-                                {filtered.length === 0 ? <li className="px-3 py-2 text-xs text-slate-400 text-center">No banks found.</li> : filtered.map((b) => (
-                                  <li key={b} onClick={() => { setFormData({ ...formData, bankName: b }); setBankDrawerOpen(false); setBankDrawerSearch(""); }}
-                                    className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-indigo-50 transition ${formData.bankName === b ? "bg-indigo-50 font-bold text-indigo-700" : "text-slate-700"}`}>{b}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    <BankDrawerDropdown
+                      value={formData.bankName}
+                      onChange={(b) => setFormData({ ...formData, bankName: b })}
+                    />
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">NUBAN Account Number (10 Digits)</label>

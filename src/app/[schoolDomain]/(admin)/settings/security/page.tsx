@@ -2,6 +2,7 @@ import React from "react";
 import { notFound } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
+import ActiveSessionsPortal from "@/components/ActiveSessionsPortal";
 import { Shield, KeyRound, Lock, UserCheck } from "lucide-react";
 
 export default async function AdminSecuritySettingsPage({
@@ -46,6 +47,9 @@ export default async function AdminSecuritySettingsPage({
         brandColor={brandColor}
         userRole="TENANT_ADMIN"
       />
+
+      {/* Active Session Control Portal */}
+      <ActiveSessionsPortal brandColor={brandColor} />
 
       {/* Security Best Practices Card */}
       <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 text-xs text-slate-600 dark:text-zinc-400 space-y-3">

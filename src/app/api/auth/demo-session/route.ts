@@ -68,6 +68,7 @@ async function getOrProvisionDemoTenant() {
       data: {
         name: DEMO_SCHOOL_NAME,
         subdomain: DEMO_SUBDOMAIN,
+        slug: DEMO_SUBDOMAIN,
         isActive: true,
         isBanned: false,
         isPublicPortalEnabled: true,

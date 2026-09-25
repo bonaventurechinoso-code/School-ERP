@@ -127,6 +127,7 @@ export async function seedTierDatabase(options: TierProvisionOptions & { tierDbU
         id: schoolId,
         name: schoolName,
         subdomain,
+        slug: subdomain.toLowerCase(),
         databaseUrl: tierDbUrl,
         isMultiDbEnabled: true,
         isActive: true,

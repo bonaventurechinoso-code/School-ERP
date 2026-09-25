@@ -43,6 +43,15 @@ enum PaymentType {
   OTHER
 }
 
+enum Role {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  BURSAR
+}
+
 // ------------------------------------------------------
 // TENANT SCHEMA
 // ------------------------------------------------------
@@ -51,7 +60,8 @@ model School {
   id            String         @id @default(uuid())
   name          String // e.g., "Green Valley High"
   subdomain     String         @unique // e.g., "greenvalley"
-  slug          String?        @unique // Saved as slug identifier
+  slug          String         @unique @default(cuid()) // Saved as slug identifier
+  logo          String?
   status        String         @default("PENDING_VERIFICATION")
   subscriptions Subscription[]
   payments      SchoolPayment[]
@@ -117,6 +127,9 @@ model School {
   secondaryDbUrl       String? // Explicit secondary tier database URL
   tierDatabases        TenantTierDatabase[]
   paymentProofs        PaymentProof[]
+  users                User[]
+  passwordResetTokens  PasswordResetToken[]
+  refreshTokens        RefreshToken[]
 }
 
 model PlatformAdmin {
@@ -130,6 +143,64 @@ model PlatformAdmin {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model SuperAdmin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  schoolId  String
+  createdAt DateTime @default(now())
+
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id                  String   @id @default(uuid())
+  userId              String
+  schoolId            String?
+  tokenHash           String   @unique
+  expiresAt           DateTime
+  isRevoked           Boolean  @default(false)
+  replacedByTokenHash String?
+  ipAddress           String?
+  userAgent           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  school              School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([schoolId])
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  schoolId           String
+  school             School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  email              String
+  passwordHash       String
+  firstName          String?
+  lastName           String?
+  role               Role     @default(STUDENT)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([schoolId])
+  @@unique([schoolId, email])
 }
 
 // ------------------------------------------------------
@@ -179,6 +250,8 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  mustChangePassword Boolean @default(false)
+
   feeStatus         String              @default("UNPAID")
   invoices          Invoice[]
   payments          Payment[]
@@ -189,6 +262,8 @@ model Student {
   academicRecords   AcademicRecord[]
   reportCards       ReportCard[]
 
+  @@index([schoolId])
+  @@unique([schoolId, email])
   @@index([schoolId, status]) // Performance index for tenant queries
   @@index([schoolId, currentClass])
   @@index([schoolId, tierId, status, createdAt(sort: Desc)])
@@ -288,6 +363,8 @@ model Staff {
   offboardedAt DateTime?
   terminatedAt DateTime?
 
+  mustChangePassword Boolean           @default(false)
+
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   Timetable       Timetable[]
@@ -296,6 +373,7 @@ model Staff {
   PayrollRecord   PayrollRecord[]
 
   @@unique([schoolId, email]) // Ensure unique staff emails per school
+  @@index([schoolId])
   @@index([schoolId, status])
   @@index([schoolId, role])
   @@index([schoolId, email])
@@ -458,6 +536,7 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([schoolId])
   @@index([schoolId, invoiceId])
   @@index([schoolId, paymentDate(sort: Desc)])
   @@index([schoolId, studentId, paymentDate(sort: Desc)])
@@ -568,6 +647,7 @@ model StudentAttendance {
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, studentId, date])
+  @@index([schoolId])
   @@index([schoolId, date])
   @@index([schoolId, date, status])
   @@index([schoolId, studentId, date])
@@ -589,6 +669,7 @@ model StaffAttendance {
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, staffId, date])
+  @@index([schoolId])
   @@index([schoolId, date])
   @@index([schoolId, date, status])
   @@index([schoolId, staffId, date])
@@ -619,6 +700,7 @@ model GradeRecord {
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, studentId, term, className, subject])
+  @@index([schoolId])
   @@index([schoolId, studentId])
   @@index([schoolId, term, className, subject])
 }
@@ -657,6 +739,7 @@ model AcademicRecord {
   updatedAt    DateTime @updatedAt
 
   @@unique([schoolId, studentId, subject, term, academicYear])
+  @@index([schoolId])
   @@index([schoolId, studentId])
   @@index([schoolId, term, academicYear])
   @@index([schoolId, className, term, academicYear])
@@ -705,6 +788,7 @@ model ReportCard {
   updatedAt            DateTime  @updatedAt
 
   @@unique([schoolId, studentId, term, academicYear])
+  @@index([schoolId])
   @@index([schoolId, studentId])
   @@index([schoolId, className, term, academicYear])
   @@index([schoolId, term, academicYear, classPosition])
@@ -754,6 +838,7 @@ model ExamResult {
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, examId, studentId])
+  @@index([schoolId])
   @@index([schoolId, studentId])
   @@index([schoolId, examId, score(sort: Desc)])
 }
@@ -1016,13 +1101,21 @@ model PlatformTransaction {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  actorId   String
-  action    String   // create_tenant, impersonate, suspend
+  id        String   @id @default(uuid())
+  schoolId  String?
+  actorId   String?
+  action    String   // create_tenant, impersonate, suspend, LOGIN_SUCCESS, etc.
+  target    String?
+  ip        String?
   tenantId  String?
   metadata  Json?
   ipAddress String?
   createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
 }
 
 model PlatformBankConfig {
@@ -1046,5 +1139,31 @@ model PlatformEarnings {
   settlementDestination String?
   createdAt             DateTime @default(now())
 }
+
+model BonaveePasswordReset {
+  id        String    @id
+  schoolId  String    @map("school_id")
+  email     String
+  userId    String    @map("user_id")
+  userType  String    @map("user_type")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  @@map("bonavee_password_resets")
+}
+
+model BonaveeUserSecurity {
+  userId              String    @id @map("user_id")
+  schoolId            String    @map("school_id")
+  mustChangePassword  Boolean?  @default(false) @map("must_change_password")
+  isTemporaryPassword Boolean?  @default(false) @map("is_temporary_password")
+  passwordUpdatedAt   DateTime? @map("password_updated_at")
+  createdAt           DateTime? @default(now()) @map("created_at")
+
+  @@map("bonavee_user_security")
+}
+
 
 

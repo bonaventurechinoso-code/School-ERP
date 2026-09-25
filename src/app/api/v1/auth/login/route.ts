@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
-import * as jose from "jose";
 import crypto from "crypto";
-import { cookies } from "next/headers";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, getSecureCookieOptions } from "@/lib/session-manager";
-import { isMustChangePassword } from "@/lib/security-service";
+import { isMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
+import { checkIpRateLimit, checkAccountLockout, recordCredentialFailure, recordCredentialSuccess } from "@/lib/rate-limiter";
+import { logAuditEvent } from "@/lib/audit-logger";
+import {
+  signAccessToken,
+  issueRefreshToken,
+  getRefreshTokenCookieOptions,
+  getAccessTokenCookieOptions,
+  REFRESH_TOKEN_COOKIE_NAME,
+  ACCESS_TOKEN_COOKIE_NAME,
+  ACCESS_TOKEN_MAX_AGE_SECONDS,
+} from "@/lib/dual-token";
 
 export async function POST(req: Request) {
   try {
@@ -16,16 +25,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required credentials." }, { status: 400 });
     }
 
-    const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-    const secret = new TextEncoder().encode(jwtSecret);
-    const alg = "HS256";
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = req.headers.get("user-agent") || "unknown";
     const normalizedEmail = (email || "").trim().toLowerCase();
     const isDev = process.env.NODE_ENV === "development";
+    const accountKey = `${(schoolDomain || "global").toLowerCase().trim()}:${normalizedEmail}`;
 
-    // 1. CENTRAL DATABASE CREDENTIAL CHECK (PLATFORM SUPER_ADMIN)
-    // Check central master database FIRST before isolated tenant lookups.
-    // If user is a PlatformAdmin in master registry or designated master admin in dev,
-    // authenticate immediately against the central database and grant SUPER_ADMIN session.
+    // 1. BRUTE-FORCE RATE LIMITING (Max 5 attempts per 15 mins per IP)
+    const ipCheck = checkIpRateLimit(clientIp);
+    if (!ipCheck.allowed) {
+      await logAuditEvent({
+        actorId: "ANONYMOUS",
+        action: "RATE_LIMIT_BLOCKED",
+        target: normalizedEmail,
+        schoolId: schoolDomain || null,
+        ip: clientIp,
+        metadata: { retryAfterSeconds: ipCheck.retryAfterSeconds },
+      });
+      return NextResponse.json(
+        {
+          error: `Too many login attempts from this IP address. Please try again after ${ipCheck.retryAfterSeconds} seconds.`,
+          code: "TOO_MANY_ATTEMPTS",
+          retryAfter: ipCheck.retryAfterSeconds,
+        },
+        { status: 429 }
+      );
+    }
+
+    // 2. TARGETED ACCOUNT LOCKOUT (30-min lockout after 5 consecutive failures)
+    const accountCheck = checkAccountLockout(accountKey);
+    if (accountCheck.locked) {
+      return NextResponse.json(
+        {
+          error: `This account has been temporarily locked for 30 minutes due to 5 consecutive failed login attempts. Time remaining: ${accountCheck.remainingMinutes} minutes.`,
+          code: "ACCOUNT_LOCKED",
+          lockedUntil: accountCheck.lockedUntil,
+        },
+        { status: 423 }
+      );
+    }
+
+    // 3. MASTER SAAS SUPERADMIN CENTRAL CREDENTIAL CHECK
+    const superAdmin = await basePrisma.superAdmin.findUnique({
+      where: { email: normalizedEmail },
+    });
     const platformAdmin = await basePrisma.platformAdmin.findUnique({
       where: { email: normalizedEmail },
     });
@@ -36,23 +79,48 @@ export async function POST(req: Request) {
        normalizedEmail === "superadmin@school.edu" ||
        normalizedEmail === "admin@bonaveeict.com.ng");
 
-    if (platformAdmin || isMasterDevAdmin) {
+    if (superAdmin || platformAdmin || isMasterDevAdmin) {
       let isCentralAuthenticated = false;
 
-      if (isMasterDevAdmin && password === "Password123") {
-        isCentralAuthenticated = true;
-      } else if (platformAdmin && platformAdmin.password) {
+      if (superAdmin && superAdmin.passwordHash) {
+        isCentralAuthenticated = await bcrypt.compare(password, superAdmin.passwordHash).catch(() => false);
+      }
+
+      if (!isCentralAuthenticated && platformAdmin && platformAdmin.password) {
         isCentralAuthenticated = await bcrypt.compare(password, platformAdmin.password).catch(() => false);
-        if (!isCentralAuthenticated && (platformAdmin.password === password || password === "Password123")) {
+        if (!isCentralAuthenticated && (platformAdmin.password === password || (isMasterDevAdmin && password === "Password123"))) {
           isCentralAuthenticated = true;
         }
       }
 
+      if (!isCentralAuthenticated && isMasterDevAdmin && password === "Password123") {
+        isCentralAuthenticated = true;
+      }
+
       if (isCentralAuthenticated) {
-        const adminId = platformAdmin?.id || "master-superadmin-001";
+        recordCredentialSuccess(clientIp, accountKey);
+        const adminId = superAdmin?.id || platformAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
         const distinctSessionToken = crypto.randomUUID();
 
+        // Issue Dual-Tokens: Short-lived Access Token (15 min) + Long-lived Refresh Token (7 days)
+        const accessToken = await signAccessToken({
+          userId: adminId,
+          schoolId: "global-saas",
+          role: "SUPER_ADMIN",
+          email: normalizedEmail,
+          isSuperAdmin: true,
+          mustChangePassword: false,
+        });
+
+        const { rawRefreshToken } = await issueRefreshToken({
+          userId: adminId,
+          schoolId: "global-saas",
+          ipAddress: clientIp,
+          userAgent,
+        });
+
+        // Authoritative database session for backwards compatibility
         const sessionResult = await createDatabaseSession({
           userId: adminId,
           email: normalizedEmail,
@@ -62,109 +130,78 @@ export async function POST(req: Request) {
           role: "SUPER_ADMIN",
           activeTiers: ["Central Platform"],
           permissions: permissions,
-          ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
-          userAgent: req.headers.get("user-agent"),
-          sessionToken: distinctSessionToken || crypto.randomUUID(),
+          ipAddress: clientIp,
+          userAgent,
+          sessionToken: distinctSessionToken,
+        });
+
+        await logAuditEvent({
+          actorId: adminId,
+          action: "LOGIN_SUCCESS",
+          target: "SUPER_ADMIN_CONSOLE",
+          schoolId: "global-saas",
+          ip: clientIp,
+          metadata: { email: normalizedEmail, isSuperAdmin: true },
         });
 
         const response = NextResponse.json({
           success: true,
           userId: adminId,
           role: "SUPER_ADMIN",
+          isSuperAdmin: true,
           schoolDomain: "admin",
           redirectUrl: "/admin",
           permissions,
-          sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
-          token: sessionResult.cookieToken,
-          maxAge: SESSION_MAX_AGE_SECONDS,
+          accessToken,
+          sessionToken: sessionResult.sessionToken || distinctSessionToken,
+          token: accessToken,
+          maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
         });
 
+        // HttpOnly, Secure, SameSite=Strict cookie wrapper for Refresh Token
+        response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());
+        // Access Token cookie
+        response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, getAccessTokenCookieOptions());
+        // Backward-compatible session cookie
         response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+
         return response;
-      } else if (platformAdmin && !schoolDomain) {
-        return NextResponse.json({ error: "Invalid Super-Admin credentials." }, { status: 401 });
+      } else if (!schoolDomain) {
+        // Record credential failure for superadmin attempt
+        const failureResult = recordCredentialFailure(clientIp, accountKey);
+        await logAuditEvent({
+          actorId: "ANONYMOUS",
+          action: failureResult.isLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILURE",
+          target: normalizedEmail,
+          schoolId: "global-saas",
+          ip: clientIp,
+          metadata: { isSuperAdminAttempt: true, attemptsLeft: failureResult.remainingAccountAttempts },
+        });
+
+        if (failureResult.isLocked) {
+          return NextResponse.json(
+            {
+              error: "Account temporarily locked for 30 minutes following 5 consecutive failed login attempts.",
+              code: "ACCOUNT_LOCKED",
+              lockedUntil: failureResult.lockedUntil,
+            },
+            { status: 423 }
+          );
+        }
+
+        return NextResponse.json(
+          { error: `Invalid Super-Admin credentials. ${failureResult.remainingAccountAttempts} attempt(s) remaining.` },
+          { status: 401 }
+        );
       }
     }
 
-    // Tenant-specific credentials require an active tenant domain context
+    // Tenant-specific credentials require an active tenant domain/slug context
     if (!schoolDomain) {
-      return NextResponse.json({ error: "Missing required school domain context for tenant authentication." }, { status: 400 });
+      return NextResponse.json({ error: "Missing required school domain/slug context for tenant authentication." }, { status: 400 });
     }
 
-    // 2. TENANT DEVELOPMENT BYPASS HOOK
-    if (isDev) {
-      const tenant = await basePrisma.school.findUnique({
-        where: { subdomain: schoolDomain },
-        include: {
-          academicTiers: {
-            orderBy: { level: "asc" },
-          },
-        },
-      });
-
-      if (tenant && tenant.isActive) {
-        const activeTiers = tenant.academicTiers.map(t => t.name);
-
-        let devRole: UserRole | null = null;
-        let devStaffRole: string | undefined = undefined;
-        let devUserId = "";
-
-        if ((email === "staff@school.edu" || email === "admin@school.edu") && password === "Password123") {
-          devRole = "SCHOOL_ADMIN";
-          devStaffRole = "Principal";
-          devUserId = "test-admin-123";
-        } else if (email === "teacher@school.edu" && password === "Password123") {
-          devRole = "STAFF";
-          devStaffRole = "Class Teacher";
-          devUserId = "test-teacher-456";
-        } else if (email === "bursar@school.edu" && password === "Password123") {
-          devRole = "STAFF";
-          devStaffRole = "School Bursar";
-          devUserId = "test-bursar-789";
-        } else if (email === "student@school.edu" && password === "Password123") {
-          devRole = "STUDENT";
-          devUserId = "test-student-999";
-        }
-
-        if (devRole) {
-          const permissions = getDefaultPermissionsForRole(devRole);
-          const distinctSessionToken = crypto.randomUUID();
-
-          const sessionResult = await createDatabaseSession({
-            userId: devUserId,
-            email: email,
-            tenantId: tenant.id,
-            schoolDomain: tenant.subdomain,
-            tenantName: tenant.name,
-            role: devRole,
-            staffRole: devStaffRole,
-            activeTiers: activeTiers,
-            permissions: permissions,
-            ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
-            userAgent: req.headers.get("user-agent"),
-            sessionToken: distinctSessionToken || crypto.randomUUID(),
-          });
-
-          const response = NextResponse.json({ 
-            success: true, 
-            userId: devUserId,
-            role: devRole, 
-            staffRole: devStaffRole,
-            schoolDomain: tenant.subdomain,
-            activeTiers,
-            permissions,
-            sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
-            token: sessionResult.cookieToken,
-            maxAge: SESSION_MAX_AGE_SECONDS,
-          });
-
-          response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
-          return response;
-        }
-      }
-    }
-
-    // 3. DUAL-KEY TENANT VERIFICATION
+    // 4. VERIFY TENANT EXISTENCE & STATUS
     const tenant = await basePrisma.school.findFirst({
       where: {
         OR: [
@@ -180,17 +217,35 @@ export async function POST(req: Request) {
     });
 
     if (!tenant || !tenant.isActive) {
-      return NextResponse.json({ error: "Unauthorized: Tenant does not exist or is inactive." }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized: Institution does not exist or is inactive." }, { status: 400 });
     }
 
     const activeTiers = tenant.academicTiers.map(t => t.name);
-    let resolvedRole: UserRole | null = null;
+    let resolvedRole: UserRole | string | null = null;
     let resolvedStaffRole: string | undefined = undefined;
     let authenticatedUserId = "";
-    let authenticatedEmail = email;
+    let authenticatedEmail = normalizedEmail;
     let mustChangePassword = false;
 
-    // A. Check Staff (SCHOOL_ADMIN / STAFF)
+    // A. Check User model (Dedicated tenant user scope)
+    const localUser = await basePrisma.user.findFirst({
+      where: {
+        schoolId: tenant.id,
+        email: { equals: normalizedEmail, mode: "insensitive" },
+      },
+    });
+
+    if (localUser && localUser.passwordHash) {
+      const isValid = await bcrypt.compare(password, localUser.passwordHash).catch(() => false);
+      if (isValid) {
+        resolvedRole = localUser.role;
+        authenticatedUserId = localUser.id;
+        authenticatedEmail = localUser.email;
+        mustChangePassword = Boolean(localUser.mustChangePassword);
+      }
+    }
+
+    // B. Check Staff (SCHOOL_ADMIN / TEACHER / BURSAR)
     if (!resolvedRole) {
       const staff = await basePrisma.staff.findFirst({
         where: { 
@@ -207,20 +262,12 @@ export async function POST(req: Request) {
           if (!isPasswordValid && (staff.password === password || password === "Password123" || password === "Welcome123")) {
             isPasswordValid = true;
           }
-          if (isPasswordValid && (
-            password === "Password123" || 
-            password === "Welcome123" || 
-            await bcrypt.compare("Password123", staff.password).catch(() => false) ||
-            await bcrypt.compare("Welcome123", staff.password).catch(() => false)
-          )) {
+          if (isPasswordValid && (password === "Welcome123" || password === "Password123")) {
             isTemporary = true;
           }
-        } else {
-          // If staff has no password hash set yet (e.g. newly self-registered tenant), accept default initial password Password123 or Welcome123
-          if (password === "Password123" || password === "Welcome123" || password === "") {
-            isPasswordValid = true;
-            isTemporary = true;
-          }
+        } else if (password === "Welcome123" || password === "Password123" || password === "") {
+          isPasswordValid = true;
+          isTemporary = true;
         }
 
         if (isPasswordValid) {
@@ -229,7 +276,7 @@ export async function POST(req: Request) {
           authenticatedUserId = staff.id;
           authenticatedEmail = staff.email;
           const userForced = await isMustChangePassword(staff.id);
-          mustChangePassword = isTemporary || userForced;
+          mustChangePassword = isTemporary || staff.mustChangePassword || userForced;
         }
       }
     }
@@ -238,7 +285,7 @@ export async function POST(req: Request) {
     if (!resolvedRole) {
       let student = await basePrisma.student.findFirst({
         where: {
-          email: email,
+          email: normalizedEmail,
           schoolId: tenant.id,
         },
       });
@@ -248,7 +295,7 @@ export async function POST(req: Request) {
           const tenantDb = await getTenantClient(tenant.id);
           student = await tenantDb.student.findFirst({
             where: {
-              email: email,
+              email: normalizedEmail,
               schoolId: tenant.id,
             },
           });
@@ -272,15 +319,6 @@ export async function POST(req: Request) {
           if (!isPasswordValid && (studentCustomFields.password === password || password === "Password123" || password === "Welcome123")) {
             isPasswordValid = true;
           }
-          if (isPasswordValid && (
-            password === "Password123" || 
-            password === "Welcome123" || 
-            studentCustomFields.isTemporaryPassword === true ||
-            await bcrypt.compare("Password123", studentCustomFields.password).catch(() => false) ||
-            await bcrypt.compare("Welcome123", studentCustomFields.password).catch(() => false)
-          )) {
-            isTemporary = true;
-          }
         } else if (password === "Password123" || password === "Welcome123") {
           isPasswordValid = true;
           isTemporary = true;
@@ -291,20 +329,70 @@ export async function POST(req: Request) {
           authenticatedUserId = student.id;
           authenticatedEmail = student.email || `${student.admissionNumber || student.id}@student.portal`;
           const userForced = await isMustChangePassword(student.id);
-          mustChangePassword = isTemporary || userForced;
+          mustChangePassword = isTemporary || student.mustChangePassword || userForced;
         }
       }
     }
 
+    // 5. IF CREDENTIALS FAILED -> RECORD FAILURE & CHECK LOCKOUT
     if (!resolvedRole) {
-      return NextResponse.json({ error: "Invalid Credentials." }, { status: 401 });
+      const failureResult = recordCredentialFailure(clientIp, accountKey);
+      await logAuditEvent({
+        actorId: "ANONYMOUS",
+        action: failureResult.isLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILURE",
+        target: normalizedEmail,
+        schoolId: tenant.id,
+        ip: clientIp,
+        metadata: { attemptsLeft: failureResult.remainingAccountAttempts },
+      });
+
+      if (failureResult.isLocked) {
+        return NextResponse.json(
+          {
+            error: "Account has been locked for 30 minutes following 5 consecutive failed login attempts.",
+            code: "ACCOUNT_LOCKED",
+            lockedUntil: failureResult.lockedUntil,
+          },
+          { status: 423 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: `Invalid Credentials. ${failureResult.remainingAccountAttempts} attempt(s) remaining before 30-minute lockout.`,
+          code: "INVALID_CREDENTIALS",
+        },
+        { status: 401 }
+      );
     }
 
-    // 2. FETCH ROLE PERMISSIONS
-    const permissions = getDefaultPermissionsForRole(resolvedRole);
-    const distinctSessionToken = crypto.randomUUID();
+    // 6. ON SUCCESS -> RESET FAILURE TRACKER & ISSUE TOKENS
+    recordCredentialSuccess(clientIp, accountKey);
 
-    // 3. PERSIST SERVER-CONTROLLED DATABASE SESSION (30-min idle limit + cryptographic binding)
+    const permissions = getDefaultPermissionsForRole(resolvedRole as UserRole);
+    const distinctSessionToken = crypto.randomUUID();
+    const effectiveSlug = tenant.slug || tenant.subdomain;
+
+    // Issue Dual-Tokens:
+    // Short-lived Access Token (15-min)
+    const accessToken = await signAccessToken({
+      userId: authenticatedUserId,
+      schoolId: tenant.id,
+      role: resolvedRole,
+      email: authenticatedEmail,
+      isSuperAdmin: false,
+      mustChangePassword,
+    });
+
+    // Long-lived Refresh Token (7-day) stored as SHA-256 hash in database
+    const { rawRefreshToken } = await issueRefreshToken({
+      userId: authenticatedUserId,
+      schoolId: tenant.id,
+      ipAddress: clientIp,
+      userAgent,
+    });
+
+    // Server-Controlled Database Session
     const sessionResult = await createDatabaseSession({
       userId: authenticatedUserId,
       email: authenticatedEmail,
@@ -316,33 +404,54 @@ export async function POST(req: Request) {
       activeTiers: activeTiers,
       permissions: permissions,
       mustChangePassword: mustChangePassword,
-      ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
-      userAgent: req.headers.get("user-agent"),
-      sessionToken: distinctSessionToken || crypto.randomUUID(),
+      ipAddress: clientIp,
+      userAgent,
+      sessionToken: distinctSessionToken,
     });
 
+    // Forced Initial Reset Pipeline:
+    // Route them straight to /[tenantSlug]/security/change-password while blocking access to all other application panels
     const redirectTarget = mustChangePassword
-      ? `/${tenant.subdomain}/security/change-password?forced=true`
+      ? `/${effectiveSlug}/security/change-password?forced=true`
       : resolvedRole === "STUDENT"
-      ? `/${tenant.subdomain}/portal/student`
-      : `/${tenant.subdomain}/dashboard`;
+      ? `/${effectiveSlug}/portal/student`
+      : `/${effectiveSlug}/dashboard`;
 
-    const response = NextResponse.json({ 
-      success: true, 
+    await logAuditEvent({
+      actorId: authenticatedUserId,
+      action: "LOGIN_SUCCESS",
+      target: tenant.name,
+      schoolId: tenant.id,
+      ip: clientIp,
+      metadata: { role: resolvedRole, mustChangePassword },
+    });
+
+    const response = NextResponse.json({
+      success: true,
       userId: authenticatedUserId,
-      role: resolvedRole, 
+      role: resolvedRole,
       staffRole: resolvedStaffRole,
       schoolDomain: tenant.subdomain,
+      tenantSlug: effectiveSlug,
       activeTiers,
       permissions,
       mustChangePassword,
       redirectUrl: redirectTarget,
-      sessionToken: sessionResult.sessionToken || distinctSessionToken || crypto.randomUUID(),
-      token: sessionResult.cookieToken,
-      maxAge: SESSION_MAX_AGE_SECONDS,
+      accessToken,
+      sessionToken: sessionResult.sessionToken || distinctSessionToken,
+      token: accessToken,
+      maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
     });
 
+    // 1. HttpOnly, Secure, SameSite=Strict cookie wrapper for Refresh Token (7 days)
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());
+
+    // 2. Short-lived Access Token cookie (15 mins)
+    response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, getAccessTokenCookieOptions());
+
+    // 3. Database session cookie for backward-compatible panels
     response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+
     return response;
 
   } catch (error: any) {

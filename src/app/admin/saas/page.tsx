@@ -153,7 +153,7 @@ export default async function SaasAdminPage() {
     })),
     recentAuditLogs: recentAuditLogs.map((log) => ({
       id: log.id,
-      actorId: log.actorId,
+      actorId: log.actorId || "system",
       action: log.action,
       tenantId: log.tenantId,
       metadata: log.metadata,

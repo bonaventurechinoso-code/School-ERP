@@ -80,11 +80,17 @@ export async function verifyTenantDomainForSSL(hostname: string): Promise<SSLVer
 
   try {
     // 3. Query database to verify tenant existence and active status
-    const school = await basePrisma.school.findUnique({
-      where: { subdomain: extractedSubdomain },
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: extractedSubdomain },
+          { slug: extractedSubdomain },
+        ],
+      },
       select: {
         id: true,
         subdomain: true,
+        slug: true,
         isActive: true,
         isBanned: true,
       },

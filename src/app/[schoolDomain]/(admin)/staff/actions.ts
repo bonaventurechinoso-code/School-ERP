@@ -302,7 +302,7 @@ export async function createStaff(
       isTemporary = false;
     }
 
-    const hashedPassword = await bcrypt.hash(staffPasswordToSave, 10);
+    const hashedPassword = await bcrypt.hash(staffPasswordToSave, 12);
 
     const timestampData: any = {};
     const status = data.status || "ONBOARDING";
@@ -325,6 +325,7 @@ export async function createStaff(
         password: hashedPassword,
         role: data.role.trim(),
         status,
+        mustChangePassword: true,
         departmentId: data.departmentId || null,
         baseSalary: data.baseSalary ? Number(data.baseSalary) : null,
         bankName: data.bankName || null,
@@ -334,8 +335,24 @@ export async function createStaff(
       }
     });
 
-    // Record user security status: if custom typed, must_change_password=false; if default Welcome123, true
-    await setUserMustChangePassword(staff.id, schoolId, isTemporary);
+    // Record user security status: auto-populate default password and assign mustChangePassword: true
+    await setUserMustChangePassword(staff.id, schoolId, true);
+
+    // Sync to User table
+    await basePrisma.user.upsert({
+      where: { schoolId_email: { schoolId, email: data.email.trim().toLowerCase() } },
+      update: { passwordHash: hashedPassword, mustChangePassword: true },
+      create: {
+        id: staff.id,
+        schoolId,
+        email: data.email.trim().toLowerCase(),
+        passwordHash: hashedPassword,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        role: (data.role.trim().toUpperCase().includes("ADMIN") ? "SCHOOL_ADMIN" : data.role.trim().toUpperCase().includes("BURSAR") ? "BURSAR" : "TEACHER") as any,
+        mustChangePassword: true,
+      },
+    }).catch(() => {});
 
     // Save metadata if any provided
     if (data.phone || data.trcnNumber || data.qualification || data.nin || data.whatsapp) {

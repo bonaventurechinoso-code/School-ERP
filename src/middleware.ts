@@ -19,6 +19,12 @@ export const config = {
 
 export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonaveeict.com.ng').toLowerCase().replace(/^www\./, '').split(':')[0].trim();
 
+// System reserved root paths that are NOT tenant slugs
+const SYSTEM_RESERVED_ROOTS = new Set([
+  'admin', 'super-admin', 'access-denied', 'trial-expired',
+  'login', 'register', 'choice', 'me', 'api', 'portal-settings'
+]);
+
 /**
  * Cleanly extracts tenant subdomains specifically against the .bonaveeict.com.ng suffix.
  */
@@ -94,16 +100,66 @@ export async function middleware(req: NextRequest) {
     strippedHost === `www.${BASE_TENANT_DOMAIN}` ||
     (strippedHost.endsWith('.onrender.com') && strippedHost.split('.').length === 3);
 
-  // On a local tenant school workspace (e.g. stmark.bonaveeict.com.ng or localhost with mockTenant),
-  // navigating to /admin or /[schoolDomain]/admin is a tenant workspace action, NOT the SaaS platform super-admin console.
-  if (subdomain && !isApexOrPlatformHost && (path === '/admin' || path === `/${subdomain}/admin`)) {
-    const dashboardTarget = url.pathname.startsWith(`/${subdomain}`) ? `/${subdomain}/dashboard` : '/dashboard';
-    return NextResponse.redirect(new URL(dashboardTarget, req.url));
+  // 5. Extract tenantSlug directly from the incoming URL path parameters (e.g. /york/...)
+  const pathSegments = path.split('/').filter(Boolean);
+  const potentialPathSlug = pathSegments.length > 0 && !SYSTEM_RESERVED_ROOTS.has(pathSegments[0]) ? pathSegments[0] : '';
+  const effectiveTenantSlug = subdomain || potentialPathSlug;
+
+  // 6. Cryptographic Session & SuperAdmin Token Resolution
+  let sessionToken = req.cookies.get('accessToken')?.value || req.cookies.get('session')?.value;
+  if (!sessionToken) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      sessionToken = authHeader.substring(7);
+    }
   }
 
-  // MASTER SAAS CONTROLLER / SUPER-ADMIN ACCESS LOCKDOWN:
-  // Explicitly hard-gate /admin and /super-admin routes behind SUPER_ADMIN role verification
-  // strictly on the master platform apex domain.
+  let verifiedSessionPayload: any = null;
+  let isSuperAdmin = false;
+
+  if (sessionToken) {
+    try {
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const verified = await jwtVerify(sessionToken, secret);
+      verifiedSessionPayload = verified.payload;
+      const userRole = ((verifiedSessionPayload.role as string) || '').trim().toUpperCase();
+      const userEmail = ((verifiedSessionPayload.email as string) || '').trim().toLowerCase();
+
+      const isMasterAdminEmail =
+        userEmail === 'superadmin@platform.com' ||
+        userEmail === 'superadmin@school.edu' ||
+        userEmail === 'admin@bonaveeict.com.ng' ||
+        userEmail.startsWith('superadmin@');
+
+      if (userRole === 'SUPER_ADMIN' || verifiedSessionPayload.isSuperAdmin === true || isMasterAdminEmail) {
+        isSuperAdmin = true;
+      }
+    } catch {
+      // Invalid/expired token
+    }
+  }
+
+  // STEP 2: SuperAdmin Bypass:
+  // Grant unrestricted global access bypass to authenticated requests originating from the master SuperAdmin scope,
+  // explicitly marking their session state with isSuperAdmin = true.
+  if (isSuperAdmin) {
+    req.headers.set('x-is-super-admin', 'true');
+    req.headers.set('x-user-role', 'SUPER_ADMIN');
+    if (verifiedSessionPayload?.userId) {
+      req.headers.set('x-user-id', verifiedSessionPayload.userId as string);
+    }
+    if (effectiveTenantSlug) {
+      req.headers.set('x-tenant-slug', effectiveTenantSlug);
+    }
+
+    // If super admin is accessing master platform admin pages or any tenant panel, let them through
+    if (path === '/admin' || path.startsWith('/admin/') || path === '/super-admin' || path.startsWith('/super-admin/')) {
+      return NextResponse.next({ request: { headers: req.headers } });
+    }
+  }
+
+  // MASTER SAAS CONTROLLER / SUPER-ADMIN CONSOLE LOCKDOWN:
   const isGlobalAdminPath =
     (!subdomain || isApexOrPlatformHost) &&
     (path === '/admin' ||
@@ -112,60 +168,103 @@ export async function middleware(req: NextRequest) {
      path.startsWith('/super-admin/'));
 
   if (isGlobalAdminPath) {
-    let sessionToken = req.cookies.get('session')?.value;
-    if (!sessionToken) {
-      const authHeader = req.headers.get('authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        sessionToken = authHeader.substring(7);
-      }
-    }
-    const isDev = process.env.NODE_ENV === 'development';
-
-    if (!sessionToken) {
+    if (!isSuperAdmin) {
       const loginUrl = new URL('/login', req.url);
       loginUrl.searchParams.set('callbackUrl', path);
-      return NextResponse.redirect(loginUrl);
+      const res = NextResponse.redirect(loginUrl);
+      if (sessionToken && !verifiedSessionPayload) {
+        res.cookies.delete('session');
+        res.cookies.delete('accessToken');
+      }
+      return res;
     }
+    return NextResponse.next({ request: { headers: req.headers } });
+  }
 
+  // STEP 2: Live School Record Validation for Path-Based Slug Routes:
+  // If a tenant route is accessed without a valid slug matching a live School record,
+  // immediately return an explicit HTTP 400 bad request.
+  let activeSchoolRecord: { schoolId: string; slug: string; name?: string } | null = null;
+
+  if (effectiveTenantSlug && !isSuperAdmin) {
     try {
-      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-      const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jwtVerify(sessionToken, secret);
+      const appBaseUrl =
+        process.env.NEXTAUTH_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.BASE_URL ||
+        `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+      const statusUrl = new URL(`/api/tenants/status?slug=${encodeURIComponent(effectiveTenantSlug)}`, appBaseUrl);
+      const statusRes = await fetch(statusUrl, { cache: 'no-store' });
 
-      const userRole = ((payload.role as string) || '').trim().toUpperCase();
-      const userEmail = ((payload.email as string) || '').trim().toLowerCase();
-
-      // Master administrator designated emails allowed to bypass tenant checks and route into global admin
-      const isMasterAdminEmail =
-        userEmail === 'superadmin@platform.com' ||
-        userEmail === 'superadmin@school.edu' ||
-        userEmail === 'admin@bonaveeict.com.ng' ||
-        userEmail.startsWith('superadmin@');
-
-      // EXPLICIT CHECK:
-      // Allow if verified role is SUPER_ADMIN, OR if running in development mode and session belongs to designated master administrator
-      if (userRole === 'SUPER_ADMIN' || (isDev && isMasterAdminEmail)) {
-        return NextResponse.next();
+      if (!statusRes.ok) {
+        // Explicit HTTP 400 bad request if slug does not match a live School record
+        return new NextResponse(
+          JSON.stringify({
+            statusCode: 400,
+            error: "Bad Request",
+            message: `Explicit Bad Request: Invalid school slug '${effectiveTenantSlug}'. No live institution matches this identifier.`,
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          }
+        );
       }
 
-      // HARD GATED: Block non-super admin roles (TENANT_ADMIN, DEMO_USER, SCHOOL_ADMIN, STAFF, STUDENT)
-      const deniedUrl = new URL('/access-denied', req.url);
-      deniedUrl.searchParams.set('role', userRole || 'GUEST');
-      deniedUrl.searchParams.set(
-        'message',
-        'Access Denied: This console is strictly restricted to Platform Super-Administrators. Standard tenant admins, demo users, staff, and students cannot access master platform governance.'
-      );
-      return NextResponse.redirect(deniedUrl);
-    } catch (err) {
-      const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.delete('session');
-      return response;
+      const statusData = await statusRes.json();
+      if (!statusData?.schoolId || statusData?.isBanned) {
+        return new NextResponse(
+          JSON.stringify({
+            statusCode: 400,
+            error: "Bad Request",
+            message: `Explicit Bad Request: Institution for slug '${effectiveTenantSlug}' is inactive or invalid.`,
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          }
+        );
+      }
+
+      // Check trial expiration
+      const now = new Date();
+      const isExpired = statusData.trialEndDate ? new Date(statusData.trialEndDate) < now : false;
+      if (isExpired && !path.includes('/trial-expired')) {
+        const expiredUrl = new URL('/trial-expired', req.url);
+        return NextResponse.redirect(expiredUrl);
+      }
+
+      activeSchoolRecord = {
+        schoolId: statusData.schoolId,
+        slug: statusData.slug || effectiveTenantSlug,
+      };
+
+      req.headers.set('x-tenant-id', activeSchoolRecord.schoolId);
+      req.headers.set('x-tenant-slug', activeSchoolRecord.slug);
+    } catch (lookupErr) {
+      console.warn('[MIDDLEWARE_SLUG_VERIFICATION_ERROR]:', lookupErr);
     }
   }
 
-  // Bypass dedicated portals, public pages, and auth endpoints from administrative interception
+  // STEP 3: Forced Initial Reset Pipeline:
+  // When an administrator adds a new Staff member or Student, mustChangePassword: true is set.
+  // Their first successful login forces a strict browser interception, routing them straight to
+  // /[tenantSlug]/security/change-password while blocking access to all other application panels until complete.
+  if (verifiedSessionPayload?.mustChangePassword) {
+    const isChangePasswordPage =
+      path.endsWith('/security/change-password') ||
+      path.includes('/security/change-password');
+
+    if (!isChangePasswordPage) {
+      const targetSlug = effectiveTenantSlug || (verifiedSessionPayload.schoolDomain as string) || '';
+      const forcedPath = targetSlug ? `/${targetSlug}/security/change-password` : '/security/change-password';
+      const forcedUrl = new URL(forcedPath, req.url);
+      forcedUrl.searchParams.set('forced', 'true');
+      return NextResponse.redirect(forcedUrl);
+    }
+  }
+
+  // Bypass public pages and auth endpoints from administrative RBAC interception
   const isPublicOrPortalPath =
     path.startsWith('/portal/') ||
     path.includes('/portal/') ||
@@ -183,41 +282,20 @@ export async function middleware(req: NextRequest) {
     path.includes('/security/change-password');
 
   if (isPublicOrPortalPath) {
-    // Intercept portal visits if user has a pending forced initial password reset
-    if ((path.includes('/portal/') || path.startsWith('/portal/')) && !path.includes('/security/change-password')) {
-      const cookieToken = req.cookies.get('session')?.value;
-      if (cookieToken) {
-        try {
-          const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-          const secret = new TextEncoder().encode(jwtSecret);
-          const verified = await jwtVerify(cookieToken, secret);
-          if (verified.payload?.mustChangePassword) {
-            const tenant = (verified.payload.schoolDomain as string) || subdomain || '';
-            const forcedPath = tenant ? `/${tenant}/security/change-password` : '/security/change-password';
-            const forcedUrl = new URL(forcedPath, req.url);
-            forcedUrl.searchParams.set('forced', 'true');
-            return NextResponse.redirect(forcedUrl);
-          }
-        } catch {
-          // Token decode fail handled by page authentication
-        }
-      }
-    }
-
     if (isIPAddress || isLocalhost) {
       if (subdomain && !url.pathname.startsWith(`/${subdomain}`)) {
         const rewriteUrl = new URL(`/${subdomain}${url.pathname}${url.search}`, req.url);
-        return NextResponse.rewrite(rewriteUrl);
+        return NextResponse.rewrite(rewriteUrl, { request: { headers: req.headers } });
       }
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: req.headers } });
     }
 
     if (subdomain && subdomain !== 'www' && subdomain !== 'app' && !url.pathname.startsWith(`/${subdomain}`)) {
       const rewriteUrl = new URL(`/${subdomain}${url.pathname}${url.search}`, req.url);
-      return NextResponse.rewrite(rewriteUrl);
+      return NextResponse.rewrite(rewriteUrl, { request: { headers: req.headers } });
     }
 
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: req.headers } });
   }
 
   // --- Auth Check & RBAC Protection for Tenant Administrative Routes ---
@@ -229,241 +307,70 @@ export async function middleware(req: NextRequest) {
   const isTenantAdminPath = tenantAdminSegments.some(segment => path.includes(segment));
 
   if (isTenantAdminPath) {
-    // Resolve candidate session tokens:
-    // Prioritize query token (from onboarding redirect) over potentially stale root-domain cookies
-    const queryToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
-    const authHeader = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-    const cookieToken = req.cookies.get('session')?.value;
-
-    let sessionToken = queryToken || authHeader || cookieToken;
-
     const isDev = process.env.NODE_ENV === 'development';
     const devMockRoleSetting = process.env.NEXT_PUBLIC_DEV_MOCK_ROLE;
     const mockRoleConfig = isDev && devMockRoleSetting ? getDevMockRoleConfig(devMockRoleSetting) : null;
 
-    const pathSegments = path.split('/').filter(Boolean);
-    const pathTenant = pathSegments.length > 0 && !['admin', 'super-admin', 'portal', 'api', 'access-denied', 'trial-expired', 'login', 'register', 'choice'].includes(pathSegments[0]) ? pathSegments[0] : '';
-    const effectiveTenant = subdomain || pathTenant;
-
-    if (!sessionToken && !mockRoleConfig) {
-      // Redirect to tenant login or portal login instead of access-denied
-      const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
+    if (!sessionToken && !mockRoleConfig && !isSuperAdmin) {
+      const targetPath = effectiveTenantSlug ? `/${effectiveTenantSlug}/login` : '/login';
       const loginUrl = new URL(targetPath, req.url);
-      if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
-        loginUrl.searchParams.set('mockTenant', effectiveTenant);
+      if (effectiveTenantSlug && (isIPAddress || isLocalhost) && !subdomain) {
+        loginUrl.searchParams.set('mockTenant', effectiveTenantSlug);
       }
       return NextResponse.redirect(loginUrl);
     }
 
-    try {
-      let payload: any = null;
+    let payload: any = verifiedSessionPayload;
 
-      if (sessionToken) {
-        try {
-          const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-          const secret = new TextEncoder().encode(jwtSecret);
-          const verified = await jwtVerify(sessionToken, secret);
-          payload = verified.payload;
-        } catch (tokenErr) {
-          // If the cookie token was invalid/expired but queryToken was also available, attempt queryToken
-          if (queryToken && sessionToken !== queryToken) {
-            try {
-              const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-              const secret = new TextEncoder().encode(jwtSecret);
-              const verifiedQuery = await jwtVerify(queryToken, secret);
-              payload = verifiedQuery.payload;
-              sessionToken = queryToken;
-            } catch {
-              if (!mockRoleConfig) throw tokenErr;
-            }
-          } else if (!mockRoleConfig) {
-            throw tokenErr;
-          }
-        }
-      }
-
-      // If no valid session token exists but Flexible Local Dev Mode is active, synthesize mock session profile
-      if (!payload && mockRoleConfig) {
-        payload = {
-          userId: 'dev-mock-user',
-          email: `mock-${mockRoleConfig.staffRole.toLowerCase().replace(/[^a-z0-9]/g, '')}@school.edu`,
-          role: mockRoleConfig.role,
-          staffRole: mockRoleConfig.staffRole,
-          tenantId: 'mock-dev-tenant',
-          schoolDomain: subdomain || 'greenwood',
-        };
-      }
-
-      // Intercept entry if user is flagged for forced initial password reset
-      if (payload?.mustChangePassword && !path.includes('/security/change-password')) {
-        const forcedPath = effectiveTenant
-          ? `/${effectiveTenant}/security/change-password`
-          : '/security/change-password';
-        const forcedUrl = new URL(forcedPath, req.url);
-        forcedUrl.searchParams.set('forced', 'true');
-        return NextResponse.redirect(forcedUrl);
-      }
-
-      // --- Strict Cross-Subdomain & Root Domain Session Isolation Guard ---
-      // If on a tenant subdomain, ensure the active session belongs to this specific tenant!
-      // Prevent root domain session states or sibling tenant sessions from bleeding across subdomains.
-      if (effectiveTenant && payload) {
-        const payloadDomain = ((payload.schoolDomain as string) || '').toLowerCase().trim();
-        const payloadRole = ((payload.role as string) || '').toUpperCase().trim();
-        const isSuperAdmin = payloadRole === 'SUPER_ADMIN';
-
-        // If the session does not belong to this tenant and is not a platform Super Admin:
-        if (!isSuperAdmin && (!payloadDomain || payloadDomain !== effectiveTenant.toLowerCase())) {
-          // If a query token was provided for this specific tenant, switch to it:
-          if (queryToken && sessionToken !== queryToken) {
-            try {
-              const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-              const secret = new TextEncoder().encode(jwtSecret);
-              const verifiedQuery = await jwtVerify(queryToken, secret);
-              const queryPayloadDomain = ((verifiedQuery.payload.schoolDomain as string) || '').toLowerCase().trim();
-              const queryRole = ((verifiedQuery.payload.role as string) || '').toUpperCase().trim();
-              if (queryPayloadDomain === effectiveTenant.toLowerCase() || queryRole === 'SUPER_ADMIN') {
-                payload = verifiedQuery.payload;
-                sessionToken = queryToken;
-              } else {
-                throw new Error("Query token tenant mismatch");
-              }
-            } catch {
-              const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
-              const loginUrl = new URL(targetPath, req.url);
-              if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
-                loginUrl.searchParams.set('mockTenant', effectiveTenant);
-              }
-              const res = NextResponse.redirect(loginUrl);
-              res.cookies.delete('session');
-              return res;
-            }
-          } else {
-            // Mismatched foreign/root cookie without matching query token:
-            // Clear the bleeding foreign cookie and redirect to this tenant's login portal,
-            // NEVER throwing the "Security Guard Activated" block page!
-            const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
-            const loginUrl = new URL(targetPath, req.url);
-            if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
-              loginUrl.searchParams.set('mockTenant', effectiveTenant);
-            }
-            const res = NextResponse.redirect(loginUrl);
-            res.cookies.delete('session');
-            return res;
-          }
-        }
-      }
-
-      // Resolve effective tenant context
-      let effectiveSubdomain = subdomain;
-      if (!effectiveSubdomain) {
-        if (payload?.schoolDomain) {
-          effectiveSubdomain = payload.schoolDomain as string;
-        } else {
-          const segments = path.split('/').filter(Boolean);
-          if (segments.length > 0 && !['admin', 'portal', 'api', 'access-denied', 'trial-expired'].includes(segments[0])) {
-            effectiveSubdomain = segments[0];
-          }
-        }
-      }
-
-      // --- Dynamic Tenant Status & 14-Day Trial Expiration Evaluation ---
-      if (effectiveSubdomain) {
-        try {
-          // Resolve internal API status check using canonical base URL
-          const appBaseUrl =
-            process.env.NEXTAUTH_URL ||
-            process.env.NEXT_PUBLIC_APP_URL ||
-            process.env.BASE_URL ||
-            `${req.nextUrl.protocol}//${req.nextUrl.host}`;
-          const statusUrl = new URL(`/api/tenants/status?subdomain=${effectiveSubdomain}`, appBaseUrl);
-          const statusRes = await fetch(statusUrl, { cache: 'no-store' });
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            const now = new Date();
-            const isExpired = statusData.trialEndDate ? new Date(statusData.trialEndDate) < now : false;
-            const isBanned = statusData.isBanned;
-
-            if (isExpired || isBanned) {
-              const expiredUrl = new URL('/trial-expired', req.url);
-              return NextResponse.redirect(expiredUrl);
-            }
-          }
-        } catch (statusCheckErr) {
-          console.warn('[MIDDLEWARE_TENANT_STATUS_CHECK_WARNING]:', statusCheckErr);
-        }
-      }
-
-      // --- Strict Role-Based Access Control (RBAC) Matrix ---
-      const rawRole = (payload?.role as string) || '';
-      const staffRole = (payload?.staffRole as string) || '';
-
-      const authResult = checkRouteAuthorization(path, rawRole, staffRole);
-
-      if (!authResult.allowed) {
-        // If guest / unauthenticated, redirect to login instead of throwing an access denied error
-        if (authResult.category === 'GUEST') {
-          const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
-          const loginUrl = new URL(targetPath, req.url);
-          if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
-            loginUrl.searchParams.set('mockTenant', effectiveTenant);
-          }
-          const res = NextResponse.redirect(loginUrl);
-          res.cookies.delete('session');
-          return res;
-        }
-
-        // 1. If student attempted to access administrative area, direct to student portal with notice
-        if (authResult.category === 'STUDENT') {
-          const studentPortalUrl = new URL('/portal/student', req.url);
-          studentPortalUrl.searchParams.set('denied', 'true');
-          return NextResponse.redirect(studentPortalUrl);
-        }
-
-        // 2. Direct all other unauthorized access attempts gracefully to /access-denied
-        const deniedUrl = new URL('/access-denied', req.url);
-        deniedUrl.searchParams.set('role', authResult.effectiveRoleName);
-        deniedUrl.searchParams.set(
-          'message',
-          authResult.reason || 'You do not have permission to view this administrative workspace.'
-        );
-        if (subdomain && (isIPAddress || isLocalhost)) {
-          deniedUrl.searchParams.set('mockTenant', subdomain);
-        }
-        return NextResponse.redirect(deniedUrl);
-      }
-
-      const resolvedSessionToken =
-        (payload?.sessionToken as string) ||
-        (payload?.sessionId as string) ||
-        (payload?.jti as string) ||
-        (payload?.token as string) ||
-        (payload?.id as string) ||
-        sessionToken ||
-        '';
-
-      // Inject cryptographically verified session claims into downstream request headers
-      req.headers.set('x-user-id', (payload?.userId as string) || '');
-      req.headers.set('x-user-role', rawRole);
-      req.headers.set('x-staff-role', staffRole);
-      req.headers.set('x-tenant-id', (payload?.tenantId as string) || '');
-      req.headers.set('x-session-token', resolvedSessionToken);
-    } catch (err) {
-      // Token is invalid or expired
-      const pathSegments = path.split('/').filter(Boolean);
-      const pathTenant = pathSegments.length > 0 && !['admin', 'super-admin', 'portal', 'api', 'access-denied', 'trial-expired', 'login', 'register', 'choice'].includes(pathSegments[0]) ? pathSegments[0] : '';
-      const effectiveTenant = subdomain || pathTenant;
-      const targetPath = subdomain ? '/login' : (pathTenant ? `/${pathTenant}/login` : '/login');
-      const loginUrl = new URL(targetPath, req.url);
-      if (effectiveTenant && (isIPAddress || isLocalhost) && !subdomain) {
-        loginUrl.searchParams.set('mockTenant', effectiveTenant);
-      }
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.delete('session');
-      return response;
+    if (!payload && mockRoleConfig) {
+      payload = {
+        userId: 'dev-mock-user',
+        email: `mock-${mockRoleConfig.staffRole.toLowerCase().replace(/[^a-z0-9]/g, '')}@school.edu`,
+        role: mockRoleConfig.role,
+        staffRole: mockRoleConfig.staffRole,
+        tenantId: activeSchoolRecord?.schoolId || 'mock-dev-tenant',
+        schoolDomain: effectiveTenantSlug || 'greenwood',
+      };
     }
+
+    // Strict Cross-Tenant Boundaries Check:
+    // Ensure active session belongs to this specific tenant! School A data is invisible to School B.
+    if (effectiveTenantSlug && payload && !isSuperAdmin) {
+      const payloadDomain = ((payload.schoolDomain || payload.tenantSlug) as string || '').toLowerCase().trim();
+      const payloadSchoolId = (payload.tenantId || payload.schoolId) as string;
+
+      const isMatchingTenant =
+        payloadDomain === effectiveTenantSlug.toLowerCase() ||
+        (activeSchoolRecord && payloadSchoolId === activeSchoolRecord.schoolId);
+
+      if (!isMatchingTenant) {
+        const targetPath = `/${effectiveTenantSlug}/login`;
+        const loginUrl = new URL(targetPath, req.url);
+        const res = NextResponse.redirect(loginUrl);
+        res.cookies.delete('session');
+        res.cookies.delete('accessToken');
+        return res;
+      }
+    }
+
+    const rawRole = (payload?.role as string) || '';
+    const staffRole = (payload?.staffRole as string) || '';
+    const authResult = isSuperAdmin ? { allowed: true } : checkRouteAuthorization(path, rawRole, staffRole);
+
+    if (!authResult.allowed) {
+      const targetPath = effectiveTenantSlug ? `/${effectiveTenantSlug}/login` : '/login';
+      const loginUrl = new URL(targetPath, req.url);
+      const res = NextResponse.redirect(loginUrl);
+      res.cookies.delete('session');
+      res.cookies.delete('accessToken');
+      return res;
+    }
+
+    req.headers.set('x-user-id', (payload?.userId as string) || '');
+    req.headers.set('x-user-role', rawRole);
+    req.headers.set('x-staff-role', staffRole);
+    req.headers.set('x-tenant-id', (payload?.tenantId || payload?.schoolId || activeSchoolRecord?.schoolId) as string || '');
   }
-  // --- End Auth Check ---
 
   let response = NextResponse.next({
     request: {
@@ -489,22 +396,5 @@ export async function middleware(req: NextRequest) {
     });
   }
 
-  // If session token was provided via query parameter during onboarding redirect, persist strictly as Host-Only cookie
-  const incomingToken = url.searchParams.get('token') || url.searchParams.get('sessionToken');
-  if (incomingToken) {
-    const isProd = process.env.NODE_ENV === 'production';
-
-    response.cookies.set('session', incomingToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      path: '/',
-      domain: undefined, // Strictly Host-Only cookie scoped to this exact subdomain
-      maxAge: 30 * 60,
-    });
-  }
-
   return response;
 }
-
-

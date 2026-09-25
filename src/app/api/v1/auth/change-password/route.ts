@@ -14,11 +14,12 @@ const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { currentPassword, newPassword, confirmPassword } = body;
+    const { oldPassword, currentPassword, newPassword, confirmPassword } = body;
+    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
 
     // 1. Resolve session token from cookies or authorization header
     const cookieStore = await cookies();
-    const cookieToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    const cookieToken = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get("accessToken")?.value;
     const authHeader = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     const token = cookieToken || authHeader;
 
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const userId = payload.userId as string;
-    const schoolId = payload.tenantId as string;
+    const schoolId = (payload.tenantId || payload.schoolId) as string;
     const role = (payload.role as string) || "STAFF";
 
     if (!userId) {
@@ -57,9 +58,10 @@ export async function POST(req: Request) {
       userId,
       schoolId: schoolId || "global-saas",
       role,
-      currentPassword,
+      oldPassword: oldPassword || currentPassword,
       newPassword,
       confirmPassword,
+      ip: clientIp,
     });
 
     if (!result.success) {
