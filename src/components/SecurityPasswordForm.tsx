@@ -20,7 +20,7 @@ export default function SecurityPasswordForm({
   onSuccess,
   brandColor = "#4f46e5",
   userRole,
-  endpoint = "/change-password",
+  endpoint = "/api/change-password",
   logoutOnSuccess = false,
 }: SecurityPasswordFormProps) {
   const router = useRouter();
@@ -89,7 +89,7 @@ export default function SecurityPasswordForm({
     setIsSubmitting(true);
 
     try {
-      const targetEndpoint = endpoint || "/change-password";
+      const targetEndpoint = endpoint || "/api/change-password";
       const res = await fetch(targetEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

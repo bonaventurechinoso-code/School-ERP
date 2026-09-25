@@ -80,7 +80,7 @@ export default async function DashboardSecuritySettingsPage() {
           isForcedReset={false}
           brandColor={brandColor}
           userRole={userRole}
-          endpoint="/change-password"
+          endpoint="/api/change-password"
           logoutOnSuccess={true}
         />
 

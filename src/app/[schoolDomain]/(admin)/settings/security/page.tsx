@@ -46,7 +46,7 @@ export default async function AdminSecuritySettingsPage({
         schoolDomain={school.subdomain}
         brandColor={brandColor}
         userRole="TENANT_ADMIN"
-        endpoint="/change-password"
+        endpoint="/api/change-password"
         logoutOnSuccess={true}
       />
 
