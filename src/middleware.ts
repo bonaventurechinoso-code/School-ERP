@@ -22,7 +22,7 @@ export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonav
 // System reserved root paths that are NOT tenant slugs
 const SYSTEM_RESERVED_ROOTS = new Set([
   'admin', 'super-admin', 'access-denied', 'trial-expired',
-  'login', 'register', 'choice', 'me', 'api', 'portal-settings'
+  'login', 'register', 'choice', 'me', 'api', 'portal-settings', 'change-password'
 ]);
 
 /**
@@ -251,12 +251,14 @@ export async function middleware(req: NextRequest) {
   // /[tenantSlug]/security/change-password while blocking access to all other application panels until complete.
   if (verifiedSessionPayload?.mustChangePassword) {
     const isChangePasswordPage =
+      path === '/change-password' ||
+      path.startsWith('/change-password') ||
       path.endsWith('/security/change-password') ||
       path.includes('/security/change-password');
 
     if (!isChangePasswordPage) {
       const targetSlug = effectiveTenantSlug || (verifiedSessionPayload.schoolDomain as string) || '';
-      const forcedPath = targetSlug ? `/${targetSlug}/security/change-password` : '/security/change-password';
+      const forcedPath = targetSlug ? `/${targetSlug}/security/change-password` : '/change-password';
       const forcedUrl = new URL(forcedPath, req.url);
       forcedUrl.searchParams.set('forced', 'true');
       return NextResponse.redirect(forcedUrl);
@@ -265,6 +267,8 @@ export async function middleware(req: NextRequest) {
 
   // Bypass public pages and auth endpoints from administrative RBAC interception
   const isPublicOrPortalPath =
+    path === '/change-password' ||
+    path.startsWith('/change-password') ||
     path.startsWith('/portal/') ||
     path.includes('/portal/') ||
     path.startsWith('/teacher') ||

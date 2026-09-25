@@ -72,7 +72,7 @@ export default function TenantLoginPage() {
 
         // Check if user is logging in using a temporary password (forced initial reset)
         if (data.mustChangePassword || data.redirectUrl?.includes('change-password')) {
-          router.push(data.redirectUrl || `/${targetDomain}/security/change-password?forced=true`);
+          router.push(data.redirectUrl || "/change-password");
           return;
         }
 

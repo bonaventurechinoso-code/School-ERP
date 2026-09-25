@@ -281,8 +281,7 @@ function UniversalLoginPageContent() {
         const user = sessionPayload;
 
         if (user?.mustChangePassword) {
-          const domain = targetDomain || user.schoolDomain || "york";
-          router.push(`/${domain}/security/change-password?forced=true`);
+          router.push("/change-password");
           return;
         }
 

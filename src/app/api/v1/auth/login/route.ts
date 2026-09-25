@@ -196,17 +196,44 @@ export async function POST(req: Request) {
       }
     }
 
-    // Tenant-specific credentials require an active tenant domain/slug context
-    if (!schoolDomain) {
+    // 4. VERIFY TENANT EXISTENCE & STATUS
+    let tenantSubdomain = schoolDomain ? (schoolDomain as string).toLowerCase().trim() : null;
+
+    if (!tenantSubdomain) {
+      const userSchool = await basePrisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        include: { school: true },
+      });
+      if (userSchool?.school) {
+        tenantSubdomain = userSchool.school.subdomain;
+      } else {
+        const staffSchool = await basePrisma.staff.findFirst({
+          where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+          include: { school: true },
+        });
+        if (staffSchool?.school) {
+          tenantSubdomain = staffSchool.school.subdomain;
+        } else {
+          const studentSchool = await basePrisma.student.findFirst({
+            where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+            include: { school: true },
+          });
+          if (studentSchool?.school) {
+            tenantSubdomain = studentSchool.school.subdomain;
+          }
+        }
+      }
+    }
+
+    if (!tenantSubdomain) {
       return NextResponse.json({ error: "Missing required school domain/slug context for tenant authentication." }, { status: 400 });
     }
 
-    // 4. VERIFY TENANT EXISTENCE & STATUS
     const tenant = await basePrisma.school.findFirst({
       where: {
         OR: [
-          { subdomain: schoolDomain.toLowerCase().trim() },
-          { slug: schoolDomain.toLowerCase().trim() },
+          { subdomain: tenantSubdomain },
+          { slug: tenantSubdomain },
         ],
       },
       include: {
@@ -241,7 +268,8 @@ export async function POST(req: Request) {
         resolvedRole = localUser.role;
         authenticatedUserId = localUser.id;
         authenticatedEmail = localUser.email;
-        mustChangePassword = Boolean(localUser.mustChangePassword);
+        const userForced = await isMustChangePassword(localUser.id);
+        mustChangePassword = Boolean(localUser.mustChangePassword) || userForced;
       }
     }
 
@@ -410,9 +438,9 @@ export async function POST(req: Request) {
     });
 
     // Forced Initial Reset Pipeline:
-    // Route them straight to /[tenantSlug]/security/change-password while blocking access to all other application panels
+    // Route them straight to /change-password while blocking access to all other application panels
     const redirectTarget = mustChangePassword
-      ? `/${effectiveSlug}/security/change-password?forced=true`
+      ? `/change-password`
       : resolvedRole === "STUDENT"
       ? `/${effectiveSlug}/portal/student`
       : `/${effectiveSlug}/dashboard`;
