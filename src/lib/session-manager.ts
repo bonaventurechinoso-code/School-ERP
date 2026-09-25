@@ -222,7 +222,23 @@ export async function validateDatabaseSession(
       }).catch(() => {});
     }
 
-    // 7. Return server-authoritative session state including sessionToken
+    // 7. Check authoritative User table for current mustChangePassword flag
+    let mustChangePassword = Boolean(payload.mustChangePassword);
+    const userRow = await basePrisma.user.findFirst({
+      where: {
+        OR: [
+          { id: dbSession.userId },
+          { staff: { id: dbSession.userId } },
+          { student: { id: dbSession.userId } },
+        ],
+      },
+      select: { mustChangePassword: true },
+    });
+    if (userRow) {
+      mustChangePassword = Boolean(userRow.mustChangePassword);
+    }
+
+    // 8. Return server-authoritative session state including sessionToken
     return {
       userId: dbSession.userId,
       email: dbSession.email || (payload.email as string),
@@ -238,6 +254,8 @@ export async function validateDatabaseSession(
       token: token,
       dbSessionId: dbSession.id,
       expiresAt: dbSession.expiresAt,
+      mustChangePassword,
+      forceChangePassword: mustChangePassword,
     };
   } catch (error) {
     console.error("[AUTH_VERIFICATION_ERROR]: Failed to validate session token:", error);

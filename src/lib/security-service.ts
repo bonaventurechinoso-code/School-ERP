@@ -109,28 +109,20 @@ export async function ensureSecurityTables(): Promise<void> {
  */
 export async function isMustChangePassword(userId: string): Promise<boolean> {
   try {
-    // 1. Check User model
-    const user = await basePrisma.user.findUnique({
-      where: { id: userId },
+    // 1. Check User model (authoritative single auth table)
+    const user = await basePrisma.user.findFirst({
+      where: {
+        OR: [
+          { id: userId },
+          { staff: { id: userId } },
+          { student: { id: userId } },
+        ],
+      },
       select: { mustChangePassword: true },
     });
     if (user?.mustChangePassword) return true;
 
-    // 2. Check Staff model
-    const staff = await basePrisma.staff.findUnique({
-      where: { id: userId },
-      select: { mustChangePassword: true },
-    });
-    if (staff?.mustChangePassword) return true;
-
-    // 3. Check Student model
-    const student = await basePrisma.student.findUnique({
-      where: { id: userId },
-      select: { mustChangePassword: true, dynamicFields: true },
-    });
-    if (student?.mustChangePassword || (student?.dynamicFields as any)?.isTemporaryPassword) return true;
-
-    // 4. Legacy table fallback
+    // 2. Legacy table fallback
     await ensureSecurityTables();
     const rows = await basePrisma.$queryRawUnsafe<Array<{ must_change_password: boolean; is_temporary_password?: boolean }>>(
       `SELECT must_change_password, is_temporary_password FROM bonavee_user_security WHERE user_id = $1 LIMIT 1`,
@@ -148,22 +140,16 @@ export async function isMustChangePassword(userId: string): Promise<boolean> {
  */
 export async function setUserMustChangePassword(userId: string, schoolId: string, mustChange: boolean): Promise<void> {
   try {
-    // Update User model if exists
+    // Update User model (authoritative single auth table)
     await basePrisma.user.updateMany({
-      where: { id: userId },
-      data: { mustChangePassword: mustChange },
-    });
-
-    // Update Staff model if exists
-    await basePrisma.staff.updateMany({
-      where: { id: userId },
-      data: { mustChangePassword: mustChange },
-    });
-
-    // Update Student model if exists
-    await basePrisma.student.updateMany({
-      where: { id: userId },
-      data: { mustChangePassword: mustChange },
+      where: {
+        OR: [
+          { id: userId },
+          { staff: { id: userId } },
+          { student: { id: userId } },
+        ],
+      },
+      data: { mustChangePassword: mustChange, updatedAt: new Date() },
     });
 
     // Update legacy table
@@ -305,7 +291,7 @@ export async function verifyPasswordResetToken(rawToken: string, schoolDomain?: 
         select: { email: true },
       });
       if (student) {
-        userEmail = student.email;
+        userEmail = student.email || undefined;
       } else {
         const user = await basePrisma.user.findUnique({
           where: { id: tokenRecord.userId },
@@ -390,40 +376,16 @@ export async function completePasswordReset(
   const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
   try {
-    // 1. Update Staff if matching
-    const staff = await basePrisma.staff.findUnique({
-      where: { id: tokenCheck.userId },
-    });
-    if (staff) {
-      await basePrisma.staff.update({
-        where: { id: staff.id },
-        data: { password: hashedPassword, mustChangePassword: false },
-      });
-    }
-
-    // 2. Update Student if matching
-    const student = await basePrisma.student.findUnique({
-      where: { id: tokenCheck.userId },
-    });
-    if (student) {
-      const currentFields = (student.dynamicFields as any) || {};
-      await basePrisma.student.update({
-        where: { id: student.id },
-        data: {
-          mustChangePassword: false,
-          dynamicFields: {
-            ...currentFields,
-            password: hashedPassword,
-            isTemporaryPassword: false,
-          },
-        },
-      });
-    }
-
-    // 3. Update User table if matching
+    // 1. Update User table (authoritative single auth table)
     await basePrisma.user.updateMany({
-      where: { id: tokenCheck.userId },
-      data: { passwordHash: hashedPassword, mustChangePassword: false },
+      where: {
+        OR: [
+          { id: tokenCheck.userId },
+          { staff: { id: tokenCheck.userId } },
+          { student: { id: tokenCheck.userId } },
+        ],
+      },
+      data: { passwordHash: hashedPassword, mustChangePassword: false, updatedAt: new Date() },
     });
 
     // 4. Update PlatformAdmin / SuperAdmin if matching
@@ -517,101 +479,79 @@ export async function changeUserPassword(params: {
   const canonicalRole = (role || "").toUpperCase();
   let verified = false;
 
-  // 1. Verify and update depending on role / model
-  if (canonicalRole === "SUPER_ADMIN") {
+  // 1. Verify credentials against User table (Authoritative single auth table)
+  let user = await basePrisma.user.findFirst({
+    where: {
+      OR: [
+        { id: userId },
+        { staff: { id: userId } },
+        { student: { id: userId } },
+      ],
+    },
+  });
+
+  if (user && user.passwordHash) {
+    verified = await bcrypt.compare(oldPassword, user.passwordHash).catch(() => false);
+  }
+
+  // Fallback for Super Admin
+  if (!verified && canonicalRole === "SUPER_ADMIN") {
     const superAdmin = await basePrisma.superAdmin.findUnique({ where: { id: userId } });
-    if (superAdmin) {
+    if (superAdmin && superAdmin.passwordHash) {
       verified = await bcrypt.compare(oldPassword, superAdmin.passwordHash).catch(() => false);
     }
     const platAdmin = await basePrisma.platformAdmin.findUnique({ where: { id: userId } });
-    if (!verified && platAdmin) {
+    if (!verified && platAdmin && platAdmin.password) {
       verified = await bcrypt.compare(oldPassword, platAdmin.password).catch(() => false);
     }
   }
 
-  if (!verified && (canonicalRole === "STUDENT")) {
-    const student = await basePrisma.student.findUnique({
-      where: { id: userId },
-      select: { id: true, dynamicFields: true },
-    });
-    if (student) {
-      const fields = (student.dynamicFields as any) || {};
-      if (fields.password) {
-        verified = await bcrypt.compare(oldPassword, fields.password).catch(() => false);
-        if (!verified && (fields.password === oldPassword || oldPassword === "Password123" || oldPassword === "Welcome123")) {
-          verified = true;
-        }
-      } else {
-        verified = oldPassword === "Password123" || oldPassword === "Welcome123";
-      }
-    }
-  }
-
   if (!verified) {
-    const staff = await basePrisma.staff.findUnique({ where: { id: userId } });
-    if (staff) {
-      if (staff.password) {
-        verified = await bcrypt.compare(oldPassword, staff.password).catch(() => false);
-        if (!verified && (staff.password === oldPassword || oldPassword === "Password123" || oldPassword === "Welcome123")) {
-          verified = true;
-        }
-      } else {
-        verified = oldPassword === "Password123" || oldPassword === "Welcome123" || oldPassword === "";
-      }
-    }
-  }
-
-  if (!verified) {
-    const user = await basePrisma.user.findUnique({ where: { id: userId } });
-    if (user) {
-      verified = await bcrypt.compare(oldPassword, user.passwordHash).catch(() => false);
-    }
-  }
-
-  if (!verified) {
-    return { success: false, error: "Incorrect old password." };
+    return { success: false, error: "Incorrect current/old password." };
   }
 
   // 2. Hash new password with 12 computation rounds
   const newHashed = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
-  // 3. Save new hash across applicable records
-  await basePrisma.staff.updateMany({
-    where: { id: userId },
-    data: { password: newHashed, mustChangePassword: false },
-  });
-
-  const student = await basePrisma.student.findUnique({ where: { id: userId }, select: { dynamicFields: true } });
-  if (student) {
-    const fields = (student.dynamicFields as any) || {};
-    await basePrisma.student.update({
-      where: { id: userId },
+  // 3. Save new hash in User table (authoritative single auth table)
+  if (user) {
+    await basePrisma.user.update({
+      where: { id: user.id },
       data: {
+        passwordHash: newHashed,
         mustChangePassword: false,
-        dynamicFields: {
-          ...fields,
-          password: newHashed,
-          isTemporaryPassword: false,
-        },
+        updatedAt: new Date(),
+      },
+    });
+  } else {
+    await basePrisma.user.updateMany({
+      where: {
+        OR: [
+          { id: userId },
+          { staff: { id: userId } },
+          { student: { id: userId } },
+        ],
+      },
+      data: {
+        passwordHash: newHashed,
+        mustChangePassword: false,
+        updatedAt: new Date(),
       },
     });
   }
 
-  await basePrisma.user.updateMany({
-    where: { id: userId },
-    data: { passwordHash: newHashed, mustChangePassword: false },
-  });
+  if (canonicalRole === "SUPER_ADMIN") {
+    await basePrisma.superAdmin.updateMany({
+      where: { id: userId },
+      data: { passwordHash: newHashed },
+    });
+    await basePrisma.platformAdmin.updateMany({
+      where: { id: userId },
+      data: { password: newHashed },
+    });
+  }
 
-  await basePrisma.superAdmin.updateMany({
-    where: { id: userId },
-    data: { passwordHash: newHashed },
-  });
-  await basePrisma.platformAdmin.updateMany({
-    where: { id: userId },
-    data: { password: newHashed },
-  });
-
-  await recordPasswordChange(userId, schoolId);
+  await recordPasswordChange(user?.id || userId, schoolId);
 
   // 4. Invalidate all active refresh token rows and sessions for that specific user
   await basePrisma.refreshToken.updateMany({

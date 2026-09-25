@@ -60,12 +60,12 @@ export default async function CommunicationsPage({
   // Dynamic tier-isolated database client
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [notices, messageLogs, students, staff] = await Promise.all([
+  const [notices, messageLogs, students, rawStaff] = await Promise.all([
     tenantDb.notice.findMany({
       where: { schoolId: school.id },
       include: {
         author: {
-          select: { firstName: true, lastName: true, role: true }
+          select: { firstName: true, lastName: true, user: { select: { role: true } } }
         }
       },
       orderBy: { createdAt: "desc" }
@@ -105,7 +105,9 @@ export default async function CommunicationsPage({
         firstName: true,
         lastName: true,
         email: true,
-        role: true,
+        user: {
+          select: { role: true }
+        },
         department: {
           select: { name: true }
         }
@@ -113,6 +115,11 @@ export default async function CommunicationsPage({
       orderBy: { firstName: "asc" }
     })
   ]);
+
+  const staff = rawStaff.map((s: any) => ({
+    ...s,
+    role: s.user?.role || "STAFF"
+  }));
 
   const activeTab = searchParams?.tab || "notices";
   const urgentNoticesCount = notices.filter(n => n.priority === "HIGH" || n.priority === "URGENT").length;

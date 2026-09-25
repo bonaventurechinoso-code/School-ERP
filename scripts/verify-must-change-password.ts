@@ -41,7 +41,7 @@ async function verifyMustChangePassword() {
   const dbUserForStaff = await basePrisma.user.findUnique({
     where: { schoolId_email: { schoolId, email: staffEmail } },
   });
-  console.log(" - DB Staff mustChangePassword in Prisma:", dbStaff?.mustChangePassword === true ? "PASSED (true)" : "FAIL");
+  console.log(" - DB Staff linked to User in Prisma:", dbStaff?.userId ? "PASSED (linked)" : "FAIL");
   console.log(" - DB User mustChangePassword in User table:", dbUserForStaff?.mustChangePassword === true ? "PASSED (true)" : "FAIL");
 
   // Test 2: Student Creation Endpoint
@@ -94,8 +94,8 @@ async function verifyMustChangePassword() {
   const dbUserForBursar = await basePrisma.user.findUnique({
     where: { schoolId_email: { schoolId, email: bursarEmail } },
   });
-  console.log(" - DB Bursar role:", dbBursar?.role);
-  console.log(" - DB Bursar mustChangePassword in Prisma:", dbBursar?.mustChangePassword === true ? "PASSED (true)" : "FAIL");
+  console.log(" - DB Bursar role:", dbUserForBursar?.role);
+  console.log(" - DB Bursar linked to User in Prisma:", dbBursar?.userId ? "PASSED (linked)" : "FAIL");
   console.log(" - DB User mustChangePassword in User table:", dbUserForBursar?.mustChangePassword === true ? "PASSED (true)" : "FAIL");
 
   // Test 4: Login Endpoint returning mustChangePassword = true and redirectUrl = /change-password
@@ -142,7 +142,7 @@ async function verifyMustChangePassword() {
   const dbUserAfterChange = await basePrisma.user.findUnique({
     where: { schoolId_email: { schoolId, email: staffEmail } },
   });
-  console.log(" - DB Staff mustChangePassword after change:", dbStaffAfterChange?.mustChangePassword === false ? "PASSED (false)" : "FAIL");
+  console.log(" - DB Staff linked after change:", dbStaffAfterChange?.userId ? "PASSED (linked)" : "FAIL");
   console.log(" - DB User mustChangePassword after change:", dbUserAfterChange?.mustChangePassword === false ? "PASSED (false)" : "FAIL");
 
   // Test 6: Self-Registration Endpoint keeping mustChangePassword = false

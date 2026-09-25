@@ -30,6 +30,18 @@ export async function resolveSchoolId(schoolIdentifier: string): Promise<string>
   return school?.id || schoolIdentifier;
 }
 
+export function toCanonicalRole(roleStr?: string | null): "SUPER_ADMIN" | "SCHOOL_ADMIN" | "PRINCIPAL" | "VICE_PRINCIPAL" | "HEADMASTER" | "BURSAR" | "TEACHER" | "STUDENT" {
+  const norm = (roleStr || "").toUpperCase().trim();
+  if (norm.includes("HEADMASTER") || norm.includes("HEAD MISTRESS") || norm.includes("HEADMISTRESS")) return "HEADMASTER";
+  if (norm.includes("VICE PRINCIPAL") || norm.includes("VICE_PRINCIPAL") || norm.includes("VP")) return "VICE_PRINCIPAL";
+  if (norm.includes("PRINCIPAL")) return "PRINCIPAL";
+  if (norm.includes("BURSAR") || norm.includes("ACCOUNTANT") || norm.includes("FINANCE")) return "BURSAR";
+  if (norm.includes("SUPER_ADMIN") || norm.includes("SUPER ADMIN")) return "SUPER_ADMIN";
+  if (norm.includes("ADMIN")) return "SCHOOL_ADMIN";
+  if (norm.includes("STUDENT")) return "STUDENT";
+  return "TEACHER";
+}
+
 /**
  * Ensure the multi-tenant staff metadata table exists for Nigerian TRCN & KYC storage
  */
@@ -106,7 +118,7 @@ export async function fetchStaffPaginated(
       const whereClause: any = {
         schoolId,
         ...(status && status !== "ALL" ? { status } : {}),
-        ...(role && role !== "ALL" ? { role } : {}),
+        ...(role && role !== "ALL" ? { user: { role: toCanonicalRole(role) } } : {}),
         ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
       };
 
@@ -132,6 +144,15 @@ export async function fetchStaffPaginated(
           orderBy: { createdAt: "desc" },
           include: { 
             department: true,
+            user: {
+              select: {
+                id: true,
+                role: true,
+                email: true,
+                mustChangePassword: true,
+                status: true,
+              }
+            },
             StaffAttendance: {
               where: {
                 date: {
@@ -169,6 +190,7 @@ export async function fetchStaffPaginated(
 
       const enhancedItems = items.map((staff: any) => ({
         ...staff,
+        role: staff.user?.role || "TEACHER",
         metadata: metadataMap[staff.id] || null,
         todayAttendance: staff.StaffAttendance?.[0] || null,
         latestPayroll: staff.PayrollRecord?.[0] || null,
@@ -316,16 +338,39 @@ export async function createStaff(
       }
     }
 
+    const canonicalRole = toCanonicalRole(data.role);
+
+    // Upsert into User table with mustChangePassword = true
+    const user = await basePrisma.user.upsert({
+      where: { schoolId_email: { schoolId, email: data.email.trim().toLowerCase() } },
+      update: {
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        role: canonicalRole,
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        status: status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+      },
+      create: {
+        schoolId,
+        email: data.email.trim().toLowerCase(),
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        role: canonicalRole,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        status: status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+      },
+    });
+
     const staff = await tenantDb.staff.create({
       data: {
         schoolId,
+        userId: user.id,
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         email: data.email.trim().toLowerCase(),
-        password: hashedPassword,
-        role: data.role.trim(),
         status,
-        mustChangePassword: true,
         departmentId: data.departmentId || null,
         baseSalary: data.baseSalary ? Number(data.baseSalary) : null,
         bankName: data.bankName || null,
@@ -334,25 +379,6 @@ export async function createStaff(
         ...timestampData,
       }
     });
-
-    // Record user security status: auto-populate default password and assign mustChangePassword: true
-    await setUserMustChangePassword(staff.id, schoolId, true);
-
-    // Sync to User table
-    await basePrisma.user.upsert({
-      where: { schoolId_email: { schoolId, email: data.email.trim().toLowerCase() } },
-      update: { passwordHash: hashedPassword, mustChangePassword: true },
-      create: {
-        id: staff.id,
-        schoolId,
-        email: data.email.trim().toLowerCase(),
-        passwordHash: hashedPassword,
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        role: (data.role.trim().toUpperCase().includes("ADMIN") ? "SCHOOL_ADMIN" : data.role.trim().toUpperCase().includes("BURSAR") ? "BURSAR" : "TEACHER") as any,
-        mustChangePassword: true,
-      },
-    }).catch(() => {});
 
     // Save metadata if any provided
     if (data.phone || data.trcnNumber || data.qualification || data.nin || data.whatsapp) {
@@ -465,11 +491,28 @@ export async function updateStaffProfile(
       }
     }
 
+    const staffRec = await tenantDb.staff.findUnique({
+      where: { id: staffId },
+      select: { id: true, userId: true },
+    });
+
+    const canonicalRole = toCanonicalRole(data.role);
+    if (staffRec?.userId) {
+      await basePrisma.user.update({
+        where: { id: staffRec.userId },
+        data: {
+          firstName: data.firstName.trim(),
+          lastName: data.lastName.trim(),
+          email: data.email.trim().toLowerCase(),
+          role: canonicalRole,
+        }
+      }).catch(() => {});
+    }
+
     const updateData: any = {
       firstName: data.firstName.trim(),
       lastName: data.lastName.trim(),
       email: data.email.trim().toLowerCase(),
-      role: data.role.trim(),
       departmentId: data.departmentId || null,
       baseSalary: data.baseSalary !== undefined && data.baseSalary !== null ? Number(data.baseSalary) : null,
       bankName: data.bankName || null,

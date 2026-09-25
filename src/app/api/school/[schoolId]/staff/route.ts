@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
 
@@ -31,7 +31,6 @@ export async function POST(
       bankName,
       bankAccountNumber,
       accountName,
-      phone,
     } = body;
 
     if (!firstName || !lastName || !email) {
@@ -51,8 +50,17 @@ export async function POST(
 
     const normalizedEmail = email.trim().toLowerCase();
     const schoolId = school.id;
-    const generatedTempPassword = tempPassword || password || "Welcome123";
+    const generatedTempPassword = tempPassword || password || "Password@123";
     const hashedPassword = await bcrypt.hash(generatedTempPassword, BCRYPT_ROUNDS);
+
+    // Map role to standard Role enum
+    const rawRole = (role || "").toUpperCase();
+    let userRole = "TEACHER";
+    if (rawRole.includes("VICE PRINCIPAL")) userRole = "VICE_PRINCIPAL";
+    else if (rawRole.includes("PRINCIPAL")) userRole = "PRINCIPAL";
+    else if (rawRole.includes("HEADMASTER")) userRole = "HEADMASTER";
+    else if (rawRole.includes("BURSAR")) userRole = "BURSAR";
+    else if (rawRole.includes("ADMIN")) userRole = "SCHOOL_ADMIN";
 
     // Resolve or fallback department
     let finalDeptId = departmentId;
@@ -70,61 +78,87 @@ export async function POST(
       }
     }
 
-    // 1. Create Staff with mustChangePassword = true
-    const staff = await basePrisma.staff.create({
-      data: {
-        schoolId,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: normalizedEmail,
-        password: hashedPassword,
-        role: role.trim(),
-        status: "ACTIVE",
-        mustChangePassword: true,
-        departmentId: finalDeptId || null,
-        baseSalary: baseSalary ? Number(baseSalary) : null,
-        bankName: bankName || null,
-        bankAccountNumber: bankAccountNumber || null,
-        accountName: accountName || null,
-        activeAt: new Date(),
-      },
-    });
-
-    // 2. Create / Upsert User record with mustChangePassword = true
-    const userRole = (role.trim().toUpperCase().includes("ADMIN")
-      ? "SCHOOL_ADMIN"
-      : role.trim().toUpperCase().includes("BURSAR")
-      ? "BURSAR"
-      : "TEACHER") as any;
-
-    await basePrisma.user.upsert({
+    // 1. Create or upsert in the single authoritative User table
+    const user = await basePrisma.user.upsert({
       where: { schoolId_email: { schoolId, email: normalizedEmail } },
       update: {
         passwordHash: hashedPassword,
-        role: userRole,
+        role: userRole as any,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        status: "ACTIVE",
         mustChangePassword: true,
       },
       create: {
-        id: staff.id,
         schoolId,
         email: normalizedEmail,
         passwordHash: hashedPassword,
-        role: userRole,
+        role: userRole as any,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        status: "ACTIVE",
         mustChangePassword: true,
       },
     });
 
-    // 3. Set mustChangePassword in security tables
-    await setUserMustChangePassword(staff.id, schoolId, true);
+    // 2. Create Staff record with userId foreign key linking directly to User.id (no duplicate auth fields)
+    const existingStaff = await basePrisma.staff.findFirst({
+      where: { schoolId, email: normalizedEmail },
+    });
+
+    let staff;
+    if (existingStaff) {
+      staff = await basePrisma.staff.update({
+        where: { id: existingStaff.id },
+        data: {
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          departmentId: finalDeptId || null,
+          baseSalary: baseSalary ? Number(baseSalary) : null,
+          bankName: bankName || null,
+          bankAccountNumber: bankAccountNumber || null,
+          accountName: accountName || null,
+          status: "ACTIVE",
+        },
+        include: {
+          user: { select: { role: true, mustChangePassword: true, status: true } },
+        },
+      });
+    } else {
+      staff = await basePrisma.staff.create({
+        data: {
+          schoolId,
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          status: "ACTIVE",
+          departmentId: finalDeptId || null,
+          baseSalary: baseSalary ? Number(baseSalary) : null,
+          bankName: bankName || null,
+          bankAccountNumber: bankAccountNumber || null,
+          accountName: accountName || null,
+          activeAt: new Date(),
+        },
+        include: {
+          user: { select: { role: true, mustChangePassword: true, status: true } },
+        },
+      });
+    }
+
+    // 3. Mark user security status
+    await setUserMustChangePassword(user.id, schoolId, true);
 
     return NextResponse.json(
       {
         success: true,
-        staff,
+        staff: {
+          ...staff,
+          role: userRole,
+          mustChangePassword: true,
+        },
+        user,
         tempPassword: generatedTempPassword,
         mustChangePassword: true,
       },

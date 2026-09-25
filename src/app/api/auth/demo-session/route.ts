@@ -47,7 +47,9 @@ async function getOrProvisionDemoTenant() {
       academicTiers: {
         orderBy: { level: "asc" },
       },
-      staff: true,
+      staff: {
+        include: { user: true }
+      },
     },
   });
 
@@ -58,7 +60,9 @@ async function getOrProvisionDemoTenant() {
         academicTiers: {
           orderBy: { level: "asc" },
         },
-        staff: true,
+        staff: {
+          include: { user: true }
+        },
       },
     });
   }
@@ -91,7 +95,9 @@ async function getOrProvisionDemoTenant() {
         academicTiers: {
           orderBy: { level: "asc" },
         },
-        staff: true,
+        staff: {
+          include: { user: true }
+        },
       },
     });
   }
@@ -114,7 +120,7 @@ async function getOrProvisionDemoTenant() {
   }
 
   const tierNames = tiers.map((t) => t.name);
-  const adminStaff = demoSchool.staff?.find((s) => s.role === "ADMIN" || s.role === "TENANT_ADMIN") || demoSchool.staff?.[0];
+  const adminStaff = demoSchool.staff?.find((s: any) => s.user?.role === "SCHOOL_ADMIN" || s.user?.role === "SUPER_ADMIN") || demoSchool.staff?.[0];
 
   const result = {
     demoSchool,

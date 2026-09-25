@@ -66,11 +66,14 @@ export async function POST(req: Request) {
           schoolId = user.schoolId;
           role = user.role;
         } else {
-          const staff = await basePrisma.staff.findUnique({ where: { id: body.userId } });
+          const staff = await basePrisma.staff.findUnique({
+            where: { id: body.userId },
+            include: { user: true },
+          });
           if (staff) {
             userId = staff.id;
             schoolId = staff.schoolId;
-            role = staff.role;
+            role = staff.user?.role || "TEACHER";
           }
         }
       } else if (body.email) {
@@ -80,11 +83,14 @@ export async function POST(req: Request) {
           schoolId = user.schoolId;
           role = user.role;
         } else {
-          const staff = await basePrisma.staff.findFirst({ where: { email: body.email.trim().toLowerCase() } });
+          const staff = await basePrisma.staff.findFirst({
+            where: { email: body.email.trim().toLowerCase() },
+            include: { user: true },
+          });
           if (staff) {
             userId = staff.id;
             schoolId = staff.schoolId;
-            role = staff.role;
+            role = staff.user?.role || "TEACHER";
           }
         }
       }

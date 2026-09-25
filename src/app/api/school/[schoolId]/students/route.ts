@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
 
@@ -38,6 +38,7 @@ export async function POST(
       parentPhone,
       dateOfBirth,
       stateOfOrigin,
+      feeStatus,
     } = body;
 
     if (!firstName || !lastName) {
@@ -70,7 +71,7 @@ export async function POST(
     }
 
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
-    const generatedTempPassword = tempPassword || password || "Welcome123";
+    const generatedTempPassword = tempPassword || password || "Password@123";
     const hashedPassword = await bcrypt.hash(generatedTempPassword, BCRYPT_ROUNDS);
 
     let finalAdmissionNumber = admissionNumber;
@@ -82,10 +83,52 @@ export async function POST(
       finalAdmissionNumber = `${prefix}/${year}/${seq}`;
     }
 
-    // 1. Create Student with mustChangePassword = true in Prisma
+    const userEmail = normalizedEmail || `${finalAdmissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain || "portal"}`;
+
+    // 1. Authoritative User table record with role = "STUDENT" and mustChangePassword = true
+    const user = await basePrisma.user.upsert({
+      where: { schoolId_email: { schoolId, email: userEmail } },
+      update: {
+        passwordHash: hashedPassword,
+        role: "STUDENT",
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        status: "ACTIVE",
+        mustChangePassword: true,
+      },
+      create: {
+        schoolId,
+        email: userEmail,
+        passwordHash: hashedPassword,
+        role: "STUDENT",
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        status: "ACTIVE",
+        mustChangePassword: true,
+      },
+    });
+
+    // Determine initial feeStatus based on Fee Payment table or existing payment proofs
+    let initialFeeStatus = feeStatus || "UNPAID";
+    if (!feeStatus) {
+      const existingPayment = await basePrisma.payment.findFirst({
+        where: {
+          OR: [
+            ...(normalizedEmail ? [{ student: { email: normalizedEmail } }] : []),
+            { student: { admissionNumber: finalAdmissionNumber } },
+          ],
+        },
+      });
+      if (existingPayment) {
+        initialFeeStatus = "PAID";
+      }
+    }
+
+    // 2. Create Student with userId foreign key linking directly to User.id
     const student = await basePrisma.student.create({
       data: {
         schoolId,
+        userId: user.id,
         tierId: finalTierId,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -94,6 +137,7 @@ export async function POST(
         currentClass: currentClass || null,
         status: "ENROLLED",
         mustChangePassword: true,
+        feeStatus: initialFeeStatus,
         dynamicFields: {
           password: hashedPassword,
           isTemporaryPassword: true,
@@ -105,39 +149,19 @@ export async function POST(
         stateOfOrigin: stateOfOrigin || null,
         enrolledAt: new Date(),
       },
+      include: {
+        user: { select: { role: true, mustChangePassword: true, status: true } },
+      },
     });
 
-    // 2. If student has email or portal access, upsert into User table with mustChangePassword = true
-    const userEmail = normalizedEmail || `${finalAdmissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain || "portal"}`;
-
-    await basePrisma.user.upsert({
-      where: { schoolId_email: { schoolId, email: userEmail } },
-      update: {
-        passwordHash: hashedPassword,
-        role: "STUDENT",
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        mustChangePassword: true,
-      },
-      create: {
-        id: student.id,
-        schoolId,
-        email: userEmail,
-        passwordHash: hashedPassword,
-        role: "STUDENT",
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        mustChangePassword: true,
-      },
-    }).catch(() => {});
-
     // 3. Mark user security status
-    await setUserMustChangePassword(student.id, schoolId, true);
+    await setUserMustChangePassword(user.id, schoolId, true);
 
     return NextResponse.json(
       {
         success: true,
         student,
+        user,
         tempPassword: generatedTempPassword,
         mustChangePassword: true,
       },

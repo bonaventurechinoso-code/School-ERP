@@ -58,7 +58,7 @@ export default async function ExamsPage({
   const activeTierName = activeTierObj ? activeTierObj.name : "";
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [courses, exams, students, examResults, staff] = await Promise.all([
+  const [courses, exams, students, examResults, rawStaff] = await Promise.all([
     tenantDb.course.findMany({
       where: {
         schoolId: school.id,
@@ -94,11 +94,20 @@ export default async function ExamsPage({
         id: true,
         firstName: true,
         lastName: true,
-        role: true,
+        user: {
+          select: { role: true },
+        },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     }),
   ]);
+
+  const staff = rawStaff.map((s: any) => ({
+    id: s.id,
+    firstName: s.firstName,
+    lastName: s.lastName,
+    role: s.user?.role || "STAFF",
+  }));
 
   // Strict isolation query for bonavee_scheduled_exams:
   // SELECT * FROM bonavee_scheduled_exams WHERE tenant_id = params.tenant ORDER BY exam_date DESC

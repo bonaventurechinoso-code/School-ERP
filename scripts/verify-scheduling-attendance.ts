@@ -89,7 +89,6 @@ async function verifySchedulingAndAttendance() {
           firstName: "Ade",
           lastName: "Okafor",
           email: "ade.okafor@test.edu.ng",
-          role: "TEACHER",
           status: "ACTIVE",
         }
       });
@@ -161,7 +160,6 @@ async function verifySchedulingAndAttendance() {
           firstName: "Fatima",
           lastName: "Aliyu",
           email: "fatima.aliyu@test.edu.ng",
-          role: "TEACHER",
           status: "ACTIVE",
         }
       });

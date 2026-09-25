@@ -238,8 +238,8 @@ export async function createStudent(
     if (data.status === "ENROLLED") timestampData.enrolledAt = new Date();
 
     let finalAdmissionNumber = data.admissionNumber;
+    const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
     if (!finalAdmissionNumber) {
-      const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
       const studentCount = await tenantDb.student.count();
       finalAdmissionNumber = generateAdmissionNumber({
         schoolSubdomain: school?.subdomain,
@@ -249,15 +249,59 @@ export async function createStudent(
     }
 
     const currentDynamic = (data.dynamicFields as any) || {};
+    const userEmail =
+      (data.email && data.email.trim().toLowerCase()) ||
+      `${finalAdmissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school?.subdomain || "portal"}`;
+
+    // 1. Authoritative User record with role=STUDENT and mustChangePassword=true
+    const user = await basePrisma.user.upsert({
+      where: { schoolId_email: { schoolId, email: userEmail } },
+      update: {
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        role: "STUDENT",
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        status: "ACTIVE",
+      },
+      create: {
+        schoolId,
+        email: userEmail,
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        role: "STUDENT",
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        status: "ACTIVE",
+      },
+    });
+
+    // 2. Compute fee status from existing invoices or payments
+    let computedFeeStatus = "UNPAID";
+    const existingInvoices = await basePrisma.invoice.findMany({
+      where: { schoolId, student: { admissionNumber: finalAdmissionNumber } },
+    }).catch(() => []);
+
+    if (existingInvoices.length > 0) {
+      const totalDue = existingInvoices.reduce((sum, inv) => sum + (inv.amountDue || 0), 0);
+      const totalPaid = existingInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      if (totalPaid >= totalDue && totalDue > 0) {
+        computedFeeStatus = "PAID";
+      } else if (totalPaid > 0) {
+        computedFeeStatus = "PARTIAL";
+      }
+    }
 
     const createdStudent = await tenantDb.student.create({
       data: {
         schoolId,
+        userId: user.id,
         tierId: data.tierId,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email || null,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        email: userEmail,
         status: data.status,
+        feeStatus: computedFeeStatus,
         mustChangePassword: true,
         dynamicFields: {
           ...currentDynamic,
@@ -277,25 +321,8 @@ export async function createStudent(
       }
     });
 
-    // Record user security status: auto-populate default password and assign mustChangePassword: true
-    await setUserMustChangePassword(createdStudent.id, schoolId, true);
-
-    if (data.email && data.email.trim()) {
-      await basePrisma.user.upsert({
-        where: { schoolId_email: { schoolId, email: data.email.trim().toLowerCase() } },
-        update: { passwordHash: hashedPassword, mustChangePassword: true },
-        create: {
-          id: createdStudent.id,
-          schoolId,
-          email: data.email.trim().toLowerCase(),
-          passwordHash: hashedPassword,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          role: "STUDENT",
-          mustChangePassword: true,
-        },
-      }).catch(() => {});
-    }
+    // Record user security status: assign mustChangePassword: true
+    await setUserMustChangePassword(user.id, schoolId, true);
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);

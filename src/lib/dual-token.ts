@@ -139,7 +139,7 @@ export async function rotateRefreshToken(params: {
     return { success: false, error: "Refresh token has expired. Please sign in again." };
   }
 
-  // Resolve user identity to build new access token claims
+  // Resolve user identity from User table (authoritative single auth source)
   let userRole = "STUDENT";
   let userEmail = "";
   let isSuperAdmin = false;
@@ -154,22 +154,20 @@ export async function rotateRefreshToken(params: {
     userEmail = superAdmin.email;
     isSuperAdmin = true;
   } else {
-    const staff = await basePrisma.staff.findUnique({
-      where: { id: existingToken.userId },
+    const user = await basePrisma.user.findFirst({
+      where: {
+        OR: [
+          { id: existingToken.userId },
+          { staff: { id: existingToken.userId } },
+          { student: { id: existingToken.userId } },
+        ],
+      },
     });
-    if (staff) {
-      userRole = staff.role;
-      userEmail = staff.email;
-      mustChangePassword = Boolean(staff.mustChangePassword);
-    } else {
-      const student = await basePrisma.student.findUnique({
-        where: { id: existingToken.userId },
-      });
-      if (student) {
-        userRole = "STUDENT";
-        userEmail = student.email || `${student.admissionNumber || student.id}@student.portal`;
-        mustChangePassword = Boolean(student.mustChangePassword);
-      }
+
+    if (user) {
+      userRole = user.role;
+      userEmail = user.email;
+      mustChangePassword = Boolean(user.mustChangePassword);
     }
   }
 

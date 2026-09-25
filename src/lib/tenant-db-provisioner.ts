@@ -207,10 +207,8 @@ export async function seedTierDatabase(options: TierProvisionOptions & { tierDbU
           firstName: "Admin",
           lastName: "Officer",
           email: adminEmail,
-          role: "ADMIN",
           departmentId: dept.id,
           status: "ACTIVE",
-          password: "",
         },
       });
     }

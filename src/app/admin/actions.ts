@@ -81,21 +81,7 @@ export async function createSchool(formData: FormData) {
             data: { name: "Administration", schoolId: school.id }
           });
           
-          const staff = await tx.staff.create({
-            data: {
-              schoolId: school.id,
-              firstName: "Admin",
-              lastName: "User",
-              email: adminEmail,
-              role: "ADMIN",
-              departmentId: dept.id,
-              status: "ACTIVE",
-              password: hashedPassword,
-              mustChangePassword: !isCustom,
-            }
-          });
-
-          await tx.user.upsert({
+          const user = await tx.user.upsert({
             where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
             update: {
               passwordHash: hashedPassword,
@@ -103,7 +89,6 @@ export async function createSchool(formData: FormData) {
               mustChangePassword: !isCustom,
             },
             create: {
-              id: staff.id,
               schoolId: school.id,
               email: adminEmail,
               passwordHash: hashedPassword,
@@ -112,12 +97,24 @@ export async function createSchool(formData: FormData) {
             },
           });
 
+          const staff = await tx.staff.create({
+            data: {
+              schoolId: school.id,
+              userId: user.id,
+              firstName: "Admin",
+              lastName: "User",
+              email: adminEmail,
+              departmentId: dept.id,
+              status: "ACTIVE",
+            }
+          });
+
           await tx.$executeRawUnsafe(`
             INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
             VALUES ($1, $2, $3, NOW())
             ON CONFLICT (user_id)
             DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-          `, staff.id, school.id, !isCustom);
+          `, user.id, school.id, !isCustom);
         }
       });
     } else {
@@ -140,21 +137,7 @@ export async function createSchool(formData: FormData) {
              data: { name: "Administration", schoolId: school.id }
            });
            
-           const staff = await tx.staff.create({
-             data: {
-               schoolId: school.id,
-               firstName: "Admin",
-               lastName: "User",
-               email: adminEmail,
-               role: "ADMIN",
-               departmentId: dept.id,
-               status: "ACTIVE",
-               password: hashedPassword,
-               mustChangePassword: !isCustom,
-             }
-           });
-
-           await tx.user.upsert({
+           const user = await tx.user.upsert({
              where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
              update: {
                passwordHash: hashedPassword,
@@ -162,7 +145,6 @@ export async function createSchool(formData: FormData) {
                mustChangePassword: !isCustom,
              },
              create: {
-               id: staff.id,
                schoolId: school.id,
                email: adminEmail,
                passwordHash: hashedPassword,
@@ -171,12 +153,24 @@ export async function createSchool(formData: FormData) {
              },
            });
 
+           const staff = await tx.staff.create({
+             data: {
+               schoolId: school.id,
+               userId: user.id,
+               firstName: "Admin",
+               lastName: "User",
+               email: adminEmail,
+               departmentId: dept.id,
+               status: "ACTIVE",
+             }
+           });
+
            await tx.$executeRawUnsafe(`
              INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
              VALUES ($1, $2, $3, NOW())
              ON CONFLICT (user_id)
              DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-           `, staff.id, school.id, !isCustom);
+           `, user.id, school.id, !isCustom);
         });
 
         // Trigger automated multi-database provisioning for selected tiers

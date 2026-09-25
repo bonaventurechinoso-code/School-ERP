@@ -26,7 +26,6 @@ export async function POST(
       departmentId,
       password,
       tempPassword,
-      phone,
       baseSalary,
       bankName,
       bankAccountNumber,
@@ -50,10 +49,10 @@ export async function POST(
 
     const schoolId = school.id;
     const normalizedEmail = email.trim().toLowerCase();
-    const generatedTempPassword = tempPassword || password || "Welcome123";
+    const generatedTempPassword = tempPassword || password || "Password@123";
     const hashedPassword = await bcrypt.hash(generatedTempPassword, BCRYPT_ROUNDS);
 
-    // Resolve or fallback department (e.g. Bursary / Finance)
+    // Resolve or fallback department
     let finalDeptId = departmentId;
     if (!finalDeptId) {
       const existingDept = await basePrisma.department.findFirst({
@@ -71,55 +70,87 @@ export async function POST(
       }
     }
 
-    // 1. Create Staff with role = "BURSAR" and mustChangePassword = true
-    const bursar = await basePrisma.staff.create({
-      data: {
-        schoolId,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: normalizedEmail,
-        password: hashedPassword,
-        role: "BURSAR",
-        status: "ACTIVE",
-        mustChangePassword: true,
-        departmentId: finalDeptId || null,
-        baseSalary: baseSalary ? Number(baseSalary) : null,
-        bankName: bankName || null,
-        bankAccountNumber: bankAccountNumber || null,
-        accountName: accountName || null,
-        activeAt: new Date(),
-      },
-    });
-
-    // 2. Create / Upsert User with role = "BURSAR" and mustChangePassword = true
-    await basePrisma.user.upsert({
+    // 1. Authoritative User table record with role = "BURSAR" and mustChangePassword = true
+    const user = await basePrisma.user.upsert({
       where: { schoolId_email: { schoolId, email: normalizedEmail } },
       update: {
         passwordHash: hashedPassword,
         role: "BURSAR",
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        status: "ACTIVE",
         mustChangePassword: true,
       },
       create: {
-        id: bursar.id,
         schoolId,
         email: normalizedEmail,
         passwordHash: hashedPassword,
         role: "BURSAR",
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        status: "ACTIVE",
         mustChangePassword: true,
       },
     });
 
+    // 2. Staff table record linked via userId foreign key
+    const existingStaff = await basePrisma.staff.findFirst({
+      where: { schoolId, email: normalizedEmail },
+    });
+
+    let bursar;
+    if (existingStaff) {
+      bursar = await basePrisma.staff.update({
+        where: { id: existingStaff.id },
+        data: {
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          departmentId: finalDeptId || null,
+          baseSalary: baseSalary ? Number(baseSalary) : null,
+          bankName: bankName || null,
+          bankAccountNumber: bankAccountNumber || null,
+          accountName: accountName || null,
+          status: "ACTIVE",
+        },
+        include: {
+          user: { select: { role: true, mustChangePassword: true, status: true } },
+        },
+      });
+    } else {
+      bursar = await basePrisma.staff.create({
+        data: {
+          schoolId,
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          status: "ACTIVE",
+          departmentId: finalDeptId || null,
+          baseSalary: baseSalary ? Number(baseSalary) : null,
+          bankName: bankName || null,
+          bankAccountNumber: bankAccountNumber || null,
+          accountName: accountName || null,
+          activeAt: new Date(),
+        },
+        include: {
+          user: { select: { role: true, mustChangePassword: true, status: true } },
+        },
+      });
+    }
+
     // 3. Mark user security status
-    await setUserMustChangePassword(bursar.id, schoolId, true);
+    await setUserMustChangePassword(user.id, schoolId, true);
 
     return NextResponse.json(
       {
         success: true,
-        bursar,
+        bursar: {
+          ...bursar,
+          role: "BURSAR",
+          mustChangePassword: true,
+        },
+        user,
         tempPassword: generatedTempPassword,
         mustChangePassword: true,
       },

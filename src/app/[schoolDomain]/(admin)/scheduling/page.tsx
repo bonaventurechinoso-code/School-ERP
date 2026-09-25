@@ -87,7 +87,7 @@ export default async function SchedulingPage({
       where: { 
         schoolId: school.id,
         status: { not: "TERMINATED" },
-        role: { in: ["TEACHER", "Class Teacher", "Subject Teacher", "Teacher", "Early Educator", "Nursery Caregiver", "Lecturer", "Professor"] }
+        user: { role: { in: ["TEACHER"] } }
       }, 
       orderBy: { firstName: "asc" } 
     }),

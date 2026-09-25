@@ -257,9 +257,7 @@ export async function middleware(req: NextRequest) {
       path.includes('/security/change-password');
 
     if (!isChangePasswordPage) {
-      const targetSlug = effectiveTenantSlug || (verifiedSessionPayload.schoolDomain as string) || '';
-      const forcedPath = targetSlug ? `/${targetSlug}/security/change-password` : '/change-password';
-      const forcedUrl = new URL(forcedPath, req.url);
+      const forcedUrl = new URL('/change-password', req.url);
       forcedUrl.searchParams.set('forced', 'true');
       return NextResponse.redirect(forcedUrl);
     }

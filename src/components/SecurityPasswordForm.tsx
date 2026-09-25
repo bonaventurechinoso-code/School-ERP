@@ -10,6 +10,8 @@ interface SecurityPasswordFormProps {
   onSuccess?: () => void;
   brandColor?: string;
   userRole?: string;
+  endpoint?: string;
+  logoutOnSuccess?: boolean;
 }
 
 export default function SecurityPasswordForm({
@@ -18,6 +20,8 @@ export default function SecurityPasswordForm({
   onSuccess,
   brandColor = "#4f46e5",
   userRole,
+  endpoint = "/change-password",
+  logoutOnSuccess = false,
 }: SecurityPasswordFormProps) {
   const router = useRouter();
 
@@ -85,7 +89,8 @@ export default function SecurityPasswordForm({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/v1/auth/change-password", {
+      const targetEndpoint = endpoint || "/change-password";
+      const res = await fetch(targetEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -102,13 +107,26 @@ export default function SecurityPasswordForm({
         throw new Error(data.error || "Failed to update password.");
       }
 
-      setSuccessMsg("Your password has been securely updated!");
+      setSuccessMsg(
+        logoutOnSuccess
+          ? "Password updated successfully! Logging out to ensure your account is protected..."
+          : "Your password has been securely updated!"
+      );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
 
       if (onSuccess) {
         onSuccess();
+      }
+
+      if (logoutOnSuccess) {
+        setTimeout(async () => {
+          await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+          router.push("/login");
+          router.refresh();
+        }, 1500);
+        return;
       }
 
       // If forced reset, automatically redirect after a brief notice

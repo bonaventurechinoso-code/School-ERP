@@ -62,6 +62,7 @@ export const getBursarContext = cache(async (): Promise<BursarContext | null> =>
           schoolId: school.id,
           email: session.email.trim().toLowerCase(),
         },
+        include: { user: true },
       });
     }
 
@@ -72,7 +73,7 @@ export const getBursarContext = cache(async (): Promise<BursarContext | null> =>
       ? session.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
       : "Mrs. Ngozi Adeleke";
 
-    const staffRole = staffRecord?.role || session?.staffRole || "School Bursar";
+    const staffRole = staffRecord?.user?.role || session?.staffRole || session?.role || "BURSAR";
 
     return {
       staffId: staffRecord?.id || "bursar-staff-id",

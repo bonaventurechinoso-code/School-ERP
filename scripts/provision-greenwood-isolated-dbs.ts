@@ -167,10 +167,8 @@ async function provision() {
           firstName: "Admin",
           lastName: "User",
           email: "admin@greenwood.edu",
-          role: "ADMIN",
           departmentId: dept.id,
           status: "ACTIVE",
-          password: "",
         },
       });
 

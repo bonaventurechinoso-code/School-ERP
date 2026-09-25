@@ -39,19 +39,30 @@ async function runNextAuthTests() {
   const staffPasswordHashed = await bcrypt.hash(staffPasswordRaw, 10);
   const staffEmail = `bursar.${Date.now()}@gmail.com`;
 
-  const testStaff = await basePrisma.staff.create({
+  const testUser = await basePrisma.user.create({
     data: {
       schoolId: testSchool.id,
       firstName: "Chidi",
       lastName: "Okonkwo",
       email: staffEmail,
-      password: staffPasswordHashed,
-      role: "Bursar", // Authentic Nigerian school role
+      passwordHash: staffPasswordHashed,
+      role: "BURSAR",
+      mustChangePassword: true,
+    },
+  });
+
+  const testStaff = await basePrisma.staff.create({
+    data: {
+      schoolId: testSchool.id,
+      userId: testUser.id,
+      firstName: "Chidi",
+      lastName: "Okonkwo",
+      email: staffEmail,
       status: "ACTIVE",
     },
   });
 
-  console.log(`Created test tenant [${testSchool.subdomain}] and Staff [${testStaff.firstName} ${testStaff.lastName} - Role: ${testStaff.role}]`);
+  console.log(`Created test tenant [${testSchool.subdomain}] and Staff [${testStaff.firstName} ${testStaff.lastName} - Role: ${testUser.role}]`);
 
   // 2. Testing CredentialsProvider Authorization Logic
   console.log("\n2. Testing CredentialsProvider Authorization Logic...");

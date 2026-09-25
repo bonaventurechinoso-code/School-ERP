@@ -99,21 +99,7 @@ export async function POST(request: Request) {
       await Promise.all(tierPromises);
 
       // 3. Create a default admin account
-      const staff = await tx.staff.create({
-        data: {
-          schoolId: school.id,
-          firstName: "Admin",
-          lastName: "User",
-          email: adminEmail,
-          role: "ADMIN",
-          status: "ACTIVE",
-          activeAt: new Date(),
-          password: adminPasswordHash,
-          mustChangePassword: !isUserProvidedPassword,
-        }
-      });
-
-      await tx.user.upsert({
+      const user = await tx.user.upsert({
         where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
         update: {
           passwordHash: adminPasswordHash,
@@ -121,7 +107,6 @@ export async function POST(request: Request) {
           mustChangePassword: !isUserProvidedPassword,
         },
         create: {
-          id: staff.id,
           schoolId: school.id,
           email: adminEmail,
           passwordHash: adminPasswordHash,
@@ -130,12 +115,24 @@ export async function POST(request: Request) {
         },
       });
 
+      const staff = await tx.staff.create({
+        data: {
+          schoolId: school.id,
+          userId: user.id,
+          firstName: "Admin",
+          lastName: "User",
+          email: adminEmail,
+          status: "ACTIVE",
+          activeAt: new Date(),
+        }
+      });
+
       await tx.$executeRawUnsafe(`
         INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
         VALUES ($1, $2, $3, NOW())
         ON CONFLICT (user_id)
         DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-      `, staff.id, school.id, !isUserProvidedPassword);
+      `, user.id, school.id, !isUserProvidedPassword);
 
       // 4. Create a default department
       await tx.department.create({

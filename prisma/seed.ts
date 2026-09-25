@@ -127,18 +127,45 @@ async function main() {
     }
 
     for (const staffMember of schoolStaff) {
-      await prisma.staff.create({
-        data: {
+      let roleEnum = "TEACHER";
+      const rLower = (staffMember.role || "").toLowerCase();
+      if (rLower.includes("admin") || rLower.includes("principal") || rLower.includes("headmaster")) {
+        roleEnum = "PRINCIPAL";
+      } else if (rLower.includes("bursar") || rLower.includes("account")) {
+        roleEnum = "BURSAR";
+      } else {
+        roleEnum = "TEACHER";
+      }
+
+      const user = await prisma.user.upsert({
+        where: { schoolId_email: { schoolId: school.id, email: staffMember.email } },
+        update: {
+          passwordHash: defaultPasswordHash,
+          role: roleEnum as any,
+          mustChangePassword: true,
+        },
+        create: {
           schoolId: school.id,
           firstName: staffMember.firstName,
           lastName: staffMember.lastName,
           email: staffMember.email,
-          password: defaultPasswordHash,
-          role: staffMember.role,
+          passwordHash: defaultPasswordHash,
+          role: roleEnum as any,
+          mustChangePassword: true,
+        },
+      });
+
+      await prisma.staff.create({
+        data: {
+          schoolId: school.id,
+          userId: user.id,
+          firstName: staffMember.firstName,
+          lastName: staffMember.lastName,
+          email: staffMember.email,
           status: staffMember.status,
           baseSalary: staffMember.baseSalary,
         },
-      })
+      });
     }
 
     let studentCount = 1

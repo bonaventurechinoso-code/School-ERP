@@ -122,7 +122,7 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
     });
     const payroll = await basePrisma.payrollRecord.findUnique({
       where: { id: payrollId },
-      include: { staff: true }
+      include: { staff: { include: { user: true } } }
     });
 
     if (!school || !payroll) {
@@ -153,7 +153,7 @@ export async function disbursePayroll(schoolDomain: string, payrollId: string) {
           type: "EXPENSE",
           category: "PAYROLL",
           amount: payroll.amount,
-          description: `Salary disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName} (${payroll.staff.role}) - Settled via external bank instruction`,
+          description: `Salary disbursement for ${payroll.staff.firstName} ${payroll.staff.lastName} (${payroll.staff.user?.role || "Staff"}) - Settled via external bank instruction`,
           referenceId: payroll.id
         }
       })

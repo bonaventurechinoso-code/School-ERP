@@ -119,14 +119,26 @@ async function main() {
   console.log("\n[7] Testing Backend Password Verification & Encryption Routine:");
   const oldPasswordRaw = "InitialPassword123";
   const oldHashed = await bcrypt.hash(oldPasswordRaw, 10);
-  const testStaff = await basePrisma.staff.create({
+  const testUser = await basePrisma.user.create({
     data: {
       firstName: "Security",
       lastName: "Tester",
       email: staffEmail,
       role: "PRINCIPAL",
       schoolId: tempSchool.id,
-      password: oldHashed,
+      passwordHash: oldHashed,
+      mustChangePassword: true,
+    }
+  });
+
+  const testStaff = await basePrisma.staff.create({
+    data: {
+      id: testUser.id,
+      userId: testUser.id,
+      firstName: "Security",
+      lastName: "Tester",
+      email: staffEmail,
+      schoolId: tempSchool.id,
     }
   });
 
@@ -163,8 +175,8 @@ async function main() {
   if (isStillMustChange !== false) throw new Error("mustChangePassword was not cleared after password change");
 
   // Verify new password hash in database
-  const updatedStaff = await basePrisma.staff.findUnique({ where: { id: testStaff.id } });
-  const isNewHashValid = await bcrypt.compare("BrandNewSecurePassword2026", updatedStaff?.password || "");
+  const updatedUser = await basePrisma.user.findUnique({ where: { id: testUser.id } });
+  const isNewHashValid = await bcrypt.compare("BrandNewSecurePassword2026", updatedUser?.passwordHash || "");
   console.log(`  ✓ New encrypted password hash verified in database: ${isNewHashValid}`);
   if (!isNewHashValid) throw new Error("New password hash does not match new password");
 

@@ -25,7 +25,7 @@ const staffContextSelect = {
   firstName: true,
   lastName: true,
   email: true,
-  role: true,
+  user: { select: { role: true } },
   department: { select: { name: true } },
   Timetable: {
     select: {
@@ -72,7 +72,7 @@ const resolveTeacherContextMemo = cache(async (): Promise<TeacherContext | null>
     staff = await basePrisma.staff.findFirst({
       where: {
         schoolId: school.id,
-        role: { in: ["Class Teacher", "TEACHER", "Teacher", "Subject Teacher", "Lecturer", "Educator"] },
+        user: { role: "TEACHER" },
       },
       select: staffContextSelect,
     });
@@ -110,7 +110,7 @@ const resolveTeacherContextMemo = cache(async (): Promise<TeacherContext | null>
     staffId: staff.id,
     staffName: `${staff.firstName} ${staff.lastName}`.trim(),
     staffEmail: staff.email,
-    staffRole: staff.role || "Class Teacher",
+    staffRole: (staff as any).user?.role || "Class Teacher",
     departmentName: staff.department?.name || "General Academics",
     schoolId: school.id,
     schoolName: school.name,
@@ -812,6 +812,7 @@ export async function getTeacherProfile() {
     where: { id: ctx.staffId },
     include: {
       department: true,
+      user: true,
       PayrollRecord: {
         orderBy: { payDate: "desc" },
         take: 3,
@@ -826,7 +827,7 @@ export async function getTeacherProfile() {
       firstName: staff?.firstName,
       lastName: staff?.lastName,
       email: staff?.email,
-      role: staff?.role,
+      role: (staff as any)?.user?.role || "TEACHER",
       department: staff?.department?.name || "Academics",
       status: staff?.status,
       bankName: staff?.bankName || "Not Configured",

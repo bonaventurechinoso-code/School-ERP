@@ -46,6 +46,8 @@ export default async function AdminSecuritySettingsPage({
         schoolDomain={school.subdomain}
         brandColor={brandColor}
         userRole="TENANT_ADMIN"
+        endpoint="/change-password"
+        logoutOnSuccess={true}
       />
 
       {/* Active Session Control Portal */}

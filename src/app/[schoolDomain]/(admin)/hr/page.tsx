@@ -24,7 +24,7 @@ export default async function HRPayrollPage({
       departments: true,
       academicTiers: true,
       staff: {
-        include: { department: true, PayrollRecord: true },
+        include: { department: true, PayrollRecord: true, user: true },
         orderBy: { firstName: "asc" },
       }
     }
@@ -117,7 +117,7 @@ export default async function HRPayrollPage({
                 <option value="">-- Choose Employee --</option>
                 {school.staff.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.firstName} {s.lastName} ({formatStaffRoleByTier(s.role, tierCategory)}) {s.department ? `• ${s.department.name}` : ""}
+                    {s.firstName} {s.lastName} ({formatStaffRoleByTier(s.user?.role || "TEACHER", tierCategory)}) {s.department ? `• ${s.department.name}` : ""}
                   </option>
                 ))}
               </select>

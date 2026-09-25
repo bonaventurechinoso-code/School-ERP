@@ -79,62 +79,67 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // B. Check Tenant Staff (Bursar, Principal, Headmaster, Class Teacher, Professor, Lecturer, etc.)
-        const staffQuery: any = { 
-          email: { equals: normalizedEmail, mode: "insensitive" } 
+        // B. Check Unified User Registry (Authoritative single auth table: Principal, Teacher, Bursar, Student, School Admin)
+        const userQuery: any = {
+          OR: [
+            { email: { equals: normalizedEmail, mode: "insensitive" } },
+            { student: { admissionNumber: { equals: normalizedEmail, mode: "insensitive" } } },
+          ],
         };
         if (requestedDomain) {
-          staffQuery.school = {
+          userQuery.school = {
             OR: [
               { subdomain: requestedDomain.toLowerCase().trim() },
               { slug: requestedDomain.toLowerCase().trim() },
+              { id: requestedDomain },
             ],
           };
         }
 
-        const staff = await basePrisma.staff.findFirst({
-          where: staffQuery,
+        const user = await basePrisma.user.findFirst({
+          where: userQuery,
           include: {
             school: {
               include: {
                 academicTiers: { orderBy: { level: "asc" } },
               },
             },
+            staff: true,
+            student: true,
           },
         });
 
-        if (staff && staff.school && staff.school.isActive && !staff.school.deletedAt) {
+        if (user && user.school && user.school.isActive && !user.school.deletedAt) {
           let isPasswordValid = false;
 
-          if (staff.password) {
-            isPasswordValid = await bcrypt.compare(rawPassword, staff.password).catch(() => false);
-            // Local dev fallback for unhashed seed passwords
-            if (!isPasswordValid && (staff.password === rawPassword || (isDev && rawPassword === "Password123"))) {
+          if (user.passwordHash) {
+            isPasswordValid = await bcrypt.compare(rawPassword, user.passwordHash).catch(() => false);
+            if (!isPasswordValid && (isDev && (rawPassword === "Password123" || rawPassword === "Password@123" || rawPassword === "Welcome123"))) {
               isPasswordValid = true;
             }
-          } else if (isDev && rawPassword === "Password123") {
+          } else if (isDev && (rawPassword === "Password123" || rawPassword === "Password@123")) {
             isPasswordValid = true;
           }
 
           if (isPasswordValid) {
-            const normalizedRole = normalizeRole(staff.role);
-            const permissions = getDefaultPermissionsForRole(normalizedRole);
-            const activeTiers = staff.school.academicTiers.map((t) => t.name);
-            const mustChangePassword = rawPassword === "Password123" || await isMustChangePassword(staff.id);
+            const permissions = getDefaultPermissionsForRole(user.role);
+            const activeTiers = user.school.academicTiers.map((t) => t.name);
+            const mustChangePassword = Boolean(user.mustChangePassword);
 
             return {
-              id: staff.id,
-              userId: staff.id,
-              email: staff.email,
-              name: `${staff.firstName} ${staff.lastName}`.trim(),
-              role: normalizedRole,
-              staffRole: staff.role, // Authentic Nigerian role (e.g. Bursar, Principal, Professor)
-              tenantId: staff.schoolId,
-              schoolDomain: staff.school.subdomain,
-              tenantName: staff.school.name,
+              id: user.id,
+              userId: user.id,
+              email: user.email,
+              name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+              role: user.role,
+              staffRole: user.role,
+              tenantId: user.schoolId,
+              schoolDomain: user.school.subdomain,
+              tenantName: user.school.name,
               activeTiers,
               permissions,
               mustChangePassword,
+              forceChangePassword: mustChangePassword,
             };
           }
         }
@@ -308,6 +313,7 @@ export const authOptions: NextAuthOptions = {
         const staff = await basePrisma.staff.findFirst({
           where: { email },
           include: {
+            user: true,
             school: {
               include: {
                 academicTiers: { orderBy: { level: "asc" } },
@@ -317,10 +323,11 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (staff && staff.school && staff.school.isActive && !staff.school.deletedAt) {
-          const normalizedRole = normalizeRole(staff.role);
+          const effectiveRole = staff.user?.role || "TEACHER";
+          const normalizedRole = normalizeRole(effectiveRole);
           user.userId = staff.id;
           user.role = normalizedRole;
-          user.staffRole = staff.role; // e.g., "Bursar", "Principal", "Headmaster", "Professor"
+          user.staffRole = effectiveRole;
           user.tenantId = staff.schoolId;
           user.schoolDomain = staff.school.subdomain;
           user.tenantName = staff.school.name;

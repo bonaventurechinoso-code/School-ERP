@@ -160,19 +160,32 @@ async function provisionOrGetTrialSandbox() {
     }
 
     adminStaff = await basePrisma.staff.findFirst({
-      where: { schoolId: school.id, role: "ADMIN" },
+      where: { schoolId: school.id, user: { role: "SCHOOL_ADMIN" } },
     });
     if (!adminStaff) {
+      let adminUser = await basePrisma.user.findFirst({
+        where: { schoolId: school.id, email: SANDBOX_ADMIN_EMAIL },
+      });
+      if (!adminUser) {
+        adminUser = await basePrisma.user.create({
+          data: {
+            schoolId: school.id,
+            email: SANDBOX_ADMIN_EMAIL,
+            role: "SCHOOL_ADMIN",
+            passwordHash: "",
+            mustChangePassword: true,
+          }
+        });
+      }
       adminStaff = await basePrisma.staff.create({
         data: {
           schoolId: school.id,
+          userId: adminUser.id,
           firstName: "Trial",
           lastName: "Administrator",
           email: SANDBOX_ADMIN_EMAIL,
-          role: "ADMIN",
           status: "ACTIVE",
           departmentId: dept.id,
-          password: "",
         },
       });
     }

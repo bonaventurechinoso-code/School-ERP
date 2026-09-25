@@ -88,25 +88,14 @@ export default async function StaffPage({
       where: {
         schoolId: school.id,
         status: "ACTIVE",
-        OR: [
-          { role: { contains: "Teacher", mode: "insensitive" } },
-          { role: { contains: "Lecturer", mode: "insensitive" } },
-          { role: { contains: "Instructor", mode: "insensitive" } },
-          { role: { contains: "Professor", mode: "insensitive" } },
-        ]
+        user: { role: "TEACHER" },
       }
     }).catch(() => 0),
     tenantDb.staff.count({
       where: {
         schoolId: school.id,
         status: "ACTIVE",
-        OR: [
-          { role: { contains: "Admin", mode: "insensitive" } },
-          { role: { contains: "Principal", mode: "insensitive" } },
-          { role: { contains: "Headmaster", mode: "insensitive" } },
-          { role: { contains: "Bursar", mode: "insensitive" } },
-          { role: { contains: "Officer", mode: "insensitive" } },
-        ]
+        user: { role: { in: ["SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR"] } },
       }
     }).catch(() => 0),
     tenantDb.staffAttendance.count({

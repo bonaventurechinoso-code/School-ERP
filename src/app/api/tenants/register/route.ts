@@ -154,36 +154,35 @@ export async function POST(request: Request) {
             data: { schoolId: school.id, name: "Administration" }
           });
 
-          const staff = await tx.staff.create({
-            data: {
-              schoolId: school.id,
-              firstName: "Admin",
-              lastName: "User",
-              email: adminEmail,
-              role: "TENANT_ADMIN",
-              departmentId: dept.id,
-              status: "ACTIVE",
-              activeAt: now,
-              password: adminPasswordHash,
-              mustChangePassword: !isUserProvidedPassword,
-            }
-          });
-
-          await tx.user.upsert({
+          const user = await tx.user.upsert({
             where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
             update: {
               passwordHash: adminPasswordHash,
               role: "SCHOOL_ADMIN",
               mustChangePassword: !isUserProvidedPassword,
+              status: "ACTIVE",
             },
             create: {
-              id: staff.id,
               schoolId: school.id,
               email: adminEmail,
               passwordHash: adminPasswordHash,
               role: "SCHOOL_ADMIN",
               mustChangePassword: !isUserProvidedPassword,
+              status: "ACTIVE",
             },
+          });
+
+          const staff = await tx.staff.create({
+            data: {
+              schoolId: school.id,
+              userId: user.id,
+              firstName: "Admin",
+              lastName: "User",
+              email: adminEmail,
+              departmentId: dept.id,
+              status: "ACTIVE",
+              activeAt: now,
+            }
           });
 
           await tx.$executeRawUnsafe(`
@@ -336,36 +335,35 @@ export async function POST(request: Request) {
         }
       });
 
-      const staff = await tx.staff.create({
-        data: {
-          schoolId: school.id,
-          firstName: "Admin",
-          lastName: "User",
-          email: adminEmail,
-          role: "TENANT_ADMIN",
-          departmentId: dept.id,
-          status: "ACTIVE",
-          activeAt: now,
-          password: adminPasswordHash,
-          mustChangePassword: !isUserProvidedPassword,
-        }
-      });
-
-      await tx.user.upsert({
+      const user = await tx.user.upsert({
         where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
         update: {
           passwordHash: adminPasswordHash,
           role: "SCHOOL_ADMIN",
           mustChangePassword: !isUserProvidedPassword,
+          status: "ACTIVE",
         },
         create: {
-          id: staff.id,
           schoolId: school.id,
           email: adminEmail,
           passwordHash: adminPasswordHash,
           role: "SCHOOL_ADMIN",
           mustChangePassword: !isUserProvidedPassword,
+          status: "ACTIVE",
         },
+      });
+
+      const staff = await tx.staff.create({
+        data: {
+          schoolId: school.id,
+          userId: user.id,
+          firstName: "Admin",
+          lastName: "User",
+          email: adminEmail,
+          departmentId: dept.id,
+          status: "ACTIVE",
+          activeAt: now,
+        }
       });
 
       await tx.$executeRawUnsafe(`

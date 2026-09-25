@@ -174,7 +174,7 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
       purgedTables.push("Student");
 
       // 6. Clear Non-Admin Staff Clutter (Preserves or resets default admin)
-      await tx.staff.deleteMany({ where: { schoolId, role: { not: "ADMIN" } } });
+      await tx.staff.deleteMany({ where: { schoolId, user: { role: { not: "SCHOOL_ADMIN" } } } });
       purgedTables.push("Staff");
     });
 
@@ -419,14 +419,28 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
         where: { schoolId, email: f.email },
       });
       if (!existingStaff) {
+        let user = await demoPrisma.user.findFirst({
+          where: { schoolId, email: f.email },
+        });
+        if (!user) {
+          user = await demoPrisma.user.create({
+            data: {
+              schoolId,
+              email: f.email,
+              role: (f.role === "ADMIN" ? "SCHOOL_ADMIN" : f.role) as any,
+              passwordHash: "",
+              mustChangePassword: true,
+            },
+          });
+        }
         await demoPrisma.staff.create({
           data: {
             schoolId,
+            userId: user.id,
             departmentId: adminDept?.id,
             firstName: f.firstName,
             lastName: f.lastName,
             email: f.email,
-            role: f.role,
             status: "ACTIVE",
             baseSalary: 150000,
           },

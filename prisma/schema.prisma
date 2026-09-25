@@ -46,10 +46,13 @@ enum PaymentType {
 enum Role {
   SUPER_ADMIN
   SCHOOL_ADMIN
+  PRINCIPAL
+  VICE_PRINCIPAL
+  HEADMASTER
+  BURSAR
   TEACHER
   STUDENT
   PARENT
-  BURSAR
 }
 
 // ------------------------------------------------------
@@ -195,9 +198,13 @@ model User {
   firstName          String?
   lastName           String?
   role               Role     @default(STUDENT)
+  status             String   @default("ACTIVE")
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  staff              Staff?
+  student            Student?
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -211,6 +218,9 @@ model Student {
   id       String @id @default(uuid())
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  userId   String? @unique
+  user     User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   tierId   String
   tier     AcademicTier @relation(fields: [tierId], references: [id], onDelete: Restrict)
@@ -334,14 +344,15 @@ model Staff {
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
+  userId   String? @unique
+  user     User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   firstName String
   lastName  String
   email     String
-  password  String?
-  role      String // e.g., TEACHER, ADMIN
 
   baseSalary        Float?
   bankAccountNumber String?
@@ -363,8 +374,6 @@ model Staff {
   offboardedAt DateTime?
   terminatedAt DateTime?
 
-  mustChangePassword Boolean           @default(false)
-
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   Timetable       Timetable[]
@@ -375,9 +384,7 @@ model Staff {
   @@unique([schoolId, email]) // Ensure unique staff emails per school
   @@index([schoolId])
   @@index([schoolId, status])
-  @@index([schoolId, role])
   @@index([schoolId, email])
-  @@index([schoolId, role, status])
   @@index([schoolId, departmentId])
   @@index([schoolId, createdAt(sort: Desc)])
 }
