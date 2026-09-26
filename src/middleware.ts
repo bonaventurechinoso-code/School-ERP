@@ -13,7 +13,7 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public files (e.g. images, fonts)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 
@@ -22,7 +22,8 @@ export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonav
 // System reserved root paths that are NOT tenant slugs
 const SYSTEM_RESERVED_ROOTS = new Set([
   'admin', 'super-admin', 'access-denied', 'trial-expired',
-  'login', 'register', 'choice', 'me', 'api', 'portal-settings', 'change-password'
+  'login', 'register', 'choice', 'me', 'api', 'portal-settings', 'change-password',
+  'sw.js', 'manifest.json'
 ]);
 
 /**
