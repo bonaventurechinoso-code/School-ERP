@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Shield, ArrowRight, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 interface SecurityPasswordFormProps {
   schoolDomain?: string;
@@ -123,8 +124,9 @@ export default function SecurityPasswordForm({
       if (logoutOnSuccess) {
         setTimeout(async () => {
           await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-          router.push("/login");
-          router.refresh();
+          const schoolSlug = schoolDomain || "";
+          const callbackUrl = schoolSlug ? `/login?school=${encodeURIComponent(schoolSlug)}` : "/login";
+          await signOut({ callbackUrl });
         }, 1500);
         return;
       }
