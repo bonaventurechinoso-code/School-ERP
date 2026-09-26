@@ -79,7 +79,7 @@ export default function ClientLayout({
       />
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pb-20 md:pb-0 relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto pb-[120px] md:pb-0 relative">
         <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex items-center justify-between gap-3 w-full px-4 py-3 md:px-8 md:py-4 shadow-xs flex-shrink-0 sticky top-0 z-20 transition-colors duration-200">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button

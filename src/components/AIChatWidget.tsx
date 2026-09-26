@@ -84,7 +84,7 @@ export default function AIChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-[90px] right-4 z-40 md:bottom-6 md:right-6 flex flex-col items-end">
       
       {isOpen && (
         <div className="w-80 md:w-96 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-5">
