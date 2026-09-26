@@ -381,17 +381,21 @@ export async function POST(request: Request) {
     });
 
     // Dispatch Registration Success Email to the School Admin
-    sendSchoolRegistrationSuccessEmail({
-      schoolName,
-      subdomain: formattedSubdomain,
-      adminEmail,
-      adminPassword: adminPassword || password,
-      contactPhone: contactPhone || null,
-      tiers,
-      schoolId: newSchool.school.id,
-    }).catch((emailErr) => {
+    try {
+      console.log(`[REGISTER_EMAIL] Triggering registration success email for: ${adminEmail}...`);
+      const emailResult = await sendSchoolRegistrationSuccessEmail({
+        schoolName,
+        subdomain: formattedSubdomain,
+        adminEmail,
+        adminPassword: adminPassword || password,
+        contactPhone: contactPhone || null,
+        tiers,
+        schoolId: newSchool.school.id,
+      });
+      console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
+    } catch (emailErr) {
       console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
-    });
+    }
 
     // Synchronize SSL generation with onboarding pipeline:
     // Trigger reverse proxy TLS binding and await initial handshake confirmation

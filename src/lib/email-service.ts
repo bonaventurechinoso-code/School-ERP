@@ -924,10 +924,14 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
 
     let deliveryStatus = "SIMULATED";
 
+    console.log(`[EMAIL_SERVICE] Initiating registration success email for: ${adminEmail}`);
+    console.log(`[EMAIL_SERVICE] Config check: RESEND_API_KEY=${!!process.env.RESEND_API_KEY} (length: ${process.env.RESEND_API_KEY?.length || 0}), SMTP_HOST=${process.env.SMTP_HOST || "none"}`);
+
     // 1. Dispatch via Resend API if RESEND_API_KEY is configured
     if (process.env.RESEND_API_KEY) {
       try {
         const fromAddress = process.env.EMAIL_FROM || "School ERP <onboarding@resend.dev>";
+        console.log(`[EMAIL_SERVICE] Sending via Resend API (From: "${fromAddress}", To: "${adminEmail}")...`);
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -942,20 +946,24 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
           }),
         });
         const resendData = await resendRes.json();
+        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
+        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
+
         if (resendRes.ok) {
           deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
-          console.log(`[EMAIL_DISPATCH] Resend email sent successfully to ${adminEmail}:`, resendData);
+          console.log(`[EMAIL_DISPATCH] Resend email successfully delivered to ${adminEmail} (id: ${resendData.id})`);
         } else {
-          console.error(`[EMAIL_DISPATCH] Resend error for ${adminEmail}:`, resendData);
+          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${adminEmail}:`, resendData);
         }
-      } catch (resendErr) {
-        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr);
+      } catch (resendErr: any) {
+        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
       }
     }
 
     // 2. Dispatch via SMTP (Nodemailer) if SMTP is configured
     if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
       try {
+        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
         const nodemailer = await import("nodemailer");
         const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST,
@@ -974,9 +982,13 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
         });
         deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
         console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${adminEmail}:`, info.messageId);
-      } catch (smtpErr) {
-        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr);
+      } catch (smtpErr: any) {
+        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
       }
+    }
+
+    if (deliveryStatus === "SIMULATED" && !process.env.RESEND_API_KEY && !process.env.SMTP_HOST) {
+      console.warn(`[EMAIL_SERVICE] NOTICE: No email provider configured on Render! Add RESEND_API_KEY to Render Environment Variables.`);
     }
 
     // 3. Fallback / Transport Logging
