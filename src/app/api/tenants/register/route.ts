@@ -206,6 +206,23 @@ export async function POST(request: Request) {
       const primarySchool = newSchools[0].school;
       const primaryStaff = newSchools[0].staff;
 
+      // Dispatch Registration Success Email to the School Admin
+      try {
+        console.log(`[REGISTER_EMAIL] Triggering registration success email for combined tenant: ${adminEmail}...`);
+        const emailResult = await sendSchoolRegistrationSuccessEmail({
+          schoolName,
+          subdomain: combinedSubdomain,
+          adminEmail,
+          adminPassword: adminPassword || password,
+          contactPhone: contactPhone || null,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          schoolId: primarySchool.id,
+        });
+        console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
+      } catch (emailErr) {
+        console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
+      }
+
       // Automatically issue authenticated database session for newly created Tenant Administrator
       const distinctSessionToken = crypto.randomUUID();
       const sessionResult = await createDatabaseSession({

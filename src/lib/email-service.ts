@@ -954,6 +954,33 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
           console.log(`[EMAIL_DISPATCH] Resend email successfully delivered to ${adminEmail} (id: ${resendData.id})`);
         } else {
           console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${adminEmail}:`, resendData);
+          if (fromAddress !== "onboarding@resend.dev" && fromAddress !== "School ERP <onboarding@resend.dev>") {
+            console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
+            try {
+              const fallbackRes = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  from: "School ERP <onboarding@resend.dev>",
+                  to: [adminEmail],
+                  subject,
+                  html: emailHtml,
+                }),
+              });
+              const fallbackData = await fallbackRes.json();
+              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
+              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
+              if (fallbackRes.ok) {
+                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
+                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${adminEmail} (id: ${fallbackData.id})`);
+              }
+            } catch (fbErr: any) {
+              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
+            }
+          }
         }
       } catch (resendErr: any) {
         console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
