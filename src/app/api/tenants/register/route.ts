@@ -13,6 +13,7 @@ import {
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 import { logAuditEvent } from "@/lib/audit-logger";
+import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
 
 const VALID_TIERS = [
   'NURSERY',
@@ -377,6 +378,19 @@ export async function POST(request: Request) {
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
 
       return { school, staff };
+    });
+
+    // Dispatch Registration Success Email to the School Admin
+    sendSchoolRegistrationSuccessEmail({
+      schoolName,
+      subdomain: formattedSubdomain,
+      adminEmail,
+      adminPassword: adminPassword || password,
+      contactPhone: contactPhone || null,
+      tiers,
+      schoolId: newSchool.school.id,
+    }).catch((emailErr) => {
+      console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
     });
 
     // Synchronize SSL generation with onboarding pipeline:

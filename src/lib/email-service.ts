@@ -821,4 +821,215 @@ export async function sendPasswordResetEmail(payload: {
   }
 }
 
+export interface SchoolRegistrationEmailPayload {
+  schoolName: string;
+  subdomain: string;
+  adminEmail: string;
+  adminPassword?: string;
+  contactPhone?: string | null;
+  tiers?: string[];
+  schoolId?: string;
+}
+
+/**
+ * Sends a welcome email containing school name, portal URL, and admin login credentials
+ * upon successful school registration.
+ */
+export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistrationEmailPayload) {
+  try {
+    const { schoolName, subdomain, adminEmail, adminPassword, contactPhone, schoolId } = payload;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const portalUrl = `${baseUrl}/login?school=${encodeURIComponent(subdomain)}`;
+    const brandColor = "#4f46e5";
+    const messageId = `<reg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
+    const subject = `🎉 Welcome to School ERP - ${schoolName} Portal Access Credentials`;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>School Registration Successful - ${schoolName}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+          .header { background: ${brandColor}; padding: 36px 32px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+          .header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; font-weight: 500; }
+          .content { padding: 36px 32px; line-height: 1.6; }
+          .welcome-text { font-size: 16px; color: #334155; margin-bottom: 24px; }
+          .credentials-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; border-left: 5px solid ${brandColor}; }
+          .cred-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+          .cred-row:last-child { border-bottom: none; }
+          .cred-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; }
+          .cred-value { font-size: 15px; font-weight: 700; color: #0f172a; word-break: break-all; }
+          .action-area { text-align: center; margin: 32px 0 20px 0; }
+          .login-btn { display: inline-block; background-color: ${brandColor}; color: #ffffff !important; text-decoration: none; padding: 15px 36px; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.35); }
+          .direct-link { font-size: 13px; color: #64748b; word-break: break-all; background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-top: 20px; }
+          .footer { padding: 24px 32px; text-align: center; color: #94a3b8; font-size: 13px; border-top: 1px solid #e2e8f0; background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${schoolName}</h1>
+            <p>School Administrative Workspace Provisioned</p>
+          </div>
+          <div class="content">
+            <p class="welcome-text">
+              Congratulations! Your institutional workspace for <strong>${schoolName}</strong> has been successfully configured and activated on the School ERP platform.
+            </p>
+
+            <div class="credentials-card">
+              <div class="cred-row">
+                <span class="cred-label">School Name</span>
+                <span class="cred-value">${schoolName}</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Portal URL</span>
+                <span class="cred-value">${portalUrl}</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Admin Login</span>
+                <span class="cred-value">${adminEmail}</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Password</span>
+                <span class="cred-value">${adminPassword || "(Configured during registration)"}</span>
+              </div>
+            </div>
+
+            <div class="action-area">
+              <a href="${portalUrl}" class="login-btn" target="_blank" rel="noopener noreferrer">
+                Access School Admin Portal &rarr;
+              </a>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; margin-top: 24px;">
+              You can access your portal directly anytime at:
+            </p>
+            <div class="direct-link">
+              <a href="${portalUrl}" style="color: ${brandColor}; font-weight: 600;">${portalUrl}</a>
+            </div>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${schoolName} &bull; Powered by School ERP<br/>
+            Need assistance? Contact support or reply directly to this notification.
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    let deliveryStatus = "SIMULATED";
+
+    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const fromAddress = process.env.EMAIL_FROM || "School ERP <onboarding@resend.dev>";
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [adminEmail],
+            subject,
+            html: emailHtml,
+          }),
+        });
+        const resendData = await resendRes.json();
+        if (resendRes.ok) {
+          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
+          console.log(`[EMAIL_DISPATCH] Resend email sent successfully to ${adminEmail}:`, resendData);
+        } else {
+          console.error(`[EMAIL_DISPATCH] Resend error for ${adminEmail}:`, resendData);
+        }
+      } catch (resendErr) {
+        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr);
+      }
+    }
+
+    // 2. Dispatch via SMTP (Nodemailer) if SMTP is configured
+    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
+      try {
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || "587"),
+          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+          },
+        });
+        const info = await transporter.sendMail({
+          from: process.env.EMAIL_FROM || process.env.SMTP_USER || "School ERP <noreply@bonaveeict.com.ng>",
+          to: adminEmail,
+          subject,
+          html: emailHtml,
+        });
+        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
+        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${adminEmail}:`, info.messageId);
+      } catch (smtpErr) {
+        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr);
+      }
+    }
+
+    // 3. Fallback / Transport Logging
+    console.log("----------------------------------------------------------------");
+    console.log(`[REGISTRATION_EMAIL] Dispatched to: ${adminEmail}`);
+    console.log(`School: ${schoolName} (${subdomain})`);
+    console.log(`Portal URL: ${portalUrl}`);
+    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log("----------------------------------------------------------------");
+
+    // Write to local log file
+    try {
+      const logsDir = path.join(process.cwd(), "logs");
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      const logFilePath = path.join(logsDir, "registration-emails.log");
+      const logEntry = `[${new Date().toISOString()}] STATUS=${deliveryStatus} TO="${adminEmail}" SCHOOL="${schoolName}" PORTAL="${portalUrl}"\n`;
+      fs.appendFileSync(logFilePath, logEntry, "utf8");
+    } catch {}
+
+    // Persist to MessageLog table
+    if (schoolId) {
+      try {
+        await basePrisma.messageLog.create({
+          data: {
+            schoolId,
+            recipientEmail: adminEmail.toLowerCase().trim(),
+            recipientType: "STAFF",
+            messageType: "EMAIL",
+            subject,
+            body: emailHtml,
+            sentAt: new Date(),
+          },
+        });
+      } catch (dbErr) {
+        console.warn("[EMAIL_SERVICE] Warning: Could not save message log to DB:", dbErr);
+      }
+    }
+
+    return {
+      success: true,
+      deliveryStatus,
+      recipient: adminEmail,
+      schoolName,
+      portalUrl,
+      subject,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to dispatch registration success email:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+
 
