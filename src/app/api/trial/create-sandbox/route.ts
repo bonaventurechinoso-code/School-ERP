@@ -38,49 +38,11 @@ async function provisionOrGetTrialSandbox() {
     };
   }
 
-  // 1. Check if sandbox school already exists
-  let school = await basePrisma.school.findUnique({
-    where: { subdomain: SANDBOX_SUBDOMAIN },
-    include: {
-      academicTiers: true,
-      staff: true,
-      classrooms: true,
-      students: true,
-    },
-  });
-
-  if (!school) {
-    const now = new Date();
-    const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-    // Create the isolated trial sandbox tenant
-    school = await basePrisma.school.create({
-      data: {
-        name: SANDBOX_SCHOOL_NAME,
-        subdomain: SANDBOX_SUBDOMAIN,
-        slug: SANDBOX_SUBDOMAIN,
-        isActive: true,
-        isBanned: false,
-        trialStartDate: now,
-        trialEndDate: fourteenDaysOut,
-        isPublicPortalEnabled: true,
-        welcomeGreeting: "Welcome to your Trial Sandbox! Explore administrative workflows safely in this isolated environment.",
-        academicTiers: {
-          create: [
-            { name: "Daycare / Nursery", level: 1 },
-            { name: "Primary School", level: 2 },
-            { name: "Secondary School", level: 3 },
-            { name: "College of Education", level: 4 },
-            { name: "Polytechnic", level: 5 },
-            { name: "University", level: 6 },
-          ],
-        },
-        departments: {
-          create: [
-            { name: "Academic Administration" },
-          ],
-        },
-      },
+  // Wrap the entire sandbox initialization in a transaction so partial retries don't leave duplicates
+  const result = await basePrisma.$transaction(async (tx) => {
+    // 1. Check if sandbox school already exists
+    let school = await tx.school.findUnique({
+      where: { subdomain: SANDBOX_SUBDOMAIN },
       include: {
         academicTiers: true,
         staff: true,
@@ -88,154 +50,241 @@ async function provisionOrGetTrialSandbox() {
         students: true,
       },
     });
-  }
 
-  if (school && !school.trialEndDate) {
     const now = new Date();
     const fourteenDaysOut = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    school = await basePrisma.school.update({
-      where: { id: school.id },
-      data: {
-        trialStartDate: school.trialStartDate || now,
-        trialEndDate: fourteenDaysOut,
-        isBanned: school.isBanned ?? false,
-      },
-      include: {
-        academicTiers: true,
-        staff: true,
-        classrooms: true,
-        students: true,
-      },
-    });
-  }
 
-  // 2. Ensure all 6 academic tiers exist
-  const completeTrialTiers = [
-    { name: "Daycare / Nursery", level: 1 },
-    { name: "Primary School", level: 2 },
-    { name: "Secondary School", level: 3 },
-    { name: "College of Education", level: 4 },
-    { name: "Polytechnic", level: 5 },
-    { name: "University", level: 6 },
-  ];
+    if (!school) {
+      // Create the isolated trial sandbox tenant
+      school = await tx.school.create({
+        data: {
+          name: SANDBOX_SCHOOL_NAME,
+          subdomain: SANDBOX_SUBDOMAIN,
+          slug: SANDBOX_SUBDOMAIN,
+          isActive: true,
+          isBanned: false,
+          trialStartDate: now,
+          trialEndDate: fourteenDaysOut,
+          isPublicPortalEnabled: true,
+          welcomeGreeting: "Welcome to your Trial Sandbox! Explore administrative workflows safely in this isolated environment.",
+          academicTiers: {
+            create: [
+              { name: "Daycare / Nursery", level: 1 },
+              { name: "Primary School", level: 2 },
+              { name: "Secondary School", level: 3 },
+              { name: "College of Education", level: 4 },
+              { name: "Polytechnic", level: 5 },
+              { name: "University", level: 6 },
+            ],
+          },
+          departments: {
+            create: [
+              { name: "Academic Administration" },
+            ],
+          },
+        },
+        include: {
+          academicTiers: true,
+          staff: true,
+          classrooms: true,
+          students: true,
+        },
+      });
+    } else if (!school.trialEndDate) {
+      school = await tx.school.update({
+        where: { id: school.id },
+        data: {
+          trialStartDate: school.trialStartDate || now,
+          trialEndDate: fourteenDaysOut,
+          isBanned: school.isBanned ?? false,
+        },
+        include: {
+          academicTiers: true,
+          staff: true,
+          classrooms: true,
+          students: true,
+        },
+      });
+    }
 
-  let tiers = school.academicTiers;
-  if (tiers.length < completeTrialTiers.length) {
+    // 2. Ensure all 6 academic tiers exist
+    const completeTrialTiers = [
+      { name: "Daycare / Nursery", level: 1 },
+      { name: "Primary School", level: 2 },
+      { name: "Secondary School", level: 3 },
+      { name: "College of Education", level: 4 },
+      { name: "Polytechnic", level: 5 },
+      { name: "University", level: 6 },
+    ];
+
     for (const t of completeTrialTiers) {
-      const exists = tiers.some(
-        (existing) => existing.name.toLowerCase() === t.name.toLowerCase()
-      );
-      if (!exists) {
-        await basePrisma.academicTier.create({
-          data: {
+      await tx.academicTier.upsert({
+        where: {
+          schoolId_name: {
             schoolId: school.id,
             name: t.name,
-            level: t.level,
+          },
+        },
+        update: {
+          level: t.level,
+        },
+        create: {
+          schoolId: school.id,
+          name: t.name,
+          level: t.level,
+        },
+      });
+    }
+
+    const tiers = await tx.academicTier.findMany({
+      where: { schoolId: school.id },
+      orderBy: { level: "asc" },
+    });
+
+    const primaryTier = tiers.find((t) => t.name.includes("Primary")) || tiers[0];
+    const secondaryTier = tiers.find((t) => t.name.includes("Secondary")) || tiers[tiers.length - 1];
+
+    // 3. Ensure administration department exists
+    const dept = await tx.department.upsert({
+      where: {
+        schoolId_name: {
+          schoolId: school.id,
+          name: "Academic Administration",
+        },
+      },
+      update: {},
+      create: {
+        schoolId: school.id,
+        name: "Academic Administration",
+      },
+    });
+
+    // 4. Ensure admin user exists
+    const adminUser = await tx.user.upsert({
+      where: {
+        schoolId_email: {
+          schoolId: school.id,
+          email: SANDBOX_ADMIN_EMAIL,
+        },
+      },
+      update: {
+        role: "SCHOOL_ADMIN",
+        status: "ACTIVE",
+      },
+      create: {
+        schoolId: school.id,
+        email: SANDBOX_ADMIN_EMAIL,
+        role: "SCHOOL_ADMIN",
+        passwordHash: "",
+        mustChangePassword: true,
+        status: "ACTIVE",
+      },
+    });
+
+    // Unlink any other staff that might conflict on unique userId constraint
+    const conflictingStaff = await tx.staff.findFirst({
+      where: {
+        userId: adminUser.id,
+        NOT: { email: SANDBOX_ADMIN_EMAIL },
+      },
+    });
+    if (conflictingStaff) {
+      await tx.staff.update({
+        where: { id: conflictingStaff.id },
+        data: { userId: null },
+      });
+    }
+
+    // 5. Upsert trial admin staff on schoolId_email (idempotent, prevents unique constraint failure)
+    const adminStaff = await tx.staff.upsert({
+      where: {
+        schoolId_email: {
+          schoolId: school.id,
+          email: SANDBOX_ADMIN_EMAIL,
+        },
+      },
+      update: {
+        userId: adminUser.id,
+        firstName: "Trial",
+        lastName: "Administrator",
+        status: "ACTIVE",
+        departmentId: dept.id,
+      },
+      create: {
+        schoolId: school.id,
+        userId: adminUser.id,
+        firstName: "Trial",
+        lastName: "Administrator",
+        email: SANDBOX_ADMIN_EMAIL,
+        status: "ACTIVE",
+        departmentId: dept.id,
+      },
+    });
+
+    // 6. Ensure sample classrooms exist
+    const classroomCount = await tx.classroom.count({
+      where: { schoolId: school.id },
+    });
+
+    if (classroomCount === 0 && primaryTier && secondaryTier) {
+      const classData = [
+        { name: "Primary 1", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
+        { name: "Primary 5", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
+        { name: "JSS 1", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
+        { name: "SSS 3", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
+      ];
+      for (const c of classData) {
+        await tx.classroom.create({ data: c });
+      }
+    }
+
+    // 7. Ensure sample students exist so the dashboard has rich data to explore
+    const studentCount = await tx.student.count({
+      where: { schoolId: school.id },
+    });
+
+    if (studentCount === 0 && primaryTier && secondaryTier) {
+      const sampleStudents = [
+        { firstName: "Amina", lastName: "Bello", currentClass: "Primary 1", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/001" },
+        { firstName: "Emeka", lastName: "Okafor", currentClass: "Primary 5", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/002" },
+        { firstName: "Chioma", lastName: "Adeyemi", currentClass: "JSS 1", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/001" },
+        { firstName: "Tunde", lastName: "Danjuma", currentClass: "SSS 3", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/002" },
+      ];
+
+      for (const s of sampleStudents) {
+        await tx.student.create({
+          data: {
+            schoolId: school.id,
+            tierId: s.tierId,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            currentClass: s.currentClass,
+            admissionNumber: s.admissionNumber,
+            status: "ENROLLED",
+            parentName: `Mr/Mrs ${s.lastName}`,
+            parentEmail: `parent.${s.lastName.toLowerCase()}@example.com`,
+            parentPhone: "+2348012345678",
           },
         });
       }
     }
-    tiers = await basePrisma.academicTier.findMany({
-      where: { schoolId: school.id },
-      orderBy: { level: "asc" },
+
+    const refreshedSchool = await tx.school.findUnique({
+      where: { id: school.id },
+      include: {
+        academicTiers: true,
+        staff: true,
+        classrooms: true,
+        students: true,
+      },
     });
-  }
 
-  const primaryTier = tiers.find(t => t.name.includes("Primary")) || tiers[0];
-  const secondaryTier = tiers.find(t => t.name.includes("Secondary")) || tiers[tiers.length - 1];
-
-  // 3 & 4. Ensure admin staff exists for the trial session
-  let adminStaff = school.staff?.find((s: any) => s.role === "ADMIN") || null;
-  if (!adminStaff) {
-    let dept = await basePrisma.department.findFirst({
-      where: { schoolId: school.id },
-    });
-    if (!dept) {
-      dept = await basePrisma.department.create({
-        data: {
-          schoolId: school.id,
-          name: "Academic Administration",
-        },
-      });
-    }
-
-    adminStaff = await basePrisma.staff.findFirst({
-      where: { schoolId: school.id, user: { role: "SCHOOL_ADMIN" } },
-    });
-    if (!adminStaff) {
-      let adminUser = await basePrisma.user.findFirst({
-        where: { schoolId: school.id, email: SANDBOX_ADMIN_EMAIL },
-      });
-      if (!adminUser) {
-        adminUser = await basePrisma.user.create({
-          data: {
-            schoolId: school.id,
-            email: SANDBOX_ADMIN_EMAIL,
-            role: "SCHOOL_ADMIN",
-            passwordHash: "",
-            mustChangePassword: true,
-          }
-        });
-      }
-      adminStaff = await basePrisma.staff.create({
-        data: {
-          schoolId: school.id,
-          userId: adminUser.id,
-          firstName: "Trial",
-          lastName: "Administrator",
-          email: SANDBOX_ADMIN_EMAIL,
-          status: "ACTIVE",
-          departmentId: dept.id,
-        },
-      });
-    }
-  }
-
-  // 5. Ensure sample classrooms exist
-  if (school.classrooms.length === 0) {
-    const classData = [
-      { name: "Primary 1", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
-      { name: "Primary 5", capacity: 30, schoolId: school.id, tierId: primaryTier.id },
-      { name: "JSS 1", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
-      { name: "SSS 3", capacity: 35, schoolId: school.id, tierId: secondaryTier.id },
-    ];
-    for (const c of classData) {
-      await basePrisma.classroom.create({ data: c });
-    }
-  }
-
-  // 6. Ensure sample students exist so the dashboard has rich data to explore
-  if (school.students.length === 0) {
-    const sampleStudents = [
-      { firstName: "Amina", lastName: "Bello", currentClass: "Primary 1", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/001" },
-      { firstName: "Emeka", lastName: "Okafor", currentClass: "Primary 5", tierId: primaryTier.id, admissionNumber: "SB/PRI/2026/002" },
-      { firstName: "Chioma", lastName: "Adeyemi", currentClass: "JSS 1", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/001" },
-      { firstName: "Tunde", lastName: "Danjuma", currentClass: "SSS 3", tierId: secondaryTier.id, admissionNumber: "SB/SEC/2026/002" },
-    ];
-
-    for (const s of sampleStudents) {
-      await basePrisma.student.create({
-        data: {
-          schoolId: school.id,
-          tierId: s.tierId,
-          firstName: s.firstName,
-          lastName: s.lastName,
-          currentClass: s.currentClass,
-          admissionNumber: s.admissionNumber,
-          status: "ENROLLED",
-          parentName: `Mr/Mrs ${s.lastName}`,
-          parentEmail: `parent.${s.lastName.toLowerCase()}@example.com`,
-          parentPhone: "+2348012345678",
-        },
-      });
-    }
-  }
-
-  const result = {
-    school,
-    adminStaff,
-    tierNames: tiers.map(t => t.name),
-  };
+    return {
+      school: refreshedSchool || school,
+      adminStaff,
+      tierNames: tiers.map((t) => t.name),
+    };
+  });
 
   (globalThis as any).__cachedTrialSandbox = {
     ...result,
