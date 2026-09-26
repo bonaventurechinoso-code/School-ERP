@@ -91,6 +91,25 @@ export default function RegisterTenantPage() {
     };
   }, []);
 
+  // 1. After all 3 checks = true, IMMEDIATELY redirect:
+  useEffect(() => {
+    if (sslVerified) {
+      const slug = registrationData?.subdomain || formData.subdomain;
+      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+    }
+  }, [sslVerified, registrationData?.subdomain, formData.subdomain]);
+
+  // 2. Add safety timeout so it NEVER spins more than 5 seconds:
+  useEffect(() => {
+    if (isConfiguring) {
+      const slug = registrationData?.subdomain || formData.subdomain;
+      const t = setTimeout(() => {
+        window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [isConfiguring, registrationData?.subdomain, formData.subdomain]);
+
   const availableTiers = [
     { id: "NURSERY", label: "Daycare / Nursery", desc: "Ages 0-4" },
     { id: "PRIMARY", label: "Primary School", desc: "Primary 1 - 6" },
@@ -166,16 +185,9 @@ export default function RegisterTenantPage() {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
 
-            // Execute secure redirect
-            setTimeout(() => {
-              const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-              const baseTarget = isLocal ? data.dashboardUrl : (data.subdomainDashboardUrl || data.dashboardUrl);
-              const hasQuery = baseTarget.includes("?");
-              const targetUrl = data.token
-                ? `${baseTarget}${hasQuery ? "&" : "?"}token=${encodeURIComponent(data.token)}`
-                : baseTarget;
-              window.location.href = targetUrl;
-            }, 1200);
+            // Execute secure redirect immediately
+            const slug = data.subdomain || formData.subdomain;
+            window.location.href = `/login?school=${encodeURIComponent(slug)}`;
             return;
           }
         }
@@ -187,11 +199,13 @@ export default function RegisterTenantPage() {
         setConfiguringStatusText("Establishing cryptographic handshake on internal subdomain...");
       }
       if (attempts >= maxPollAttempts) {
-        // If external DNS is taking long, stop polling and allow manual redirect
+        // If external DNS is taking long, stop polling and redirect
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
         setConfiguringStatusText("SSL generation bound. Ready to access.");
         setSslVerified(true);
+        const slug = data.subdomain || formData.subdomain;
+        window.location.href = `/login?school=${encodeURIComponent(slug)}`;
       }
     };
 
@@ -199,15 +213,8 @@ export default function RegisterTenantPage() {
     if (data.sslReady) {
       setSslVerified(true);
       setConfiguringStatusText("SSL certificate verified! Redirecting to secure school dashboard...");
-      setTimeout(() => {
-        const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-        const baseTarget = isLocal ? data.dashboardUrl : (data.subdomainDashboardUrl || data.dashboardUrl);
-        const hasQuery = baseTarget.includes("?");
-        const targetUrl = data.token
-          ? `${baseTarget}${hasQuery ? "&" : "?"}token=${encodeURIComponent(data.token)}`
-          : baseTarget;
-        window.location.href = targetUrl;
-      }, 1200);
+      const slug = data.subdomain || formData.subdomain;
+      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
       return;
     }
 
@@ -403,21 +410,24 @@ export default function RegisterTenantPage() {
               </div>
 
               {/* Direct Zero-SSL Fallback Link if user needs instant entry */}
-              {registrationData && (
-                <div className="pt-2 max-w-md mx-auto">
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between text-left">
-                    <span className="truncate pr-2">
-                      Target: <span className="font-mono font-semibold text-slate-900">{registrationData.subdomainUrl}</span>
-                    </span>
-                    <a 
-                      href={registrationData.fullDirectPortalUrl + "/dashboard"}
-                      className="text-blue-600 hover:text-blue-800 font-semibold flex-shrink-0"
-                    >
-                      Direct Route &rarr;
-                    </a>
-                  </div>
+              <div className="pt-2 max-w-md mx-auto">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between text-left">
+                  <span className="truncate pr-2">
+                    Target: <span className="font-mono font-semibold text-slate-900">{registrationData?.subdomainUrl || (formData.subdomain ? `${formData.subdomain}.${rootDisplay}` : "Direct Portal")}</span>
+                  </span>
+                  <a 
+                    href={`/login?school=${encodeURIComponent(registrationData?.subdomain || formData.subdomain)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const slug = registrationData?.subdomain || formData.subdomain;
+                      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-semibold flex-shrink-0 cursor-pointer"
+                  >
+                    Direct Route &rarr;
+                  </a>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
