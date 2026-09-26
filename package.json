@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx prisma db execute --file ./prisma/backfill.sql --schema prisma/schema.prisma && npx prisma generate && npx prisma db push --accept-data-loss && next build",
+    "clean-db": "node -e \"const {PrismaClient}=require('@prisma/client');(async()=>{const p=new PrismaClient(); await p.$executeRawUnsafe('DELETE FROM \\\"User\\\"'); await p.$executeRawUnsafe('DELETE FROM \\\"School\\\" WHERE slug IS NULL'); console.log('cleaned'); await p.$disconnect()})()\"",
+    "build": "npx prisma generate && npx prisma db push --accept-data-loss && next build",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push"

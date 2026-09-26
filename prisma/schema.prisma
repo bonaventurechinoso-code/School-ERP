@@ -63,7 +63,7 @@ model School {
   id            String         @id @default(uuid())
   name          String // e.g., "Green Valley High"
   subdomain     String         @unique // e.g., "greenvalley"
-  slug          String         @unique
+  slug          String?        @unique
   logo          String?
   status        String         @default("PENDING_VERIFICATION")
   subscriptions Subscription[]
