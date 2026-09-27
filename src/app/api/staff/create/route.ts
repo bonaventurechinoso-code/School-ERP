@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
+import { sendStaffEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 export async function POST(req: Request) {
   try {
@@ -157,6 +158,19 @@ export async function POST(req: Request) {
     }
 
     await setUserMustChangePassword(user.id, schoolId, true);
+
+    // Dispatch enrollment confirmation email to staff member
+    sendStaffEnrollmentConfirmationEmail({
+      schoolId,
+      staffId: staff.id,
+      staffName: `${firstName.trim()} ${lastName.trim()}`,
+      staffEmail: normalizedEmail,
+      role: canonicalRole,
+      departmentId: finalDeptId || null,
+      temporaryPassword: generatedTempPassword,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in api/staff/create:", emailErr);
+    });
 
     return NextResponse.json(
       {

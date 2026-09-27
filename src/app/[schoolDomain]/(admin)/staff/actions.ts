@@ -7,6 +7,7 @@ import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/secur
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
+import { sendStaffEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -424,6 +425,20 @@ export async function createStaff(
 
     await invalidateStaffNamespace(schoolId);
     safeRevalidate(`/[schoolDomain]/staff`, "page");
+
+    // Dispatch enrollment confirmation email to staff member
+    sendStaffEnrollmentConfirmationEmail({
+      schoolId,
+      staffId: staff.id,
+      staffName: `${data.firstName.trim()} ${data.lastName.trim()}`,
+      staffEmail: data.email.trim().toLowerCase(),
+      role: canonicalRole,
+      departmentId: data.departmentId || null,
+      temporaryPassword: isTemporary ? staffPasswordToSave : undefined,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in createStaff:", emailErr);
+    });
+
     return { success: true, data: staff };
   } catch (error: any) {
     console.error("[createStaff] Failed to create staff:", error);

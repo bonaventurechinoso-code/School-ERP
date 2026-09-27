@@ -2,7 +2,7 @@
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
-import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
@@ -224,7 +224,7 @@ export async function enrollApplicantAction(payload: {
 
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
-      select: { id: true, subdomain: true },
+      select: { id: true, subdomain: true, name: true },
     });
 
     const [firstName, ...lastNameParts] = (lead.applicantName || "").trim().split(" ");
@@ -324,6 +324,24 @@ export async function enrollApplicantAction(payload: {
     safeRevalidate("/[schoolDomain]/(admin)/students", "page");
     safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
     safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
+
+    // Dispatch enrollment confirmation email to student / parent
+    sendStudentEnrollmentConfirmationEmail({
+      schoolId: lead.schoolId,
+      studentId: newStudent.id,
+      schoolName: school?.name,
+      subdomain: domain,
+      studentName: `${firstName} ${lastName}`.trim(),
+      admissionNumber,
+      currentClass: lead.targetGrade,
+      tierName: targetTier || lead.tier?.name,
+      studentEmail: lead.studentEmail,
+      parentEmail: lead.parentEmail,
+      parentName: lead.parentName,
+      temporaryPassword: isTemporary ? "Welcome123" : undefined,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in enrollLead:", emailErr);
+    });
 
     return {
       success: true,

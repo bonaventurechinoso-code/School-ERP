@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 async function resolveSchool(schoolParam: string) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolParam);
@@ -156,6 +157,24 @@ export async function POST(
 
     // 3. Mark user security status
     await setUserMustChangePassword(user.id, schoolId, true);
+
+    // Dispatch enrollment confirmation email to student / parent
+    sendStudentEnrollmentConfirmationEmail({
+      schoolId,
+      studentId: student.id,
+      schoolName: school.name,
+      subdomain: school.subdomain,
+      studentName: `${firstName.trim()} ${lastName.trim()}`,
+      admissionNumber: finalAdmissionNumber,
+      currentClass: currentClass || "JSS 1",
+      tierName: school.academicTiers?.find(t => t.id === finalTierId)?.name || null,
+      studentEmail: userEmail,
+      parentEmail: parentEmail || null,
+      parentName: parentName || null,
+      temporaryPassword: generatedTempPassword,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api/school/[schoolId]/students:", emailErr);
+    });
 
     return NextResponse.json(
       {

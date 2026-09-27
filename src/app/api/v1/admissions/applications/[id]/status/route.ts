@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
-import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
@@ -24,7 +24,7 @@ export async function PATCH(
 
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
-      select: { id: true, subdomain: true },
+      select: { id: true, subdomain: true, name: true },
     });
 
     let updatedLead;
@@ -140,6 +140,22 @@ export async function PATCH(
       } catch {
         // safe fallback
       }
+
+      // Dispatch enrollment confirmation email to student / parent
+      sendStudentEnrollmentConfirmationEmail({
+        schoolId: lead.schoolId,
+        schoolName: school?.name,
+        subdomain: school?.subdomain,
+        studentName: `${firstName} ${lastName}`.trim(),
+        admissionNumber,
+        currentClass: lead.targetGrade,
+        tierName: lead.tier?.name,
+        studentEmail: lead.studentEmail,
+        parentEmail: lead.parentEmail,
+        parentName: lead.parentName,
+      }).catch((emailErr) => {
+        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in status route:", emailErr);
+      });
     } else {
       updatedLead = await basePrisma.admissionLead.update({
         where: { id },

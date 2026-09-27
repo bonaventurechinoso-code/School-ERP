@@ -1070,5 +1070,621 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
   }
 }
 
+export interface StudentEnrollmentConfirmationEmailPayload {
+  schoolId: string;
+  studentId?: string;
+  schoolName?: string;
+  subdomain?: string;
+  studentName: string;
+  admissionNumber?: string | null;
+  currentClass?: string | null;
+  tierName?: string | null;
+  studentEmail?: string | null;
+  parentEmail?: string | null;
+  parentName?: string | null;
+  temporaryPassword?: string | null;
+}
+
+export interface StaffEnrollmentConfirmationEmailPayload {
+  schoolId: string;
+  staffId?: string;
+  schoolName?: string;
+  subdomain?: string;
+  staffName: string;
+  staffEmail: string;
+  role?: string | null;
+  departmentId?: string | null;
+  departmentName?: string | null;
+  temporaryPassword?: string | null;
+}
+
+/**
+ * Sends a confirmation email to the student and/or parent when a student is enrolled.
+ * Dispatches via Resend API using FROM = "School ERP <noreply@bonaveeict.com.ng>".
+ * Uses the same email template style as the school registration welcome email.
+ * Non-blocking: logs failures without throwing exceptions.
+ */
+export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnrollmentConfirmationEmailPayload) {
+  try {
+    const {
+      schoolId,
+      studentId,
+      studentName,
+      admissionNumber,
+      currentClass,
+      tierName,
+      studentEmail,
+      parentEmail,
+      parentName,
+      temporaryPassword,
+    } = payload;
+
+    // Resolve school details if missing
+    let schoolName = payload.schoolName;
+    let subdomain = payload.subdomain;
+    if ((!schoolName || !subdomain) && schoolId) {
+      try {
+        const school = await basePrisma.school.findUnique({
+          where: { id: schoolId },
+          select: { name: true, subdomain: true },
+        });
+        if (school) {
+          schoolName = schoolName || school.name;
+          subdomain = subdomain || school.subdomain;
+        }
+      } catch (err) {
+        console.warn("[EMAIL_SERVICE] Warning: Could not fetch school for student enrollment email:", err);
+      }
+    }
+
+    const tenantName = schoolName || "School ERP";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
+    const brandColor = "#4f46e5";
+    const messageId = `<student-enroll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
+    const subject = `🎉 Enrollment Confirmation - ${studentName} (${tenantName})`;
+
+    // Collect valid recipients (student email and/or parent email)
+    const rawRecipients = [parentEmail, studentEmail].filter(
+      (e): e is string => typeof e === "string" && e.trim().length > 0 && e.includes("@")
+    );
+    const recipients = Array.from(new Set(rawRecipients.map((e) => e.trim().toLowerCase())));
+
+    if (recipients.length === 0) {
+      console.warn(`[EMAIL_SERVICE] Cannot dispatch student enrollment confirmation: No valid recipient email provided for ${studentName} (ID: ${studentId || "unknown"})`);
+      return { success: false, error: "No recipient email address" };
+    }
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Student Enrollment Confirmed - ${tenantName}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+          .header { background: ${brandColor}; padding: 36px 32px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+          .header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; font-weight: 500; }
+          .content { padding: 36px 32px; line-height: 1.6; }
+          .welcome-text { font-size: 16px; color: #334155; margin-bottom: 24px; }
+          .credentials-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; border-left: 5px solid ${brandColor}; }
+          .cred-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+          .cred-row:last-child { border-bottom: none; }
+          .cred-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; }
+          .cred-value { font-size: 15px; font-weight: 700; color: #0f172a; word-break: break-all; }
+          .action-area { text-align: center; margin: 32px 0 20px 0; }
+          .login-btn { display: inline-block; background-color: ${brandColor}; color: #ffffff !important; text-decoration: none; padding: 15px 36px; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.35); }
+          .direct-link { font-size: 13px; color: #64748b; word-break: break-all; background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-top: 20px; }
+          .footer { padding: 24px 32px; text-align: center; color: #94a3b8; font-size: 13px; border-top: 1px solid #e2e8f0; background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${tenantName}</h1>
+            <p>Student Enrollment Confirmation</p>
+          </div>
+          <div class="content">
+            <p class="welcome-text">
+              ${parentName ? `Dear <strong>${parentName}</strong>,<br/><br/>` : ""}Congratulations! We are delighted to confirm that <strong>${studentName}</strong> has been successfully enrolled at <strong>${tenantName}</strong>. Welcome to our academic community!
+            </p>
+
+            <div class="credentials-card">
+              <div class="cred-row">
+                <span class="cred-label">Student Name</span>
+                <span class="cred-value">${studentName}</span>
+              </div>
+              ${admissionNumber ? `
+              <div class="cred-row">
+                <span class="cred-label">Admission Number</span>
+                <span class="cred-value">${admissionNumber}</span>
+              </div>` : ""}
+              ${currentClass ? `
+              <div class="cred-row">
+                <span class="cred-label">Class / Grade</span>
+                <span class="cred-value">${currentClass}</span>
+              </div>` : ""}
+              ${tierName ? `
+              <div class="cred-row">
+                <span class="cred-label">Academic Tier</span>
+                <span class="cred-value">${tierName}</span>
+              </div>` : ""}
+              <div class="cred-row">
+                <span class="cred-label">Portal URL</span>
+                <span class="cred-value">${portalUrl}</span>
+              </div>
+              ${studentEmail ? `
+              <div class="cred-row">
+                <span class="cred-label">Student Login</span>
+                <span class="cred-value">${studentEmail}</span>
+              </div>` : ""}
+              ${temporaryPassword ? `
+              <div class="cred-row">
+                <span class="cred-label">Temporary Password</span>
+                <span class="cred-value">${temporaryPassword}</span>
+              </div>` : ""}
+            </div>
+
+            <div class="action-area">
+              <a href="${portalUrl}" class="login-btn" target="_blank" rel="noopener noreferrer">
+                Access Student Portal &rarr;
+              </a>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; margin-top: 24px;">
+              You can access the portal directly anytime at:
+            </p>
+            <div class="direct-link">
+              <a href="${portalUrl}" style="color: ${brandColor}; font-weight: 600;">${portalUrl}</a>
+            </div>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by School ERP<br/>
+            Need assistance? Contact the school admissions office or reply directly to this notification.
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    let deliveryStatus = "SIMULATED";
+    const fromAddress = "School ERP <noreply@bonaveeict.com.ng>";
+
+    console.log(`[EMAIL_SERVICE] Initiating student enrollment confirmation for: ${recipients.join(", ")}`);
+
+    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
+    if (process.env.RESEND_API_KEY) {
+      try {
+        console.log(`[EMAIL_SERVICE] Sending student enrollment confirmation via Resend API (From: "${fromAddress}", To: ${JSON.stringify(recipients)})...`);
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: recipients,
+            subject,
+            html: emailHtml,
+          }),
+        });
+        const resendData = await resendRes.json();
+        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
+        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
+
+        if (resendRes.ok) {
+          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
+          console.log(`[EMAIL_DISPATCH] Student enrollment confirmation delivered to ${recipients.join(", ")} (id: ${resendData.id})`);
+        } else {
+          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${recipients.join(", ")}:`, resendData);
+          console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
+          try {
+              const fallbackRes = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  from: "School ERP <onboarding@resend.dev>",
+                  to: recipients,
+                  subject,
+                  html: emailHtml,
+                }),
+              });
+              const fallbackData = await fallbackRes.json();
+              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
+              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
+              if (fallbackRes.ok) {
+                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
+                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${recipients.join(", ")} (id: ${fallbackData.id})`);
+              }
+            } catch (fbErr: any) {
+              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
+            }
+        }
+      } catch (resendErr: any) {
+        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
+      }
+    }
+
+    // 2. Dispatch via SMTP if configured and Resend not delivered
+    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
+      try {
+        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || "587"),
+          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+          },
+        });
+        const info = await transporter.sendMail({
+          from: fromAddress,
+          to: recipients,
+          subject,
+          html: emailHtml,
+        });
+        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
+        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${recipients.join(", ")}:`, info.messageId);
+      } catch (smtpErr: any) {
+        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
+      }
+    }
+
+    // 3. Fallback / Transport Logging
+    console.log("----------------------------------------------------------------");
+    console.log(`[STUDENT_ENROLLMENT_EMAIL] Dispatched to: ${recipients.join(", ")}`);
+    console.log(`School: ${tenantName} (${subdomain || "default"})`);
+    console.log(`Student: ${studentName} (${admissionNumber || "N/A"})`);
+    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log("----------------------------------------------------------------");
+
+    // Local file log
+    try {
+      const logsDir = path.join(process.cwd(), "logs");
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      const logFilePath = path.join(logsDir, "enrollment-emails.log");
+      const logEntry = `[${new Date().toISOString()}] TYPE=STUDENT STATUS=${deliveryStatus} TO="${recipients.join(", ")}" SCHOOL="${tenantName}" STUDENT="${studentName}"\n`;
+      fs.appendFileSync(logFilePath, logEntry, "utf8");
+    } catch {}
+
+    // Persist to MessageLog table
+    if (schoolId) {
+      for (const recipient of recipients) {
+        try {
+          await basePrisma.messageLog.create({
+            data: {
+              schoolId,
+              recipientEmail: recipient,
+              recipientType: recipient === parentEmail?.toLowerCase().trim() ? "PARENT" : "STUDENT",
+              messageType: "EMAIL",
+              subject,
+              body: emailHtml,
+              sentAt: new Date(),
+            },
+          });
+        } catch (dbErr) {
+          console.warn("[EMAIL_SERVICE] Warning: Could not save student enrollment message log to DB:", dbErr);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      deliveryStatus,
+      recipients,
+      studentName,
+      schoolName: tenantName,
+      subject,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to dispatch student enrollment confirmation email:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Sends a confirmation email to the staff member upon enrollment.
+ * Dispatches via Resend API using FROM = "School ERP <noreply@bonaveeict.com.ng>".
+ * Uses the same email template style as the school registration welcome email.
+ * Non-blocking: logs failures without throwing exceptions.
+ */
+export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollmentConfirmationEmailPayload) {
+  try {
+    const {
+      schoolId,
+      staffId,
+      staffName,
+      staffEmail,
+      role,
+      departmentId,
+      temporaryPassword,
+    } = payload;
+
+    // Resolve school details if missing
+    let schoolName = payload.schoolName;
+    let subdomain = payload.subdomain;
+    if ((!schoolName || !subdomain) && schoolId) {
+      try {
+        const school = await basePrisma.school.findUnique({
+          where: { id: schoolId },
+          select: { name: true, subdomain: true },
+        });
+        if (school) {
+          schoolName = schoolName || school.name;
+          subdomain = subdomain || school.subdomain;
+        }
+      } catch (err) {
+        console.warn("[EMAIL_SERVICE] Warning: Could not fetch school for staff enrollment email:", err);
+      }
+    }
+
+    // Resolve department name if missing
+    let departmentName = payload.departmentName;
+    if (!departmentName && departmentId) {
+      try {
+        const dept = await basePrisma.department.findUnique({
+          where: { id: departmentId },
+          select: { name: true },
+        });
+        if (dept) {
+          departmentName = dept.name;
+        }
+      } catch {}
+    }
+
+    const tenantName = schoolName || "School ERP";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
+    const brandColor = "#4f46e5";
+    const messageId = `<staff-enroll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
+    const subject = `🎉 Staff Enrollment Confirmation - Welcome to ${tenantName}`;
+
+    const normalizedStaffEmail = staffEmail?.trim().toLowerCase();
+    if (!normalizedStaffEmail || !normalizedStaffEmail.includes("@")) {
+      console.warn(`[EMAIL_SERVICE] Cannot dispatch staff enrollment confirmation: No valid email provided for ${staffName} (ID: ${staffId || "unknown"})`);
+      return { success: false, error: "No valid staff email address" };
+    }
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Staff Enrollment Confirmed - ${tenantName}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+          .header { background: ${brandColor}; padding: 36px 32px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+          .header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; font-weight: 500; }
+          .content { padding: 36px 32px; line-height: 1.6; }
+          .welcome-text { font-size: 16px; color: #334155; margin-bottom: 24px; }
+          .credentials-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; border-left: 5px solid ${brandColor}; }
+          .cred-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+          .cred-row:last-child { border-bottom: none; }
+          .cred-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; }
+          .cred-value { font-size: 15px; font-weight: 700; color: #0f172a; word-break: break-all; }
+          .action-area { text-align: center; margin: 32px 0 20px 0; }
+          .login-btn { display: inline-block; background-color: ${brandColor}; color: #ffffff !important; text-decoration: none; padding: 15px 36px; border-radius: 10px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.35); }
+          .direct-link { font-size: 13px; color: #64748b; word-break: break-all; background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-top: 20px; }
+          .footer { padding: 24px 32px; text-align: center; color: #94a3b8; font-size: 13px; border-top: 1px solid #e2e8f0; background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${tenantName}</h1>
+            <p>Staff Enrollment & Onboarding Confirmation</p>
+          </div>
+          <div class="content">
+            <p class="welcome-text">
+              Congratulations! Your staff account for <strong>${tenantName}</strong> has been successfully configured and enrolled on the School ERP platform.
+            </p>
+
+            <div class="credentials-card">
+              <div class="cred-row">
+                <span class="cred-label">Staff Name</span>
+                <span class="cred-value">${staffName}</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Role / Position</span>
+                <span class="cred-value">${role || "Staff Member"}</span>
+              </div>
+              ${departmentName ? `
+              <div class="cred-row">
+                <span class="cred-label">Department</span>
+                <span class="cred-value">${departmentName}</span>
+              </div>` : ""}
+              <div class="cred-row">
+                <span class="cred-label">Portal URL</span>
+                <span class="cred-value">${portalUrl}</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Staff Login</span>
+                <span class="cred-value">${normalizedStaffEmail}</span>
+              </div>
+              ${temporaryPassword ? `
+              <div class="cred-row">
+                <span class="cred-label">Temporary Password</span>
+                <span class="cred-value">${temporaryPassword}</span>
+              </div>` : ""}
+            </div>
+
+            <div class="action-area">
+              <a href="${portalUrl}" class="login-btn" target="_blank" rel="noopener noreferrer">
+                Access Staff Portal &rarr;
+              </a>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; margin-top: 24px;">
+              You can access the portal directly anytime at:
+            </p>
+            <div class="direct-link">
+              <a href="${portalUrl}" style="color: ${brandColor}; font-weight: 600;">${portalUrl}</a>
+            </div>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by School ERP<br/>
+            Need assistance? Contact the school administration or reply directly to this notification.
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    let deliveryStatus = "SIMULATED";
+    const fromAddress = "School ERP <noreply@bonaveeict.com.ng>";
+
+    console.log(`[EMAIL_SERVICE] Initiating staff enrollment confirmation for: ${normalizedStaffEmail}`);
+
+    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
+    if (process.env.RESEND_API_KEY) {
+      try {
+        console.log(`[EMAIL_SERVICE] Sending staff enrollment confirmation via Resend API (From: "${fromAddress}", To: "${normalizedStaffEmail}")...`);
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [normalizedStaffEmail],
+            subject,
+            html: emailHtml,
+          }),
+        });
+        const resendData = await resendRes.json();
+        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
+        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
+
+        if (resendRes.ok) {
+          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
+          console.log(`[EMAIL_DISPATCH] Staff enrollment confirmation delivered to ${normalizedStaffEmail} (id: ${resendData.id})`);
+        } else {
+          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${normalizedStaffEmail}:`, resendData);
+          console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
+          try {
+              const fallbackRes = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  from: "School ERP <onboarding@resend.dev>",
+                  to: [normalizedStaffEmail],
+                  subject,
+                  html: emailHtml,
+                }),
+              });
+              const fallbackData = await fallbackRes.json();
+              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
+              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
+              if (fallbackRes.ok) {
+                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
+                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${normalizedStaffEmail} (id: ${fallbackData.id})`);
+              }
+            } catch (fbErr: any) {
+              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
+            }
+        }
+      } catch (resendErr: any) {
+        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
+      }
+    }
+
+    // 2. Dispatch via SMTP if configured and Resend not delivered
+    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
+      try {
+        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || "587"),
+          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+          },
+        });
+        const info = await transporter.sendMail({
+          from: fromAddress,
+          to: normalizedStaffEmail,
+          subject,
+          html: emailHtml,
+        });
+        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
+        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${normalizedStaffEmail}:`, info.messageId);
+      } catch (smtpErr: any) {
+        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
+      }
+    }
+
+    // 3. Fallback / Transport Logging
+    console.log("----------------------------------------------------------------");
+    console.log(`[STAFF_ENROLLMENT_EMAIL] Dispatched to: ${normalizedStaffEmail}`);
+    console.log(`School: ${tenantName} (${subdomain || "default"})`);
+    console.log(`Staff: ${staffName} (${role || "Staff Member"})`);
+    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log("----------------------------------------------------------------");
+
+    // Local file log
+    try {
+      const logsDir = path.join(process.cwd(), "logs");
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      const logFilePath = path.join(logsDir, "enrollment-emails.log");
+      const logEntry = `[${new Date().toISOString()}] TYPE=STAFF STATUS=${deliveryStatus} TO="${normalizedStaffEmail}" SCHOOL="${tenantName}" STAFF="${staffName}"\n`;
+      fs.appendFileSync(logFilePath, logEntry, "utf8");
+    } catch {}
+
+    // Persist to MessageLog table
+    if (schoolId) {
+      try {
+        await basePrisma.messageLog.create({
+          data: {
+            schoolId,
+            recipientEmail: normalizedStaffEmail,
+            recipientType: "STAFF",
+            messageType: "EMAIL",
+            subject,
+            body: emailHtml,
+            sentAt: new Date(),
+          },
+        });
+      } catch (dbErr) {
+        console.warn("[EMAIL_SERVICE] Warning: Could not save staff enrollment message log to DB:", dbErr);
+      }
+    }
+
+    return {
+      success: true,
+      deliveryStatus,
+      recipient: normalizedStaffEmail,
+      staffName,
+      schoolName: tenantName,
+      subject,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to dispatch staff enrollment confirmation email:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+
 
 

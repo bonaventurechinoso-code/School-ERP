@@ -4,12 +4,13 @@ import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTi
 import { revalidatePath } from "next/cache";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 export async function acceptOfferAction(token: string, schoolDomain: string) {
   try {
     const school = await basePrisma.school.findUnique({
       where: { subdomain: schoolDomain },
-      select: { id: true, subdomain: true },
+      select: { id: true, subdomain: true, name: true },
     });
     if (!school) throw new Error("School not found");
 
@@ -109,6 +110,22 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
     } catch {
       // safe fallback
     }
+
+    // Dispatch enrollment confirmation email to student / parent
+    sendStudentEnrollmentConfirmationEmail({
+      schoolId: school.id,
+      schoolName: school.name,
+      subdomain: school.subdomain,
+      studentName: `${firstName} ${lastName}`.trim(),
+      admissionNumber,
+      currentClass: lead.targetGrade,
+      tierName: targetTier,
+      studentEmail: lead.studentEmail,
+      parentEmail: lead.parentEmail,
+      parentName: lead.parentName,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in acceptOfferAction:", emailErr);
+    });
 
     return { success: true };
   } catch (error: any) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 export async function POST(
   req: NextRequest,
@@ -46,7 +47,7 @@ export async function POST(
 
     const school = await basePrisma.school.findUnique({ 
       where: { id: schoolId },
-      select: { id: true, subdomain: true }
+      select: { id: true, subdomain: true, name: true }
     });
 
     const [firstName, ...lastNameParts] = (lead.applicantName || "").trim().split(" ");
@@ -129,6 +130,23 @@ export async function POST(
     } catch {
       // safe fallback
     }
+
+    // Dispatch enrollment confirmation email to student / parent
+    sendStudentEnrollmentConfirmationEmail({
+      schoolId: lead.schoolId,
+      studentId: newStudent.id,
+      schoolName: school?.name,
+      subdomain: school?.subdomain,
+      studentName: `${firstName} ${lastName}`.trim(),
+      admissionNumber,
+      currentClass: lead.targetGrade,
+      tierName: lead.tier?.name,
+      studentEmail: lead.studentEmail,
+      parentEmail: lead.parentEmail,
+      parentName: lead.parentName,
+    }).catch((emailErr) => {
+      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api enroll route:", emailErr);
+    });
 
     return NextResponse.json({
       success: true,

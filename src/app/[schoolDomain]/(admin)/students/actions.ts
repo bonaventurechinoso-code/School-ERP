@@ -10,6 +10,7 @@ import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -324,6 +325,26 @@ export async function createStudent(
     // Record user security status: assign mustChangePassword: true
     await setUserMustChangePassword(user.id, schoolId, true);
 
+    // Dispatch enrollment confirmation email if enrolled
+    if (data.status === "ENROLLED" || !data.status) {
+      sendStudentEnrollmentConfirmationEmail({
+        schoolId,
+        studentId: createdStudent.id,
+        schoolName: school?.name,
+        subdomain: school?.subdomain,
+        studentName: `${data.firstName.trim()} ${data.lastName.trim()}`,
+        admissionNumber: finalAdmissionNumber,
+        currentClass: data.currentClass || null,
+        tierName: tierContext,
+        studentEmail: userEmail,
+        parentEmail: data.parentEmail || null,
+        parentName: data.parentName || null,
+        temporaryPassword: isTemporary ? passwordToSave : undefined,
+      }).catch((emailErr) => {
+        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error:", emailErr);
+      });
+    }
+
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
 
@@ -437,6 +458,26 @@ export async function updateStudentStatus(
       where: { id: studentId },
       data
     });
+
+    if (newStatus === "ENROLLED") {
+      tenantDb.student.findUnique({ where: { id: studentId } }).then((st: any) => {
+        if (st) {
+          sendStudentEnrollmentConfirmationEmail({
+            schoolId,
+            studentId: st.id,
+            studentName: `${st.firstName} ${st.lastName}`.trim(),
+            admissionNumber: st.admissionNumber,
+            currentClass: st.currentClass,
+            tierName: tierContext,
+            studentEmail: st.email,
+            parentEmail: st.parentEmail,
+            parentName: st.parentName,
+          }).catch((emailErr) => {
+            console.error("[EMAIL_DISPATCH] Student enrollment confirmation error:", emailErr);
+          });
+        }
+      }).catch(() => {});
+    }
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
