@@ -930,7 +930,7 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
     // 1. Dispatch via Resend API if RESEND_API_KEY is configured
     if (process.env.RESEND_API_KEY) {
       try {
-        const fromAddress = process.env.EMAIL_FROM || "School ERP <onboarding@resend.dev>";
+        const fromAddress = process.env.EMAIL_FROM || "School ERP <noreply@bonaveeict.com.ng>";
         console.log(`[EMAIL_SERVICE] Sending via Resend API (From: "${fromAddress}", To: "${adminEmail}")...`);
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",

@@ -70,7 +70,7 @@ async function testEmail() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "School ERP <onboarding@resend.dev>",
+          from: process.env.EMAIL_FROM || "School ERP <noreply@bonaveeict.com.ng>",
           to: [adminEmail],
           subject,
           html: emailHtml,
