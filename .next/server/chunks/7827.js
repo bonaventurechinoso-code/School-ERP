@@ -72,7 +72,7 @@ exports.id=7827,exports.ids=[7827],exports.modules={45673:(e,t,s)=>{Promise.reso
               (function() {
                 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
                   window.addEventListener('load', function() {
-                    navigator.serviceWorker.register('/sw.js')
+                    navigator.serviceWorker.register('/sw.js', { scope: '/' })
                       .then(function(registration) {
                         console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
                       })

@@ -87,7 +87,7 @@ exports.id=6009,exports.ids=[6009],exports.modules={12558:(e,a,t)=>{let s={"017a
               (function() {
                 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
                   window.addEventListener('load', function() {
-                    navigator.serviceWorker.register('/sw.js')
+                    navigator.serviceWorker.register('/sw.js', { scope: '/' })
                       .then(function(registration) {
                         console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
                       })
