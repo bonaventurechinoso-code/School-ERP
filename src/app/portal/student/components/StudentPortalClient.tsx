@@ -285,12 +285,12 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
             <div className="space-y-6 animate-in fade-in duration-300">
               {/* Student Welcome Hero Card (Modern School ERP Banner) */}
               <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-indigo-900 text-white rounded-2xl p-6 sm:p-8 shadow-lg shadow-indigo-950/20 border border-indigo-800/40 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                {/* Decorative ambient background glows */}
-                <div className="absolute -top-20 -right-20 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-500/15 rounded-full blur-2xl pointer-events-none" />
+                {/* Decorative ambient background glows - hidden on mobile to prevent Android compositor tearing */}
+                <div className="hidden sm:block absolute -top-20 -right-20 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+                <div className="hidden sm:block absolute -bottom-20 -left-20 w-64 h-64 bg-purple-500/15 rounded-full blur-2xl pointer-events-none" />
                 
-                <div className="space-y-2 relative z-10">
-                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                <div className="space-y-2 relative z-10 min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white truncate min-w-0">
                     Welcome back, {student.firstName}!
                   </h2>
                   <p className="text-xs sm:text-sm text-indigo-100/80 max-w-xl leading-relaxed">
@@ -313,20 +313,20 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
                 </div>
 
                 {/* Student Identity Card */}
-                <div className="flex items-center gap-3.5 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 px-4 py-3 rounded-xl shrink-0 transition relative z-10 text-white">
-                  <div className="w-11 h-11 rounded-lg bg-indigo-500/30 text-indigo-200 flex items-center justify-center font-bold text-lg border border-indigo-400/20">
+                <div className="flex items-center gap-3.5 bg-[#1e1e2f] border border-indigo-700/50 px-4 py-3 rounded-xl shrink-0 transition relative z-10 text-white overflow-hidden transform-gpu min-w-0">
+                  <div className="w-11 h-11 rounded-lg bg-indigo-500/30 text-indigo-200 flex items-center justify-center font-bold text-lg border border-indigo-400/20 shrink-0">
                     <User className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-[10px] text-indigo-200 uppercase font-bold tracking-wider">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-[10px] text-indigo-200 uppercase font-bold tracking-wider truncate min-w-0">
                         {isHigherEd ? "Matric No." : "Student ID"}
                       </p>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-400/25 text-indigo-200 border border-indigo-300/30 font-extrabold uppercase">
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-400/25 text-indigo-200 border border-indigo-300/30 font-extrabold uppercase shrink-0">
                         {currentTierConfig.badgeCode}
                       </span>
                     </div>
-                    <p className="text-sm font-black text-white font-mono tracking-wide whitespace-nowrap">
+                    <p className="text-sm font-black text-white font-mono tracking-wide whitespace-nowrap truncate min-w-0">
                       {student.admissionNumber}
                     </p>
                   </div>
@@ -334,77 +334,77 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
               </div>
 
               {/* 4 Feature Metric Cards: Elevated, Color-Accented Modern ERP Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 {/* Metric 1: Learning Areas / Subjects / Credit Units */}
-                <div className="bg-gradient-to-br from-indigo-50/70 via-white to-white dark:from-indigo-950/30 dark:via-zinc-900 dark:to-zinc-900 p-5 rounded-xl shadow-sm shadow-indigo-100/50 dark:shadow-none border border-indigo-100/80 dark:border-indigo-900/40 relative overflow-hidden group hover:border-indigo-300/80 transition">
+                <div className="bg-[#1e1e2f] p-4 sm:p-5 rounded-xl border border-indigo-900/50 relative overflow-hidden transform-gpu min-w-0 group hover:border-indigo-500/50 transition">
                   <div className="absolute top-0 inset-x-0 h-1 bg-indigo-500" />
-                  <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-500 dark:text-zinc-400">
+                  <div className="flex items-center justify-between text-slate-400 mb-2 min-w-0">
+                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-400 min-w-0">
                       {isHigherEd ? "Credit Units" : isSecondary ? "Subjects" : "Learning Areas"}
                     </span>
-                    <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                       <BookOpen className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  <p className="text-2xl sm:text-3xl font-black text-white truncate min-w-0">
                     {isHigherEd ? `${student.academicRank.creditUnitsRegistered || 21}` : "8"}
                   </p>
-                  <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mt-1 block">
+                  <span className="text-[11px] font-semibold text-indigo-400 mt-1 block truncate min-w-0">
                     {isHigherEd ? "Active This Semester" : "Active This Term"}
                   </span>
                 </div>
 
                 {/* Metric 2: Attendance Rate */}
-                <div className="bg-gradient-to-br from-emerald-50/70 via-white to-white dark:from-emerald-950/30 dark:via-zinc-900 dark:to-zinc-900 p-5 rounded-xl shadow-sm shadow-emerald-100/50 dark:shadow-none border border-emerald-100/80 dark:border-emerald-900/40 relative overflow-hidden group hover:border-emerald-300/80 transition">
+                <div className="bg-[#1e1e2f] p-4 sm:p-5 rounded-xl border border-emerald-900/50 relative overflow-hidden transform-gpu min-w-0 group hover:border-emerald-500/50 transition">
                   <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
-                  <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-500 dark:text-zinc-400">Attendance Rate</span>
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <div className="flex items-center justify-between text-slate-400 mb-2 min-w-0">
+                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-400 min-w-0">Attendance Rate</span>
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                       <CheckCircle2 className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">96.4%</p>
-                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">
+                  <p className="text-2xl sm:text-3xl font-black text-white truncate min-w-0">96.4%</p>
+                  <span className="text-[11px] font-semibold text-emerald-400 mt-1 block truncate min-w-0">
                     Present 52/54 Days
                   </span>
                 </div>
 
                 {/* Metric 3: Academic Standing / Learning Stage / GPA */}
-                <div className="bg-gradient-to-br from-amber-50/70 via-white to-white dark:from-amber-950/30 dark:via-zinc-900 dark:to-zinc-900 p-5 rounded-xl shadow-sm shadow-amber-100/50 dark:shadow-none border border-amber-100/80 dark:border-amber-900/40 relative overflow-hidden group hover:border-amber-300/80 transition">
+                <div className="bg-[#1e1e2f] p-4 sm:p-5 rounded-xl border border-amber-900/50 relative overflow-hidden transform-gpu min-w-0 group hover:border-amber-500/50 transition">
                   <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
-                  <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-500 dark:text-zinc-400">
+                  <div className="flex items-center justify-between text-slate-400 mb-2 min-w-0">
+                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-400 min-w-0">
                       {isHigherEd ? "Semester GPA" : isSecondary ? "Class Rank" : "Learning Stage"}
                     </span>
-                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
                       <Award className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  <p className="text-2xl sm:text-3xl font-black text-white truncate min-w-0">
                     {isHigherEd
                       ? `${student.academicRank.semesterGpa || 3.88}`
                       : isSecondary
                       ? "3rd / 44"
                       : "Stage 3"}
                   </p>
-                  <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-1 block truncate">
+                  <span className="text-[11px] font-semibold text-amber-400 mt-1 block truncate min-w-0">
                     {isHigherEd ? "First Class Standing" : isSecondary ? "Honors Roll" : "Exceeding Expectations"}
                   </span>
                 </div>
 
                 {/* Metric 4: Outstanding Fees */}
-                <div className="bg-gradient-to-br from-purple-50/70 via-white to-white dark:from-purple-950/30 dark:via-zinc-900 dark:to-zinc-900 p-5 rounded-xl shadow-sm shadow-purple-100/50 dark:shadow-none border border-purple-100/80 dark:border-purple-900/40 relative overflow-hidden group hover:border-purple-300/80 transition">
+                <div className="bg-[#1e1e2f] p-4 sm:p-5 rounded-xl border border-purple-900/50 relative overflow-hidden transform-gpu min-w-0 group hover:border-purple-500/50 transition">
                   <div className="absolute top-0 inset-x-0 h-1 bg-purple-500" />
-                  <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-500 dark:text-zinc-400">Outstanding Fees</span>
-                    <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                  <div className="flex items-center justify-between text-slate-400 mb-2 min-w-0">
+                    <span className="text-xs font-bold uppercase tracking-wider truncate text-slate-400 min-w-0">Outstanding Fees</span>
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
                       <CreditCard className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className={`text-2xl sm:text-3xl font-black whitespace-nowrap font-mono tabular-nums tracking-tight ${financeState.outstandingBalance > 0 ? "text-purple-700 dark:text-purple-300" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  <p className={`text-2xl sm:text-3xl font-black whitespace-nowrap font-mono tabular-nums tracking-tight truncate min-w-0 ${financeState.outstandingBalance > 0 ? "text-purple-300" : "text-emerald-400"}`}>
                     {financeState.currency}{financeState.outstandingBalance.toLocaleString()}
                   </p>
-                  <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 mt-1 block">
+                  <span className="text-[11px] font-semibold text-purple-400 mt-1 block truncate min-w-0">
                     {financeState.outstandingBalance > 0 ? "Payment Due" : "Clear Ledger"}
                   </span>
                 </div>
@@ -413,30 +413,30 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
               {/* Isolated Miniature Overview Summary Strip (< 15% Screen Height) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 {/* 1. Latest Institutional Bulletin Snapshot */}
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between overflow-hidden transform-gpu min-w-0">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
                         <Megaphone className="w-4 h-4" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Latest Bulletin</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider truncate">Latest Bulletin</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-medium">Read-only digest</span>
+                      <span className="text-[10px] text-slate-400 font-medium shrink-0">Read-only digest</span>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate min-w-0">
                       {communications.notices[0]?.title || "No active school bulletins at this time"}
                     </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5 truncate min-w-0">
                       {communications.notices[0]?.content || "Official school announcements and notices will appear here."}
                     </p>
                   </div>
                   <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-400 truncate">
                       {communications.notices.length} active announcements
                     </span>
                     <button
                       type="button"
                       onClick={() => setActiveTab("COMMUNICATIONS")}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors shrink-0"
                     >
                       Open Broadcasts <ArrowRight className="w-3 h-3" />
                     </button>
@@ -444,30 +444,30 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
                 </div>
 
                 {/* 2. Academic Enrollment Standing Snapshot */}
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between overflow-hidden transform-gpu min-w-0">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                         <Award className="w-4 h-4" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Academic Record</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider truncate">Academic Record</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-medium">Official Registry</span>
+                      <span className="text-[10px] text-slate-400 font-medium shrink-0">Official Registry</span>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
+                    <p className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate min-w-0">
                       Class / Level: {student.currentClass}
                     </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5 truncate min-w-0">
                       Status: <span className="font-semibold text-emerald-600 dark:text-emerald-400 uppercase">{student.status || "ENROLLED"}</span> • {currentTierConfig.tierName}
                     </p>
                   </div>
                   <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-400 truncate">
                       Verified Bio Profile
                     </span>
                     <button
                       type="button"
                       onClick={() => setActiveTab("PROFILE")}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors shrink-0"
                     >
                       View Student Bio <ArrowRight className="w-3 h-3" />
                     </button>
@@ -475,7 +475,7 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
                 </div>
 
                 {/* 3. Tuition & Clearance Ledger Snapshot */}
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between">
+                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs flex flex-col justify-between overflow-hidden transform-gpu min-w-0">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
