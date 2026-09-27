@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Image from "next/image";
 import {
   CheckCircle2,
   XCircle,
@@ -556,11 +557,14 @@ export default function VerificationsTableClient({
 
             {/* Image Viewer Container */}
             <div className="flex-1 min-h-[320px] max-h-[60vh] overflow-auto flex items-center justify-center bg-black/60 rounded-xl p-3 border border-slate-800">
-              <img
+              <Image
                 src={activeProofForView.proofImageUrl}
                 alt="Payment Proof Receipt"
+                width={800}
+                height={800}
+                unoptimized
                 style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
-                className="max-h-full max-w-full object-contain rounded-lg transition-transform duration-150"
+                className="max-h-full max-w-full w-auto h-auto object-contain rounded-lg transition-transform duration-150"
               />
             </div>
 

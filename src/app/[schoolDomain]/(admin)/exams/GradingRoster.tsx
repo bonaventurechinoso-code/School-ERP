@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo, useRef } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { upsertExamResult } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
@@ -575,7 +575,7 @@ export default function GradingRoster({
   }, [filteredStudents, selectedClass, tenant?.subdomain]);
 
   // Compute Initial State Synchronously
-  const computeInitialState = () => {
+  const computeInitialState = useCallback(() => {
     const initScores: Record<string, Record<string, string>> = {};
     const initTotals: Record<string, number> = {};
 
@@ -626,7 +626,7 @@ export default function GradingRoster({
     });
 
     return { initScores, initTotals };
-  };
+  }, [studentsWithRegNo, examResults, selectedExamId, tierCategory, activeTierDisplay]);
 
   // 7. Input state bound to student.regNo
   const [scores, setScores] = useState<Record<string, Record<string, string>>>(() => computeInitialState().initScores);
@@ -637,7 +637,7 @@ export default function GradingRoster({
     const { initScores, initTotals } = computeInitialState();
     setScores(initScores);
     setCommittedTotals(initTotals);
-  }, [selectedExamId, selectedClass, examResults, studentsWithRegNo, tierCategory, activeTierDisplay]);
+  }, [computeInitialState]);
 
   const getStudentScores = (regNo: string): Record<string, string> => {
     return scores[regNo] || {};

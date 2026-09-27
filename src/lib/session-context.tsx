@@ -248,7 +248,7 @@ export function SessionProvider({
       window.removeEventListener(AUTH_UPDATE_EVENT, handleAuthEvent);
       window.removeEventListener("storage", handleStorageEvent);
     };
-  }, []);
+  }, [initialSession, mockConfig, refreshSession]);
 
   // 4. Role & Permission Calculations
   const role = useMemo(() => {

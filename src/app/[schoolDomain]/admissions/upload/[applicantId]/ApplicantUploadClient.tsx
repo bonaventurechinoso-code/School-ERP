@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import Image from "next/image";
 import {
   UploadCloud,
   CheckCircle2,
@@ -367,9 +368,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
                   {previews.passportPhoto ? (
                     <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
-                      <img
+                      <Image
                         src={previews.passportPhoto}
                         alt="Passport preview"
+                        width={48}
+                        height={48}
+                        unoptimized
                         className="w-12 h-12 rounded-lg object-cover border border-slate-200"
                       />
                       <div className="flex-1 min-w-0">
