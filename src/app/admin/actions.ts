@@ -5,6 +5,13 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import { provisionTierDatabases } from "@/lib/tenant-db-provisioner";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
+import {
+  recordTenantCreated,
+  recordTenantSuspended,
+  recordTenantActivated,
+  recordTenantDeleted,
+  sendSuperAdminTenantRegistrationEmail,
+} from "@/lib/admin-notifications";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -137,6 +144,22 @@ export async function createSchool(formData: FormData) {
           `, user.id, school.id, !isCustom);
         }
       });
+
+      // Record tenant registered notification & trigger Super Admin email
+      recordTenantCreated({
+        schoolName: name,
+        subdomain,
+        adminEmail,
+        tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+      }).catch((err) => console.error("[NOTIF_ERROR]", err));
+
+      sendSuperAdminTenantRegistrationEmail({
+        schoolName: name,
+        subdomain,
+        adminEmail,
+        contactPhone: contactPhone || null,
+        tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+      }).catch((err) => console.error("[SUPER_ADMIN_EMAIL_ERROR]", err));
     } else {
         let createdSchoolId: string | undefined;
         await basePrisma.$transaction(async (tx) => {
@@ -202,6 +225,24 @@ export async function createSchool(formData: FormData) {
             tiers,
             adminEmail,
           }).catch((err) => console.warn("[PROVISIONING_DEFERRED]", err?.message));
+
+          // Record tenant registered notification & trigger Super Admin email
+          recordTenantCreated({
+            schoolId: createdSchoolId,
+            schoolName: name,
+            subdomain,
+            adminEmail,
+            tiers,
+          }).catch((err) => console.error("[NOTIF_ERROR]", err));
+
+          sendSuperAdminTenantRegistrationEmail({
+            schoolName: name,
+            subdomain,
+            adminEmail,
+            contactPhone: contactPhone || null,
+            tiers,
+            schoolId: createdSchoolId,
+          }).catch((err) => console.error("[SUPER_ADMIN_EMAIL_ERROR]", err));
         }
     }
 
@@ -216,10 +257,25 @@ export async function toggleSchoolStatus(schoolId: string, currentStatus: boolea
     const school = await basePrisma.school.update({
       where: { id: schoolId },
       data: { isActive: !currentStatus },
-      select: { subdomain: true }
+      select: { id: true, name: true, subdomain: true, isActive: true }
     });
     if (school?.subdomain) {
       await invalidateTenantMetadata(school.subdomain);
+    }
+    if (school) {
+      if (!currentStatus) {
+        await recordTenantActivated({
+          schoolId: school.id,
+          schoolName: school.name,
+          subdomain: school.subdomain,
+        });
+      } else {
+        await recordTenantSuspended({
+          schoolId: school.id,
+          schoolName: school.name,
+          subdomain: school.subdomain,
+        });
+      }
     }
     revalidatePath("/admin");
   } catch (error: any) {
@@ -231,10 +287,17 @@ export async function deleteSchool(schoolId: string) {
   try {
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
-      select: { subdomain: true }
+      select: { id: true, name: true, subdomain: true }
     });
     if (school?.subdomain) {
       await invalidateTenantMetadata(school.subdomain);
+    }
+    if (school) {
+      await recordTenantDeleted({
+        schoolId: school.id,
+        schoolName: school.name,
+        subdomain: school.subdomain,
+      });
     }
     await basePrisma.school.delete({
       where: { id: schoolId }

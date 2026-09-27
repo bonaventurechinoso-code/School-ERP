@@ -14,6 +14,7 @@ import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
+import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "@/lib/admin-notifications";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -233,7 +234,27 @@ export async function POST(request: Request) {
         console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
       }
 
-      // Automatically issue authenticated database session for newly created Tenant Administrator
+      // Trigger Super-Admin notification record and email alert
+      try {
+        await recordTenantCreated({
+          schoolId: primarySchool.id,
+          schoolName,
+          subdomain: combinedSubdomain,
+          adminEmail,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+        });
+        await sendSuperAdminTenantRegistrationEmail({
+          schoolName,
+          subdomain: combinedSubdomain,
+          adminEmail,
+          contactPhone: contactPhone || null,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          schoolId: primarySchool.id,
+        });
+      } catch (notifErr) {
+        console.error("[SUPER_ADMIN_NOTIF_EXCEPTION]:", notifErr);
+      }
+
       const distinctSessionToken = crypto.randomUUID();
       const sessionResult = await createDatabaseSession({
         userId: primaryStaff.id,
@@ -422,6 +443,27 @@ export async function POST(request: Request) {
       console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
     } catch (emailErr) {
       console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
+    }
+
+    // Trigger Super-Admin notification record and email alert
+    try {
+      await recordTenantCreated({
+        schoolId: newSchool.school.id,
+        schoolName,
+        subdomain: formattedSubdomain,
+        adminEmail,
+        tiers,
+      });
+      await sendSuperAdminTenantRegistrationEmail({
+        schoolName,
+        subdomain: formattedSubdomain,
+        adminEmail,
+        contactPhone: contactPhone || null,
+        tiers,
+        schoolId: newSchool.school.id,
+      });
+    } catch (notifErr) {
+      console.error("[SUPER_ADMIN_NOTIF_EXCEPTION]:", notifErr);
     }
 
     // Synchronize SSL generation with onboarding pipeline:

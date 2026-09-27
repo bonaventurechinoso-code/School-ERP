@@ -89,30 +89,30 @@ export default function SuperAdminSidebar() {
   };
 
   const navContent = (
-    <div className="flex flex-col h-full bg-slate-900 dark:bg-zinc-950 text-slate-300 select-none">
+    <div className="flex flex-col h-full bg-[#0D1117] dark:bg-zinc-950 text-slate-300 select-none">
       {/* Brand Header */}
-      <div className="p-4 sm:p-5 border-b border-slate-800 dark:border-zinc-800/80 flex items-center justify-between">
+      <div className="p-4 sm:p-5 border-b border-slate-800/80 dark:border-zinc-800/80 flex items-center justify-between">
         <Link href="/admin" className="flex items-center gap-3 group">
-          <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-slate-800 dark:bg-zinc-900 border border-slate-700/80 dark:border-zinc-800 flex items-center justify-center p-1.5 shadow-sm group-hover:border-indigo-500 transition-colors">
+          <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-slate-900 dark:bg-zinc-900 border border-slate-700/80 dark:border-zinc-800 flex items-center justify-center p-1.5 shadow-xs group-hover:border-indigo-500/60 transition-colors">
             <Image
               src="/img/business-logo.png"
               alt="School ERP"
-              width={28}
-              height={28}
+              width={26}
+              height={26}
               className="object-contain w-full h-full"
             />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-sm text-white tracking-tight">
+              <span className="font-bold text-sm text-white tracking-tight">
                 School ERP
               </span>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider">
-                Admin
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 uppercase tracking-wider">
+                Console
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-zinc-500 truncate max-w-[130px]">
-              Master Platform Shell
+            <p className="text-[11px] text-slate-400 dark:text-zinc-500 font-medium">
+              Platform Administration
             </p>
           </div>
         </Link>
@@ -128,9 +128,9 @@ export default function SuperAdminSidebar() {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        <div className="px-3 pt-2 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          PLATFORM ADMINISTRATION
+      <nav className="flex-1 p-3.5 space-y-1 overflow-y-auto">
+        <div className="px-3 pt-2 pb-2 text-[10px] font-bold text-slate-500 dark:text-zinc-500 uppercase tracking-widest">
+          Platform Operations
         </div>
 
         {NAV_ITEMS.map((item) => {
@@ -142,33 +142,38 @@ export default function SuperAdminSidebar() {
               key={item.href}
               href={item.href}
               onClick={() => setIsOpen(false)}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-xs transition-all duration-150 group relative ${
+              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group relative ${
                 active
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25 font-semibold"
-                  : "text-slate-300 dark:text-zinc-400 hover:bg-slate-800/70 dark:hover:bg-zinc-900 hover:text-white"
+                  ? "bg-indigo-600/15 text-white font-semibold border border-indigo-500/25 shadow-xs"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 dark:hover:bg-zinc-900/60"
               }`}
             >
               <div className="flex items-center gap-3">
                 <Icon
                   className={`w-4 h-4 shrink-0 transition-colors ${
                     active
-                      ? "text-white"
-                      : "text-slate-400 group-hover:text-indigo-400"
+                      ? "text-indigo-400"
+                      : "text-slate-500 group-hover:text-slate-300"
                   }`}
                 />
-                <span className="tracking-wide">{item.name}</span>
+                <span className="tracking-tight">{item.name}</span>
               </div>
 
               {item.badge && (
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                     active
-                      ? "bg-white/20 text-white"
+                      ? "bg-indigo-500/30 text-indigo-200"
                       : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                   }`}
                 >
                   {item.badge}
                 </span>
+              )}
+
+              {/* Active left indicator indicator bar */}
+              {active && (
+                <span className="absolute left-0 top-2 bottom-2 w-1 bg-indigo-500 rounded-r-full shadow-sm" />
               )}
             </Link>
           );
@@ -176,26 +181,29 @@ export default function SuperAdminSidebar() {
       </nav>
 
       {/* Bottom Status & Footer */}
-      <div className="p-3.5 border-t border-slate-800 dark:border-zinc-800/80 space-y-2">
-        <div className="p-2.5 rounded-xl bg-slate-800/50 dark:bg-zinc-900/50 border border-slate-800 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <div className="p-3.5 border-t border-slate-800/80 dark:border-zinc-800/80 space-y-2.5">
+        <div className="p-3 rounded-xl bg-slate-900/60 dark:bg-zinc-900/50 border border-slate-800 dark:border-zinc-800/80 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
             <div className="text-[11px] leading-tight">
-              <span className="font-semibold text-white block">Cluster Online</span>
-              <span className="text-[10px] text-slate-400">PostgreSQL • Ready</span>
+              <span className="font-semibold text-white block">Platform Active</span>
+              <span className="text-[10px] text-slate-400 dark:text-zinc-500">PostgreSQL Core • 100%</span>
             </div>
           </div>
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
         </div>
 
-        <div className="px-2 py-1 text-[10px] text-slate-500 dark:text-zinc-500 flex items-center justify-between">
-          <span>v1.0 SaaS Super-Admin</span>
+        <div className="px-2 text-[10px] text-slate-500 dark:text-zinc-500 flex items-center justify-between font-mono">
+          <span>v2.4 SaaS Core</span>
           <Link
             href="/"
             target="_blank"
-            className="hover:text-slate-300 transition flex items-center gap-1"
+            className="hover:text-slate-300 transition flex items-center gap-1 font-sans"
           >
-            Portal <ExternalLink className="w-2.5 h-2.5" />
+            Root Portal <ExternalLink className="w-2.5 h-2.5" />
           </Link>
         </div>
       </div>

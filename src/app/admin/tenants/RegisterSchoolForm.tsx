@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PhoneInput } from "@/components/PhoneInput";
 import { SearchableMultiSelect } from "@/components/SearchableMultiSelect";
-import { Plus, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2, Check } from "lucide-react";
 import { createSchool } from "../actions";
 
 export const ACADEMIC_TIERS_OPTIONS = [
@@ -23,7 +23,11 @@ export const ACADEMIC_TIERS_OPTIONS = [
   { id: "Professional / Postgraduate Institute", label: "Professional / Postgraduate Institute" }
 ];
 
-export default function RegisterSchoolForm() {
+export interface RegisterSchoolFormProps {
+  onSuccess?: () => void;
+}
+
+export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProps = {}) {
   const router = useRouter();
 
   const [formData, setFormData] = useState({
@@ -41,6 +45,14 @@ export default function RegisterSchoolForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Real-time password strength validation checks
+  const password = formData.password;
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password);
+  const strengthScore = [hasMinLength, hasUppercase, hasNumber, hasSpecial].filter(Boolean).length;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -114,6 +126,9 @@ export default function RegisterSchoolForm() {
       });
       setSelectedTiers([]);
       router.refresh();
+      if (onSuccess) {
+        setTimeout(() => onSuccess(), 1500);
+      }
     } catch (err: any) {
       // Fallback: try server action createSchool if API endpoint had network issue
       try {
@@ -235,6 +250,58 @@ export default function RegisterSchoolForm() {
             {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         </div>
+
+        {/* Real-time Password Strength Hint */}
+        {formData.password && (
+          <div className="mt-2 space-y-1.5 p-2.5 rounded-xl bg-slate-100/70 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-800 text-[11px] animate-in fade-in duration-150">
+            <div className="flex items-center justify-between font-medium">
+              <span className="text-slate-500 dark:text-zinc-400">Password Strength:</span>
+              <span
+                className={`font-semibold ${
+                  strengthScore === 4
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : strengthScore >= 2
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-rose-600 dark:text-rose-400"
+                }`}
+              >
+                {strengthScore === 4 ? "Strong" : strengthScore >= 2 ? "Moderate" : "Weak"}
+              </span>
+            </div>
+            {/* Segmented Strength Bar */}
+            <div className="grid grid-cols-4 gap-1.5 h-1">
+              {[1, 2, 3, 4].map((step) => (
+                <div
+                  key={step}
+                  className={`h-full rounded-full transition-all duration-200 ${
+                    strengthScore >= step
+                      ? strengthScore === 4
+                        ? "bg-emerald-500"
+                        : strengthScore >= 2
+                        ? "bg-amber-500"
+                        : "bg-rose-500"
+                      : "bg-slate-200 dark:bg-zinc-700"
+                  }`}
+                />
+              ))}
+            </div>
+            {/* Requirement Checklist */}
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-1 text-[10px] text-slate-500 dark:text-zinc-400">
+              <span className={`flex items-center gap-1 ${hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                <Check className={`w-3 h-3 ${hasMinLength ? "opacity-100 stroke-[2.5]" : "opacity-30"}`} /> 8+ characters
+              </span>
+              <span className={`flex items-center gap-1 ${hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                <Check className={`w-3 h-3 ${hasUppercase ? "opacity-100 stroke-[2.5]" : "opacity-30"}`} /> 1 uppercase
+              </span>
+              <span className={`flex items-center gap-1 ${hasNumber ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                <Check className={`w-3 h-3 ${hasNumber ? "opacity-100 stroke-[2.5]" : "opacity-30"}`} /> 1 number
+              </span>
+              <span className={`flex items-center gap-1 ${hasSpecial ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                <Check className={`w-3 h-3 ${hasSpecial ? "opacity-100 stroke-[2.5]" : "opacity-30"}`} /> 1 special symbol
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div>

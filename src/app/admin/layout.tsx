@@ -6,6 +6,7 @@ import { jwtVerify } from "jose";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import AccessDeniedFallback from "@/components/AccessDeniedFallback";
 import SuperAdminSidebar from "./SuperAdminSidebar";
+import AdminNotificationBell from "@/components/AdminNotificationBell";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
@@ -68,7 +69,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-zinc-950 flex flex-col lg:flex-row transition-colors duration-200">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-zinc-950 flex flex-col lg:flex-row transition-colors duration-200">
       <SuperAdminSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
@@ -80,6 +81,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <AdminNotificationBell />
             <div className="bg-slate-100 dark:bg-zinc-800 rounded-full border border-slate-200 dark:border-zinc-700">
               <ThemeToggle />
             </div>

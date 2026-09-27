@@ -6,14 +6,21 @@ import {
   ShieldCheck,
   TrendingUp,
   ArrowRight,
+  Activity,
+  PlusCircle,
+  PauseCircle,
+  CheckCircle2,
+  Trash2,
+  Clock,
 } from "lucide-react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { formatCurrency } from "@/lib/format-utils";
+import { getRecentActivityTimeline } from "@/lib/admin-notifications";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const [schoolsCount, studentsCount, staffCount, platformWallet, recentSchools] =
+  const [schoolsCount, studentsCount, staffCount, platformWallet, recentSchools, recentActivities] =
     await Promise.all([
       basePrisma.school.count(),
       basePrisma.student.count(),
@@ -29,6 +36,7 @@ export default async function AdminDashboardPage() {
           _count: { select: { students: true } },
         },
       }),
+      getRecentActivityTimeline(10),
     ]);
 
   return (
@@ -119,6 +127,123 @@ export default async function AdminDashboardPage() {
             <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">Online</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Cluster healthy & listening</p>
+        </div>
+      </div>
+
+      {/* Recent Activity Timeline (Latest 10 Events: Tenant Created, Suspended, Deleted) */}
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs overflow-hidden">
+        {/* Card Header */}
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50/50 dark:bg-zinc-900/50">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                <Activity className="w-4 h-4" />
+              </span>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Recent Activity
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                Latest 10 events
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Real-time timeline of tenant registrations, status updates, and administrative platform lifecycle events
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/audit-logs"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+            >
+              Full Audit Trail <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Timeline Events List */}
+        <div className="p-5">
+          {recentActivities.length === 0 ? (
+            <div className="py-10 text-center">
+              <Activity className="w-8 h-8 mx-auto text-slate-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-zinc-300">
+                No recent activity recorded yet
+              </p>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Tenant creations, status suspensions, and deletions will automatically log here in real-time.
+              </p>
+            </div>
+          ) : (
+            <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-zinc-800">
+              {recentActivities.map((evt, idx) => {
+                let badgeStyle = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+                let badgeText = "Created";
+                let icon = <PlusCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+                let dotRing = "ring-emerald-500/20 bg-emerald-500";
+
+                if (evt.type === "SUSPENDED") {
+                  badgeStyle = "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+                  badgeText = "Suspended";
+                  icon = <PauseCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
+                  dotRing = "ring-amber-500/20 bg-amber-500";
+                } else if (evt.type === "ACTIVATED") {
+                  badgeStyle = "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800";
+                  badgeText = "Activated";
+                  icon = <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />;
+                  dotRing = "ring-blue-500/20 bg-blue-500";
+                } else if (evt.type === "DELETED") {
+                  badgeStyle = "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800";
+                  badgeText = "Deleted";
+                  icon = <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
+                  dotRing = "ring-rose-500/20 bg-rose-500";
+                }
+
+                return (
+                  <div key={evt.id || idx} className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-2 group">
+                    {/* Node Dot */}
+                    <div className="absolute -left-6 top-1 sm:top-1/2 sm:-translate-y-1/2 w-5 h-5 rounded-full bg-white dark:bg-zinc-900 border-2 border-slate-300 dark:border-zinc-700 flex items-center justify-center">
+                      <span className={`w-2 h-2 rounded-full ${dotRing}`} />
+                    </div>
+
+                    {/* Event Info */}
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border shrink-0 ${badgeStyle}`}>
+                        {icon}
+                        {badgeText}
+                      </span>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link
+                            href="/admin/tenants"
+                            className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate"
+                          >
+                            {evt.schoolName}
+                          </Link>
+                          {evt.subdomain && (
+                            <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 border border-slate-200/50 dark:border-zinc-700/50">
+                              {evt.subdomain}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                          {evt.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Timestamp */}
+                    <div className="text-left sm:text-right shrink-0 pl-11 sm:pl-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-zinc-500">
+                        <Clock className="w-3 h-3" />
+                        {evt.timeAgo}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

@@ -18,6 +18,7 @@ interface EditSchoolProps {
     subdomain: string;
     academicTiers: AcademicTierItem[];
   };
+  trigger?: React.ReactNode;
 }
 
 interface TierOption {
@@ -94,7 +95,7 @@ function matchesTierOption(tierName: string, optionId: string): boolean {
   }
 }
 
-export default function EditSchoolModal({ school }: EditSchoolProps) {
+export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -215,14 +216,20 @@ export default function EditSchoolModal({ school }: EditSchoolProps) {
   return (
     <>
       {/* Row Action Button */}
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20 transition-all duration-150 outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
-        title="Edit Tenant & Institution Types"
-      >
-        EDIT
-      </button>
+      {trigger ? (
+        <div onClick={handleOpen} className="inline-flex items-center cursor-pointer" title="Edit Tenant">
+          {trigger}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20 transition-all duration-150 outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+          title="Edit Tenant & Institution Types"
+        >
+          EDIT
+        </button>
+      )}
 
       {/* Modal Overlay & Card */}
       {isOpen && (
