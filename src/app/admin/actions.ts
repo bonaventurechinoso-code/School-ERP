@@ -6,7 +6,27 @@ import { provisionTierDatabases } from "@/lib/tenant-db-provisioner";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 
-const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION', 'COMBINED_NURSERY_PRIMARY_SECONDARY'];
+const VALID_TIERS = [
+  'Creche / Daycare',
+  'Nursery / Kindergarten',
+  'Primary School',
+  'Junior Secondary School',
+  'Senior Secondary School',
+  'Technical / Vocational School',
+  'Islamiyya / Quranic School',
+  'University',
+  'Polytechnic',
+  'College of Education',
+  'Monotechnic',
+  'College of Nursing / Health Sciences',
+  'Professional / Postgraduate Institute',
+  'NURSERY',
+  'DAYCARE',
+  'PRIMARY',
+  'SECONDARY',
+  'PRIMARY_SECONDARY',
+  'COMBINED_NURSERY_PRIMARY_SECONDARY'
+];
 
 export async function createSchool(formData: FormData) {
   const name = formData.get("name") as string;

@@ -16,14 +16,24 @@ import { logAuditEvent } from "@/lib/audit-logger";
 import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
 
 const VALID_TIERS = [
+  'Creche / Daycare',
+  'Nursery / Kindergarten',
+  'Primary School',
+  'Junior Secondary School',
+  'Senior Secondary School',
+  'Technical / Vocational School',
+  'Islamiyya / Quranic School',
+  'University',
+  'Polytechnic',
+  'College of Education',
+  'Monotechnic',
+  'College of Nursing / Health Sciences',
+  'Professional / Postgraduate Institute',
   'NURSERY',
   'DAYCARE',
   'PRIMARY',
   'SECONDARY',
   'PRIMARY_SECONDARY',
-  'UNIVERSITY',
-  'POLYTECHNIC',
-  'COLLEGE_OF_EDUCATION',
   'COMBINED_NURSERY_PRIMARY_SECONDARY'
 ];
 

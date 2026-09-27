@@ -8,7 +8,26 @@ import { logAuditEvent } from "@/lib/audit-logger";
 
 const execAsync = util.promisify(exec);
 
-const VALID_TIERS = ['NURSERY', 'DAYCARE', 'PRIMARY', 'SECONDARY', 'PRIMARY_SECONDARY', 'UNIVERSITY', 'POLYTECHNIC', 'COLLEGE_OF_EDUCATION'];
+const VALID_TIERS = [
+  'Creche / Daycare',
+  'Nursery / Kindergarten',
+  'Primary School',
+  'Junior Secondary School',
+  'Senior Secondary School',
+  'Technical / Vocational School',
+  'Islamiyya / Quranic School',
+  'University',
+  'Polytechnic',
+  'College of Education',
+  'Monotechnic',
+  'College of Nursing / Health Sciences',
+  'Professional / Postgraduate Institute',
+  'NURSERY',
+  'DAYCARE',
+  'PRIMARY',
+  'SECONDARY',
+  'PRIMARY_SECONDARY'
+];
 
 export async function POST(request: Request) {
   try {

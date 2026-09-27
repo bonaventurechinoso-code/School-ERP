@@ -27,7 +27,90 @@ const getTenantLoginUrl = (subdomain: string) => {
 };
 
 function getTierBadge(tierName: string) {
-  const upperName = (tierName || "").toUpperCase();
+  const norm = (tierName || "").trim();
+  const upperName = norm.toUpperCase();
+
+  // 13 Standalone Academic Tiers
+  if (upperName === "CRECHE / DAYCARE" || upperName === "CRECHE" || upperName === "DAYCARE / CRECHE") {
+    return {
+      style: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
+      label: "Creche / Daycare",
+    };
+  }
+  if (upperName === "NURSERY / KINDERGARTEN" || upperName === "KINDERGARTEN") {
+    return {
+      style: "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-500/20",
+      label: "Nursery / Kindergarten",
+    };
+  }
+  if (upperName.includes("JUNIOR SECONDARY") || upperName === "JSS") {
+    return {
+      style: "bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/20",
+      label: "Junior Secondary School",
+    };
+  }
+  if (upperName.includes("SENIOR SECONDARY") || upperName === "SSS") {
+    return {
+      style: "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20",
+      label: "Senior Secondary School",
+    };
+  }
+  if (upperName.includes("TECHNICAL") || upperName.includes("VOCATIONAL")) {
+    return {
+      style: "bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-500/20",
+      label: "Technical / Vocational School",
+    };
+  }
+  if (upperName.includes("ISLAMIYYA") || upperName.includes("QURANIC")) {
+    return {
+      style: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+      label: "Islamiyya / Quranic School",
+    };
+  }
+  if (upperName.includes("MONOTECHNIC")) {
+    return {
+      style: "bg-pink-50 dark:bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-200 dark:border-pink-500/20",
+      label: "Monotechnic",
+    };
+  }
+  if (upperName.includes("NURSING") || upperName.includes("HEALTH SCIENCES")) {
+    return {
+      style: "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
+      label: "College of Nursing / Health Sciences",
+    };
+  }
+  if (upperName.includes("POSTGRADUATE") || upperName.includes("PROFESSIONAL / POSTGRADUATE")) {
+    return {
+      style: "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-300 dark:border-zinc-700",
+      label: "Professional / Postgraduate Institute",
+    };
+  }
+  if (upperName === "UNIVERSITY" || upperName === "HIGHER ED: UNIVERSITY") {
+    return {
+      style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+      label: "University",
+    };
+  }
+  if (upperName === "POLYTECHNIC" || upperName === "HIGHER ED: POLYTECHNIC") {
+    return {
+      style: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/20",
+      label: "Polytechnic",
+    };
+  }
+  if (upperName === "COLLEGE OF EDUCATION" || upperName === "HIGHER ED: COLLEGE OF EDUCATION" || upperName === "COLLEGE_OF_EDUCATION") {
+    return {
+      style: "bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-500/20",
+      label: "College of Education",
+    };
+  }
+  if (upperName === "PRIMARY SCHOOL" || upperName === "PRIMARY") {
+    return {
+      style: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+      label: "Primary School",
+    };
+  }
+
+  // Legacy mappings for existing tenant records
   if (
     upperName === "DAYCARE" ||
     upperName === "NURSERY" ||
@@ -50,12 +133,12 @@ function getTierBadge(tierName: string) {
       style: "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
       label: "Nursery, Primary & Secondary",
     };
-  } else if (upperName.includes("UNIVERSITY") || upperName === "UNIVERSITY") {
+  } else if (upperName.includes("UNIVERSITY")) {
     return {
       style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
       label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: University",
     };
-  } else if (upperName.includes("POLYTECHNIC") || upperName === "POLYTECHNIC") {
+  } else if (upperName.includes("POLYTECHNIC")) {
     return {
       style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
       label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: Polytechnic",
@@ -65,12 +148,12 @@ function getTierBadge(tierName: string) {
       style: "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
       label: upperName.includes("HIGHER ED") ? tierName : "Higher Ed: College of Education",
     };
-  } else if (upperName.includes("PRIMARY") || upperName === "PRIMARY SCHOOL") {
+  } else if (upperName.includes("PRIMARY")) {
     return {
       style: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
       label: "Primary School",
     };
-  } else if (upperName.includes("SECONDARY") || upperName === "SECONDARY SCHOOL") {
+  } else if (upperName.includes("SECONDARY")) {
     return {
       style: "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20",
       label: "Secondary School",

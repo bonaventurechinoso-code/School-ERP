@@ -3,18 +3,24 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PhoneInput } from "@/components/PhoneInput";
+import { SearchableMultiSelect } from "@/components/SearchableMultiSelect";
 import { Plus, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { createSchool } from "../actions";
 
 export const ACADEMIC_TIERS_OPTIONS = [
-  { id: "DAYCARE", label: "Daycare / Nursery" },
-  { id: "PRIMARY", label: "Primary School" },
-  { id: "SECONDARY", label: "Secondary School" },
-  { id: "PRIMARY_SECONDARY", label: "Combined Primary & Secondary School" },
-  { id: "COMBINED_NURSERY_PRIMARY_SECONDARY", label: "Combined Nursery, Primary & Secondary" },
-  { id: "UNIVERSITY", label: "Higher Ed: University" },
-  { id: "POLYTECHNIC", label: "Higher Ed: Polytechnic" },
-  { id: "COLLEGE_OF_EDUCATION", label: "Higher Ed: College of Education" }
+  { id: "Creche / Daycare", label: "Creche / Daycare" },
+  { id: "Nursery / Kindergarten", label: "Nursery / Kindergarten" },
+  { id: "Primary School", label: "Primary School" },
+  { id: "Junior Secondary School", label: "Junior Secondary School" },
+  { id: "Senior Secondary School", label: "Senior Secondary School" },
+  { id: "Technical / Vocational School", label: "Technical / Vocational School" },
+  { id: "Islamiyya / Quranic School", label: "Islamiyya / Quranic School" },
+  { id: "University", label: "University" },
+  { id: "Polytechnic", label: "Polytechnic" },
+  { id: "College of Education", label: "College of Education" },
+  { id: "Monotechnic", label: "Monotechnic" },
+  { id: "College of Nursing / Health Sciences", label: "College of Nursing / Health Sciences" },
+  { id: "Professional / Postgraduate Institute", label: "Professional / Postgraduate Institute" }
 ];
 
 export default function RegisterSchoolForm() {
@@ -35,12 +41,6 @@ export default function RegisterSchoolForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const handleTierToggle = (tierId: string) => {
-    setSelectedTiers((prev) =>
-      prev.includes(tierId) ? prev.filter((id) => id !== tierId) : [...prev, tierId]
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -280,29 +280,13 @@ export default function RegisterSchoolForm() {
         <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">
           Academic Tiers *
         </label>
-        <div className="space-y-2 p-3 rounded-xl bg-slate-50/80 dark:bg-zinc-800/30 border border-slate-200/80 dark:border-zinc-800/80 max-h-44 overflow-y-auto">
-          {ACADEMIC_TIERS_OPTIONS.map((tier) => {
-            const isChecked = selectedTiers.includes(tier.id);
-            return (
-              <label
-                key={tier.id}
-                className="flex items-start space-x-2.5 text-xs text-slate-700 dark:text-zinc-300 cursor-pointer group hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-              >
-                <div className="pt-0.5">
-                  <input
-                    type="checkbox"
-                    name="tiers"
-                    value={tier.id}
-                    checked={isChecked}
-                    onChange={() => handleTierToggle(tier.id)}
-                    className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                </div>
-                <span className="font-medium">{tier.label}</span>
-              </label>
-            );
-          })}
-        </div>
+        <SearchableMultiSelect
+          options={ACADEMIC_TIERS_OPTIONS}
+          selected={selectedTiers}
+          onChange={(newTiers) => setSelectedTiers(newTiers)}
+          placeholder="Select one or more academic tiers..."
+          searchPlaceholder="Search academic tiers..."
+        />
       </div>
 
       {/* Clear, Functional Action Submission Button */}
