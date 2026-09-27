@@ -1,9 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/api/tenants/status/route": "app/api/tenants/status/route.js",
-  "/api/auth/demo-session/route": "app/api/auth/demo-session/route.js",
-  "/[schoolDomain]/page": "app/[schoolDomain]/page.js",
-  "/[schoolDomain]/portal/student/page": "app/[schoolDomain]/portal/student/page.js",
-  "/[schoolDomain]/(admin)/dashboard/page": "app/[schoolDomain]/(admin)/dashboard/page.js",
-  "/[schoolDomain]/(admin)/portal-settings/page": "app/[schoolDomain]/(admin)/portal-settings/page.js"
-}

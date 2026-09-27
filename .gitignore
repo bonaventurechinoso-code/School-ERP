@@ -6,12 +6,10 @@
 # testing
 /coverage
 
-# next.js (tracking precompiled build assets for zero-memory remote deployments)
-# /.next/
-.next/cache/
-.next/static/webpack/
-.next/static/development/
-# /out/
+# next.js
+.next/
+/.next/
+
 
 # production
 # /build
