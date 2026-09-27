@@ -27,4 +27,4 @@
                   });
                 }
               })();
-            `}})]}),s.jsx("body",{className:"h-full flex flex-col bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-slate-50 transition-colors duration-300",children:s.jsx(i,{attribute:"class",defaultTheme:"system",enableSystem:!0,disableTransitionOnChange:!0,children:e})})]})}},5023:()=>{}};var t=require("../../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),s=t.X(0,[6039,694,5219,5767,1932,3044,3510,7111,3589,6994,5530,6165,5710],()=>r(61229));module.exports=s})();
+            `}})]}),s.jsx("body",{className:"h-full flex flex-col bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-slate-50 transition-colors duration-300",children:s.jsx(i,{attribute:"class",defaultTheme:"system",enableSystem:!0,disableTransitionOnChange:!0,children:e})})]})}},5023:()=>{}};var t=require("../../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),s=t.X(0,[6039,694,5219,5767,1932,3510,3044,7111,3589,6994,5530,6165,5710],()=>r(61229));module.exports=s})();

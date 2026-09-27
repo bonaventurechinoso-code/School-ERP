@@ -66,6 +66,11 @@ const NAV_ITEMS: NavItem[] = [
     icon: Settings,
   },
   {
+    name: "Security & Password",
+    href: "/admin/security",
+    icon: ShieldCheck,
+  },
+  {
     name: "Support",
     href: "/admin/support",
     icon: LifeBuoy,
