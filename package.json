@@ -6,6 +6,8 @@
     "dev": "next dev",
     "clean-db": "node -e \"const {PrismaClient}=require('@prisma/client');(async()=>{const p=new PrismaClient(); await p.$executeRawUnsafe('DELETE FROM \\\"User\\\"'); await p.$executeRawUnsafe('DELETE FROM \\\"School\\\" WHERE slug IS NULL'); console.log('cleaned'); await p.$disconnect()})()\"",
     "build": "npx prisma generate && npx prisma db push --accept-data-loss && next build",
+    "build:local": "npx prisma generate && npx prisma db push --accept-data-loss && next build",
+    "build:render": "npx prisma generate && echo 'Using precompiled local build assets'",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push"

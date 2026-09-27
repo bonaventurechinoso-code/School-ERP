@@ -6,13 +6,14 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
+# next.js (tracking precompiled build assets for zero-memory remote deployments)
+# /.next/
+.next/cache/
+# /out/
 
 # production
-/build
-/dist
+# /build
+# /dist
 
 # misc
 .DS_Store

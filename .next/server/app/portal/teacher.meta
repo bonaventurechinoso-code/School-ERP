@@ -1,0 +1,7 @@
+{
+  "status": 307,
+  "headers": {
+    "Location": "/teacher/my-class",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/portal/layout,_N_T_/portal/teacher/layout,_N_T_/portal/teacher/page,_N_T_/portal/teacher"
+  }
+}

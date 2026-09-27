@@ -1,0 +1,1 @@
+"use strict";exports.id=6826,exports.ids=[6826],exports.modules={96826:(s,e,r)=>{r.d(e,{prisma:()=>t});let t=r(68476).basePrisma}};
