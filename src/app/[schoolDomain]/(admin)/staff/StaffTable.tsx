@@ -84,6 +84,55 @@ const QUALIFICATIONS = [
   "Ph.D (Doctor of Philosophy)",
 ];
 
+function getStaffAssignmentLabel(tier?: string | null): string {
+  if (!tier) return "Subject / Class Assigned";
+  const norm = tier.toUpperCase().trim();
+
+  // 3. Tertiary: Label = "Department / Faculty", no Subject
+  if (
+    norm.includes("TERTIARY") ||
+    norm.includes("UNIVERSITY") ||
+    norm.includes("POLYTECHNIC") ||
+    norm.includes("COLLEGE OF EDUCATION") ||
+    norm.includes("HIGHER") ||
+    norm === "UNI" ||
+    norm === "COE" ||
+    norm === "HND"
+  ) {
+    return "Department / Faculty";
+  }
+
+  // 1. Basic (Nursery/Primary/JSS): Label = "Subject / Class Assigned"
+  if (
+    norm.includes("NURSERY") ||
+    norm.includes("DAYCARE") ||
+    norm.includes("CRECHE") ||
+    norm.includes("CRÈCHE") ||
+    norm.includes("PRE-SCHOOL") ||
+    norm.includes("KINDERGARTEN") ||
+    norm.includes("EARLY") ||
+    norm.includes("PRIMARY") ||
+    norm.includes("BASIC") ||
+    norm.includes("ELEMENTARY") ||
+    norm.includes("JSS") ||
+    norm.includes("JUNIOR")
+  ) {
+    return "Subject / Class Assigned";
+  }
+
+  // 2. Secondary (SSS): Label = "Subject Taught" only, no Department
+  if (
+    norm.includes("SECONDARY") ||
+    norm.includes("SSS") ||
+    norm.includes("SENIOR") ||
+    norm.includes("HIGH SCHOOL")
+  ) {
+    return "Subject Taught";
+  }
+
+  return "Subject / Class Assigned";
+}
+
 export default function StaffTable({
   staffList,
   initialNextCursor,
@@ -112,6 +161,10 @@ export default function StaffTable({
   const defaultRole = useMemo(() => getDefaultRoleForTier(tierCategory), [tierCategory]);
   const tierBadgeLabel = useMemo(() => getStaffTierBadgeLabel(tierCategory), [tierCategory]);
   const isTertiary = tierCategory === "TERTIARY";
+
+  const staffAssignmentLabel = useMemo(() => {
+    return getStaffAssignmentLabel(effectiveTier);
+  }, [effectiveTier]);
 
   // Roster & Pagination state
   const [currentStaff, setCurrentStaff] = useState<any[]>(staffList);
@@ -683,7 +736,7 @@ export default function StaffTable({
             disabled={isPending}
             className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
           >
-            <option value="ALL">All Subjects / Departments ({departments.length})</option>
+            <option value="ALL">All {staffAssignmentLabel} ({departments.length})</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
@@ -695,7 +748,7 @@ export default function StaffTable({
             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5"
           >
             <Building2 className="w-4 h-4 text-indigo-600" />
-            <span>Staff Categories ({departments.length})</span>
+            <span>{staffAssignmentLabel} ({departments.length})</span>
           </button>
 
           {/* ADD STAFF BUTTON */}
@@ -777,13 +830,13 @@ export default function StaffTable({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Subject / Department</label>
+              <label className="block font-semibold text-slate-600 mb-1">{staffAssignmentLabel}</label>
               <select
                 value={createData.departmentId}
                 onChange={(e) => setCreateData({ ...createData, departmentId: e.target.value })}
                 className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
               >
-                <option value="">-- Select Subject / Department --</option>
+                <option value="">-- Select {staffAssignmentLabel} --</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -998,7 +1051,7 @@ export default function StaffTable({
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
                 <th className="p-4">Staff Member & ID</th>
                 <th className="p-4">Role & Tier</th>
-                <th className="p-4">Subject / Department</th>
+                <th className="p-4">{staffAssignmentLabel}</th>
                 <th className="p-4">TRCN & Credentials</th>
                 <th className="p-4">Today&apos;s Clock-In</th>
                 <th className="p-4">Remuneration</th>
