@@ -179,7 +179,7 @@ export default function AnnualBroadsheetClient({
     if (!broadsheet || broadsheet.length === 0) return;
 
     const headers = [
-      "Rank",
+      "POSITION",
       "Registration Number",
       "Student Full Name",
       "Current Class",
@@ -555,7 +555,7 @@ export default function AnnualBroadsheetClient({
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
                   <tr>
-                    <th className="px-5 py-3.5 text-center">Rank</th>
+                    <th className="px-5 py-3.5 text-center">POSITION</th>
                     <th className="px-5 py-3.5">Student Profile</th>
                     <th className="px-4 py-3.5 text-center">1st Term</th>
                     <th className="px-4 py-3.5 text-center">2nd Term</th>
