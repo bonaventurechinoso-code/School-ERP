@@ -411,8 +411,8 @@ function UniversalLoginPageContent() {
             </div>
           )}
 
-          {/* 3.C Role Selector Tabs (Flexible responsive grid, no truncation) */}
-          <div className="w-full grid grid-cols-4 gap-1 sm:gap-1.5 p-1 sm:p-1.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-zinc-500 dark:text-zinc-400 select-none overflow-x-auto">
+          {/* 3.C Role Selector Tabs (Responsive grid, no overlap) */}
+          <div className="w-full max-w-full grid grid-cols-2 md:grid-cols-4 gap-2 p-1.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-zinc-500 dark:text-zinc-400 select-none">
             {ROLE_CONFIGS.map((tab) => {
               const isActive = activeRoleTab === tab.id;
               return (
@@ -423,13 +423,19 @@ function UniversalLoginPageContent() {
                     setActiveRoleTab(tab.id);
                     setErrorMsg("");
                   }}
-                  className={`w-auto min-w-max sm:w-full py-2 px-2.5 sm:px-4 rounded-lg transition-all text-center whitespace-nowrap flex items-center justify-center font-medium ${
+                  className={`w-full text-xs sm:text-sm px-2 py-2.5 truncate whitespace-nowrap rounded-lg transition-all text-center flex items-center justify-center font-medium ${
                     isActive
                       ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 shadow-xs font-semibold"
                       : "hover:text-zinc-900 dark:hover:text-zinc-100"
                   }`}
                 >
-                  {tab.label}
+                  {tab.id === "admin" ? (
+                    <span className="truncate">
+                      <span className="hidden sm:inline">School </span>Admin
+                    </span>
+                  ) : (
+                    <span className="truncate">{tab.label}</span>
+                  )}
                 </button>
               );
             })}

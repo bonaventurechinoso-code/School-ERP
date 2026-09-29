@@ -20,9 +20,9 @@ function MarketingNavbar() {
   const isAuthenticated = mounted && (status === "authenticated" || Boolean(session));
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200/40 dark:border-slate-800/40 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
+    <header className="sticky top-0 z-50 w-full max-w-full overflow-hidden bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200/40 dark:border-slate-800/40 transition-colors duration-300">
+      <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-full overflow-hidden px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           {/* Left: Brand Logo */}
           <Link href="/" className="flex items-center gap-3 group focus:outline-none shrink-0">
             <div className="w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-slate-900 to-indigo-950 dark:from-slate-950 dark:to-indigo-950 border border-slate-700/50 dark:border-slate-800 shadow-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
@@ -163,7 +163,7 @@ function MarketingNavbar() {
 
             <Link 
               href="/register" 
-              className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-600 to-blue-600 hover:from-indigo-500 hover:via-indigo-600 hover:to-blue-500 shadow-md shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/35 border border-indigo-400/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              className="group relative hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-600 to-blue-600 hover:from-indigo-500 hover:via-indigo-600 hover:to-blue-500 shadow-md shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/35 border border-indigo-400/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
             >
               <span>Onboard Institution</span>
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -294,7 +294,7 @@ export default function LandingPage() {
       </SessionProvider>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-32 overflow-hidden bg-slate-900">
+      <section className="relative pt-24 pb-32 w-full max-w-full overflow-x-hidden px-4 sm:px-6 bg-slate-900">
         {/* Background Image Integration */}
         <div className="absolute inset-0 z-0 overflow-hidden">
           <Image
