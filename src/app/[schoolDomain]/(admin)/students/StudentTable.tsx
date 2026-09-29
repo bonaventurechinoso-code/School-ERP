@@ -44,7 +44,7 @@ interface StudentTableProps {
 }
 
 export function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
-  if (!targetClass || targetClass === "ALL") return true;
+  if (!targetClass || targetClass === "ALL" || targetClass === "All Classes") return true;
   if (!studentClass) return false;
   const sNorm = studentClass.trim().toLowerCase();
   const tNorm = targetClass.trim().toLowerCase();
@@ -88,6 +88,56 @@ export function getClassOptionsForTier(
   }
 
   return getClassesForTier(tierIdentifier, classroomsList.map((c) => c.name));
+}
+
+export function getRosterClassOptions(
+  tier?: string,
+  institutionType?: string,
+  tiersList: AcademicTier[] = [],
+  classroomsList: Array<{ id: string; name: string }> = []
+): string[] {
+  const normTier = (tier || "").toLowerCase().trim();
+  const normType = (institutionType || "").toLowerCase().trim();
+
+  let targetTier = (tier || "").trim();
+  const matchingTier = tiersList.find(
+    (t) => t.id === targetTier || t.name.toLowerCase() === targetTier.toLowerCase()
+  );
+  if (matchingTier) {
+    targetTier = matchingTier.name;
+  } else if ((!targetTier || targetTier.toLowerCase() === "all") && tiersList.length > 0) {
+    targetTier = tiersList[0].name;
+  }
+  const effectiveTier = targetTier.toLowerCase();
+
+  // If tier === 'polytechnic' or institutionType === 'Polytechnic'
+  if (
+    tier === "polytechnic" ||
+    institutionType === "Polytechnic" ||
+    normTier === "polytechnic" ||
+    normType === "polytechnic" ||
+    effectiveTier === "polytechnic" ||
+    effectiveTier.includes("polytechnic") ||
+    normType.includes("polytechnic")
+  ) {
+    return ["All Classes", "ND1", "ND2", "HND1", "HND2"];
+  }
+
+  // If tier === 'university'
+  if (
+    tier === "university" ||
+    institutionType === "University" ||
+    normTier === "university" ||
+    normType === "university" ||
+    effectiveTier === "university" ||
+    effectiveTier.includes("university") ||
+    normType.includes("university")
+  ) {
+    return ["All Classes", "100 Level", "200 Level", "300 Level", "400 Level", "500 Level"];
+  }
+
+  const defaultClasses = getClassOptionsForTier(tier, tiersList, classroomsList);
+  return ["All Classes", ...defaultClasses.filter((c) => c !== "All Classes")];
 }
 
 export function getGraduatingClassForTier(
@@ -158,9 +208,14 @@ export default function StudentTable({
   const [filterClass, setFilterClass] = useState<string>("ALL");
   const [filterFeeStatus, setFilterFeeStatus] = useState<string>("ALL");
   const [selectedDrawerTab, setSelectedDrawerTab] = useState<"BIO" | "GUARDIAN" | "DOCS" | "LIFECYCLE" | "FINANCE">("BIO");
-  const classOptions = getClassOptionsForTier(activeTier, tiers, classrooms);
+  const classOptions = getRosterClassOptions(
+    activeTier,
+    tenant?.institutionType || tenant?.preciseTier,
+    tiers,
+    classrooms
+  );
   const graduatingInfo = getGraduatingClassForTier(activeTier, tiers, classrooms);
-  const targetGraduatingClass = bulkClass || (filterClass !== "ALL" ? filterClass : graduatingInfo.primaryClass);
+  const targetGraduatingClass = bulkClass || (filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : graduatingInfo.primaryClass);
 
   const [metrics, setMetrics] = useState<StudentMetricsData>(
     initialMetrics || {
@@ -391,7 +446,7 @@ export default function StudentTable({
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
         status: "ENROLLED",
-        className: newClass !== "ALL" ? newClass : undefined,
+        className: newClass !== "ALL" && newClass !== "All Classes" ? newClass : undefined,
         cursor: null,
         limit: 25,
       });
@@ -408,7 +463,7 @@ export default function StudentTable({
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
         status: "ENROLLED",
-        className: filterClass !== "ALL" ? filterClass : undefined,
+        className: filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : undefined,
         cursor: currentCursor,
         limit: 25,
       });
@@ -429,7 +484,7 @@ export default function StudentTable({
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
         status: "ENROLLED",
-        className: filterClass !== "ALL" ? filterClass : undefined,
+        className: filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : undefined,
         cursor: targetCursor,
         limit: 25,
       });
@@ -652,9 +707,8 @@ export default function StudentTable({
               value={filterClass}
               onChange={(e) => handleClassFilterChange(e.target.value)}
             >
-              <option value="ALL">All Classes</option>
               {classOptions.map((cls) => (
-                <option key={cls} value={cls}>
+                <option key={cls} value={cls === "All Classes" ? "ALL" : cls}>
                   {cls}
                 </option>
               ))}
@@ -681,7 +735,7 @@ export default function StudentTable({
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <button 
             onClick={() => {
-              if (filterClass !== "ALL") setBulkClass(filterClass);
+              if (filterClass !== "ALL" && filterClass !== "All Classes") setBulkClass(filterClass);
               else setBulkClass(graduatingInfo.primaryClass);
               setShowBulkGraduate(true);
             }}
