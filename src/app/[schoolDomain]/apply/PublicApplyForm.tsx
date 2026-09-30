@@ -7,17 +7,22 @@ import { useNumericInput } from "@/hooks/useNumericInput";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatTierLabel } from "@/lib/guestPortalUtils";
 import { NIGERIAN_UNIVERSITY_HIERARCHY, POLYTECHNIC_HIERARCHY, COLLEGE_HIERARCHY } from "@/lib/academicHierarchies";
+import { TIER_CLASSES, getClassesForTier } from "@/lib/school-tiers";
 
 export default function PublicApplyForm({
   schoolName,
   schoolDomain,
+  schoolTier,
   tiers,
+  initialTierId: propInitialTierId,
   classrooms,
   brandColor
 }: {
   schoolName: string;
   schoolDomain: string;
+  schoolTier?: string;
   tiers: AcademicTier[];
+  initialTierId?: string;
   classrooms: any[];
   brandColor: string;
 }) {
@@ -25,8 +30,32 @@ export default function PublicApplyForm({
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
   
-  // 1. Automatic Tier Selection
-  const initialTierId = tiers.length > 0 ? tiers[0].id : "";
+  // School tier state with loading guard (defaults to schoolTier or "secondary")
+  const [tier, setTier] = useState<string | null>(schoolTier || "secondary");
+  const [loadingTier, setLoadingTier] = useState<boolean>(false);
+
+  // Sync / resolve tier on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlTier = urlParams.get("tier");
+      const cookieTierMatch = document.cookie.match(/(?:^|;\s*)activeTier=([^;]*)/);
+      const cookieTier = cookieTierMatch ? decodeURIComponent(cookieTierMatch[1]) : null;
+      const resolved = urlTier || cookieTier || schoolTier || "secondary";
+      console.log(`[PublicApplyForm] Resolved school tier:`, resolved);
+      setTier(resolved);
+      setLoadingTier(false);
+    }
+  }, [schoolTier, tiers]);
+
+  // 1. Automatic Tier Selection matching resolved tier
+  const matchedTierRecord = tiers.find(
+    (t) =>
+      (tier && t.name.toLowerCase() === tier.toLowerCase()) ||
+      (tier && t.name.toLowerCase().includes(tier.toLowerCase())) ||
+      (tier && tier.toLowerCase().includes(t.name.toLowerCase()))
+  );
+  const initialTierId = propInitialTierId || matchedTierRecord?.id || (tiers.length > 0 ? tiers[0].id : "");
   
   const [formData, setFormData] = useState({
     applicantName: "",
@@ -46,8 +75,8 @@ export default function PublicApplyForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const selectedTier = tiers.find(t => t.id === formData.tierId);
-  const selectedTierName = selectedTier?.name || "";
+  const selectedTier = tiers.find(t => t.id === formData.tierId) || matchedTierRecord;
+  const selectedTierName = tier || selectedTier?.name || "";
   
   // Determine if context is Higher Education
   const isHigherEd = selectedTierName.toLowerCase().includes("higher ed") || 
@@ -128,26 +157,23 @@ export default function PublicApplyForm({
   };
 
   const renderClassOptions = () => {
-    if (!selectedTierName) return null;
-    const tier = selectedTierName.toUpperCase();
-    
-    switch (true) {
-      case tier.includes("PRIMARY"):
-        return ["Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6"].map(c => <option key={c} value={c}>{c}</option>);
-      case tier.includes("SECONDARY"):
-        return ["JSS 1", "JSS 2", "JSS 3", "SS 1", "SS 2", "SS 3"].map(c => <option key={c} value={c}>{c}</option>);
-      case isHigherEd:
-        if (institutionSubtype === "POLYTECHNIC") {
-          return ["ND 1", "ND 2", "HND 1", "HND 2"].map(c => <option key={c} value={c}>{c}</option>);
-        } else if (institutionSubtype === "COLLEGE_OF_EDUCATION") {
-          return ["NCE 1", "NCE 2", "NCE 3"].map(c => <option key={c} value={c}>{c}</option>);
-        } else {
-          return ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level", "600 Level"].map(c => <option key={c} value={c}>{c}</option>);
-        }
-      default:
-        return ["Kindergarten", "Nursery 1", "Nursery 2", "Nursery 3"].map(c => <option key={c} value={c}>{c}</option>);
-    }
+    if (!tier) return null;
+    const classes = getClassesForTier(tier);
+    return classes.map((c) => (
+      <option key={c} value={c}>
+        {c}
+      </option>
+    ));
   };
+
+  if (loadingTier || !tier) {
+    return (
+      <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-3" />
+        <p className="text-sm font-semibold text-slate-600 dark:text-zinc-400">Loading school academic tier...</p>
+      </div>
+    );
+  }
 
   if (isSuccess) {
     return (
@@ -194,15 +220,13 @@ export default function PublicApplyForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
           {/* Read-Only Academic Tier Badge */}
-          {tiers.length > 0 && (
-            <div className="md:col-span-2 flex flex-col items-start">
-              <label className={labelStyles}>Academic Tier</label>
-              <div className="inline-flex items-center px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 font-medium text-sm shadow-sm">
-                <span className="w-2.5 h-2.5 rounded-full mr-3 shadow-sm" style={{ backgroundColor: brandColor }}></span>
-                {formatTierLabel(selectedTierName || tiers[0].name)}
-              </div>
+          <div className="md:col-span-2 flex flex-col items-start">
+            <label className={labelStyles}>Academic Tier</label>
+            <div className="inline-flex items-center px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 font-medium text-sm shadow-sm">
+              <span className="w-2.5 h-2.5 rounded-full mr-3 shadow-sm" style={{ backgroundColor: brandColor }}></span>
+              {tier}
             </div>
-          )}
+          </div>
 
           {formData.tierId && (
             <>

@@ -1,9 +1,17 @@
 import React from "react";
+import { cookies } from "next/headers";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import PublicApplyForm from "./PublicApplyForm";
 
-export default async function ApplyPage({ params: paramsPromise }: { params: Promise<{ schoolDomain: string }> }) {
+export default async function ApplyPage({
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
+}: {
+  params: Promise<{ schoolDomain: string }>;
+  searchParams?: Promise<{ tier?: string }>;
+}) {
   const params = await paramsPromise;
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: { academicTiers: true },
@@ -20,6 +28,32 @@ export default async function ApplyPage({ params: paramsPromise }: { params: Pro
     );
   }
 
+  // 1. Resolve school tier for domain / trial-sandbox
+  const cookieStore = await cookies();
+  const rawCookieTier = cookieStore.get("activeTier")?.value;
+  const cookieTier = rawCookieTier ? decodeURIComponent(rawCookieTier) : undefined;
+  const requestedTier = (searchParams?.tier || cookieTier || "").trim();
+
+  // Find matching tier record if exists in school.academicTiers
+  const matchedTier = school.academicTiers.find((t) => {
+    if (!requestedTier) return false;
+    const tLower = t.name.toLowerCase();
+    const reqLower = requestedTier.toLowerCase();
+    return tLower === reqLower || tLower.includes(reqLower) || reqLower.includes(tLower);
+  });
+
+  const schoolTier = matchedTier?.name || requestedTier || school.academicTiers[0]?.name || "Secondary School";
+  const initialTierId = matchedTier?.id || school.academicTiers[0]?.id || "";
+
+  // Log tier to console first as requested
+  console.log(`[ApplyPage] Active school tier for ${params.schoolDomain}:`, {
+    schoolTier,
+    initialTierId,
+    requestedTier,
+    cookieTier,
+    searchParamTier: searchParams?.tier,
+  });
+
   const tenantDb = getTenantClient(school.id);
   const classrooms = await tenantDb.classroom.findMany();
 
@@ -31,7 +65,9 @@ export default async function ApplyPage({ params: paramsPromise }: { params: Pro
         <PublicApplyForm 
           schoolName={school.name}
           schoolDomain={school.subdomain}
+          schoolTier={schoolTier}
           tiers={school.academicTiers}
+          initialTierId={initialTierId}
           classrooms={classrooms}
           brandColor={brandColor}
         />

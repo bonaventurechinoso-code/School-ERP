@@ -20,23 +20,31 @@ export async function POST(request: NextRequest) {
       password,
     } = data;
 
-    if (!schoolDomain || !applicantName || !tierId || !targetGrade) {
+    const headerTenantId = request.headers.get("x-tenant-id") || request.headers.get("tenant-id");
+    const domainCandidate = schoolDomain || headerTenantId;
+
+    if (!domainCandidate || !applicantName) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Lookup tenant ID from slug
+    // Lookup tenant ID from id, subdomain, or slug
     const school = await basePrisma.school.findFirst({
       where: {
         OR: [
-          { subdomain: schoolDomain.toLowerCase().trim() },
-          { slug: schoolDomain.toLowerCase().trim() },
+          { id: domainCandidate },
+          { subdomain: domainCandidate.toLowerCase().trim() },
+          { slug: domainCandidate.toLowerCase().trim() },
         ],
       },
+      include: { academicTiers: true },
     });
 
     if (!school) {
       return NextResponse.json({ error: "School not found" }, { status: 404 });
     }
+
+    const effectiveTierId = tierId || school.academicTiers[0]?.id;
+    const effectiveTargetGrade = targetGrade || "Class 1";
 
     const tenantDb = getTenantClient(school.id);
 
@@ -69,8 +77,8 @@ export async function POST(request: NextRequest) {
         parentContact: parentContact || "N/A",
         parentPhone: parentContact || null,
         parentEmail,
-        tierId,
-        targetGrade,
+        tierId: effectiveTierId!,
+        targetGrade: effectiveTargetGrade,
         source: "Website",
         status: "INQUIRY",
         documents: {
@@ -92,7 +100,7 @@ export async function POST(request: NextRequest) {
           applicationNo: appNo,
           firstName: fName,
           lastName: lName,
-          classApplied: targetGrade,
+          classApplied: effectiveTargetGrade,
           parentPhone: parentContact || studentPhone || "N/A",
           email: studentEmail || parentEmail || null,
           status: "new",

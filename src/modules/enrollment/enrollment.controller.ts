@@ -109,9 +109,26 @@ export async function getAllApplications({
   tenantId: string;
   status?: string;
 }) {
-  const where: any = { tenantId };
+  const school = await basePrisma.school.findFirst({
+    where: {
+      OR: [
+        { id: tenantId },
+        { subdomain: tenantId.toLowerCase().trim() },
+        { slug: tenantId.toLowerCase().trim() },
+      ],
+    },
+    select: { id: true },
+  });
+
+  const effectiveTenantId = school?.id || tenantId;
+
+  const where: any = { tenantId: effectiveTenantId };
   if (status && status !== "ALL") {
-    where.status = status;
+    if (status.includes(",")) {
+      where.status = { in: status.split(",").map((s) => s.trim()) };
+    } else {
+      where.status = status;
+    }
   }
 
   const applications = await basePrisma.admissionRegister.findMany({
@@ -132,10 +149,23 @@ export async function getApplicationById({
   id: string;
   tenantId: string;
 }) {
+  const school = await basePrisma.school.findFirst({
+    where: {
+      OR: [
+        { id: tenantId },
+        { subdomain: tenantId.toLowerCase().trim() },
+        { slug: tenantId.toLowerCase().trim() },
+      ],
+    },
+    select: { id: true },
+  });
+
+  const effectiveTenantId = school?.id || tenantId;
+
   const applicant = await basePrisma.admissionRegister.findFirst({
     where: {
       id,
-      tenantId,
+      tenantId: effectiveTenantId,
     },
   });
 
@@ -255,9 +285,7 @@ export async function admitApplicant({
   if (tier?.id) {
     studentData.tierId = tier.id;
   }
-  if (classroom?.id) {
-    studentData.classroomId = classroom.id;
-  }
+  studentData.enrolledAt = new Date();
   if (applicant.email) {
     studentData.email = applicant.email;
     studentData.parentEmail = applicant.email;
@@ -299,3 +327,37 @@ export async function rejectApplicant({
 
   return updated;
 }
+
+/**
+ * Update applicant status (e.g. docs_pending, rejected, under_review, etc.)
+ */
+export async function updateApplicantStatus({
+  id,
+  tenantId,
+  status,
+  verifiedBy,
+}: {
+  id: string;
+  tenantId: string;
+  status: string;
+  verifiedBy?: string;
+}) {
+  const applicant = await getApplicationById({ id, tenantId });
+  if (!applicant) {
+    throw new Error("Applicant not found for tenant");
+  }
+
+  const data: any = { status };
+  if (status === "docs_pending" || status === "under_review" || status === "verified") {
+    if (verifiedBy) data.verifiedBy = verifiedBy;
+    data.verifiedAt = new Date();
+  }
+
+  const updated = await basePrisma.admissionRegister.update({
+    where: { id: applicant.id },
+    data,
+  });
+
+  return updated;
+}
+
