@@ -59,41 +59,112 @@ export default async function AdmissionsPage({
     );
   }
 
-  // Resolve active tier from URL searchParams or cookie
+  // Resolve active tier from URL searchParams or cookie (cookie = sidebar TierSwitcher selection)
   const cookieStore = await cookies();
-  const cookieTier = cookieStore.get("activeTier")?.value;
+  const rawCookieTier = cookieStore.get("activeTier")?.value;
+  const cookieTier = rawCookieTier ? decodeURIComponent(rawCookieTier) : undefined;
   const requestedTierParam = searchParams?.tier;
+  const activeCandidate = (requestedTierParam || cookieTier || school.academicTiers[0]?.name || "University").trim();
 
-  const activeTierObj = requestedTierParam
-    ? school.academicTiers.find(
-        (t) =>
-          sanitizeTierSlug(t.name) === sanitizeTierSlug(requestedTierParam) ||
-          t.name.toLowerCase().includes(requestedTierParam.toLowerCase()) ||
-          ((t.name === "Higher Institution / University" || t.name.toLowerCase().includes("higher institution")) &&
-            (requestedTierParam.toLowerCase().includes("poly") ||
-              requestedTierParam.toLowerCase().includes("college") ||
-              requestedTierParam.toLowerCase().includes("uni")))
-      )
-    : null;
+  // Normalize candidate tier into canonical system types
+  const candidateLower = activeCandidate.toLowerCase();
+  const candidateSlug = sanitizeTierSlug(activeCandidate);
 
-  const activeTierName = activeTierObj ? activeTierObj.name : (requestedTierParam || "");
+  let activeTierType: "university" | "polytechnic" | "college_education" | "secondary" | "primary" | "nursery" = "primary";
+  let activeTierDisplayName = "Primary School";
 
-  // Query leads with optional tier filtering
+  if (candidateSlug === "university" || candidateLower.includes("uni") || candidateLower.includes("undergraduate") || candidateLower.includes("higher")) {
+    activeTierType = "university";
+    activeTierDisplayName = "University";
+  } else if (candidateSlug === "polytechnic" || candidateLower.includes("poly") || candidateLower.includes("nd & hnd")) {
+    activeTierType = "polytechnic";
+    activeTierDisplayName = "Polytechnic";
+  } else if (candidateSlug === "college_education" || candidateLower.includes("college") || candidateLower.includes("nce")) {
+    activeTierType = "college_education";
+    activeTierDisplayName = "College of Education";
+  } else if (candidateSlug === "secondary" || (candidateLower.includes("secondary") && !candidateLower.includes("primary")) || candidateLower.includes("jss") || candidateLower.includes("sss")) {
+    activeTierType = "secondary";
+    activeTierDisplayName = "Secondary School";
+  } else if (candidateSlug === "primary" || (candidateLower.includes("primary") && !candidateLower.includes("secondary")) || candidateLower.includes("basic")) {
+    activeTierType = "primary";
+    activeTierDisplayName = "Primary School";
+  } else if (candidateSlug === "nursery" || candidateLower.includes("nursery") || candidateLower.includes("daycare") || candidateLower.includes("creche") || candidateLower.includes("early childhood")) {
+    activeTierType = "nursery";
+    activeTierDisplayName = "Daycare / Nursery";
+  }
+
+  // Find exact matching academic tier record for the active tenant
+  const activeTierObj = school.academicTiers.find((t) => {
+    const tSlug = sanitizeTierSlug(t.name);
+    const tLower = t.name.toLowerCase();
+
+    if (activeTierType === "university") {
+      return (
+        tSlug === "university" ||
+        tLower.includes("university") ||
+        tLower.includes("higher institution") ||
+        tLower.includes("tertiary")
+      );
+    }
+    if (activeTierType === "polytechnic") {
+      return (
+        tSlug === "polytechnic" ||
+        tLower.includes("polytechnic") ||
+        tLower.includes("higher institution")
+      );
+    }
+    if (activeTierType === "college_education") {
+      return (
+        tSlug === "college_education" ||
+        tLower.includes("college") ||
+        tLower.includes("higher institution")
+      );
+    }
+    if (activeTierType === "secondary") {
+      return (
+        (tSlug === "secondary" || tLower.includes("secondary") || tLower.includes("high school")) &&
+        !tLower.includes("primary")
+      );
+    }
+    if (activeTierType === "primary") {
+      return (
+        (tSlug === "primary" || tLower.includes("primary") || tLower.includes("basic")) &&
+        !tLower.includes("secondary")
+      );
+    }
+    if (activeTierType === "nursery") {
+      return (
+        tSlug === "nursery" ||
+        tLower.includes("nursery") ||
+        tLower.includes("daycare") ||
+        tLower.includes("creche")
+      );
+    }
+    return false;
+  });
+
+  // Query leads strictly for the active tier to enforce tier isolation
   const whereClause: any = { schoolId: school.id };
   if (activeTierObj) {
     whereClause.tierId = activeTierObj.id;
+  } else {
+    // If tenant does not have this tier, return 0 leads rather than leaking records
+    whereClause.tierId = "non-existent-tier-boundary";
   }
 
   const cacheKey = buildCacheKey({
     tenantId: school.id,
     table: "admissions",
     action: "pipeline_tiered",
-    filters: { tierId: activeTierObj?.id || "ALL" },
+    filters: {
+      tierId: activeTierObj?.id || activeTierType,
+      activeTierType,
+    },
   });
 
   const leads = await cacheAside({
     key: cacheKey,
-    ttlSeconds: 900,
+    ttlSeconds: 60,
     fetchFn: async () => {
       return basePrisma.admissionLead.findMany({
         where: whereClause,
@@ -104,7 +175,7 @@ export default async function AdmissionsPage({
     },
   });
 
-  // KPI Funnel Metrics
+  // KPI Funnel Metrics - strictly computed from active tier leads
   const totalLeads = leads.length;
   const inquiryCount = leads.filter((l) => l.status === "INQUIRY").length;
   const appliedCount = leads.filter((l) => l.status === "APPLIED").length;
@@ -115,71 +186,27 @@ export default async function AdmissionsPage({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 h-full flex flex-col">
-      {/* HEADER & TIER SWITCHER */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100">
-            Admissions & Enrollment
+      {/* HEADER & TIER BOUNDARY ISOLATION */}
+      {/* Bug 1 fix: flex-col on mobile, flex-row on desktop (lg:) with nowrap title */}
+      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5 lg:flex-nowrap">
+        <div className="min-w-0 lg:shrink-0 lg:max-w-none">
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100 lg:whitespace-nowrap">
+            Admissions &amp; Enrollment
           </h2>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
             Track and manage prospective candidates from initial inquiry to entrance assessment and final matriculation.
           </p>
         </div>
 
-        {/* Academic Tier Switcher Navigation */}
-        {school.academicTiers.length > 0 && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 overflow-x-auto shrink-0">
-            <Link
-              href={`/${params.schoolDomain}/admissions`}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                !requestedTierParam
-                  ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              All Tiers ({totalLeads})
-            </Link>
-            {school.academicTiers.map((tier) => {
-              const isAggregatedHigherEd =
-                tier.name === "Higher Institution / University" ||
-                tier.name.toLowerCase().includes("higher institution");
-
-              // Dynamic label: replace aggregated placeholder with specific tier from ?tier query param
-              let displayTierName = tier.name;
-              if (isAggregatedHigherEd) {
-                const paramLower = (requestedTierParam || cookieTier || "").toLowerCase();
-                if (paramLower.includes("poly")) {
-                  displayTierName = "Polytechnic";
-                } else if (paramLower.includes("college")) {
-                  displayTierName = "College of Education";
-                } else {
-                  displayTierName = "University";
-                }
-              }
-
-              const isSelected =
-                (activeTierObj ? activeTierObj.id === tier.id : false) ||
-                activeTierName.toLowerCase() === tier.name.toLowerCase() ||
-                activeTierName.toLowerCase() === displayTierName.toLowerCase();
-
-              const tierQueryParam = isAggregatedHigherEd ? displayTierName : tier.name;
-
-              return (
-                <Link
-                  key={tier.id}
-                  href={`/${params.schoolDomain}/admissions?tier=${encodeURIComponent(tierQueryParam)}`}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                    isSelected
-                      ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50"
-                  }`}
-                >
-                  {displayTierName}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {/* Bug 2 fix: Tier boundary enforcement — show ONLY the active tier tab/indicator */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 shrink-0">
+          <span
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            {activeTierDisplayName} ({totalLeads})
+          </span>
+        </div>
       </header>
 
       {/* 5-STAGE ADMISSIONS FUNNEL COCKPIT */}

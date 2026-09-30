@@ -578,10 +578,10 @@ export default function AIChatWidget() {
             isDragging
               ? "cursor-grabbing scale-105 shadow-2xl opacity-90"
               : "cursor-grab hover:shadow-2xl hover:-translate-y-0.5"
-          } w-12 h-12 md:w-auto md:h-12 md:px-5 md:py-3 text-sm`}
+          } w-12 h-12 lg:w-auto lg:h-auto lg:max-w-[200px] lg:px-4 lg:py-[10px] text-sm`}
         >
           <MessageSquare className="w-5 h-5 text-blue-400 dark:text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-          <span className="hidden md:inline whitespace-nowrap">Ask Institutional AI</span>
+          <span className="hidden lg:inline whitespace-nowrap truncate">Ask Institutional AI</span>
         </button>
       )}
     </>
