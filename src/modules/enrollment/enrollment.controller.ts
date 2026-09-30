@@ -1,0 +1,301 @@
+import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import fs from "fs";
+import path from "path";
+
+export interface CredentialDoc {
+  type: string;
+  path: string;
+  originalName?: string;
+  verified: boolean;
+}
+
+/**
+ * Generate Application No helper:
+ * Format: TENANTCODE/YEAR/SEQ e.g TRIAL/2026/0001
+ */
+export async function generateApplicationNo(tenantId: string): Promise<string> {
+  const count = await basePrisma.admissionRegister.count({
+    where: { tenantId },
+  });
+  const year = new Date().getFullYear();
+  const code = (tenantId || "TENANT").substring(0, 5).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `${code}/${year}/${String(count + 1).padStart(4, "0")}`;
+}
+
+/**
+ * Store application in admission_registers table with tenantId scoping
+ */
+export async function storeApplication({
+  tenantId,
+  firstName,
+  lastName,
+  classApplied,
+  parentPhone,
+  email,
+  files = [],
+}: {
+  tenantId: string;
+  firstName: string;
+  lastName: string;
+  classApplied: string;
+  parentPhone: string;
+  email?: string;
+  files?: Array<{ type: string; buffer: Buffer; filename: string; originalName?: string }>;
+}) {
+  if (!tenantId || !firstName || !lastName || !classApplied || !parentPhone) {
+    throw new Error("Missing required applicant fields");
+  }
+
+  const applicationNo = await generateApplicationNo(tenantId);
+  const year = new Date().getFullYear();
+  const credentialsJson: CredentialDoc[] = [];
+
+  // File upload to storage/app/public/tenants/{tenantId}/admissions/{year}/{applicationNo}/ or public/uploads/tenants/{tenantId}/admissions/{year}/{applicationNo}/
+  if (files && files.length > 0) {
+    const uploadDir = path.join(
+      process.cwd(),
+      "public",
+      "uploads",
+      "tenants",
+      tenantId,
+      "admissions",
+      String(year),
+      applicationNo.replace(/\//g, "-")
+    );
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    for (const file of files) {
+      const sanitizedFilename = `${Date.now()}-${file.filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const fullPath = path.join(uploadDir, sanitizedFilename);
+      fs.writeFileSync(fullPath, file.buffer);
+
+      const publicRelativePath = `/uploads/tenants/${tenantId}/admissions/${year}/${applicationNo.replace(/\//g, "-")}/${sanitizedFilename}`;
+      credentialsJson.push({
+        type: file.type,
+        path: publicRelativePath,
+        originalName: file.originalName || file.filename,
+        verified: false,
+      });
+    }
+  }
+
+  const applicant = await basePrisma.admissionRegister.create({
+    data: {
+      tenantId,
+      applicationNo,
+      firstName,
+      lastName,
+      classApplied,
+      parentPhone,
+      email: email || null,
+      credentialsJson: credentialsJson.length > 0 ? (credentialsJson as any) : null,
+      status: "new",
+    },
+  });
+
+  return applicant;
+}
+
+/**
+ * Get all applications scoped by tenantId and optional status
+ */
+export async function getAllApplications({
+  tenantId,
+  status,
+}: {
+  tenantId: string;
+  status?: string;
+}) {
+  const where: any = { tenantId };
+  if (status && status !== "ALL") {
+    where.status = status;
+  }
+
+  const applications = await basePrisma.admissionRegister.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
+
+  return applications;
+}
+
+/**
+ * Get single application by ID with tenantId isolation
+ */
+export async function getApplicationById({
+  id,
+  tenantId,
+}: {
+  id: string;
+  tenantId: string;
+}) {
+  const applicant = await basePrisma.admissionRegister.findFirst({
+    where: {
+      id,
+      tenantId,
+    },
+  });
+
+  return applicant;
+}
+
+/**
+ * Verify document in credentials_json
+ */
+export async function verifyDocument({
+  id,
+  tenantId,
+  docType,
+  verified = true,
+  verifiedBy,
+}: {
+  id: string;
+  tenantId: string;
+  docType: string;
+  verified?: boolean;
+  verifiedBy?: string;
+}) {
+  const applicant = await getApplicationById({ id, tenantId });
+  if (!applicant) {
+    throw new Error("Applicant not found for tenant");
+  }
+
+  const docs = (applicant.credentialsJson as any[]) || [];
+  const updatedDocs = docs.map((doc: any) => {
+    if (doc.type === docType || doc.originalName === docType) {
+      return { ...doc, verified };
+    }
+    return doc;
+  });
+
+  const allVerified = updatedDocs.length > 0 && updatedDocs.every((d) => d.verified);
+
+  const updated = await basePrisma.admissionRegister.update({
+    where: { id: applicant.id },
+    data: {
+      credentialsJson: updatedDocs as any,
+      verifiedBy: verifiedBy || applicant.verifiedBy,
+      verifiedAt: verified ? new Date() : applicant.verifiedAt,
+      status: allVerified ? "under_review" : applicant.status,
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Admit applicant:
+ * 1. Updates admission_registers status to 'admitted' and sets admittedAt (audit record kept)
+ * 2. Creates the student record in Student table with tenantId scoping
+ */
+export async function admitApplicant({
+  id,
+  tenantId,
+  verifiedBy,
+}: {
+  id: string;
+  tenantId: string;
+  verifiedBy?: string;
+}) {
+  const applicant = await getApplicationById({ id, tenantId });
+  if (!applicant) {
+    throw new Error("Applicant not found for tenant");
+  }
+
+  // 1. Update audit record status in admission_registers (DO NOT DELETE)
+  const updatedAdmission = await basePrisma.admissionRegister.update({
+    where: { id: applicant.id },
+    data: {
+      status: "admitted",
+      admittedAt: new Date(),
+      verifiedBy: verifiedBy || applicant.verifiedBy,
+    },
+  });
+
+  // 2. Resolve School Tenant for Student placement
+  const school = await basePrisma.school.findFirst({
+    where: {
+      OR: [
+        { id: tenantId },
+        { subdomain: tenantId },
+        { slug: tenantId },
+      ],
+    },
+    include: { academicTiers: true },
+  });
+
+  const tenantDb = getTenantClient(school?.id || tenantId);
+
+  // 3. Resolve Classroom or Tier
+  const classroom = await tenantDb.classroom.findFirst({
+    where: {
+      schoolId: school?.id || tenantId,
+      name: { equals: applicant.classApplied, mode: "insensitive" },
+    },
+  });
+
+  const tier =
+    school?.academicTiers?.[0] ||
+    (await basePrisma.academicTier.findFirst({ where: { schoolId: school?.id || tenantId } }));
+
+  const studentData: any = {
+    schoolId: school?.id || tenantId,
+    admissionNumber: applicant.applicationNo,
+    firstName: applicant.firstName,
+    lastName: applicant.lastName,
+    currentClass: applicant.classApplied,
+    status: "ENROLLED",
+    parentPhone: applicant.parentPhone,
+    parentName: `${applicant.lastName} Family`,
+  };
+
+  if (tier?.id) {
+    studentData.tierId = tier.id;
+  }
+  if (classroom?.id) {
+    studentData.classroomId = classroom.id;
+  }
+  if (applicant.email) {
+    studentData.email = applicant.email;
+    studentData.parentEmail = applicant.email;
+  }
+
+  // 4. Create Student record from admission_register data
+  const student = await tenantDb.student.create({
+    data: studentData,
+  });
+
+  return {
+    success: true,
+    admissionRegister: updatedAdmission,
+    student,
+  };
+}
+
+/**
+ * Reject applicant
+ */
+export async function rejectApplicant({
+  id,
+  tenantId,
+}: {
+  id: string;
+  tenantId: string;
+}) {
+  const applicant = await getApplicationById({ id, tenantId });
+  if (!applicant) {
+    throw new Error("Applicant not found for tenant");
+  }
+
+  const updated = await basePrisma.admissionRegister.update({
+    where: { id: applicant.id },
+    data: {
+      status: "rejected",
+    },
+  });
+
+  return updated;
+}

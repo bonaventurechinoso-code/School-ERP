@@ -307,6 +307,48 @@ export async function enrollApplicantAction(payload: {
       },
     });
 
+    // 4b. Sync status to AdmissionRegister audit trail (DO NOT DELETE)
+    try {
+      const existingReg = await basePrisma.admissionRegister.findFirst({
+        where: {
+          tenantId: schoolId,
+          OR: [
+            { email: lead.studentEmail || lead.parentEmail || undefined },
+            { parentPhone: lead.parentPhone || lead.parentContact || undefined },
+            { firstName, lastName },
+          ],
+        },
+      });
+
+      if (existingReg) {
+        await basePrisma.admissionRegister.update({
+          where: { id: existingReg.id },
+          data: {
+            status: "admitted",
+            admittedAt: new Date(),
+          },
+        });
+      } else {
+        const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
+        const appNo = await generateApplicationNo(schoolId);
+        await basePrisma.admissionRegister.create({
+          data: {
+            tenantId: schoolId,
+            applicationNo: appNo,
+            firstName: firstName || "Student",
+            lastName,
+            classApplied: lead.targetGrade || "N/A",
+            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+            email: lead.studentEmail || lead.parentEmail || null,
+            status: "admitted",
+            admittedAt: new Date(),
+          },
+        });
+      }
+    } catch (auditErr) {
+      console.warn("[enrollApplicantAction] Warning: Could not mirror audit to admission_registers:", auditErr);
+    }
+
     // 5. ROSTER DYNAMIC SYNC REFRESH & CACHE PURGE
     invalidateTierConnection();
     await Promise.all([

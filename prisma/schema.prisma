@@ -1172,5 +1172,26 @@ model BonaveeUserSecurity {
   @@map("bonavee_user_security")
 }
 
+model AdmissionRegister {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  applicationNo   String    @unique @map("application_no")
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  classApplied    String    @map("class_applied")
+  parentPhone     String    @map("parent_phone")
+  email           String?
+  credentialsJson Json?     @map("credentials_json")
+  status          String    @default("new")
+  verifiedBy      String?   @map("verified_by")
+  verifiedAt      DateTime? @map("verified_at")
+  admittedAt      DateTime? @map("admitted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("admission_registers")
+}
+
 
 

@@ -79,6 +79,29 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Global Admission Register record creation with tenantId scoping
+    try {
+      const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
+      const appNo = await generateApplicationNo(school.id);
+      const nameParts = (applicantName || "Student").trim().split(" ");
+      const fName = nameParts[0] || "Student";
+      const lName = nameParts.slice(1).join(" ") || "Applicant";
+      await basePrisma.admissionRegister.create({
+        data: {
+          tenantId: school.id,
+          applicationNo: appNo,
+          firstName: fName,
+          lastName: lName,
+          classApplied: targetGrade,
+          parentPhone: parentContact || studentPhone || "N/A",
+          email: studentEmail || parentEmail || null,
+          status: "new",
+        },
+      });
+    } catch (regErr) {
+      console.warn("[PUBLIC_SUBMIT] Warning: could not mirror to admission_registers:", regErr);
+    }
+
     // Provision or sync Student portal user record
     const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();
     if (accountEmail) {

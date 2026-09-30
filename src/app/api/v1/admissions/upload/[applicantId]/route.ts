@@ -213,6 +213,58 @@ export async function POST(
       console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
     }
 
+    // 5b. Update Global Admission Register audit record & document vault
+    try {
+      const credsList: any[] = [];
+      if (updateData.passportPhotoUrl) credsList.push({ type: "passport", path: updateData.passportPhotoUrl, verified: false });
+      if (updateData.academicResultsUrl) credsList.push({ type: "result", path: updateData.academicResultsUrl, verified: false });
+      if (updateData.birthCertificateUrl) credsList.push({ type: "birth_cert", path: updateData.birthCertificateUrl, verified: false });
+      if (updateData.medicalRecordsUrl) credsList.push({ type: "medical", path: updateData.medicalRecordsUrl, verified: false });
+
+      const nameParts = (lead.applicantName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+      const existingReg = await basePrisma.admissionRegister.findFirst({
+        where: {
+          tenantId: schoolId,
+          OR: [
+            { email: lead.studentEmail || lead.parentEmail || undefined },
+            { parentPhone: lead.parentPhone || lead.parentContact || undefined },
+            { firstName, lastName },
+          ],
+        },
+      });
+
+      if (existingReg) {
+        await basePrisma.admissionRegister.update({
+          where: { id: existingReg.id },
+          data: {
+            credentialsJson: credsList,
+            status: "under_review",
+          },
+        });
+      } else {
+        const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
+        const appNo = await generateApplicationNo(schoolId);
+        await basePrisma.admissionRegister.create({
+          data: {
+            tenantId: schoolId,
+            applicationNo: appNo,
+            firstName,
+            lastName,
+            classApplied: lead.targetGrade,
+            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+            email: lead.studentEmail || lead.parentEmail || null,
+            credentialsJson: credsList,
+            status: "under_review",
+          },
+        });
+      }
+    } catch (regErr) {
+      console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
+    }
+
     // 6. Path Revalidation
     try {
       const subdomain = lead.school?.subdomain;
