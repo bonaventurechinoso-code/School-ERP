@@ -161,6 +161,9 @@ export default function ApplicantDossierDrawer({
     });
   };
 
+  const handleVerify = (id: string) => () => handleSetDocumentStatus(id, "VERIFIED");
+  const handleReject = (id: string) => () => handleSetDocumentStatus(id, "REJECTED");
+
   const handleSaveScreening = (e: React.FormEvent) => {
     e.preventDefault();
     setAlertMsg(null);
@@ -571,97 +574,94 @@ export default function ApplicantDossierDrawer({
                   </h4>
                   <div className="divide-y divide-slate-100 text-xs">
                     {requiredDocs.map((req) => {
-                      const existingDoc = docs.find((d: any) =>
-                        (d.type === req.type || d.type === req.key || req.aliases.includes(d.type) || req.aliases.includes(d.docType)) &&
-                        Boolean(d.fileUrl)
-                      );
+                      const doc = docs.find((d: any) =>
+                        d.type === req.type ||
+                        d.type === req.key ||
+                        (req.aliases && (req.aliases.includes(d.type) || req.aliases.includes(d.docType)))
+                      ) || {};
 
-                      if (existingDoc) {
-                        let fileUrl = existingDoc.fileUrl;
-                        if (fileUrl && fileUrl.startsWith("/uploads/")) {
-                          fileUrl = `/api${fileUrl}`;
-                        }
-                        const isVerified = existingDoc.status === "VERIFIED";
-                        const isRejected = existingDoc.status === "REJECTED";
-
-                        return (
-                          <div key={req.key} className="py-3 flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                isVerified ? "bg-emerald-100 text-emerald-600" : isRejected ? "bg-red-100 text-red-600" : "bg-indigo-100 text-indigo-600"
-                              }`}>
-                                <FileCheck className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-800">{req.label}</p>
-                                <p className="text-[11px] text-slate-500 font-mono truncate max-w-[200px] sm:max-w-xs">
-                                  {existingDoc.fileName || `${req.label}.pdf`}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={fileUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 transition border border-indigo-200"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>View</span>
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() => handleSetDocumentStatus(req.key, "VERIFIED")}
-                                disabled={isPending}
-                                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
-                                  isVerified
-                                    ? "bg-emerald-600 text-white shadow-xs"
-                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                                }`}
-                              >
-                                {isVerified ? "Verified ✓" : "Mark Verified"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleSetDocumentStatus(req.key, "REJECTED")}
-                                disabled={isPending}
-                                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
-                                  isRejected
-                                    ? "bg-red-600 text-white shadow-xs"
-                                    : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
-                                }`}
-                              >
-                                {isRejected ? "Rejected ✗" : "Reject"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={req.key} className="py-3 flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-slate-100 text-slate-400">
-                                <FileCheck className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-800">{req.label}</p>
-                                <span className="text-[11px] text-amber-600 font-medium">Awaiting Parent Upload</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                disabled={true}
-                                className="px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                              >
-                                Mark Verified
-                              </button>
-                            </div>
-                          </div>
-                        );
+                      const rawFileUrl = doc.fileUrl || doc.url;
+                      let resolvedFileUrl = rawFileUrl;
+                      if (resolvedFileUrl && resolvedFileUrl.startsWith("/uploads/")) {
+                        resolvedFileUrl = `/api${resolvedFileUrl}`;
                       }
+                      const hasFile = Boolean(rawFileUrl);
+                      const isVerified = doc.status === "VERIFIED";
+                      const isRejected = doc.status === "REJECTED";
+                      const docId = doc.id || req.key;
+
+                      return (
+                        <div key={req.key} className="py-3 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                isVerified
+                                  ? "bg-emerald-100 text-emerald-600"
+                                  : isRejected
+                                  ? "bg-red-100 text-red-600"
+                                  : hasFile
+                                  ? "bg-indigo-100 text-indigo-600"
+                                  : "bg-slate-100 text-slate-400"
+                              }`}
+                            >
+                              <FileCheck className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800">{req.label}</p>
+                              {hasFile ? (
+                                <p className="text-[11px] text-slate-500 font-mono truncate max-w-[200px] sm:max-w-xs">
+                                  {doc.fileName || `${req.label}.pdf`} •{" "}
+                                  <span className={isVerified ? "text-emerald-600 font-bold" : isRejected ? "text-rose-600 font-bold" : "text-indigo-600 font-semibold"}>
+                                    {isVerified ? "Verified ✓" : isRejected ? "Rejected ✗" : "Uploaded"}
+                                  </span>
+                                </p>
+                              ) : (
+                                <span className="text-[11px] text-amber-600 font-medium">Awaiting Parent Upload</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => window.open(doc.fileUrl || doc.url || resolvedFileUrl, '_blank')}
+                              disabled={!doc.fileUrl && !doc.url}
+                              className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 transition border ${
+                                !doc.fileUrl && !doc.url
+                                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                                  : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 cursor-pointer"
+                              }`}
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleVerify(doc.id || docId)}
+                              disabled={doc.status === 'VERIFIED' || !doc.fileUrl}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition ${
+                                doc.status === 'VERIFIED'
+                                  ? "bg-emerald-600 text-white shadow-xs cursor-default"
+                                  : !doc.fileUrl
+                                  ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                              }`}
+                            >
+                              {doc.status === 'VERIFIED' ? "Verified ✓" : "Mark Verified"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleReject(doc.id || docId)}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                                doc.status === 'REJECTED'
+                                  ? "bg-red-600 text-white shadow-xs"
+                                  : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                              }`}
+                            >
+                              {doc.status === 'REJECTED' ? "Rejected ✗" : "Reject"}
+                            </button>
+                          </div>
+                        </div>
+                      );
                     })}
                   </div>
                 </div>

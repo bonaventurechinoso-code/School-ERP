@@ -2,6 +2,7 @@ import React from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import TrackApplicationClient from "./TrackApplicationClient";
 import { Building2, SearchX } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 
 export default async function TrackApplicationPage({
   params: paramsPromise,
@@ -33,7 +34,10 @@ export default async function TrackApplicationPage({
 
   if (!school) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
+        <div className="max-w-md w-full mb-3 text-left">
+          <BackButton />
+        </div>
         <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 text-center">
           <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-slate-800 dark:text-zinc-100">Institution Not Found</h1>
@@ -102,7 +106,10 @@ export default async function TrackApplicationPage({
 
   if (!register) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
+        <div className="max-w-md w-full mb-3 text-left">
+          <BackButton />
+        </div>
         <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 sm:p-10 rounded-3xl shadow-lg border border-slate-200 dark:border-zinc-800 text-center animate-in fade-in">
           <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-5">
             <SearchX className="w-8 h-8" />
@@ -125,24 +132,29 @@ export default async function TrackApplicationPage({
   const brandColor = "#4f46e5";
 
   return (
-    <TrackApplicationClient
-      schoolDomain={school.subdomain || schoolDomain}
-      schoolId={school.id}
-      schoolName={school.name}
-      contactPhone={school.contactPhone}
-      brandColor={brandColor}
-      applicant={{
-        id: register.id,
-        applicationNo: register.applicationNo,
-        firstName: register.firstName,
-        lastName: register.lastName,
-        classApplied: register.classApplied,
-        parentPhone: register.parentPhone,
-        email: register.email,
-        status: register.status,
-        credentialsJson: register.credentialsJson as any,
-        createdAt: register.createdAt.toISOString(),
-      }}
-    />
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
+      <div className="max-w-4xl mx-auto pt-5 px-4 sm:px-6">
+        <BackButton />
+      </div>
+      <TrackApplicationClient
+        schoolDomain={school.subdomain || schoolDomain}
+        schoolId={school.id}
+        schoolName={school.name}
+        contactPhone={school.contactPhone}
+        brandColor={brandColor}
+        applicant={{
+          id: register.id,
+          applicationNo: register.applicationNo,
+          firstName: register.firstName,
+          lastName: register.lastName,
+          classApplied: register.classApplied,
+          parentPhone: register.parentPhone,
+          email: register.email,
+          status: register.status,
+          credentialsJson: register.credentialsJson as any,
+          createdAt: register.createdAt.toISOString(),
+        }}
+      />
+    </div>
   );
 }
