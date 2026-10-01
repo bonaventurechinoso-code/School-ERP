@@ -302,306 +302,313 @@ export default function PublicApplyForm({
     );
   }
 
-  const inputStyles = "w-full border border-slate-200 rounded-xl p-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 disabled:bg-slate-50 disabled:dark:bg-zinc-800 disabled:text-slate-400 disabled:dark:text-zinc-500 disabled:cursor-not-allowed";
-  const labelStyles = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5";
-  const sectionHeaderStyles = "font-bold text-slate-900 dark:text-slate-100 text-xl mb-4";
-  const panelStyles = "md:col-span-2 bg-slate-50/50 dark:bg-zinc-900/50 p-6 md:p-8 rounded-2xl border border-slate-100 dark:border-zinc-800/80";
+  const inputStyles = "w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all disabled:bg-slate-50 disabled:dark:bg-zinc-800 disabled:text-slate-400 disabled:cursor-not-allowed";
+  const labelStyles = "block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1";
+  const sectionHeaderStyles = "font-bold text-slate-900 dark:text-slate-100 text-sm mb-2";
+  const panelStyles = "bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3";
 
   return (
-    <div className="bg-white text-slate-900 dark:bg-zinc-950 dark:text-slate-50 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
-      <div className="p-8 text-center bg-slate-900 dark:bg-zinc-950 rounded-t-3xl relative transition-colors duration-300">
-        <div className="absolute top-6 right-6">
-          <ThemeToggle />
+    <div className="min-h-[100dvh] flex flex-col justify-center py-4 px-4 max-w-[480px] mx-auto w-full">
+      <div className="bg-white text-slate-900 dark:bg-zinc-950 dark:text-slate-50 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-300 max-h-[92dvh] overflow-y-auto scrollbar-hide flex flex-col">
+        {/* Header Compact */}
+        <div className="p-4 text-center bg-slate-900 dark:bg-zinc-950 relative transition-colors duration-300">
+          <div className="absolute top-3 right-3">
+            <ThemeToggle />
+          </div>
+          <div className="mx-auto w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 shadow-xs bg-white/10 backdrop-blur-xs border border-white/20">
+            <GraduationCap className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-[22px] font-bold text-white tracking-tight mb-1">
+            Apply to {schoolName}
+          </h1>
+          <p className="text-[13px] text-slate-400 dark:text-zinc-400 leading-tight mb-3">
+            Begin your journey with us by completing this quick inquiry form.
+          </p>
         </div>
-        <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm bg-white/10 backdrop-blur-sm border border-white/20">
-          <GraduationCap className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Apply to {schoolName}</h1>
-        <p className="mt-2 text-slate-200 text-sm max-w-lg mx-auto">
-          Begin your journey with us by completing this quick inquiry form.
-        </p>
-      </div>
 
-      {/* 2-Step Progress Indicator */}
-      <div className="px-6 md:px-10 pt-6 pb-2">
-        <div className="flex items-center justify-between max-w-xs mx-auto relative">
-          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-200 dark:bg-zinc-800 -translate-y-1/2 z-0" />
-          <div
-            className="absolute top-1/2 left-0 h-0.5 transition-all duration-300 -translate-y-1/2 z-0"
-            style={{
-              width: step === 1 ? "0%" : "100%",
-              backgroundColor: brandColor || "#4f46e5",
-            }}
-          />
-
-          {/* Step 1 Pill */}
-          <button
-            type="button"
-            onClick={() => {
-              setFormError(null);
-              setStep(1);
-            }}
-            className="relative z-10 flex flex-col items-center group cursor-pointer"
-          >
+        {/* Stepper Compact */}
+        <div className="px-5 pt-3 mb-4">
+          <div className="flex items-center justify-between max-w-[240px] mx-auto relative">
+            <div className="absolute top-4 left-0 right-0 h-[2px] bg-slate-200 dark:bg-zinc-800 -translate-y-1/2 z-0" />
             <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm ${
-                step === 1
-                  ? "text-white ring-4 ring-indigo-100 dark:ring-indigo-950"
-                  : "bg-emerald-500 text-white"
-              }`}
-              style={{ backgroundColor: step === 1 ? (brandColor || "#0f172a") : undefined }}
-            >
-              {step > 1 ? "✓" : "1"}
-            </div>
-            <span
-              className={`text-xs mt-1.5 font-bold ${
-                step === 1 ? "text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-zinc-400"
-              }`}
-            >
-              Student Details
-            </span>
-          </button>
+              className="absolute top-4 left-0 h-[2px] transition-all duration-300 -translate-y-1/2 z-0"
+              style={{
+                width: step === 1 ? "0%" : "100%",
+                backgroundColor: brandColor || "#0f172a",
+              }}
+            />
 
-          {/* Step 2 Pill */}
-          <div className="relative z-10 flex flex-col items-center">
-            <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm ${
-                step === 2
-                  ? "text-white ring-4 ring-indigo-100 dark:ring-indigo-950"
-                  : "bg-slate-200 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
-              }`}
-              style={{ backgroundColor: step === 2 ? (brandColor || "#0f172a") : undefined }}
+            {/* Step 1 Circle */}
+            <button
+              type="button"
+              onClick={() => {
+                setFormError(null);
+                setStep(1);
+              }}
+              className="relative z-10 flex flex-col items-center group cursor-pointer"
             >
-              2
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-xs ${
+                  step === 1
+                    ? "text-white ring-2 ring-indigo-200 dark:ring-indigo-900"
+                    : "bg-emerald-500 text-white"
+                }`}
+                style={{ backgroundColor: step === 1 ? (brandColor || "#0f172a") : undefined }}
+              >
+                {step > 1 ? "✓" : "1"}
+              </div>
+              <span
+                className={`text-[11px] font-semibold mt-1 ${
+                  step === 1 ? "text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-zinc-400"
+                }`}
+              >
+                Student Details
+              </span>
+            </button>
+
+            {/* Step 2 Circle */}
+            <div className="relative z-10 flex flex-col items-center">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-xs ${
+                  step === 2
+                    ? "text-white ring-2 ring-indigo-200 dark:ring-indigo-900"
+                    : "bg-slate-200 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+                }`}
+                style={{ backgroundColor: step === 2 ? (brandColor || "#0f172a") : undefined }}
+              >
+                2
+              </div>
+              <span
+                className={`text-[11px] font-semibold mt-1 ${
+                  step === 2 ? "text-slate-900 dark:text-slate-100" : "text-slate-400 dark:text-zinc-500"
+                }`}
+              >
+                Parent &amp; Security
+              </span>
             </div>
-            <span
-              className={`text-xs mt-1.5 font-bold ${
-                step === 2 ? "text-slate-900 dark:text-slate-100" : "text-slate-400 dark:text-zinc-500"
-              }`}
-            >
-              Parent &amp; Security
-            </span>
           </div>
         </div>
-      </div>
 
-      <form onSubmit={handleSubmit} className="p-6 md:p-10 space-y-8">
-        {step === 1 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-300">
-            {/* Academic Tier pills */}
-            <div className="md:col-span-2 flex flex-col items-start">
-              <label className={labelStyles}>Academic Tier</label>
-              <div className="flex flex-wrap gap-2">
-                {tiers && tiers.length > 0 ? (
-                  tiers.map((t) => {
-                    const isSelected =
-                      formData.tierId === t.id ||
-                      (tier && t.name.toLowerCase() === tier.toLowerCase());
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => {
-                          setTier(t.name);
-                          setFormData((prev) => ({ ...prev, tierId: t.id, targetGrade: "" }));
-                        }}
-                        className={`inline-flex items-center px-4 py-2 rounded-xl border font-medium text-sm transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-indigo-600 bg-indigo-50/80 text-indigo-900 dark:border-indigo-400 dark:bg-indigo-950/60 dark:text-indigo-200 shadow-sm"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-                        }`}
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full mr-2.5 shadow-sm"
-                          style={{
-                            backgroundColor: isSelected ? (brandColor || "#4f46e5") : "#94a3b8",
+        {/* Step Content */}
+        <form onSubmit={handleSubmit} className="p-4 pt-0 space-y-3 flex-1 flex flex-col justify-between">
+          {step === 1 && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {/* Academic Tier Grid */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Academic Tier
+                </label>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {tiers && tiers.length > 0 ? (
+                    tiers.map((t) => {
+                      const isSelected =
+                        formData.tierId === t.id ||
+                        (tier && t.name.toLowerCase() === tier.toLowerCase());
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTier(t.name);
+                            setFormData((prev) => ({ ...prev, tierId: t.id, targetGrade: "" }));
                           }}
-                        />
-                        {formatTierLabel(t.name)}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="inline-flex items-center px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 font-medium text-sm shadow-sm">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full mr-3 shadow-sm"
-                      style={{ backgroundColor: brandColor }}
-                    />
-                    {tier}
-                  </div>
-                )}
+                          className={`h-9 px-3 text-[12px] font-medium rounded-full border flex items-center gap-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              isSelected ? "bg-white" : "bg-slate-400"
+                            }`}
+                          />
+                          <span className="truncate">{formatTierLabel(t.name)}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="h-9 px-3 text-[12px] font-medium rounded-full border border-slate-200 bg-white text-slate-600 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full shrink-0 bg-slate-900" />
+                      <span className="truncate">{tier}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {formData.tierId && (
-              <>
-                {isHigherEd ? (
-                  <>
-                    <div className={panelStyles}>
-                      <h3 className={sectionHeaderStyles}>Applicant Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="md:col-span-2">
-                          <label className={labelStyles}>Full Name *</label>
-                          <input
-                            required
-                            type="text"
-                            placeholder="e.g. Jane Doe"
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.applicantName}
-                            onChange={(e) =>
-                              setFormData({ ...formData, applicantName: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label className={labelStyles}>Personal Email *</label>
-                          <input
-                            required
-                            type="email"
-                            placeholder="jane@example.com"
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.studentEmail}
-                            onChange={(e) =>
-                              setFormData({ ...formData, studentEmail: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label className={labelStyles}>Phone Number *</label>
-                          <input
-                            required
-                            type="tel"
-                            inputMode="numeric"
-                            pattern="[0-9+]*"
-                            minLength={14}
-                            maxLength={14}
-                            placeholder="+155500000000"
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.studentPhone}
-                            onChange={(e) =>
-                              handleNumericChange(e, (val) =>
-                                setFormData({ ...formData, studentPhone: val })
-                              )
-                            }
-                          />
+              {formData.tierId && (
+                <>
+                  {isHigherEd ? (
+                    <>
+                      <div className={panelStyles}>
+                        <h3 className={sectionHeaderStyles}>Applicant Details</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className={labelStyles}>Full Name *</label>
+                            <input
+                              required
+                              type="text"
+                              placeholder="e.g. Jane Doe"
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.applicantName}
+                              onChange={(e) =>
+                                setFormData({ ...formData, applicantName: e.target.value })
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className={labelStyles}>Personal Email *</label>
+                            <input
+                              required
+                              type="email"
+                              placeholder="jane@example.com"
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.studentEmail}
+                              onChange={(e) =>
+                                setFormData({ ...formData, studentEmail: e.target.value })
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className={labelStyles}>Phone Number *</label>
+                            <input
+                              required
+                              type="tel"
+                              inputMode="numeric"
+                              pattern="[0-9+]*"
+                              minLength={14}
+                              maxLength={14}
+                              placeholder="+155500000000"
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.studentPhone}
+                              onChange={(e) =>
+                                handleNumericChange(e, (val) =>
+                                  setFormData({ ...formData, studentPhone: val })
+                                )
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className={panelStyles}>
-                      <h3 className={sectionHeaderStyles}>Academic Programme Selection</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="md:col-span-2">
-                          <label className={labelStyles}>Academic Level *</label>
-                          <select
-                            required
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.targetGrade}
-                            onChange={(e) =>
-                              setFormData({ ...formData, targetGrade: e.target.value })
-                            }
-                          >
-                            <option value="">Select a level...</option>
-                            {renderClassOptions()}
-                          </select>
-                        </div>
-                        <div>
-                          <label className={labelStyles}>{orgUnitLabel}</label>
-                          <select
-                            required
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.facultyOrSchool}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                facultyOrSchool: e.target.value,
-                                intendedCourseOrProgramme: "",
-                              })
-                            }
-                          >
-                            <option value="">Select...</option>
-                            {Object.keys(activeHierarchy).map((unit) => (
-                              <option key={unit} value={unit}>
-                                {unit}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className={labelStyles}>{courseProgrammeLabel}</label>
-                          <select
-                            required
-                            disabled={!formData.facultyOrSchool}
-                            className={inputStyles}
-                            style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                            value={formData.intendedCourseOrProgramme}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                intendedCourseOrProgramme: e.target.value,
-                              })
-                            }
-                          >
-                            <option value="">
-                              {formData.facultyOrSchool
-                                ? "Select a programme..."
-                                : "Make a selection above first"}
-                            </option>
-                            {formData.facultyOrSchool &&
-                              activeHierarchy[formData.facultyOrSchool]?.map((prog) => (
-                                <option key={prog} value={prog}>
-                                  {prog}
+                      <div className={panelStyles}>
+                        <h3 className={sectionHeaderStyles}>Academic Programme Selection</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className={labelStyles}>Academic Level *</label>
+                            <select
+                              required
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.targetGrade}
+                              onChange={(e) =>
+                                setFormData({ ...formData, targetGrade: e.target.value })
+                              }
+                            >
+                              <option value="">Select a level...</option>
+                              {renderClassOptions()}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={labelStyles}>{orgUnitLabel}</label>
+                            <select
+                              required
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.facultyOrSchool}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  facultyOrSchool: e.target.value,
+                                  intendedCourseOrProgramme: "",
+                                })
+                              }
+                            >
+                              <option value="">Select...</option>
+                              {Object.keys(activeHierarchy).map((unit) => (
+                                <option key={unit} value={unit}>
+                                  {unit}
                                 </option>
                               ))}
-                          </select>
+                            </select>
+                          </div>
+                          <div>
+                            <label className={labelStyles}>{courseProgrammeLabel}</label>
+                            <select
+                              required
+                              disabled={!formData.facultyOrSchool}
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.intendedCourseOrProgramme}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  intendedCourseOrProgramme: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">
+                                {formData.facultyOrSchool
+                                  ? "Select a programme..."
+                                  : "Make a selection above first"}
+                              </option>
+                              {formData.facultyOrSchool &&
+                                activeHierarchy[formData.facultyOrSchool]?.map((prog) => (
+                                  <option key={prog} value={prog}>
+                                    {prog}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </>
-                ) : (
-                  /* K-12 Layout (Step 1) */
-                  <div className={panelStyles}>
-                    <h3 className={sectionHeaderStyles}>Student Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="md:col-span-2">
-                        <label className={labelStyles}>Student Full Name *</label>
+                    </>
+                  ) : (
+                    /* K-12 Compact Step 1 Card */
+                    <div className="bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3">
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm mb-1">
+                        Student Details
+                      </h3>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Student Full Name *
+                        </label>
                         <input
                           required
                           type="text"
                           placeholder="e.g. Timmy Doe"
-                          className={inputStyles}
-                          style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                          className="w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
                           value={formData.applicantName}
                           onChange={(e) =>
                             setFormData({ ...formData, applicantName: e.target.value })
                           }
                         />
                       </div>
-                      <div className="md:col-span-2">
-                        <label className={labelStyles}>Student / Account Email *</label>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Student / Account Email *
+                        </label>
                         <input
                           required
                           type="email"
                           placeholder="student@example.com"
-                          className={inputStyles}
-                          style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                          className="w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
                           value={formData.studentEmail}
                           onChange={(e) =>
                             setFormData({ ...formData, studentEmail: e.target.value })
                           }
                         />
                       </div>
-                      <div className="md:col-span-2">
-                        <label className={labelStyles}>Target Grade/Class *</label>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Target Grade/Class *
+                        </label>
                         <select
                           required
-                          className={inputStyles}
-                          style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                          className="w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
                           value={formData.targetGrade}
                           onChange={(e) =>
                             setFormData({ ...formData, targetGrade: e.target.value })
@@ -612,38 +619,36 @@ export default function PublicApplyForm({
                         </select>
                       </div>
                     </div>
-                  </div>
-                )}
-              </>
-            )}
+                  )}
+                </>
+              )}
 
-            {formError && (
-              <div className="md:col-span-2 p-4 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 rounded-xl text-sm font-semibold border border-rose-200 dark:border-rose-900">
-                {formError}
-              </div>
-            )}
+              {formError && (
+                <div className="p-3 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 rounded-lg text-xs font-semibold border border-rose-200 dark:border-rose-900">
+                  {formError}
+                </div>
+              )}
 
-            <div className="md:col-span-2 pt-4 flex justify-end">
               <button
                 type="button"
                 onClick={handleContinueToStep2}
-                className="w-full md:w-auto px-8 py-3.5 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 cursor-pointer"
-                style={{ backgroundColor: brandColor }}
+                className="w-full h-10 px-4 text-[13px] font-semibold text-white rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                style={{ backgroundColor: brandColor || "#0f172a" }}
               >
                 <span>Continue to Parent Details</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {step === 2 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-300">
-            {isHigherEd ? (
-              <div className={panelStyles}>
-                <h3 className={sectionHeaderStyles}>Emergency Contact</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
+          {step === 2 && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {isHigherEd ? (
+                <div className="bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3">
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm mb-1">
+                    Emergency Contact
+                  </h3>
+                  <div>
                     <label className={labelStyles}>Contact Full Name *</label>
                     <input
                       required
@@ -687,12 +692,12 @@ export default function PublicApplyForm({
                     />
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className={panelStyles}>
-                <h3 className={sectionHeaderStyles}>Parent / Guardian Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
+              ) : (
+                <div className="bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3">
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm mb-1">
+                    Parent / Guardian Details
+                  </h3>
+                  <div>
                     <label className={labelStyles}>Parent/Guardian Full Name *</label>
                     <input
                       required
@@ -736,142 +741,143 @@ export default function PublicApplyForm({
                     />
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Student Portal Account Security Panel */}
-            <div className={panelStyles}>
-              <div className="flex items-center gap-2 mb-2">
-                <Lock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <h3 className={sectionHeaderStyles}>Student Portal Account Security</h3>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
-                Create a secure password to access your student portal and track your application
-                status.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className={labelStyles}>Create Account Password *</label>
-                  <div className="relative">
-                    <input
-                      required
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Min. 8 alphanumeric characters"
-                      className={`${inputStyles} pr-10`}
-                      style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+              {/* Student Portal Account Security Panel */}
+              <div className="bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                    Student Portal Account Security
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mb-2">
+                  Create a secure password to access your student portal and track your application status.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className={labelStyles}>Create Account Password *</label>
+                    <div className="relative">
+                      <input
+                        required
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Min. 8 alphanumeric characters"
+                        className={`${inputStyles} pr-9`}
+                        style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelStyles}>Confirm Password *</label>
+                    <div className="relative">
+                      <input
+                        required
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Re-enter password"
+                        className={`${inputStyles} pr-9`}
+                        style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                        value={formData.confirmPassword}
+                        onChange={(e) =>
+                          setFormData({ ...formData, confirmPassword: e.target.value })
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className={labelStyles}>Confirm Password *</label>
-                  <div className="relative">
-                    <input
-                      required
-                      type={showConfirmPassword ? "text" : "password"}
-                      placeholder="Re-enter password"
-                      className={`${inputStyles} pr-10`}
-                      style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                      value={formData.confirmPassword}
-                      onChange={(e) =>
-                        setFormData({ ...formData, confirmPassword: e.target.value })
-                      }
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Real-time validation badges */}
-              <div className="flex flex-wrap items-center gap-3 text-xs pt-4">
-                <span
-                  className={`inline-flex items-center gap-1 font-semibold ${
-                    formData.password.length >= 8
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-slate-400"
-                  }`}
-                >
-                  {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1 font-semibold ${
-                    /[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-slate-400"
-                  }`}
-                >
-                  {/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)
-                    ? "✓"
-                    : "•"}{" "}
-                  Alphanumeric
-                </span>
-                {formData.confirmPassword.length > 0 && (
+                {/* Real-time validation badges */}
+                <div className="flex flex-wrap items-center gap-2 text-[11px] pt-1">
                   <span
                     className={`inline-flex items-center gap-1 font-semibold ${
-                      formData.password === formData.confirmPassword
+                      formData.password.length >= 8
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-amber-600 dark:text-amber-400"
+                        : "text-slate-400"
                     }`}
                   >
-                    {formData.password === formData.confirmPassword
-                      ? "✓ Passwords match"
-                      : "⚠ Passwords do not match"}
+                    {formData.password.length >= 8 ? "✓" : "•"} Min. 8 chars
                   </span>
-                )}
+                  <span
+                    className={`inline-flex items-center gap-1 font-semibold ${
+                      /[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)
+                      ? "✓"
+                      : "•"}{" "}
+                    Alphanumeric
+                  </span>
+                  {formData.confirmPassword.length > 0 && (
+                    <span
+                      className={`inline-flex items-center gap-1 font-semibold ${
+                        formData.password === formData.confirmPassword
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-amber-600 dark:text-amber-400"
+                      }`}
+                    >
+                      {formData.password === formData.confirmPassword
+                        ? "✓ Match"
+                        : "⚠ Don't match"}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {formError && (
+                <div className="p-3 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 rounded-lg text-xs font-semibold border border-rose-200 dark:border-rose-900">
+                  {formError}
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormError(null);
+                    setStep(1);
+                  }}
+                  className="h-10 px-3.5 rounded-lg border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 font-semibold text-[13px] transition cursor-pointer"
+                >
+                  ← Back
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isPending || !formData.tierId}
+                  className="flex-1 h-10 px-4 text-white rounded-lg font-semibold text-[13px] shadow-sm hover:shadow transition-all disabled:opacity-70 cursor-pointer"
+                  style={{ backgroundColor: brandColor || "#0f172a" }}
+                >
+                  {isPending ? "Submitting..." : "Submit Application"}
+                </button>
               </div>
             </div>
-
-            {formError && (
-              <div className="md:col-span-2 p-4 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 rounded-xl text-sm font-semibold border border-rose-200 dark:border-rose-900">
-                {formError}
-              </div>
-            )}
-
-            <div className="md:col-span-2 pt-4 flex flex-col-reverse sm:flex-row items-center justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setFormError(null);
-                  setStep(1);
-                }}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 font-bold text-sm transition cursor-pointer"
-              >
-                ← Back to Student Details
-              </button>
-
-              <button
-                type="submit"
-                disabled={isPending || !formData.tierId}
-                className="w-full sm:w-auto px-10 py-3.5 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:hover:translate-y-0 hover:-translate-y-0.5 cursor-pointer"
-                style={{ backgroundColor: brandColor }}
-              >
-                {isPending ? "Submitting Application..." : "Submit Application"}
-              </button>
-            </div>
-          </div>
-        )}
-      </form>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
