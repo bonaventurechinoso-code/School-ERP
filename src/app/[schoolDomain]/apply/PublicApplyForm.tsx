@@ -78,6 +78,7 @@ export default function PublicApplyForm({
     parentEmail: "",
     targetGrade: "",
     targetClass: "",
+    academicTier: matchedTierRecord?.name || schoolTier || "Secondary School",
     facultyOrSchool: "",
     intendedCourseOrProgramme: "",
     tierId: initialTierId,
@@ -89,7 +90,7 @@ export default function PublicApplyForm({
   const [formError, setFormError] = useState<string | null>(null);
 
   const selectedTier = tiers.find(t => t.id === formData.tierId) || matchedTierRecord;
-  const selectedTierName = tier || selectedTier?.name || "";
+  const selectedTierName = tier || selectedTier?.name || formData.academicTier || "";
 
   // On Tier change, reset Target Grade/Class to "" (Select a class...) so user must re-pick
   useEffect(() => {
@@ -237,10 +238,30 @@ export default function PublicApplyForm({
 
     startTransition(async () => {
       try {
+        const currentTierRecord = tiers.find((t) => t.id === formData.tierId) || matchedTierRecord;
+        const resolvedTierName =
+          formData.academicTier || currentTierRecord?.name || tier || "Secondary School";
+        const chosenClass = formData.targetClass || formData.targetGrade || "";
+
+        const payload = {
+          ...formData,
+          schoolDomain,
+          fullName: formData.applicantName,
+          applicantName: formData.applicantName,
+          email: formData.studentEmail,
+          studentEmail: formData.studentEmail,
+          academicTier: resolvedTierName,
+          tierId: formData.tierId || currentTierRecord?.id,
+          targetClass: chosenClass,
+          targetGrade: chosenClass,
+          targetClassCohort: chosenClass,
+        };
+        console.log("[PublicApplyForm] Submitting application payload:", payload);
+
         const res = await fetch("/api/v1/admissions/public-submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, schoolDomain })
+          body: JSON.stringify(payload),
         });
 
         if (res.ok) {
@@ -446,7 +467,7 @@ export default function PublicApplyForm({
                           type="button"
                           onClick={() => {
                             setTier(t.name);
-                            setFormData((prev) => ({ ...prev, tierId: t.id, targetGrade: "", targetClass: "" }));
+                            setFormData((prev) => ({ ...prev, tierId: t.id, academicTier: t.name, targetGrade: "", targetClass: "" }));
                           }}
                           className={`h-9 px-3 text-[12px] font-medium rounded-full border flex items-center gap-2 transition-all cursor-pointer ${
                             isSelected

@@ -18,7 +18,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import BackButton from "@/components/ui/BackButton";
-import DossierDrawer, { DossierApplicant } from "./components/DossierDrawer";
+import DossierDrawer, { DossierApplicant, deriveTierFromClass } from "./components/DossierDrawer";
 
 export default function AdmissionRegisterPage({
   params: paramsPromise,
@@ -57,22 +57,29 @@ export default function AdmissionRegisterPage({
       const rawData = json.data || [];
 
       // Map to DossierApplicant format
-      const formatted: DossierApplicant[] = rawData.map((item: any) => ({
-        id: item.id,
-        applicationNo: item.applicationNo || `APP-${item.id.slice(0, 6).toUpperCase()}`,
-        firstName: item.firstName || item.applicantName?.split(" ")[0] || "Applicant",
-        lastName: item.lastName || item.applicantName?.split(" ").slice(1).join(" ") || "",
-        classApplied: item.classApplied || item.targetGrade || "Class 1",
-        parentPhone: item.parentPhone || item.parentContact || "N/A",
-        parentName: item.parentName,
-        email: item.email || item.studentEmail || null,
-        status: item.status || "docs_pending",
-        tierName: item.tier?.name,
-        createdAt: item.createdAt || new Date().toISOString(),
-        verifiedAt: item.verifiedAt,
-        verifiedBy: item.verifiedBy,
-        documents: item.credentialsJson || [],
-      }));
+      const formatted: DossierApplicant[] = rawData.map((item: any) => {
+        const classApplied = item.classApplied || item.targetClass || item.targetGrade || "Class 1";
+        const tierName = item.tierName || item.tier?.name || item.academicTier || deriveTierFromClass(classApplied);
+        return {
+          id: item.id,
+          applicationNo: item.applicationNo || `APP-${item.id.slice(0, 6).toUpperCase()}`,
+          firstName: item.firstName || item.applicantName?.split(" ")[0] || "Applicant",
+          lastName: item.lastName || item.applicantName?.split(" ").slice(1).join(" ") || "",
+          classApplied,
+          parentPhone: item.parentPhone || item.parentContact || "N/A",
+          parentName: item.parentName,
+          email: item.email || item.studentEmail || null,
+          status: item.status || "docs_pending",
+          tierName,
+          academicTier: tierName,
+          targetClass: classApplied,
+          targetClassCohort: classApplied,
+          createdAt: item.createdAt || new Date().toISOString(),
+          verifiedAt: item.verifiedAt,
+          verifiedBy: item.verifiedBy,
+          documents: item.credentialsJson || [],
+        };
+      });
 
       setRecords(formatted);
     } catch (err: any) {
@@ -327,7 +334,10 @@ export default function AdmissionRegisterPage({
                       )}
                     </td>
                     <td className="py-4 px-4 font-medium text-slate-700 dark:text-zinc-300">
-                      {r.classApplied}
+                      <div className="font-semibold text-slate-900 dark:text-zinc-100">{r.classApplied}</div>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium block">
+                        {r.tierName || deriveTierFromClass(r.classApplied)}
+                      </span>
                     </td>
                     <td className="py-4 px-4">{renderStatusBadge(r.status)}</td>
                     <td className="py-4 px-4 text-slate-500 dark:text-zinc-400 font-mono text-[11px]">
@@ -392,6 +402,10 @@ export default function AdmissionRegisterPage({
                 <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5 mt-0.5">
                   <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
                   <span>{r.classApplied}</span>
+                  <span className="text-slate-400">·</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                    {r.tierName || deriveTierFromClass(r.classApplied)}
+                  </span>
                 </p>
               </div>
 

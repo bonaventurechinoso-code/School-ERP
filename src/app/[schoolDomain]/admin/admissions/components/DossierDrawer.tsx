@@ -43,6 +43,9 @@ export interface DossierApplicant {
   email?: string | null;
   status: string;
   tierName?: string;
+  academicTier?: string;
+  targetClass?: string;
+  targetClassCohort?: string;
   address?: string;
   createdAt: string;
   verifiedAt?: string | null;
@@ -51,6 +54,39 @@ export interface DossierApplicant {
   credentials_json?: any[];
   credentialsJson?: any[];
   targetGrade?: string;
+}
+
+export function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
+  if (!cls) return fallbackTier || "Secondary School";
+  const c = cls.toLowerCase().trim();
+  if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
+    return "Daycare / Nursery";
+  }
+  if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
+    return "Primary School";
+  }
+  if (
+    c.includes("jss") ||
+    c.includes("sss") ||
+    c.includes("ss1") ||
+    c.includes("ss 1") ||
+    c.includes("ss2") ||
+    c.includes("ss 2") ||
+    c.includes("ss3") ||
+    c.includes("ss 3") ||
+    c.includes("secondary") ||
+    c.includes("high")
+  ) {
+    return "Secondary School";
+  }
+  if (
+    ["nd", "hnd", "100 level", "200", "300", "400", "university", "polytechnic", "college of education"].some((k) =>
+      c.includes(k)
+    )
+  ) {
+    return "Higher Institution / University";
+  }
+  return fallbackTier || "Secondary School";
 }
 
 interface DossierDrawerProps {
@@ -462,14 +498,16 @@ export default function DossierDrawer({
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-zinc-100 mt-1.5">
                 {applicant.firstName} {applicant.lastName}
               </h2>
-              <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-0.5">
-                <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Class Applied:</span>
-                <strong className="text-slate-800 dark:text-zinc-200">{applicant.classApplied}</strong>
-                {applicant.tierName && (
-                  <span className="text-slate-400">({applicant.tierName})</span>
-                )}
-              </p>
+              {(() => {
+                const targetClass = applicant.targetClass || applicant.targetClassCohort || applicant.targetGrade || applicant.classApplied || "N/A";
+                const academicTier = applicant.academicTier || applicant.tierName || deriveTierFromClass(targetClass);
+                return (
+                  <p className="text-xs font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-0.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Target: <strong className="text-slate-800 dark:text-zinc-200">{targetClass}</strong> · <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{academicTier}</span></span>
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Status indicator */}
@@ -851,6 +889,21 @@ export default function DossierDrawer({
                       </div>
                     </div>
                   )}
+
+                  <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200 dark:border-zinc-700 sm:col-span-2">
+                    <div>
+                      <span className="text-slate-400 block mb-0.5 font-medium">Target Class Cohort</span>
+                      <p className="font-bold text-slate-800 dark:text-zinc-200">
+                        {applicant.targetClass || applicant.targetClassCohort || applicant.targetGrade || applicant.classApplied}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block mb-0.5 font-medium">Academic Tier</span>
+                      <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                        {applicant.academicTier || applicant.tierName || deriveTierFromClass(applicant.targetClass || applicant.classApplied)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

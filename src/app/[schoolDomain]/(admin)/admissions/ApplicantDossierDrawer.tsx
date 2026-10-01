@@ -46,6 +46,39 @@ export interface ApplicantDossierDrawerProps {
 
 const STAGES = ["INQUIRY", "APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"];
 
+function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
+  if (!cls) return fallbackTier || "Secondary School";
+  const c = cls.toLowerCase().trim();
+  if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
+    return "Daycare / Nursery";
+  }
+  if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
+    return "Primary School";
+  }
+  if (
+    c.includes("jss") ||
+    c.includes("sss") ||
+    c.includes("ss1") ||
+    c.includes("ss 1") ||
+    c.includes("ss2") ||
+    c.includes("ss 2") ||
+    c.includes("ss3") ||
+    c.includes("ss 3") ||
+    c.includes("secondary") ||
+    c.includes("high")
+  ) {
+    return "Secondary School";
+  }
+  if (
+    ["nd", "hnd", "100 level", "200", "300", "400", "university", "polytechnic", "college of education"].some((k) =>
+      c.includes(k)
+    )
+  ) {
+    return "Higher Institution / University";
+  }
+  return fallbackTier || "Secondary School";
+}
+
 export default function ApplicantDossierDrawer({
   lead,
   isOpen,
@@ -251,11 +284,16 @@ export default function ApplicantDossierDrawer({
                     {lead.status}
                   </span>
                 </div>
-                <p className="text-xs text-indigo-200 mt-0.5 font-medium flex items-center gap-2">
-                  <span>Target: {lead.targetGrade}</span>
-                  <span>•</span>
-                  <span>{lead.tier?.name || "Academic Tier"}</span>
-                </p>
+                {(() => {
+                  const targetClass = lead.targetClass || lead.targetClassCohort || lead.targetGrade || "N/A";
+                  const academicTier = lead.academicTier || lead.tier?.name || deriveTierFromClass(targetClass);
+                  return (
+                    <p className="text-xs text-indigo-200 mt-0.5 font-medium flex items-center gap-2">
+                      <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Target: <strong className="text-white font-semibold">{targetClass}</strong> · {academicTier}</span>
+                    </p>
+                  );
+                })()}
                 <p className="text-[11px] text-slate-400 font-mono mt-1">
                   Applicant Ref: <strong className="text-slate-200">ADM-{lead.id.slice(0, 6).toUpperCase()}</strong>
                 </p>
@@ -430,11 +468,15 @@ export default function ApplicantDossierDrawer({
                   </div>
                   <div>
                     <span className="text-slate-400 block mb-0.5 font-medium">Target Class Cohort</span>
-                    <p className="font-bold text-slate-800">{lead.targetGrade}</p>
+                    <p className="font-bold text-slate-800">
+                      {lead.targetClass || lead.targetClassCohort || lead.targetGrade}
+                    </p>
                   </div>
                   <div>
                     <span className="text-slate-400 block mb-0.5 font-medium">Academic Tier</span>
-                    <p className="font-bold text-slate-800">{lead.tier?.name || "General Tier"}</p>
+                    <p className="font-bold text-slate-800">
+                      {lead.academicTier || lead.tier?.name || deriveTierFromClass(lead.targetClass || lead.targetGrade)}
+                    </p>
                   </div>
                   <div>
                     <span className="text-slate-400 block mb-0.5 font-medium">Inquiry Source</span>

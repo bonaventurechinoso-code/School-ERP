@@ -32,7 +32,40 @@ const STAGES = [
   { id: "ENROLLED", label: "Matriculated", color: "border-t-emerald-500", bg: "bg-emerald-500/10 text-emerald-800" },
 ];
 
-type LeadWithTier = AdmissionLead & { tier?: AcademicTier | null; notes?: any[] };
+function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
+  if (!cls) return fallbackTier || "Secondary School";
+  const c = cls.toLowerCase().trim();
+  if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
+    return "Daycare / Nursery";
+  }
+  if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
+    return "Primary School";
+  }
+  if (
+    c.includes("jss") ||
+    c.includes("sss") ||
+    c.includes("ss1") ||
+    c.includes("ss 1") ||
+    c.includes("ss2") ||
+    c.includes("ss 2") ||
+    c.includes("ss3") ||
+    c.includes("ss 3") ||
+    c.includes("secondary") ||
+    c.includes("high")
+  ) {
+    return "Secondary School";
+  }
+  if (
+    ["nd", "hnd", "100 level", "200", "300", "400", "university", "polytechnic", "college of education"].some((k) =>
+      c.includes(k)
+    )
+  ) {
+    return "Higher Institution / University";
+  }
+  return fallbackTier || "Secondary School";
+}
+
+type LeadWithTier = AdmissionLead & { tier?: AcademicTier | null; notes?: any[]; targetClass?: string; academicTier?: string; targetClassCohort?: string };
 
 export default function AdmissionsPipeline({
   leads,
@@ -477,7 +510,7 @@ export default function AdmissionsPipeline({
                                 {lead.applicantName}
                               </h4>
                               <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                {lead.targetGrade} • <span className="text-indigo-600">{lead.tier?.name}</span>
+                                {lead.targetGrade || (lead as any).targetClass} • <span className="text-indigo-600 font-semibold">{lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}</span>
                               </p>
                             </div>
                             <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
@@ -576,9 +609,9 @@ export default function AdmissionsPipeline({
                         </td>
 
                         <td className="p-4 font-semibold text-slate-700">
-                          {lead.targetGrade}
+                          {lead.targetGrade || (lead as any).targetClass}
                           <span className="text-[10px] text-indigo-600 font-medium block">
-                            {lead.tier?.name}
+                            {lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}
                           </span>
                         </td>
 

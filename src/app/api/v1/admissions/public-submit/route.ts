@@ -43,8 +43,78 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "School not found" }, { status: 404 });
     }
 
-    const effectiveTierId = tierId || school.academicTiers[0]?.id;
-    const effectiveTargetGrade = targetGrade || "Class 1";
+    function deriveTierFromClass(cls: string, fallback?: string): string {
+      cls = (cls || "").toLowerCase().trim();
+      if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => cls.includes(k))) {
+        return "Daycare / Nursery";
+      }
+      if (cls.includes("primary") || cls.includes("basic") || cls.includes("elementary")) {
+        return "Primary School";
+      }
+      if (
+        cls.includes("jss") ||
+        cls.includes("sss") ||
+        cls.includes("ss1") ||
+        cls.includes("ss 1") ||
+        cls.includes("ss2") ||
+        cls.includes("ss 2") ||
+        cls.includes("ss3") ||
+        cls.includes("ss 3") ||
+        cls.includes("secondary") ||
+        cls.includes("high")
+      ) {
+        return "Secondary School";
+      }
+      if (["nd", "hnd", "100 level", "200", "300", "400", "university", "polytechnic", "college of education"].some((k) => cls.includes(k))) {
+        return "Higher Institution / University";
+      }
+      return fallback || "Secondary School";
+    }
+
+    const resolvedTargetClass = (data.targetClass || data.targetGrade || data.targetClassCohort || targetGrade || "Class 1").trim();
+    const effectiveTargetGrade = resolvedTargetClass;
+    const derivedTierName = deriveTierFromClass(effectiveTargetGrade, data.academicTier);
+
+    // Determine intended tier name
+    let academicTierName = (data.academicTier || "").trim();
+    if (!academicTierName || (derivedTierName !== "Daycare / Nursery" && academicTierName.toLowerCase().includes("daycare"))) {
+      academicTierName = derivedTierName;
+    }
+
+    // Match tier in school's AcademicTiers
+    let matchedTier = school.academicTiers.find((t) => {
+      const tName = t.name.toLowerCase();
+      const targetName = academicTierName.toLowerCase();
+      return tName === targetName || tName.includes(targetName) || targetName.includes(tName);
+    });
+
+    if (!matchedTier && tierId) {
+      const explicitTier = school.academicTiers.find((t) => t.id === tierId);
+      // If explicit tier is not mismatched with class
+      if (explicitTier && !(explicitTier.name.toLowerCase().includes("daycare") && derivedTierName === "Secondary School")) {
+        matchedTier = explicitTier;
+      }
+    }
+
+    if (!matchedTier) {
+      // Find fallback matching derivedTierName
+      matchedTier = school.academicTiers.find((t) => {
+        const tName = t.name.toLowerCase();
+        const derived = derivedTierName.toLowerCase();
+        return tName === derived || tName.includes(derived) || derived.includes(tName);
+      }) || school.academicTiers[0];
+    }
+
+    const effectiveTierId = matchedTier?.id || tierId || school.academicTiers[0]?.id;
+    const finalTierName = matchedTier?.name || academicTierName || derivedTierName;
+
+    console.log("[PUBLIC_SUBMIT] Effective submission payload:", {
+      applicantName,
+      targetClass: effectiveTargetGrade,
+      targetClassCohort: effectiveTargetGrade,
+      academicTier: finalTierName,
+      effectiveTierId,
+    });
 
     const tenantDb = getTenantClient(school.id);
 
@@ -70,7 +140,7 @@ export async function POST(request: NextRequest) {
     const newLead = await tenantDb.admissionLead.create({
       data: {
         schoolId: school.id,
-        applicantName,
+        applicantName: applicantName || data.fullName,
         studentEmail,
         studentPhone,
         parentName,
@@ -83,6 +153,9 @@ export async function POST(request: NextRequest) {
         status: "INQUIRY",
         documents: {
           passwordHash: hashedPassword,
+          academicTier: finalTierName,
+          targetClass: effectiveTargetGrade,
+          targetClassCohort: effectiveTargetGrade,
         },
       }
     });
@@ -92,7 +165,7 @@ export async function POST(request: NextRequest) {
     try {
       const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
       appNo = await generateApplicationNo(school.id);
-      const nameParts = (applicantName || "Student").trim().split(" ");
+      const nameParts = (applicantName || data.fullName || "Student").trim().split(" ");
       const fName = nameParts[0] || "Student";
       const lName = nameParts.slice(1).join(" ") || "Applicant";
       await basePrisma.admissionRegister.create({
@@ -105,6 +178,14 @@ export async function POST(request: NextRequest) {
           parentPhone: parentContact || studentPhone || "N/A",
           email: studentEmail || parentEmail || null,
           status: "docs_pending",
+          credentialsJson: [
+            {
+              type: "TIER_INFO",
+              academicTier: finalTierName,
+              targetClass: effectiveTargetGrade,
+              targetClassCohort: effectiveTargetGrade,
+            }
+          ] as any,
         },
       });
     } catch (regErr: any) {
@@ -131,28 +212,33 @@ export async function POST(request: NextRequest) {
           await tenantDb.student.update({
             where: { id: existingStudent.id },
             data: {
+              tierId: effectiveTierId!,
+              currentClass: effectiveTargetGrade,
               dynamicFields: {
                 ...currentFields,
                 password: hashedPassword,
                 isTemporaryPassword: isTemporary,
+                academicTier: finalTierName,
+                targetClass: effectiveTargetGrade,
+                targetClassCohort: effectiveTargetGrade,
               },
             },
           });
           await setUserMustChangePassword(existingStudent.id, school.id, isTemporary);
         } else {
-          const nameParts = applicantName.trim().split(" ");
+          const nameParts = (applicantName || data.fullName || "Student").trim().split(" ");
           const firstName = nameParts[0] || "Student";
           const lastName = nameParts.slice(1).join(" ") || "Applicant";
 
           const createdStudent = await tenantDb.student.create({
             data: {
               schoolId: school.id,
-              tierId,
+              tierId: effectiveTierId!,
               firstName,
               lastName,
               email: accountEmail,
               status: "APPLICANT",
-              currentClass: targetGrade,
+              currentClass: effectiveTargetGrade,
               parentName: parentName || null,
               parentPhone: parentContact || null,
               parentEmail: parentEmail || null,
@@ -160,6 +246,9 @@ export async function POST(request: NextRequest) {
               dynamicFields: {
                 password: hashedPassword,
                 isTemporaryPassword: isTemporary,
+                academicTier: finalTierName,
+                targetClass: effectiveTargetGrade,
+                targetClassCohort: effectiveTargetGrade,
               },
             },
           });
