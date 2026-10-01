@@ -49,6 +49,79 @@ export const MANDATORY_CREDENTIALS: CredentialItem[] = [
   },
 ];
 
+export interface ApplicationReceivedEmailPayload {
+  schoolId: string;
+  applicantName: string;
+  applicationNo: string;
+  targetGrade?: string;
+  recipientEmail: string;
+  parentName?: string;
+  schoolName?: string;
+  subdomain?: string;
+  leadId?: string;
+}
+
+/**
+ * Sends responsive email notifying applicant of received application and next step to upload documents
+ */
+export async function sendApplicationReceivedEmail(payload: ApplicationReceivedEmailPayload) {
+  try {
+    const {
+      schoolId,
+      applicantName,
+      applicationNo,
+      targetGrade = "Class 1",
+      recipientEmail,
+      parentName = "Parent / Guardian",
+      subdomain = "udoka",
+    } = payload;
+
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { name: true, subdomain: true, contactPhone: true },
+    }).catch(() => null);
+
+    const tenantName = school?.name || payload.schoolName || "School ERP";
+    const sub = school?.subdomain || subdomain;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+    const trackUrl = `${baseUrl}/${sub}/admissions/track/${applicationNo}`;
+
+    const isDev = process.env.NODE_ENV !== "production";
+    const hasSmtp = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+
+    if (isDev || !hasSmtp) {
+      console.log("[MOCK EMAIL] " + trackUrl);
+      return { success: true, trackUrl, trackingUrl: trackUrl };
+    }
+
+    try {
+      const nodemailer = await import("nodemailer");
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
+        },
+      });
+
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.SMTP_USER || "School ERP <noreply@bonaveeict.com.ng>",
+        to: recipientEmail,
+        subject: `Application Received - App No: ${applicationNo}`,
+        html: `<p>Dear ${parentName || applicantName},</p><p>Your application (App No: ${applicationNo}) has been received for ${tenantName} (${targetGrade}).</p><p>Next step: upload documents at <a href="${trackUrl}">${trackUrl}</a></p>`,
+      });
+    } catch (smtpErr: any) {
+      console.log("[MOCK EMAIL] " + trackUrl);
+    }
+
+    return { success: true, trackUrl, trackingUrl: trackUrl };
+  } catch (err: any) {
+    return { success: true };
+  }
+}
+
 /**
  * Sends a responsive HTML email acknowledging an Admissions inquiry and requesting
  * required credential documents for stage progression.

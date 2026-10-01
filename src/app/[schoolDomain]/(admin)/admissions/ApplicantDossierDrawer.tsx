@@ -22,6 +22,8 @@ import {
   ChevronRight,
   Star,
   Save,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
@@ -55,6 +57,7 @@ export default function ApplicantDossierDrawer({
   onPrintOfferLetter,
   onPrintExamSlip,
 }: ApplicantDossierDrawerProps) {
+  const [isMaximized, setIsMaximized] = useState(false);
   const [activeTab, setActiveTab] = useState<"bio" | "documents" | "screening" | "offer">("bio");
   const [isPending, startTransition] = useTransition();
   const [alertMsg, setAlertMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -139,6 +142,25 @@ export default function ApplicantDossierDrawer({
     });
   };
 
+  const handleSetDocumentStatus = (docKey: string, nextStatus: "VERIFIED" | "REJECTED" | "PENDING") => {
+    setAlertMsg(null);
+    startTransition(async () => {
+      const res = await updateLeadDocumentsAction({
+        leadId: lead.id,
+        schoolId,
+        schoolDomain,
+        documentType: docKey,
+        status: nextStatus as any,
+      });
+      if (res.success) {
+        setAlertMsg({ type: "success", text: `Document set to ${nextStatus}.` });
+        if (onLeadUpdated) onLeadUpdated();
+      } else {
+        setAlertMsg({ type: "error", text: res.error || "Failed to update document." });
+      }
+    });
+  };
+
   const handleSaveScreening = (e: React.FormEvent) => {
     e.preventDefault();
     setAlertMsg(null);
@@ -197,7 +219,11 @@ export default function ApplicantDossierDrawer({
   return (
     <div className={`fixed inset-0 z-50 justify-end bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 ${isOpen ? "flex" : "hidden"}`}>
       <div 
-        className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-300"
+        className={`${
+          isMaximized
+            ? "fixed inset-0 z-[100] w-screen h-screen max-w-none"
+            : "fixed right-0 top-0 w-[480px] h-screen z-50"
+        } bg-white shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* TOP HEADER */}
@@ -233,13 +259,26 @@ export default function ApplicantDossierDrawer({
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-              aria-label="Close drawer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsMaximized(!isMaximized)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                aria-label={isMaximized ? "Minimize drawer" : "Maximize drawer"}
+                title={isMaximized ? "Minimize" : "Maximize"}
+              >
+                {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Close drawer"
+                title="Close Dossier"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* PIPELINE PROGRESS BAR */}
@@ -425,71 +464,210 @@ export default function ApplicantDossierDrawer({
           )}
 
           {/* TAB 2: STATUTORY KYC DOCUMENTS */}
-          {activeTab === "documents" && (
-            <div className="space-y-5">
-              {/* UPLOAD PORTAL SHARE CARD */}
-              <div className="bg-indigo-900 text-white p-5 rounded-2xl shadow-sm border border-indigo-800 flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-sm font-black">Parent Self-Service Upload Portal</h4>
-                  <p className="text-xs text-indigo-200 mt-0.5">
-                    Share secure link with parents to upload missing birth certificates and photos.
-                  </p>
+          {activeTab === "documents" && (() => {
+            const application = lead;
+            const rawDocs = application.documents || application.admissionDocuments || application.kycDocs || application.credentialsJson || [];
+            
+            let docs: any[] = [];
+            if (Array.isArray(rawDocs)) {
+              docs = rawDocs.map((d: any) => ({
+                ...d,
+                type: d.type || d.docType || d.key,
+                fileUrl: d.fileUrl || d.url || d.path,
+                fileName: d.fileName || d.filename || d.originalName || `${d.type || "Document"}.pdf`,
+                status: d.status || "PENDING",
+              }));
+            } else if (typeof rawDocs === "object" && rawDocs !== null) {
+              docs = Object.entries(rawDocs).map(([k, v]: [string, any]) => {
+                if (typeof v === "object" && v !== null) {
+                  return {
+                    ...v,
+                    type: v.type || v.docType || k,
+                    fileUrl: v.fileUrl || v.url || v.path,
+                    fileName: v.fileName || v.filename || v.originalName || `${k}.pdf`,
+                    status: v.status || "PENDING",
+                  };
+                }
+                return {
+                  type: k,
+                  fileUrl: v,
+                  fileName: `${k}.pdf`,
+                  status: "PENDING",
+                };
+              });
+            }
+
+            // Top-level direct column fallbacks on application record
+            if (application.passportPhotoUrl && !docs.some((d) => d.type === "Recent Passport" || d.type === "passportPhoto")) {
+              docs.push({ type: "Recent Passport", fileUrl: application.passportPhotoUrl, fileName: "Passport Photograph.jpg" });
+              docs.push({ type: "passportPhoto", fileUrl: application.passportPhotoUrl, fileName: "Passport Photograph.jpg" });
+            }
+            if (application.birthCertificateUrl && !docs.some((d) => d.type === "NPC Birth Cert" || d.type === "birthCertificate")) {
+              docs.push({ type: "NPC Birth Cert", fileUrl: application.birthCertificateUrl, fileName: "National Birth Certificate.pdf" });
+              docs.push({ type: "birthCertificate", fileUrl: application.birthCertificateUrl, fileName: "National Birth Certificate.pdf" });
+            }
+            if (application.academicResultsUrl && !docs.some((d) => d.type === "Previous Academic Results" || d.type === "academicResults")) {
+              docs.push({ type: "Previous Academic Results", fileUrl: application.academicResultsUrl, fileName: "Previous Academic Results.pdf" });
+              docs.push({ type: "academicResults", fileUrl: application.academicResultsUrl, fileName: "Previous Academic Results.pdf" });
+            }
+            if (application.medicalRecordsUrl && !docs.some((d) => d.type === "Medical Fitness" || d.type === "medicalRecords")) {
+              docs.push({ type: "Medical Fitness", fileUrl: application.medicalRecordsUrl, fileName: "Medical Fitness Certificate.pdf" });
+              docs.push({ type: "medicalRecords", fileUrl: application.medicalRecordsUrl, fileName: "Medical Fitness Certificate.pdf" });
+            }
+
+            console.log("DOCS FOR", application.applicantNo || application.id, docs);
+
+            const requiredDocs = [
+              {
+                type: "Recent Passport",
+                key: "passportPhoto",
+                aliases: ["Recent Passport", "passportPhoto", "passport_photo", "passport"],
+                label: "Recent Passport",
+              },
+              {
+                type: "NPC Birth Cert",
+                key: "birthCertificate",
+                aliases: ["NPC Birth Cert", "birthCertificate", "birth_certificate", "birthCert"],
+                label: "NPC Birth Cert",
+              },
+              {
+                type: "Previous Academic Results",
+                key: "academicResults",
+                aliases: ["Previous Academic Results", "academicResults", "academic_results", "lastResult", "last_result", "result"],
+                label: "Previous Academic Results",
+              },
+              {
+                type: "Medical Fitness",
+                key: "medicalRecords",
+                aliases: ["Medical Fitness", "medicalRecords", "medical_records", "medical_fitness", "nin"],
+                label: "Medical Fitness",
+              },
+            ];
+
+            return (
+              <div className="space-y-5">
+                {/* UPLOAD PORTAL SHARE CARD */}
+                <div className="bg-indigo-900 text-white p-5 rounded-2xl shadow-sm border border-indigo-800 flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-black">Parent Self-Service Upload Portal</h4>
+                    <p className="text-xs text-indigo-200 mt-0.5">
+                      Share secure link with parents to upload missing birth certificates and photos.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyUploadPortalLink}
+                    className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>{copiedLink ? "Link Copied!" : "Copy Portal Link"}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={copyUploadPortalLink}
-                  className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shrink-0"
-                >
-                  <Copy className="w-4 h-4" />
-                  <span>{copiedLink ? "Link Copied!" : "Copy Portal Link"}</span>
-                </button>
-              </div>
 
-              {/* DOCUMENT VERIFICATION CHECKLIST */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                  Required Admission Documents
-                </h4>
-                <div className="divide-y divide-slate-100 text-xs">
-                  {docList.map((doc) => {
-                    const docState = docs[doc.key] || {};
-                    const isVerified = docState.status === "VERIFIED";
+                {/* DOCUMENT VERIFICATION CHECKLIST */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
+                    Required Admission Documents
+                  </h4>
+                  <div className="divide-y divide-slate-100 text-xs">
+                    {requiredDocs.map((req) => {
+                      const existingDoc = docs.find((d: any) =>
+                        (d.type === req.type || d.type === req.key || req.aliases.includes(d.type) || req.aliases.includes(d.docType)) &&
+                        Boolean(d.fileUrl)
+                      );
 
-                    return (
-                      <div key={doc.key} className="py-3 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            isVerified ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
-                          }`}>
-                            <FileCheck className="w-4 h-4" />
+                      if (existingDoc) {
+                        let fileUrl = existingDoc.fileUrl;
+                        if (fileUrl && fileUrl.startsWith("/uploads/")) {
+                          fileUrl = `/api${fileUrl}`;
+                        }
+                        const isVerified = existingDoc.status === "VERIFIED";
+                        const isRejected = existingDoc.status === "REJECTED";
+
+                        return (
+                          <div key={req.key} className="py-3 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                isVerified ? "bg-emerald-100 text-emerald-600" : isRejected ? "bg-red-100 text-red-600" : "bg-indigo-100 text-indigo-600"
+                              }`}>
+                                <FileCheck className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800">{req.label}</p>
+                                <p className="text-[11px] text-slate-500 font-mono truncate max-w-[200px] sm:max-w-xs">
+                                  {existingDoc.fileName || `${req.label}.pdf`}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 transition border border-indigo-200"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>View</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleSetDocumentStatus(req.key, "VERIFIED")}
+                                disabled={isPending}
+                                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                                  isVerified
+                                    ? "bg-emerald-600 text-white shadow-xs"
+                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                                }`}
+                              >
+                                {isVerified ? "Verified ✓" : "Mark Verified"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetDocumentStatus(req.key, "REJECTED")}
+                                disabled={isPending}
+                                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                                  isRejected
+                                    ? "bg-red-600 text-white shadow-xs"
+                                    : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                                }`}
+                              >
+                                {isRejected ? "Rejected ✗" : "Reject"}
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-800">{doc.label}</p>
-                            <span className="text-[11px] text-slate-400">
-                              {isVerified ? "Audited & Verified" : doc.url ? "Uploaded • Pending Audit" : "Awaiting Parent Upload"}
-                            </span>
-                          </div>
-                        </div>
+                        );
+                      } else {
+                        return (
+                          <div key={req.key} className="py-3 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-slate-100 text-slate-400">
+                                <FileCheck className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800">{req.label}</p>
+                                <span className="text-[11px] text-amber-600 font-medium">Awaiting Parent Upload</span>
+                              </div>
+                            </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleToggleDocumentStatus(doc.key, docState.status)}
-                            disabled={isPending}
-                            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition ${
-                              isVerified
-                                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
-                          >
-                            {isVerified ? "Verified ✓" : "Mark Verified"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={true}
+                                className="px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                              >
+                                Mark Verified
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 3: SCREENING, EXAM & INTERVIEW */}
           {activeTab === "screening" && (

@@ -88,9 +88,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Global Admission Register record creation with tenantId scoping
+    let appNo = `APP-${Date.now().toString().slice(-6)}`;
     try {
       const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
-      const appNo = await generateApplicationNo(school.id);
+      appNo = await generateApplicationNo(school.id);
       const nameParts = (applicantName || "Student").trim().split(" ");
       const fName = nameParts[0] || "Student";
       const lName = nameParts.slice(1).join(" ") || "Applicant";
@@ -103,11 +104,15 @@ export async function POST(request: NextRequest) {
           classApplied: effectiveTargetGrade,
           parentPhone: parentContact || studentPhone || "N/A",
           email: studentEmail || parentEmail || null,
-          status: "new",
+          status: "docs_pending",
         },
       });
-    } catch (regErr) {
-      console.warn("[PUBLIC_SUBMIT] Warning: could not mirror to admission_registers:", regErr);
+    } catch (regErr: any) {
+      if (regErr?.code === "P2002") {
+        console.warn("[PUBLIC_SUBMIT] Unique constraint on admissionRegister:", regErr);
+      } else {
+        console.warn("[PUBLIC_SUBMIT] Warning: could not mirror to admission_registers:", regErr);
+      }
     }
 
     // Provision or sync Student portal user record
@@ -160,22 +165,66 @@ export async function POST(request: NextRequest) {
           });
           await setUserMustChangePassword(createdStudent.id, school.id, isTemporary);
         }
-      } catch (studentErr) {
-        console.warn("[public-submit] Warning while provisioning student account record:", studentErr);
+      } catch (studentErr: any) {
+        if (studentErr?.code === "P2002") {
+          console.warn("[public-submit] Student already exists with this email:", accountEmail);
+        } else {
+          console.warn("[public-submit] Warning while provisioning student account record:", studentErr);
+        }
       }
     }
 
-    // Trigger initial inquiry email automation
-    triggerInquiryNotification({
-      leadId: newLead.id,
-      schoolId: school.id,
-      lead: newLead,
-      school,
-    });
+    const trackUrl = `/${school.subdomain || domainCandidate}/admissions/track/${appNo}`;
 
-    return NextResponse.json({ success: true, lead: newLead });
+    // Send Application Received email asynchronously without awaiting (non-blocking)
+    const targetRecipient = (studentEmail || parentEmail || "").trim();
+    if (targetRecipient) {
+      import("@/lib/email-service")
+        .then(({ sendApplicationReceivedEmail }) => {
+          sendApplicationReceivedEmail({
+            schoolId: school.id,
+            applicantName,
+            applicationNo: appNo,
+            targetGrade: effectiveTargetGrade,
+            recipientEmail: targetRecipient,
+            parentName: parentName || "Parent / Guardian",
+            schoolName: school.name,
+            subdomain: school.subdomain,
+            leadId: newLead.id,
+          }).catch((e) => console.log(e));
+        })
+        .catch((e) => console.log(e));
+    }
+
+    // Trigger initial inquiry notification
+    try {
+      triggerInquiryNotification({
+        leadId: newLead.id,
+        schoolId: school.id,
+        lead: newLead,
+        school,
+      });
+    } catch (notifErr) {
+      console.warn("[PUBLIC_SUBMIT] Notification error:", notifErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      applicationNo: appNo,
+      trackUrl,
+      appNo,
+      redirectUrl: trackUrl,
+      trackingUrl: trackUrl,
+      lead: newLead,
+    });
   } catch (error: any) {
     console.error("Public submission error:", error);
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        { error: "An admission inquiry with this contact or email is already registered." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message || "Failed to submit application" }, { status: 500 });
   }
 }

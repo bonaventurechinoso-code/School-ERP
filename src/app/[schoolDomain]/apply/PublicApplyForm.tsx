@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { AcademicTier } from "@prisma/client";
 import { GraduationCap, ArrowRight, Loader2, CheckCircle2, CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
@@ -26,6 +27,11 @@ export default function PublicApplyForm({
   classrooms: any[];
   brandColor: string;
 }) {
+  const pathname = usePathname();
+  // Extract schoolDomain safely from pathname: e.g. "/springfield-academy/apply" -> "springfield-academy"
+  const domainFromPath = pathname ? pathname.split("/").filter(Boolean)[0] : null;
+  const currentDomain = domainFromPath || schoolDomain;
+
   const { handleNumericChange } = useNumericInput();
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
@@ -115,6 +121,9 @@ export default function PublicApplyForm({
     }));
   }, [formData.tierId, institutionSubtype]);
 
+  const [submittedAppNo, setSubmittedAppNo] = useState<string | null>(null);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -145,6 +154,14 @@ export default function PublicApplyForm({
         });
 
         if (res.ok) {
+          const resData = await res.json();
+          const applicationNo = resData.applicationNo || resData.appNo || resData.lead?.id;
+          const derivedDomain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
+          const encoded = encodeURIComponent(applicationNo);
+          const finalUrl = `/${derivedDomain}/admissions/track/${encoded}`;
+          console.log("[PublicApplyForm] Redirect URL built:", finalUrl, { applicationNo, encoded, schoolDomain: derivedDomain });
+          setSubmittedAppNo(applicationNo);
+          setRedirectUrl(finalUrl);
           setIsSuccess(true);
         } else {
           const err = await res.json();
@@ -176,22 +193,59 @@ export default function PublicApplyForm({
   }
 
   if (isSuccess) {
+    const derivedDomain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
+    const encoded = encodeURIComponent(submittedAppNo || "");
+    const finalTrackUrl = redirectUrl || `/${derivedDomain}/admissions/track/${encoded}`;
     return (
-      <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl p-12 text-center animate-in fade-in zoom-in-95">
-        <div className="mx-auto w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+      <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl p-8 sm:p-12 text-center animate-in fade-in zoom-in-95">
+        <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-950/60 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-6">
           <CheckCircle className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Application Received!</h2>
-        <p className="mt-4 text-zinc-600 dark:text-zinc-400 text-lg">
-          Thank you for applying to {schoolName}. Our admissions team will review your inquiry and reach out shortly.
+        <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">Application Received!</h2>
+        {submittedAppNo && (
+          <div className="inline-block mt-3 px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-sm border border-indigo-200 dark:border-indigo-800">
+            Application No: {submittedAppNo}
+          </div>
+        )}
+        <p className="mt-4 text-zinc-600 dark:text-zinc-300 text-base max-w-lg mx-auto">
+          Thank you for applying to <strong>{schoolName}</strong>. Next step: upload your verification documents to complete your admission processing.
         </p>
-        <button 
-          onClick={() => window.location.href = `/${schoolDomain}`} 
-          className="mt-8 px-8 py-3 text-white rounded-xl font-bold transition-transform hover:-translate-y-0.5 shadow-lg"
-          style={{ backgroundColor: brandColor }}
-        >
-          Return to Website
-        </button>
+
+        {/* Save your tracking link */}
+        <div className="mt-6 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-400 max-w-lg mx-auto text-left">
+          <p className="font-semibold text-slate-800 dark:text-zinc-200 mb-1">Save your tracking link:</p>
+          <div className="font-mono break-all text-indigo-600 dark:text-indigo-400 select-all">
+            {typeof window !== "undefined" ? `${window.location.origin}${finalTrackUrl}` : finalTrackUrl}
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const domain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
+              const encodedAppNo = encodeURIComponent(submittedAppNo || "");
+              const finalUrl = `/${domain}/admissions/track/${encodedAppNo}`;
+              console.log("[PublicApplyForm] Navigating to track page via window.location.replace:", finalUrl);
+              window.location.replace(finalUrl);
+            }}
+            className="w-full sm:w-auto px-8 py-3.5 text-white rounded-xl font-bold transition-transform hover:-translate-y-0.5 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+            style={{ backgroundColor: brandColor }}
+          >
+            <span>Go to track page</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <button 
+            type="button"
+            onClick={() => {
+              const domain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
+              window.location.replace(`/${domain}`);
+            }}
+            className="w-full sm:w-auto px-6 py-3.5 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl font-bold transition cursor-pointer"
+          >
+            Return to Website
+          </button>
+        </div>
       </div>
     );
   }

@@ -204,6 +204,17 @@ export default function AdmissionRegisterTable({
     }
   };
 
+  const handleRequestDocs = (record: AdmissionRegisterRecord) => {
+    if (typeof window !== "undefined") {
+      const url = `${window.location.origin}/${schoolDomain}/admissions/track/${record.applicationNo}`;
+      navigator.clipboard.writeText(url);
+      setActionMessage({
+        type: "success",
+        text: `Document upload link copied for ${record.firstName}! (${url})`,
+      });
+    }
+  };
+
   const openDrawer = (record: AdmissionRegisterRecord) => {
     setSelectedRecord(record);
     setIsDrawerOpen(true);
@@ -220,11 +231,18 @@ export default function AdmissionRegisterTable({
           </span>
         );
       case "docs_pending":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs">
+            <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+            docs_pending
+          </span>
+        );
+      case "docs_submitted":
       case "under_review":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800 shadow-2xs">
-            <Clock className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-            docs_pending
+            <FileCheck className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+            docs_submitted
           </span>
         );
       case "admitted":
@@ -319,7 +337,8 @@ export default function AdmissionRegisterTable({
             >
               <option value="ALL">All Statuses ({records.length})</option>
               <option value="new">New ({records.filter((r) => r.status === "new").length})</option>
-              <option value="docs_pending">Docs Pending ({records.filter((r) => r.status === "docs_pending" || r.status === "under_review").length})</option>
+              <option value="docs_pending">Docs Pending ({records.filter((r) => r.status === "docs_pending").length})</option>
+              <option value="docs_submitted">Docs Submitted ({records.filter((r) => r.status === "docs_submitted" || r.status === "under_review").length})</option>
               <option value="admitted">Admitted ({records.filter((r) => r.status === "admitted").length})</option>
               <option value="rejected">Rejected ({records.filter((r) => r.status === "rejected").length})</option>
             </select>
@@ -471,8 +490,18 @@ export default function AdmissionRegisterTable({
                             </button>
                           )}
 
-                          {/* ADMIT (ONE-CLICK) */}
-                          {!isAdmitted ? (
+                          {/* ACTION BUTTON: REQUEST DOCS vs ADMIT */}
+                          {record.status.toLowerCase() === "docs_pending" || record.status.toLowerCase() === "new" ? (
+                            <button
+                              disabled={isActionLoading}
+                              onClick={() => handleRequestDocs(record)}
+                              className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold text-xs transition flex items-center gap-1 shadow-2xs"
+                              title="Copy document upload tracking link"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                              <span>Request Docs</span>
+                            </button>
+                          ) : (record.status.toLowerCase() === "docs_submitted" || record.status.toLowerCase() === "approved") ? (
                             <button
                               disabled={isActionLoading}
                               onClick={() => handleAdmit(record.id)}
@@ -482,12 +511,12 @@ export default function AdmissionRegisterTable({
                               <UserCheck className="w-3.5 h-3.5" />
                               <span>Admit</span>
                             </button>
-                          ) : (
+                          ) : isAdmitted ? (
                             <span className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1 border border-emerald-200 dark:border-emerald-900">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                               <span>Enrolled</span>
                             </span>
-                          )}
+                          ) : null}
 
                           {/* REJECT */}
                           {record.status !== "rejected" && !isAdmitted && (
@@ -520,6 +549,7 @@ export default function AdmissionRegisterTable({
         onAdmit={handleAdmit}
         onReject={handleReject}
         schoolName={schoolName}
+        schoolDomain={schoolDomain}
       />
     </div>
   );

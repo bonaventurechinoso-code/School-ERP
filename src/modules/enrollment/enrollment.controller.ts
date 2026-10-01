@@ -235,6 +235,12 @@ export async function admitApplicant({
     throw new Error("Applicant not found for tenant");
   }
 
+  // Verify applicant has docs uploaded
+  const creds = Array.isArray(applicant.credentialsJson) ? applicant.credentialsJson : [];
+  if (creds.length === 0) {
+    throw new Error("Documents not uploaded yet");
+  }
+
   // 1. Update audit record status in admission_registers (DO NOT DELETE)
   const updatedAdmission = await basePrisma.admissionRegister.update({
     where: { id: applicant.id },

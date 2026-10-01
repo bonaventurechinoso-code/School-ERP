@@ -95,6 +95,10 @@ export async function createAdmissionLeadAction(payload: {
     return { success: true, lead };
   } catch (error: any) {
     console.error("[createAdmissionLeadAction] Error:", error);
+    if (error?.code === "P2002") {
+      const field = Array.isArray(error?.meta?.target) ? error.meta.target.join(", ") : error?.meta?.target || "contact/email";
+      return { success: false, error: `An inquiry record with this ${field} already exists.` };
+    }
     return { success: false, error: error.message || "Failed to create inquiry." };
   }
 }
@@ -239,6 +243,36 @@ export async function enrollApplicantAction(payload: {
       studentSequence: studentCount + 1,
     });
 
+    // Verify applicant has docs uploaded before student creation
+    const leadDocuments = (lead.documents as any) || {};
+    const hasLeadDocs =
+      Boolean(lead.passportPhotoUrl) ||
+      Boolean(lead.academicResultsUrl) ||
+      Boolean(lead.birthCertificateUrl) ||
+      Boolean(lead.medicalRecordsUrl) ||
+      Object.keys(leadDocuments).some((k) => k !== "passwordHash" && Boolean(leadDocuments[k]));
+
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        tenantId: schoolId,
+        OR: [
+          ...(lead.studentEmail || lead.parentEmail ? [{ email: lead.studentEmail || lead.parentEmail }] : []),
+          ...(lead.parentPhone || lead.parentContact ? [{ parentPhone: lead.parentPhone || lead.parentContact }] : []),
+          { firstName, lastName },
+        ],
+      },
+    });
+
+    const hasRegisterDocs = Boolean(
+      registerRecord &&
+      Array.isArray(registerRecord.credentialsJson) &&
+      registerRecord.credentialsJson.length > 0
+    );
+
+    if (!hasLeadDocs && !hasRegisterDocs) {
+      return { success: false, error: "Documents not uploaded yet" };
+    }
+
     // 3. Write student profile directly into the isolated tier database's Student table
     const existingStudent = await tierDb.student.findFirst({
       where: {
@@ -250,7 +284,6 @@ export async function enrollApplicantAction(payload: {
       },
     });
 
-    const leadDocuments = (lead.documents as any) || {};
     const leadPasswordHash = leadDocuments.passwordHash;
     const defaultPasswordHash = await bcrypt.hash("Welcome123", 10);
     const finalPasswordHash = leadPasswordHash || defaultPasswordHash;
@@ -393,6 +426,13 @@ export async function enrollApplicantAction(payload: {
     };
   } catch (error: any) {
     console.error("Error executing enrollApplicantAction:", error);
+    if (error?.code === "P2002") {
+      const field = Array.isArray(error?.meta?.target) ? error.meta.target.join(", ") : error?.meta?.target || "unique field";
+      return {
+        success: false,
+        error: `A record with this ${field} already exists. Please verify the student's admission number or email.`,
+      };
+    }
     return { success: false, error: error?.message || "Failed to finalize enrollment." };
   }
 }

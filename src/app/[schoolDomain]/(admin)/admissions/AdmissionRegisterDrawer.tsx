@@ -33,6 +33,7 @@ export interface AdmissionRegisterRecord {
     type?: string;
     docType?: string;
     url?: string;
+    path?: string;
     filename?: string;
     originalName?: string;
     name?: string;
@@ -56,6 +57,7 @@ interface AdmissionRegisterDrawerProps {
   onAdmit: (id: string) => Promise<void>;
   onReject: (id: string) => Promise<void>;
   schoolName?: string;
+  schoolDomain?: string;
 }
 
 export default function AdmissionRegisterDrawer({
@@ -66,6 +68,7 @@ export default function AdmissionRegisterDrawer({
   onAdmit,
   onReject,
   schoolName = "Greenwood Academy",
+  schoolDomain,
 }: AdmissionRegisterDrawerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedAppNo, setCopiedAppNo] = useState(false);
@@ -246,9 +249,9 @@ export default function AdmissionRegisterDrawer({
                         </p>
                       </div>
                     </div>
-                    {doc.url && (
+                    {(doc.url || doc.path) && (
                       <a
-                        href={doc.url}
+                        href={doc.url || doc.path}
                         target="_blank"
                         rel="noreferrer"
                         className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1 transition"
@@ -351,7 +354,24 @@ export default function AdmissionRegisterDrawer({
               </button>
             )}
 
-            {applicant.status !== "admitted" ? (
+            {applicant.status.toLowerCase() === "docs_pending" || applicant.status.toLowerCase() === "new" ? (
+              <button
+                disabled={isProcessing}
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const domain = schoolDomain || "portal";
+                    const url = `${window.location.origin}/${domain}/admissions/track/${applicant.applicationNo}`;
+                    navigator.clipboard.writeText(url);
+                    alert(`Document upload tracking link copied to clipboard:\n${url}`);
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-sm transition flex items-center gap-1.5"
+                title="Copy Document Upload Tracking Link"
+              >
+                <Clock className="w-4 h-4" />
+                Request Docs
+              </button>
+            ) : (applicant.status.toLowerCase() === "docs_submitted" || applicant.status.toLowerCase() === "approved") ? (
               <button
                 disabled={isProcessing}
                 onClick={async () => {
@@ -364,12 +384,12 @@ export default function AdmissionRegisterDrawer({
                 <UserCheck className="w-4 h-4" />
                 Admit Student
               </button>
-            ) : (
+            ) : applicant.status.toLowerCase() === "admitted" ? (
               <span className="px-4 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-700">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Student Enrolled
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

@@ -10,10 +10,11 @@ export const config = {
      * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
+     * - uploads (static user uploads)
      * - favicon.ico (favicon file)
      * - public files (e.g. images, fonts)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|uploads|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 
@@ -23,7 +24,7 @@ export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonav
 const SYSTEM_RESERVED_ROOTS = new Set([
   'admin', 'super-admin', 'access-denied', 'trial-expired',
   'login', 'register', 'choice', 'me', 'api', 'portal-settings', 'change-password',
-  'sw.js', 'manifest.json'
+  'sw.js', 'manifest.json', 'uploads'
 ]);
 
 /**
@@ -82,6 +83,11 @@ export function extractTenantSubdomain(host: string, searchParams?: URLSearchPar
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const path = url.pathname;
+
+  // Immediate bypass for uploads, api, _next, and favicon
+  if (path.startsWith('/uploads') || path.startsWith('/api') || path.startsWith('/_next') || path === '/favicon.ico') {
+    return NextResponse.next();
+  }
 
   // 1. Extract hostname from incoming headers (Render/Node reverse proxy passes x-forwarded-host)
   const rawHost = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
@@ -278,6 +284,8 @@ export async function middleware(req: NextRequest) {
     path.startsWith('/trial-expired') ||
     path.includes('/login') ||
     path.includes('/apply') ||
+    path.includes('/admissions/track') ||
+    path.includes('/admissions/upload') ||
     path.startsWith('/register') ||
     path.includes('/forgot-password') ||
     path.includes('/reset-password') ||
