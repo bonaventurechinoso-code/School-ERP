@@ -8,7 +8,13 @@ import { useNumericInput } from "@/hooks/useNumericInput";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatTierLabel } from "@/lib/guestPortalUtils";
 import { NIGERIAN_UNIVERSITY_HIERARCHY, POLYTECHNIC_HIERARCHY, COLLEGE_HIERARCHY } from "@/lib/academicHierarchies";
-import { TIER_CLASSES, getClassesForTier } from "@/lib/school-tiers";
+
+const TIER_CLASSES = {
+  "daycare_nursery": ["Daycare", "Playgroup", "Pre-Nursery", "Nursery 1", "Nursery 2", "Nursery 3"],
+  "primary": ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"],
+  "secondary": ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"],
+  "higher": ["ND 1", "ND 2", "HND 1", "HND 2", "100 Level", "200 Level", "300 Level", "400 Level"]
+};
 
 export default function PublicApplyForm({
   schoolName,
@@ -71,6 +77,7 @@ export default function PublicApplyForm({
     parentContact: "",
     parentEmail: "",
     targetGrade: "",
+    targetClass: "",
     facultyOrSchool: "",
     intendedCourseOrProgramme: "",
     tierId: initialTierId,
@@ -83,6 +90,47 @@ export default function PublicApplyForm({
 
   const selectedTier = tiers.find(t => t.id === formData.tierId) || matchedTierRecord;
   const selectedTierName = tier || selectedTier?.name || "";
+
+  // On Tier change, reset Target Grade/Class to "" (Select a class...) so user must re-pick
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      targetClass: "",
+      targetGrade: "",
+      facultyOrSchool: "",
+      intendedCourseOrProgramme: "",
+    }));
+  }, [selectedTier]);
+
+  // Complete filter logic according to selectedTier
+  const filteredClasses = React.useMemo(() => {
+    const rawTier = (selectedTierName || selectedTier?.name || tier || "").toLowerCase().trim();
+    if (
+      rawTier === "daycare / nursery" ||
+      rawTier.includes("daycare") ||
+      rawTier.includes("nursery") ||
+      rawTier.includes("creche") ||
+      rawTier.includes("early")
+    ) {
+      return TIER_CLASSES.daycare_nursery;
+    }
+    if (rawTier.includes("primary") || rawTier.includes("basic") || rawTier.includes("elementary")) {
+      return TIER_CLASSES.primary;
+    }
+    if (
+      rawTier.includes("higher") ||
+      rawTier.includes("university") ||
+      rawTier.includes("polytechnic") ||
+      rawTier.includes("college of education") ||
+      rawTier.includes("tertiary")
+    ) {
+      return TIER_CLASSES.higher;
+    }
+    if (rawTier.includes("secondary") || rawTier.includes("high")) {
+      return TIER_CLASSES.secondary;
+    }
+    return TIER_CLASSES.daycare_nursery;
+  }, [selectedTierName, selectedTier, tier]);
   
   // Determine if context is Higher Education
   const isHigherEd = selectedTierName.toLowerCase().includes("higher ed") || 
@@ -111,16 +159,6 @@ export default function PublicApplyForm({
   const orgUnitLabel = institutionSubtype === "UNIVERSITY" ? "Select Faculty *" : "Select School *";
   const courseProgrammeLabel = institutionSubtype === "UNIVERSITY" ? "Intended Course of Study *" : "Intended Programme *";
 
-  // State synchronization when changing higher-level context
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      targetGrade: "",
-      facultyOrSchool: "",
-      intendedCourseOrProgramme: "",
-    }));
-  }, [formData.tierId, institutionSubtype]);
-
   const [step, setStep] = useState<number>(1);
   const [submittedAppNo, setSubmittedAppNo] = useState<string | null>(null);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
@@ -142,7 +180,7 @@ export default function PublicApplyForm({
       setFormError("Please enter a valid Student / Account Email.");
       return;
     }
-    if (!formData.targetGrade.trim()) {
+    if (!formData.targetGrade?.trim() && !formData.targetClass?.trim()) {
       setFormError("Target Grade/Class is required.");
       return;
     }
@@ -226,9 +264,7 @@ export default function PublicApplyForm({
   };
 
   const renderClassOptions = () => {
-    if (!tier) return null;
-    const classes = getClassesForTier(tier);
-    return classes.map((c) => (
+    return filteredClasses.map((c) => (
       <option key={c} value={c}>
         {c}
       </option>
@@ -410,7 +446,7 @@ export default function PublicApplyForm({
                           type="button"
                           onClick={() => {
                             setTier(t.name);
-                            setFormData((prev) => ({ ...prev, tierId: t.id, targetGrade: "" }));
+                            setFormData((prev) => ({ ...prev, tierId: t.id, targetGrade: "", targetClass: "" }));
                           }}
                           className={`h-9 px-3 text-[12px] font-medium rounded-full border flex items-center gap-2 transition-all cursor-pointer ${
                             isSelected
@@ -503,13 +539,17 @@ export default function PublicApplyForm({
                               required
                               className={inputStyles}
                               style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                              value={formData.targetGrade}
+                              value={formData.targetClass || formData.targetGrade || ""}
                               onChange={(e) =>
-                                setFormData({ ...formData, targetGrade: e.target.value })
+                                setFormData({ ...formData, targetGrade: e.target.value, targetClass: e.target.value })
                               }
                             >
-                              <option value="">Select a level...</option>
-                              {renderClassOptions()}
+                              <option value="">Select a class...</option>
+                              {filteredClasses.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
                             </select>
                           </div>
                           <div>
@@ -609,13 +649,17 @@ export default function PublicApplyForm({
                         <select
                           required
                           className="w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
-                          value={formData.targetGrade}
+                          value={formData.targetClass || formData.targetGrade || ""}
                           onChange={(e) =>
-                            setFormData({ ...formData, targetGrade: e.target.value })
+                            setFormData({ ...formData, targetGrade: e.target.value, targetClass: e.target.value })
                           }
                         >
                           <option value="">Select a class...</option>
-                          {renderClassOptions()}
+                          {filteredClasses.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
