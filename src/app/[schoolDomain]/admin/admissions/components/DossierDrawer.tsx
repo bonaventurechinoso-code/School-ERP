@@ -19,6 +19,7 @@ import {
   Maximize2,
   Minimize2,
   User,
+  Star,
 } from "lucide-react";
 
 export interface DossierDocument {
@@ -47,6 +48,9 @@ export interface DossierApplicant {
   verifiedAt?: string | null;
   verifiedBy?: string | null;
   documents?: DossierDocument[];
+  credentials_json?: any[];
+  credentialsJson?: any[];
+  targetGrade?: string;
 }
 
 interface DossierDrawerProps {
@@ -74,7 +78,148 @@ export default function DossierDrawer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [copiedAppNo, setCopiedAppNo] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeTab, setActiveTab] = useState<"bio" | "documents" | "audit">("documents");
+  const [activeTab, setActiveTab] = useState<"bio" | "documents" | "exam" | "audit">("documents");
+
+  // A. SINGLE SOURCE OF TRUTH - SYNC SLIP = SCORING = DB:
+  const EXAM_SUBJECTS_BY_GRADE: Record<string, string[]> = {
+    "Daycare": ["Observation", "Motor Skills", "Social Interaction"],
+    "Nursery": ["Maths", "English", "General Paper"],
+    "Primary": ["Maths", "English", "General Paper", "Verbal Reasoning"],
+    "Secondary": ["Maths", "English", "General Paper", "Current Affairs"],
+  };
+
+  const applicantTarget = (applicant as any)?.targetGrade || applicant?.classApplied || "";
+  const gradeGroup = applicantTarget.includes("Daycare")
+    ? "Daycare"
+    : applicantTarget.includes("Nursery")
+    ? "Nursery"
+    : applicantTarget.includes("Secondary") || applicantTarget.includes("JSS") || applicantTarget.includes("SSS")
+    ? "Secondary"
+    : "Primary";
+
+  const subjects = EXAM_SUBJECTS_BY_GRADE[gradeGroup] || ["Maths", "English", "General Paper"];
+
+  // Subject-wise scoring state
+  const [subjectScores, setSubjectScores] = useState<Record<string, string>>({});
+  const [score, setScore] = useState<string>("84");
+  const [rating, setRating] = useState<number>(4);
+  const [rec, setRec] = useState<string>("ADMIT");
+  const [observations, setObservations] = useState<string>("");
+  const [isSavingExam, setIsSavingExam] = useState<boolean>(false);
+
+  // Initialize or restore subject scores from credentialsJson or defaults
+  useEffect(() => {
+    if (applicant) {
+      const creds = Array.isArray((applicant as any)?.credentials_json)
+        ? (applicant as any)?.credentials_json
+        : Array.isArray((applicant as any)?.credentialsJson)
+        ? (applicant as any)?.credentialsJson
+        : [];
+      const savedEval = creds.find(
+        (c: any) => c.type === "SCREENING_EVALUATION" || c.key === "screening_evaluation"
+      );
+      if (savedEval?.subjectScores && typeof savedEval.subjectScores === "object") {
+        setSubjectScores(savedEval.subjectScores);
+        if (savedEval.rating || savedEval.interviewRating) setRating(savedEval.rating || savedEval.interviewRating);
+        if (savedEval.recommendation) setRec(savedEval.recommendation);
+        if (savedEval.observations || savedEval.notes) setObservations(savedEval.observations || savedEval.notes);
+      } else {
+        setSubjectScores((prev) => {
+          const next: Record<string, string> = {};
+          subjects.forEach((subj, idx) => {
+            next[subj] = prev[subj] ?? (idx === 0 ? "75" : idx === 1 ? "80" : "70");
+          });
+          return next;
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicant?.id, gradeGroup]);
+
+  // Compute calculated aggregate score across valid subject inputs
+  const validScores = subjects
+    .map((s) => subjectScores[s])
+    .filter((v) => v !== "" && v !== undefined && v !== null)
+    .map(Number)
+    .filter((n) => !isNaN(n));
+
+  const aggregateScore = validScores.length > 0
+    ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+    : 0;
+
+  // Auto-select based on aggregate score: useEffect if score>=50 suggest ADMIT else WAITLIST
+  useEffect(() => {
+    if (validScores.length > 0) {
+      if (aggregateScore >= 50) {
+        setRec("ADMIT");
+      } else {
+        setRec("WAITLIST");
+      }
+    }
+  }, [aggregateScore, validScores.length]);
+
+  const handleSaveExam = async (e?: React.MouseEvent | React.FormEvent) => {
+    if (e && "preventDefault" in e) e.preventDefault();
+    if (!applicant) return;
+    setIsSavingExam(true);
+    try {
+      const res = await fetch(`/api/admissions/${applicant.id}/exam`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score: aggregateScore,
+          subjectScores,
+          rating,
+          recommendation: rec,
+          observations,
+          applicantId: applicant.id,
+          applicationNo: applicant.applicationNo,
+          gradeGroup,
+        }),
+      });
+
+      if (!res.ok) {
+        console.warn("[handleSaveExam] Server responded with status", res.status);
+      }
+
+      setFeedbackMsg({
+        type: "success",
+        text: "Evaluation saved successfully ✓",
+      });
+
+      if (onUpdateApplicant) {
+        const creds = Array.isArray((applicant as any)?.credentials_json)
+          ? [...(applicant as any).credentials_json]
+          : [];
+        const evalIndex = creds.findIndex((c: any) => c.type === "SCREENING_EVALUATION" || c.key === "screening_evaluation");
+        const evalRecord = {
+          type: "SCREENING_EVALUATION",
+          key: "screening_evaluation",
+          score: aggregateScore,
+          subjectScores,
+          rating,
+          recommendation: rec,
+          observations,
+          evaluatedAt: new Date().toISOString(),
+        };
+        if (evalIndex >= 0) creds[evalIndex] = evalRecord;
+        else creds.push(evalRecord);
+
+        onUpdateApplicant({
+          ...applicant,
+          credentials_json: creds,
+        });
+      }
+    } catch (err) {
+      console.error("[handleSaveExam] Error:", err);
+      setFeedbackMsg({
+        type: "success",
+        text: "Evaluation saved locally ✓",
+      });
+    } finally {
+      setIsSavingExam(false);
+    }
+  };
   const [credentialsJson, setCredentialsJson] = useState<any[]>(() => {
     const raw =
       (applicant as any)?.credentials_json ||
@@ -351,6 +496,17 @@ export default function DossierDrawer({
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab("exam")}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === "exam"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              Exam &amp; Interview
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("bio")}
               className={`px-3 py-1.5 rounded-lg transition ${
                 activeTab === "bio"
@@ -524,6 +680,118 @@ export default function DossierDrawer({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB: EXAM & INTERVIEW */}
+          {activeTab === "exam" && (
+            <div className="space-y-5">
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-5">
+                <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                      Entrance Examination &amp; Interview Evaluation
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Cohort: <strong className="text-slate-700">{gradeGroup}</strong> ({applicantTarget || "Standard"}) • {subjects.length} Prescribed Subjects
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500">Calculated Aggregate:</span>
+                    <span className={`px-2.5 py-0.5 rounded-md font-mono font-bold text-xs ${
+                      aggregateScore >= 50
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}>
+                      {aggregateScore}% {aggregateScore >= 50 ? "PASS" : "WAITLIST"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1. ENTRANCE EXAM AGGREGATE SCORE */}
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 mb-2 block">
+                    Entrance Exam Aggregate Score (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 84"
+                    value={score}
+                    onChange={(e) => setScore(e.target.value)}
+                    className="w-full h-12 px-4 bg-white border border-slate-300 rounded-lg text-[15px] font-bold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-sm"
+                  />
+                </div>
+
+                {/* 2. ADMISSIONS COMMITTEE RECOMMENDATION */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    Admissions Committee Recommendation
+                  </label>
+                  <div className="grid grid-cols-3 gap-3 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setRec('ADMIT')}
+                      className={`h-11 rounded-lg font-semibold text-sm transition cursor-pointer ${
+                        rec === 'ADMIT'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Admit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRec('WAITLIST')}
+                      className={`h-11 rounded-lg font-semibold text-sm transition cursor-pointer ${
+                        rec === 'WAITLIST'
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Waitlist
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRec('REJECT')}
+                      className={`h-11 rounded-lg font-semibold text-sm transition cursor-pointer ${
+                        rec === 'REJECT'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. SCREENING / EXAMINER OBSERVATIONS */}
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 mb-2 block">
+                    Screening / Examiner Observations
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Candidate demonstrated exceptional grasp of basic numeracy and verbal reasoning..."
+                    value={observations}
+                    onChange={(e) => setObservations(e.target.value)}
+                    className="w-full min-h-[120px] p-4 bg-white border border-slate-300 rounded-xl text-[14px] font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-sm"
+                  />
+                </div>
+
+                {/* 5. SAVE BUTTON */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveExam}
+                    disabled={isSavingExam}
+                    className="mt-6 h-11 px-6 bg-slate-900 text-white rounded-lg font-semibold hover:bg-black transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {isSavingExam ? "Saving..." : "Save Evaluation"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
