@@ -294,23 +294,27 @@ export default function RegisterTenantPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      <Link href="/" className="absolute top-8 left-8 text-slate-500 hover:text-slate-800 font-medium transition-colors">
-        &larr; Back to Home
-      </Link>
-      
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
         
         {/* Header */}
-        <div className="px-5 py-5 md:px-8 md:py-6 text-white bg-slate-900 transition-colors duration-300">
-          <div className="flex items-center gap-2 mb-2">
-            <Image
-              src="/img/business-logo.png"
-              alt="School ERP"
-              width={24}
-              height={24}
-              className="w-6 h-6 object-contain rounded-md"
-            />
-            <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+        <div className="relative z-10 px-5 pt-4 pb-4 md:px-8 md:py-6 text-white bg-slate-900 transition-colors duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-2">
+            <div className="flex items-center gap-2">
+              <Image
+                src="/img/business-logo.png"
+                alt="School ERP"
+                width={24}
+                height={24}
+                className="w-6 h-6 object-contain rounded-md"
+              />
+              <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+            </div>
+            <Link
+              href="/"
+              className="text-xs md:text-sm font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1 w-fit mt-1 md:mt-0"
+            >
+              &larr; Back to Home
+            </Link>
           </div>
           <h1 className="text-2xl font-bold">
             {isConfiguring 
