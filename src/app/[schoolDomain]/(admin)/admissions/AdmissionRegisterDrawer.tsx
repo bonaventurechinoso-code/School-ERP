@@ -126,82 +126,82 @@ export default function AdmissionRegisterDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 animate-in slide-in-from-right duration-300">
+      <div className="w-full sm:max-w-2xl md:max-w-3xl bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 animate-in slide-in-from-right duration-300">
         {/* DRAWER HEADER */}
-        <div className="p-6 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/70 dark:bg-zinc-900/80">
+        <div className="p-6 md:p-8 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/70 dark:bg-zinc-900/80">
           <div>
             <div className="flex items-center gap-3">
-              <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5">
+              <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5">
                 {applicant.applicationNo}
                 <button
                   onClick={handleCopyAppNo}
                   className="hover:text-indigo-800 dark:hover:text-indigo-200 transition"
                   title="Copy Application Number"
                 >
-                  <Copy className="w-3 h-3" />
+                  <Copy className="w-3.5 h-3.5" />
                 </button>
               </span>
               {copiedAppNo && (
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                   Copied!
                 </span>
               )}
               {getStatusBadge(applicant.status)}
             </div>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-zinc-100 mt-2">
+            <h3 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-zinc-100 mt-2">
               {applicant.firstName} {applicant.lastName}
             </h3>
-            <p className="text-sm font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-1">
+            <p className="text-sm md:text-base font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-1">
               <GraduationCap className="w-4 h-4 text-indigo-500" />
               Applying for: <strong className="text-slate-800 dark:text-zinc-200">{applicant.classApplied}</strong>
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/50 dark:hover:bg-zinc-800 rounded-xl transition"
+            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/50 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* DRAWER BODY */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
           {/* PARENT / GUARDIAN CONTACT DETAILS */}
-          <div className="bg-slate-50 dark:bg-zinc-800/40 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 space-y-3">
+          <div className="bg-slate-50 dark:bg-zinc-800/40 p-6 md:p-8 rounded-2xl border border-slate-200 dark:border-zinc-800 space-y-4">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
               Primary Contact &amp; Guardian Info
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900 shrink-0">
-                  <Phone className="w-4 h-4" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900 shrink-0">
+                  <Phone className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-400">Parent Phone</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Parent Phone</p>
                   <a
                     href={`tel:${applicant.parentPhone}`}
-                    className="text-sm font-bold text-slate-800 dark:text-zinc-200 hover:text-indigo-600 transition"
+                    className="text-base font-bold text-slate-800 dark:text-zinc-200 hover:text-indigo-600 transition font-mono"
                   >
                     {applicant.parentPhone}
                   </a>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900 shrink-0">
-                  <Mail className="w-4 h-4" />
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900 shrink-0">
+                  <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-400">Email Address</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Email Address</p>
                   {applicant.email ? (
                     <a
                       href={`mailto:${applicant.email}`}
-                      className="text-sm font-bold text-slate-800 dark:text-zinc-200 hover:text-blue-600 transition truncate block max-w-[200px]"
+                      className="text-base font-bold text-slate-800 dark:text-zinc-200 hover:text-blue-600 transition truncate block max-w-[240px]"
                     >
                       {applicant.email}
                     </a>
                   ) : (
-                    <span className="text-sm text-slate-400 italic">Not provided</span>
+                    <span className="text-base text-slate-400 italic">Not provided</span>
                   )}
                 </div>
               </div>
@@ -209,43 +209,43 @@ export default function AdmissionRegisterDrawer({
           </div>
 
           {/* CREDENTIALS & DOCUMENTS VAULT */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Verified Credentials &amp; Uploads
               </h4>
-              <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+              <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-zinc-400">
                 {docs.length} file{docs.length === 1 ? "" : "s"} uploaded
               </span>
             </div>
 
             {docs.length === 0 ? (
-              <div className="p-6 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/20">
-                <FileText className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
-                <p className="text-xs font-bold text-slate-600 dark:text-zinc-300">
+              <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/20">
+                <FileText className="w-9 h-9 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-600 dark:text-zinc-300">
                   No credentials uploaded yet
                 </p>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   Applicant has not submitted documentary proof via the public upload portal.
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {docs.map((doc, idx) => (
                   <div
                     key={idx}
-                    className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between hover:border-indigo-300 transition"
+                    className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between hover:border-indigo-300 transition"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                        <FileCheck className="w-4 h-4" />
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <FileCheck className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+                        <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-zinc-200">
                           {doc.type || doc.docType || doc.originalName || doc.name || `Document ${idx + 1}`}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-mono">
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
                           {doc.filename || doc.name || "Attached in application register"}
                         </p>
                       </div>
@@ -267,9 +267,9 @@ export default function AdmissionRegisterDrawer({
                           href={resolvedUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition cursor-pointer"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <Download className="w-4 h-4" />
                           View
                         </a>
                       );
@@ -281,15 +281,15 @@ export default function AdmissionRegisterDrawer({
           </div>
 
           {/* PERMANENT AUDIT TRAIL */}
-          <div className="bg-slate-50 dark:bg-zinc-800/40 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 space-y-3">
+          <div className="bg-slate-50 dark:bg-zinc-800/40 p-6 md:p-8 rounded-2xl border border-slate-200 dark:border-zinc-800 space-y-4">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-500" />
               Official Audit Trail (Permanent)
             </h4>
-            <div className="space-y-2 text-xs divide-y divide-slate-200 dark:divide-zinc-800">
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-slate-500 dark:text-zinc-400">Application Submitted:</span>
-                <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
+            <div className="space-y-3 text-sm divide-y divide-slate-200 dark:divide-zinc-800">
+              <div className="pt-2.5 flex items-center justify-between">
+                <span className="text-slate-500 dark:text-zinc-400 font-medium">Application Submitted:</span>
+                <span className="font-bold text-slate-800 dark:text-zinc-200 font-mono">
                   {new Date(applicant.createdAt).toLocaleString("en-US", {
                     dateStyle: "medium",
                     timeStyle: "short",
@@ -298,9 +298,9 @@ export default function AdmissionRegisterDrawer({
               </div>
 
               {applicant.verifiedAt && (
-                <div className="pt-2 flex items-center justify-between">
-                  <span className="text-slate-500 dark:text-zinc-400">Credentials Verified:</span>
-                  <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
+                <div className="pt-2.5 flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-zinc-400 font-medium">Credentials Verified:</span>
+                  <span className="font-bold text-slate-800 dark:text-zinc-200 font-mono">
                     {new Date(applicant.verifiedAt).toLocaleString("en-US", {
                       dateStyle: "medium",
                       timeStyle: "short",
@@ -311,7 +311,7 @@ export default function AdmissionRegisterDrawer({
               )}
 
               {applicant.admittedAt && (
-                <div className="pt-2 flex items-center justify-between">
+                <div className="pt-2.5 flex items-center justify-between">
                   <span className="text-emerald-600 dark:text-emerald-400 font-bold">Admitted &amp; Enrolled:</span>
                   <span className="font-bold text-emerald-700 dark:text-emerald-300 font-mono">
                     {new Date(applicant.admittedAt).toLocaleString("en-US", {
@@ -322,9 +322,9 @@ export default function AdmissionRegisterDrawer({
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-slate-500 dark:text-zinc-400">Last Modified:</span>
-                <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
+              <div className="pt-2.5 flex items-center justify-between">
+                <span className="text-slate-500 dark:text-zinc-400 font-medium">Last Modified:</span>
+                <span className="font-bold text-slate-800 dark:text-zinc-200 font-mono">
                   {new Date(applicant.updatedAt).toLocaleString("en-US", {
                     dateStyle: "medium",
                     timeStyle: "short",

@@ -166,7 +166,7 @@ export default function AdmissionsPipeline({
               font-family: Georgia, Cambria, "Times New Roman", Times, serif; 
               padding: 48px; 
               color: #0f172a; 
-              max-width: 800px; 
+              max-width: 860px; 
               margin: 0 auto; 
               line-height: 1.6; 
               background-color: #ffffff;
@@ -179,84 +179,84 @@ export default function AdmissionsPipeline({
         </head>
         <body>
           <div class="print:hidden mb-8 flex items-center justify-between border-b pb-4">
-            <button onclick="window.close()" class="px-4 py-2 bg-slate-100 text-slate-700 font-sans font-bold rounded-xl text-xs">
+            <button onclick="window.close()" class="px-4 py-2 bg-slate-100 text-slate-700 font-sans font-bold rounded-xl text-sm cursor-pointer">
               Back to CRM
             </button>
-            <button onclick="window.print()" class="px-5 py-2 bg-slate-900 text-white font-sans font-bold rounded-xl text-xs shadow-md">
+            <button onclick="window.print()" class="px-5 py-2.5 bg-slate-900 text-white font-sans font-bold rounded-xl text-sm shadow-md cursor-pointer">
               Print Official Offer Letter
             </button>
           </div>
 
           <!-- INSTITUTION LETTERHEAD -->
-          <div class="text-center border-b-2 border-slate-900 pb-5 mb-8">
-            <div class="inline-block w-16 h-16 rounded-2xl bg-indigo-900 text-white font-sans font-black text-2xl flex items-center justify-center mb-2 border-2 border-amber-400 shadow-sm">
-              GW
+          <div class="text-center border-b-2 border-slate-900 pb-6 mb-8">
+            <div class="inline-block w-16 h-16 rounded-2xl bg-indigo-900 text-white font-sans font-black text-2xl flex items-center justify-center mb-3 border-2 border-amber-400 shadow-sm mx-auto">
+              ${schoolName ? schoolName.slice(0, 2).toUpperCase() : "GW"}
             </div>
-            <h1 class="text-2xl font-black uppercase tracking-tight text-slate-900">${schoolName}</h1>
-            <p class="text-xs uppercase tracking-widest text-slate-600 font-sans mt-0.5">
+            <h1 class="text-3xl font-black uppercase tracking-tight text-slate-900">${schoolName}</h1>
+            <p class="text-sm uppercase tracking-widest text-slate-600 font-sans mt-1">
               Office of the Admissions Director & Academic Board
             </p>
-            <p class="text-[11px] text-slate-500 font-sans mt-1">
-              Official Offer Ref: <strong class="font-mono">${offerRef}</strong> • Date: ${dateStr}
+            <p class="text-xs text-slate-500 font-sans mt-1.5">
+              Official Offer Ref: <strong class="font-mono text-slate-800">${offerRef}</strong> • Date: ${dateStr}
             </p>
           </div>
 
           <!-- RECIPIENT -->
-          <div class="mb-6 font-sans text-xs space-y-1">
-            <p class="font-bold text-sm text-slate-900">To the Parents / Guardians of: ${lead.applicantName}</p>
-            <p class="text-slate-600">Telephone: ${lead.parentPhone || lead.parentContact}</p>
-            <p class="text-slate-600">Offered Placement: <strong>${lead.targetGrade}</strong> (${lead.tier?.name || "Academic Tier"})</p>
+          <div class="mb-6 font-sans text-sm sm:text-base space-y-1.5">
+            <p class="font-bold text-base md:text-lg text-slate-900">To the Parents / Guardians of: ${lead.applicantName}</p>
+            <p class="text-slate-600">Telephone: <span class="font-mono text-slate-800 font-semibold">${lead.parentPhone || lead.parentContact}</span></p>
+            <p class="text-slate-600">Offered Placement: <strong class="text-slate-900">${lead.targetGrade}</strong> (${lead.tier?.name || "Academic Tier"})</p>
           </div>
 
-          <h2 class="text-base font-bold underline mb-5 text-center font-sans uppercase tracking-wide">
+          <h2 class="text-lg md:text-xl font-bold underline mb-6 text-center font-sans uppercase tracking-wide text-slate-900">
             OFFER OF PROVISIONAL ADMISSION FOR THE 2026/2027 ACADEMIC SESSION
           </h2>
 
-          <div class="text-xs space-y-3 leading-relaxed text-slate-800">
+          <div class="text-base md:text-lg space-y-4 leading-relaxed tracking-normal text-slate-800">
             <p>
               Following successful review of the admission application, entrance assessment, and screening credentials, the Academic Admissions Board of <strong>${schoolName}</strong> is pleased to extend an offer of <strong>Provisional Admission</strong> to:
             </p>
 
-            <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl my-3 font-sans text-center">
-              <span class="text-[11px] uppercase tracking-wider text-slate-500 block font-bold">Candidate Name</span>
-              <p class="text-base font-black text-slate-900 mt-0.5">${lead.applicantName}</p>
-              <span class="inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
+            <div class="p-5 bg-slate-50 border border-slate-200 rounded-xl my-4 font-sans text-center">
+              <span class="text-xs uppercase tracking-wider text-slate-500 block font-bold">Candidate Name</span>
+              <p class="text-xl font-black text-slate-900 mt-1">${lead.applicantName}</p>
+              <span class="inline-block mt-2 px-3.5 py-1 rounded-full text-sm font-bold bg-indigo-100 text-indigo-800">
                 Admitted Cohort: ${lead.targetGrade} (${lead.tier?.name || "General Tier"})
               </span>
             </div>
 
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-[11px] mt-4">1. Acceptance of Placement & Enrollment Fee</h3>
-            <p>
+            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-5 mb-1">1. Acceptance of Placement & Enrollment Fee</h3>
+            <p class="text-sm md:text-base leading-relaxed text-slate-700">
               To secure this placement, a non-refundable Acceptance Fee of <strong>₦25,000.00</strong> must be lodged into the school bursary bank account within fourteen (14) calendar days of the date of this letter.
             </p>
 
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-[11px] mt-3">2. Statutory Verification Requirements</h3>
-            <p>
+            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-4 mb-1">2. Statutory Verification Requirements</h3>
+            <p class="text-sm md:text-base leading-relaxed text-slate-700">
               This provisional placement is contingent upon satisfactory submission of the original National Population Commission (NPC) Birth Certificate, NIMC National Identification Number (NIN) slip, and Medical Certificate of Fitness prior to orientation.
             </p>
 
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-[11px] mt-3">3. Matriculation</h3>
-            <p>
+            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-4 mb-1">3. Matriculation</h3>
+            <p class="text-sm md:text-base leading-relaxed text-slate-700">
               Upon payment confirmation, the candidate will be assigned an official institutional Admission Number and granted access to the Student Portal.
             </p>
           </div>
 
           <!-- SIGNATURE BLOCK -->
-          <div class="mt-14 pt-8 border-t border-slate-300 grid grid-cols-2 gap-8 font-sans text-xs">
+          <div class="mt-14 pt-8 border-t border-slate-300 grid grid-cols-2 gap-8 font-sans text-sm">
             <div>
-              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-sm">
+              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-base text-slate-800">
                 Mrs. O. A. Babatunde
               </div>
               <p class="font-bold text-slate-900">Director of Admissions & Enrollment</p>
-              <p class="text-[10px] text-slate-500">${schoolName}</p>
+              <p class="text-xs text-slate-500">${schoolName}</p>
             </div>
 
             <div class="text-right">
-              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-sm">
+              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-base text-slate-800">
                 Dr. A. B. Adeleke
               </div>
               <p class="font-bold text-slate-900">Registrar & Head of School</p>
-              <p class="text-[10px] text-slate-500">Seal of Academic Board</p>
+              <p class="text-xs text-slate-500">Seal of Academic Board</p>
             </div>
           </div>
         </body>
@@ -295,62 +295,62 @@ export default function AdmissionsPipeline({
         </head>
         <body class="flex flex-col items-center justify-center min-h-screen">
           <div class="print:hidden mb-6 flex items-center gap-3">
-            <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">
+            <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs sm:text-sm cursor-pointer">
               Close
             </button>
-            <button onclick="window.print()" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs shadow-md">
+            <button onclick="window.print()" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md cursor-pointer">
               Print Examination Slip
             </button>
           </div>
 
-          <div class="w-full max-w-xl bg-white border-2 border-slate-800 rounded-3xl p-8 shadow-2xl">
+          <div class="w-full max-w-2xl bg-white border-2 border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
             <!-- Header -->
-            <div class="text-center border-b-2 border-slate-800 pb-4 mb-5">
-              <h2 class="text-xl font-black uppercase text-slate-900">${schoolName}</h2>
-              <p class="text-[10px] uppercase tracking-widest font-bold text-slate-500">Entrance Screening & Examination Admit Card</p>
-              <span class="inline-block mt-2 font-mono font-bold text-xs bg-slate-900 text-white px-3 py-1 rounded-md">
+            <div class="text-center border-b-2 border-slate-800 pb-4">
+              <h2 class="text-2xl font-black uppercase text-slate-900">${schoolName}</h2>
+              <p class="text-xs uppercase tracking-widest font-bold text-slate-500 mt-1">Entrance Screening & Examination Admit Card</p>
+              <span class="inline-block mt-3 font-mono font-bold text-sm bg-slate-900 text-white px-4 py-1.5 rounded-lg shadow-sm">
                 Roll No: ${examNo}
               </span>
             </div>
 
             <!-- Candidate Details -->
-            <div class="flex items-center gap-6 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-              <div class="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 text-[10px] font-bold text-center shrink-0">
+            <div class="flex items-center gap-6 p-5 bg-slate-50 rounded-2xl border border-slate-200">
+              <div class="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 text-xs font-bold text-center shrink-0">
                 <span>Affix Recent</span>
                 <span>Passport Photo</span>
               </div>
-              <div class="text-xs space-y-1.5 min-w-0">
-                <p><span class="text-slate-500">Candidate Name:</span> <strong class="text-slate-900 text-sm block">${lead.applicantName}</strong></p>
-                <p><span class="text-slate-500">Target Grade:</span> <strong class="text-slate-800">${lead.targetGrade}</strong> (${lead.tier?.name || "General"})</p>
-                <p><span class="text-slate-500">Parent Telephone:</span> <strong class="text-slate-800 font-mono">${lead.parentPhone || lead.parentContact}</strong></p>
+              <div class="text-sm space-y-2 min-w-0">
+                <p><span class="text-xs text-slate-500 block uppercase font-bold tracking-wider">Candidate Name</span> <strong class="text-slate-900 text-base md:text-lg block">${lead.applicantName}</strong></p>
+                <p><span class="text-xs text-slate-500 uppercase font-bold tracking-wider">Target Grade:</span> <strong class="text-slate-800 ml-1.5">${lead.targetGrade}</strong> (${lead.tier?.name || "General"})</p>
+                <p><span class="text-xs text-slate-500 uppercase font-bold tracking-wider">Parent Telephone:</span> <strong class="text-slate-800 font-mono ml-1.5">${lead.parentPhone || lead.parentContact}</strong></p>
               </div>
             </div>
 
             <!-- Exam Schedule -->
-            <div class="border border-slate-200 rounded-2xl p-4 text-xs space-y-2 mb-6">
-              <h4 class="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Screening Schedule & Venue</h4>
-              <div class="grid grid-cols-2 gap-3">
+            <div class="border border-slate-200 rounded-2xl p-5 text-sm space-y-3">
+              <h4 class="font-bold text-slate-800 uppercase tracking-wider text-xs border-b border-slate-100 pb-2">Screening Schedule & Venue</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <span class="text-slate-500 block text-[10px]">Test Date</span>
-                  <strong class="text-slate-900">Saturday, 27th September 2026</strong>
+                  <span class="text-slate-500 block text-xs font-medium">Test Date</span>
+                  <strong class="text-slate-900 text-sm sm:text-base">Saturday, 27th September 2026</strong>
                 </div>
                 <div>
-                  <span class="text-slate-500 block text-[10px]">Arrival & Accreditation</span>
-                  <strong class="text-slate-900">08:30 AM Prompt</strong>
+                  <span class="text-slate-500 block text-xs font-medium">Arrival & Accreditation</span>
+                  <strong class="text-slate-900 text-sm sm:text-base">08:30 AM Prompt</strong>
                 </div>
                 <div>
-                  <span class="text-slate-500 block text-[10px]">Examination Hall</span>
-                  <strong class="text-slate-900">Main ICT Complex / Hall A</strong>
+                  <span class="text-slate-500 block text-xs font-medium">Examination Hall</span>
+                  <strong class="text-slate-900 text-sm sm:text-base">Main ICT Complex / Hall A</strong>
                 </div>
                 <div>
-                  <span class="text-slate-500 block text-[10px]">Test Subjects</span>
-                  <strong class="text-slate-900">Maths, English, General Paper</strong>
+                  <span class="text-slate-500 block text-xs font-medium">Test Subjects</span>
+                  <strong class="text-slate-900 text-sm sm:text-base">Maths, English, General Paper</strong>
                 </div>
               </div>
             </div>
 
             <!-- Instructions -->
-            <div class="text-[10px] text-slate-500 border-t border-slate-200 pt-4 space-y-1 leading-relaxed">
+            <div class="text-xs text-slate-600 border-t border-slate-200 pt-4 space-y-1.5 leading-relaxed">
               <p>• Candidates must arrive in neat mufti or previous school uniform with this printed slip.</p>
               <p>• Writing materials (HB Pencils, Erasers, Pens) are required. Calculators and mobile phones are strictly prohibited.</p>
             </div>
