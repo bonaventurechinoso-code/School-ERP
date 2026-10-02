@@ -172,17 +172,21 @@ export default function ApplicantDossierDrawer({
   const handleAdvanceStage = (targetStage: string) => {
     setAlertMsg(null);
     startTransition(async () => {
-      const res = await updateLeadStatusAction({
-        leadId: lead.id,
-        status: targetStage,
-        schoolId,
-        schoolDomain,
-      });
-      if (res.success) {
-        setAlertMsg({ type: "success", text: `Candidate advanced to ${targetStage} stage!` });
-        if (onLeadUpdated) onLeadUpdated();
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to update stage." });
+      try {
+        const res = await updateLeadStatusAction({
+          leadId: lead.id,
+          status: targetStage,
+          schoolId,
+          schoolDomain,
+        });
+        if (res && res.success) {
+          setAlertMsg({ type: "success", text: `Candidate advanced to ${targetStage} stage!` });
+          if (onLeadUpdated) onLeadUpdated();
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Failed to update stage." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Failed to update stage." });
       }
     });
   };
@@ -191,18 +195,22 @@ export default function ApplicantDossierDrawer({
     const nextStatus = currentStatus === "VERIFIED" ? "PENDING" : "VERIFIED";
     setAlertMsg(null);
     startTransition(async () => {
-      const res = await updateLeadDocumentsAction({
-        leadId: lead.id,
-        schoolId,
-        schoolDomain,
-        documentType: docKey,
-        status: nextStatus as any,
-      });
-      if (res.success) {
-        setAlertMsg({ type: "success", text: `Updated document verification to ${nextStatus}.` });
-        if (onLeadUpdated) onLeadUpdated();
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to update document." });
+      try {
+        const res = await updateLeadDocumentsAction({
+          leadId: lead.id,
+          schoolId,
+          schoolDomain,
+          documentType: docKey,
+          status: nextStatus as any,
+        });
+        if (res && res.success) {
+          setAlertMsg({ type: "success", text: `Updated document verification to ${nextStatus}.` });
+          if (onLeadUpdated) onLeadUpdated();
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Failed to update document." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Failed to update document." });
       }
     });
   };
@@ -210,18 +218,22 @@ export default function ApplicantDossierDrawer({
   const handleSetDocumentStatus = (docKey: string, nextStatus: "VERIFIED" | "REJECTED" | "PENDING") => {
     setAlertMsg(null);
     startTransition(async () => {
-      const res = await updateLeadDocumentsAction({
-        leadId: lead.id,
-        schoolId,
-        schoolDomain,
-        documentType: docKey,
-        status: nextStatus as any,
-      });
-      if (res.success) {
-        setAlertMsg({ type: "success", text: `Document set to ${nextStatus}.` });
-        if (onLeadUpdated) onLeadUpdated();
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to update document." });
+      try {
+        const res = await updateLeadDocumentsAction({
+          leadId: lead.id,
+          schoolId,
+          schoolDomain,
+          documentType: docKey,
+          status: nextStatus as any,
+        });
+        if (res && res.success) {
+          setAlertMsg({ type: "success", text: `Document set to ${nextStatus}.` });
+          if (onLeadUpdated) onLeadUpdated();
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Failed to update document." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Failed to update document." });
       }
     });
   };
@@ -270,7 +282,7 @@ export default function ApplicantDossierDrawer({
         schoolId,
         schoolDomain,
       });
-      if (res.success) {
+      if (res && res.success) {
         setAlertMsg({
           type: "success",
           text: res.emailSent
@@ -279,10 +291,10 @@ export default function ApplicantDossierDrawer({
         });
         if (onLeadUpdated) onLeadUpdated();
       } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to dispatch Admit Slip." });
+        setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch Admit Slip." });
       }
     } catch (err: any) {
-      setAlertMsg({ type: "error", text: err.message || "Failed to dispatch Admit Slip." });
+      setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch Admit Slip." });
     } finally {
       setIsDispatchingSlip(false);
     }
@@ -301,21 +313,25 @@ export default function ApplicantDossierDrawer({
     });
 
     startTransition(async () => {
-      const res = await updateLeadScreeningAction({
-        leadId: lead.id,
-        schoolId,
-        schoolDomain,
-        examScore: scoreNum,
-        subjectScores: cleanSubjectScores,
-        interviewRating,
-        recommendation,
-        notes: screeningNotes,
-      });
-      if (res.success) {
-        setAlertMsg({ type: "success", text: "Screening assessment & subject score breakdown recorded successfully." });
-        if (onLeadUpdated) onLeadUpdated();
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to save assessment." });
+      try {
+        const res = await updateLeadScreeningAction({
+          leadId: lead.id,
+          schoolId,
+          schoolDomain,
+          examScore: scoreNum,
+          subjectScores: cleanSubjectScores,
+          interviewRating,
+          recommendation,
+          notes: screeningNotes,
+        });
+        if (res && res.success) {
+          setAlertMsg({ type: "success", text: "Screening assessment & subject score breakdown recorded successfully." });
+          if (onLeadUpdated) onLeadUpdated();
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Failed to save assessment." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Failed to save assessment." });
       }
     });
   };
@@ -325,19 +341,23 @@ export default function ApplicantDossierDrawer({
 
     setAlertMsg(null);
     startTransition(async () => {
-      const res = await enrollApplicantAction({
-        leadId: lead.id,
-        schoolId,
-        schoolDomain,
-      });
-      if (res.success) {
-        setAlertMsg({
-          type: "success",
-          text: `Applicant successfully matriculated! Admission No: ${res.student?.admissionNumber || "Generated"}`
+      try {
+        const res = await enrollApplicantAction({
+          leadId: lead.id,
+          schoolId,
+          schoolDomain,
         });
-        if (onLeadUpdated) onLeadUpdated();
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Enrollment failed." });
+        if (res && res.success) {
+          setAlertMsg({
+            type: "success",
+            text: `Applicant successfully matriculated! Admission No: ${res.student?.admissionNumber || "Generated"}`
+          });
+          if (onLeadUpdated) onLeadUpdated();
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Enrollment failed." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Enrollment failed." });
       }
     });
   };
@@ -357,8 +377,8 @@ export default function ApplicantDossierDrawer({
         className={`${
           isMaximized
             ? "fixed inset-0 z-[100] w-screen h-screen max-w-none"
-            : "fixed right-0 top-0 w-full sm:w-[600px] md:w-[720px] lg:w-[840px] xl:w-[920px] h-screen z-50"
-        } bg-white shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-200`}
+            : "fixed right-0 top-0 w-full sm:w-[680px] md:w-[800px] lg:w-[940px] xl:w-[1080px] h-screen z-50"
+        } bg-white shadow-2xl flex flex-col overflow-hidden transition-all duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* TOP HEADER */}
@@ -487,27 +507,34 @@ export default function ApplicantDossierDrawer({
               <span>{copiedLink ? "Link Copied!" : "Upload Link"}</span>
             </button>
           </div>
+        </div>
 
-          {/* TAB STRIP */}
-          <div className="flex items-center gap-2 mt-5 -mb-2 border-b border-slate-800 overflow-x-auto">
+        {/* STANDALONE EXPANSIVE SUB-TAB NAVIGATION CONTAINER */}
+        <div className="bg-slate-100/90 border-b border-slate-200 px-6 md:px-8 py-3 shrink-0 sticky top-0 z-20 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar">
             {[
-              { id: "bio", label: "Candidate Bio-Data" },
-              { id: "documents", label: "Statutory KYC Docs" },
-              { id: "screening", label: "Exam & Interview" },
-              { id: "offer", label: "Offer & Matriculation" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-2.5 text-xs sm:text-sm font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
-                  activeTab === tab.id
-                    ? "border-indigo-400 text-white"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+              { id: "bio", label: "Candidate Bio-Data", icon: UserCheck },
+              { id: "documents", label: "Statutory KYC Docs", icon: FileCheck },
+              { id: "screening", label: "Exam & Interview", icon: Star },
+              { id: "offer", label: "Offer & Matriculation", icon: Award },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-500/30"
+                      : "bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200/90 shadow-2xs"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -521,9 +548,9 @@ export default function ApplicantDossierDrawer({
           </div>
         )}
 
-        {/* SCROLLABLE BODY */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50/50">
-          <div className="max-w-3xl mx-auto space-y-6">
+        {/* SCROLLABLE EXPANSIVE WORKSPACE BODY */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50/60 min-h-0">
+          <div className="w-full max-w-5xl mx-auto min-h-[70vh] flex flex-col space-y-6 pb-8">
             {/* TAB 1: BIO-DATA & CONTACT */}
             {activeTab === "bio" && (
               <div className="space-y-6">

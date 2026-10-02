@@ -222,7 +222,7 @@ export default function AdmissionRegisterTable({
         recipientEmail: record.email || undefined,
       });
 
-      if (res.success) {
+      if (res && res.success) {
         setActionMessage({
           type: "success",
           text: `Document request email successfully dispatched to ${res.recipientEmail || record.email || "applicant"}! Link copied to clipboard.`,
@@ -234,7 +234,7 @@ export default function AdmissionRegisterTable({
       } else {
         setActionMessage({
           type: "error",
-          text: res.error || "Failed to dispatch request email. Upload link was copied to clipboard.",
+          text: res?.error || "Failed to dispatch request email. Upload link was copied to clipboard.",
         });
       }
     } catch (err: any) {

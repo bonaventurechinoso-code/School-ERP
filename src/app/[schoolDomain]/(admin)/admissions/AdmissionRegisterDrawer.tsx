@@ -388,11 +388,11 @@ export default function AdmissionRegisterDrawer({
                       recipientEmail: applicant.email || undefined,
                     });
 
-                    if (res.success) {
+                    if (res && res.success) {
                       alert(`${res.message || "Document request email successfully dispatched!"}\n\nUpload link copied to clipboard:\n${url}`);
                       applicant.status = "docs_pending";
                     } else {
-                      alert(`${res.error || "Failed to dispatch email."}\n\nUpload link copied to clipboard:\n${url}`);
+                      alert(`${res?.error || "Failed to dispatch email."}\n\nUpload link copied to clipboard:\n${url}`);
                     }
                   } catch (err: any) {
                     alert(err?.message || "Failed to send request docs email.");

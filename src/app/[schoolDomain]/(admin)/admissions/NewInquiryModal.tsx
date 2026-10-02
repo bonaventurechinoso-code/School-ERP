@@ -63,27 +63,31 @@ export default function NewInquiryModal({
 
     setAlertMsg(null);
     startTransition(async () => {
-      const res = await createAdmissionLeadAction({
-        schoolId,
-        schoolDomain,
-        ...formData,
-      });
-
-      if (res.success) {
-        setAlertMsg({ type: "success", text: `Inquiry logged for ${formData.applicantName}!` });
-        setFormData({
-          applicantName: "",
-          targetGrade: "JSS 1",
-          tierId: tiers[0]?.id || "",
-          parentName: "",
-          parentContact: "",
-          parentEmail: "",
-          source: "Walk-In Parent",
+      try {
+        const res = await createAdmissionLeadAction({
+          schoolId,
+          schoolDomain,
+          ...formData,
         });
-        if (onLeadCreated) onLeadCreated();
-        setTimeout(() => onClose(), 800);
-      } else {
-        setAlertMsg({ type: "error", text: res.error || "Failed to log inquiry." });
+
+        if (res && res.success) {
+          setAlertMsg({ type: "success", text: `Inquiry logged for ${formData.applicantName}!` });
+          setFormData({
+            applicantName: "",
+            targetGrade: "JSS 1",
+            tierId: tiers[0]?.id || "",
+            parentName: "",
+            parentContact: "",
+            parentEmail: "",
+            source: "Walk-In Parent",
+          });
+          if (onLeadCreated) onLeadCreated();
+          setTimeout(() => onClose(), 800);
+        } else {
+          setAlertMsg({ type: "error", text: res?.error || "Failed to log inquiry." });
+        }
+      } catch (err: any) {
+        setAlertMsg({ type: "error", text: err?.message || "Failed to log inquiry." });
       }
     });
   };

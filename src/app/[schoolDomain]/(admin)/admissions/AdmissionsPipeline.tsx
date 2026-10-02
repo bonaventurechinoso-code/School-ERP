@@ -121,17 +121,21 @@ export default function AdmissionsPipeline({
     const nextStage = STAGES[currentIndex + 1].id;
 
     startTransition(async () => {
-      const res = await updateLeadStatusAction({
-        leadId,
-        status: nextStage,
-        schoolId,
-        schoolDomain: schoolDomain || "",
-      });
-      if (res.success) {
-        setLocalLeads((prev) =>
-          prev.map((l) => (l.id === leadId ? { ...l, status: nextStage } : l))
-        );
-        router.refresh();
+      try {
+        const res = await updateLeadStatusAction({
+          leadId,
+          status: nextStage,
+          schoolId,
+          schoolDomain: schoolDomain || "",
+        });
+        if (res && res.success) {
+          setLocalLeads((prev) =>
+            prev.map((l) => (l.id === leadId ? { ...l, status: nextStage } : l))
+          );
+          router.refresh();
+        }
+      } catch (err) {
+        console.error("Failed to advance stage:", err);
       }
     });
   };
