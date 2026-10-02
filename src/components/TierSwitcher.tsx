@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useTransition, useMemo } from "react";
+import React, { useTransition, useMemo, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Layers, Check, ChevronDown } from "lucide-react";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
+import { useTenant } from "@/lib/tenant-context";
 
 export interface TierItem {
   id: string;
@@ -85,28 +86,37 @@ export default function TierSwitcher({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const tenant = useTenant();
 
-  // Determine whether current environment is the Trial Sandbox
-  const isTrial = schoolDomain === "trial-sandbox" || schoolDomain.includes("trial");
+  // Determine whether current environment is specifically the demo trial sandbox
+  const isTrialSandbox = schoolDomain === "trial-sandbox";
 
-  // Effective tiers: For trial sandbox (or when fewer tiers exist), merge with the complete spectrum of tiers
-  const effectiveTiers: TierItem[] = useMemo(() => {
-    if (isTrial || tiers.length <= 2) {
-      return COMPLETE_TRIAL_TIERS.map((trialTier) => {
-        const existing = tiers.find(
-          (t) =>
-            t.name.toLowerCase() === trialTier.name.toLowerCase() ||
-            sanitizeTierSlug(t.name) === sanitizeTierSlug(trialTier.name)
-        );
-        return existing
-          ? { ...existing, sublabel: trialTier.sublabel, slug: trialTier.slug }
-          : trialTier;
-      });
+  // 2. Fetch Tenant Subscriptions: Read from database tiers, fallback to tenant profile/session
+  const rawSubscribedTiers: TierItem[] = useMemo(() => {
+    if (tiers && tiers.length > 0) {
+      return tiers;
     }
+    if (tenant?.activeTiers && tenant.activeTiers.length > 0) {
+      return tenant.activeTiers.map((name, idx) => ({
+        id: `tenant-tier-${idx}`,
+        name,
+      }));
+    }
+    if (tenant?.preciseTier) {
+      return [{ id: "tenant-tier-0", name: tenant.preciseTier }];
+    }
+    if (isTrialSandbox) {
+      return COMPLETE_TRIAL_TIERS;
+    }
+    return [];
+  }, [tiers, tenant?.activeTiers, tenant?.preciseTier, isTrialSandbox]);
 
-    // Attach known sublabels to existing tiers, splitting any legacy aggregated tertiary tiers into discrete entries
-    return tiers.flatMap((t) => {
-      const upper = (t.name || "").toUpperCase();
+  // 3. Filter the Dropdown Options: Restrict strictly to tiers present in the tenant's registration profile
+  const effectiveTiers: TierItem[] = useMemo(() => {
+    if (!rawSubscribedTiers || rawSubscribedTiers.length === 0) return [];
+
+    return rawSubscribedTiers.flatMap((t) => {
+      const upper = (t.name || "").toUpperCase().trim();
       const isAggregatedTertiary =
         (upper.includes("HIGHER") && upper.includes("UNIVERSITY")) ||
         upper.includes("HIGHER INSTITUTION") ||
@@ -141,31 +151,60 @@ export default function TierSwitcher({
         ];
       }
 
+      // Enrich only the subscribed tier with authentic metadata (sublabel & slug)
       const match = COMPLETE_TRIAL_TIERS.find(
         (ct) =>
           ct.name.toLowerCase() === t.name.toLowerCase() ||
-          sanitizeTierSlug(ct.name) === sanitizeTierSlug(t.name)
+          sanitizeTierSlug(ct.name) === sanitizeTierSlug(t.name) ||
+          (upper.includes("SECONDARY") && ct.slug === "secondary") ||
+          (upper.includes("PRIMARY") && !upper.includes("SECONDARY") && ct.slug === "primary") ||
+          ((upper.includes("NURSERY") || upper.includes("DAYCARE")) && ct.slug === "nursery") ||
+          (upper.includes("UNIVERSITY") && ct.slug === "university") ||
+          ((upper.includes("POLYTECHNIC") || upper.includes("POLY")) && ct.slug === "polytechnic") ||
+          ((upper.includes("COLLEGE") || upper.includes("EDUCATION")) && ct.slug === "college_education")
       );
-      return [match ? { ...t, sublabel: match.sublabel, slug: match.slug } : t];
+
+      return [match ? { ...t, name: match.name, sublabel: match.sublabel, slug: match.slug } : t];
     });
-  }, [isTrial, tiers]);
+  }, [rawSubscribedTiers]);
 
-  if (!effectiveTiers || effectiveTiers.length === 0) return null;
-
-  // Resolve active tier item
+  // 4. Handle Single-Tier Defaults: If exactly one tier is subscribed, automatically select it
   const paramTier = searchParams.get("tier");
-  const activeTierObj =
-    effectiveTiers.find(
-      (t) =>
-        (paramTier &&
-          ((t.slug && t.slug.toLowerCase() === paramTier.toLowerCase()) ||
-            sanitizeTierSlug(t.name) === sanitizeTierSlug(paramTier) ||
-            t.name.toLowerCase().includes(paramTier.toLowerCase()) ||
-            sanitizeTierSlug(paramTier).includes(sanitizeTierSlug(t.name)))) ||
-        (currentTier &&
-          (t.name.toLowerCase() === currentTier.toLowerCase() ||
-            sanitizeTierSlug(t.name) === sanitizeTierSlug(currentTier)))
-    ) || effectiveTiers[0];
+  const activeTierObj = useMemo(() => {
+    if (effectiveTiers.length === 0) return null;
+    if (effectiveTiers.length === 1) {
+      return effectiveTiers[0];
+    }
+
+    return (
+      effectiveTiers.find(
+        (t) =>
+          (paramTier &&
+            ((t.slug && t.slug.toLowerCase() === paramTier.toLowerCase()) ||
+              sanitizeTierSlug(t.name) === sanitizeTierSlug(paramTier) ||
+              t.name.toLowerCase().includes(paramTier.toLowerCase()) ||
+              sanitizeTierSlug(paramTier).includes(sanitizeTierSlug(t.name)))) ||
+          (currentTier &&
+            (t.name.toLowerCase() === currentTier.toLowerCase() ||
+              sanitizeTierSlug(t.name) === sanitizeTierSlug(currentTier)))
+      ) || effectiveTiers[0]
+    );
+  }, [effectiveTiers, paramTier, currentTier]);
+
+  // Synchronize single-tier default with cookie
+  useEffect(() => {
+    if (effectiveTiers.length === 1 && typeof document !== "undefined") {
+      const single = effectiveTiers[0];
+      const cookies = document.cookie.split("; ");
+      const activeCookie = cookies.find((row) => row.startsWith("activeTier="))?.split("=")[1];
+      const decoded = activeCookie ? decodeURIComponent(activeCookie).toLowerCase() : "";
+      if (!decoded || (decoded !== single.name.toLowerCase() && decoded !== (single.slug || "").toLowerCase())) {
+        document.cookie = `activeTier=${encodeURIComponent(single.name)}; path=/; max-age=31536000; SameSite=Lax`;
+      }
+    }
+  }, [effectiveTiers]);
+
+  if (!effectiveTiers || effectiveTiers.length === 0 || !activeTierObj) return null;
 
   const handleSelectTier = (tier: TierItem) => {
     const slug = tier.slug || sanitizeTierSlug(tier.name);
@@ -204,8 +243,8 @@ export default function TierSwitcher({
               );
               if (selected) handleSelectTier(selected);
             }}
-            disabled={isPending}
-            className="w-full appearance-none bg-slate-800/95 hover:bg-slate-800 text-white border border-slate-700/90 rounded-xl px-3 py-2.5 pr-8 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-xs"
+            disabled={isPending || effectiveTiers.length <= 1}
+            className="w-full appearance-none bg-slate-800/95 hover:bg-slate-800 text-white border border-slate-700/90 rounded-xl px-3 py-2.5 pr-8 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:cursor-default shadow-xs"
           >
             {effectiveTiers.map((tier) => (
               <option key={tier.id} value={tier.name} className="bg-slate-900 text-white py-1.5 font-medium">
@@ -213,9 +252,11 @@ export default function TierSwitcher({
               </option>
             ))}
           </select>
-          <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-            <ChevronDown className="w-4 h-4" />
-          </div>
+          {effectiveTiers.length > 1 && (
+            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          )}
         </div>
 
         {/* Active Tier Visual Indicator Badge */}
