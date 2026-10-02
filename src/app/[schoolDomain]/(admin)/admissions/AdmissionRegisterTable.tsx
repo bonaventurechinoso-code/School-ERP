@@ -23,6 +23,7 @@ import {
 import AdmissionRegisterDrawer, {
   AdmissionRegisterRecord,
 } from "./AdmissionRegisterDrawer";
+import { requestApplicantDocsAction } from "./actions";
 
 interface AdmissionRegisterTableProps {
   schoolId: string;
@@ -204,14 +205,45 @@ export default function AdmissionRegisterTable({
     }
   };
 
-  const handleRequestDocs = (record: AdmissionRegisterRecord) => {
-    if (typeof window !== "undefined") {
-      const url = `${window.location.origin}/${schoolDomain}/admissions/track/${record.applicationNo}`;
-      navigator.clipboard.writeText(url);
-      setActionMessage({
-        type: "success",
-        text: `Document upload link copied for ${record.firstName}! (${url})`,
+  const handleRequestDocs = async (record: AdmissionRegisterRecord) => {
+    setActionLoadingId(record.id);
+    setActionMessage(null);
+    try {
+      if (typeof window !== "undefined") {
+        const url = `${window.location.origin}/${schoolDomain}/admissions/track/${record.applicationNo}`;
+        navigator.clipboard.writeText(url);
+      }
+
+      const res = await requestApplicantDocsAction({
+        admissionId: record.id,
+        applicationNo: record.applicationNo,
+        schoolId,
+        schoolDomain,
+        recipientEmail: record.email || undefined,
       });
+
+      if (res.success) {
+        setActionMessage({
+          type: "success",
+          text: `Document request email successfully dispatched to ${res.recipientEmail || record.email || "applicant"}! Link copied to clipboard.`,
+        });
+        await fetchRecords();
+        if (selectedRecord?.id === record.id) {
+          setSelectedRecord((prev) => (prev ? { ...prev, status: "docs_pending" } : null));
+        }
+      } else {
+        setActionMessage({
+          type: "error",
+          text: res.error || "Failed to dispatch request email. Upload link was copied to clipboard.",
+        });
+      }
+    } catch (err: any) {
+      setActionMessage({
+        type: "error",
+        text: err?.message || "Error requesting documents.",
+      });
+    } finally {
+      setActionLoadingId(null);
     }
   };
 

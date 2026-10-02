@@ -19,6 +19,7 @@ import {
   Download,
   Copy,
 } from "lucide-react";
+import { requestApplicantDocsAction } from "./actions";
 
 export interface AdmissionRegisterRecord {
   id: string;
@@ -357,16 +358,37 @@ export default function AdmissionRegisterDrawer({
             {applicant.status.toLowerCase() === "docs_pending" || applicant.status.toLowerCase() === "new" ? (
               <button
                 disabled={isProcessing}
-                onClick={() => {
-                  if (typeof window !== "undefined") {
+                onClick={async () => {
+                  setIsProcessing(true);
+                  try {
                     const domain = schoolDomain || "portal";
                     const url = `${window.location.origin}/${domain}/admissions/track/${applicant.applicationNo}`;
-                    navigator.clipboard.writeText(url);
-                    alert(`Document upload tracking link copied to clipboard:\n${url}`);
+                    if (typeof window !== "undefined") {
+                      navigator.clipboard.writeText(url);
+                    }
+
+                    const res = await requestApplicantDocsAction({
+                      admissionId: applicant.id,
+                      applicationNo: applicant.applicationNo,
+                      schoolId: applicant.tenantId,
+                      schoolDomain: domain,
+                      recipientEmail: applicant.email || undefined,
+                    });
+
+                    if (res.success) {
+                      alert(`${res.message || "Document request email successfully dispatched!"}\n\nUpload link copied to clipboard:\n${url}`);
+                      applicant.status = "docs_pending";
+                    } else {
+                      alert(`${res.error || "Failed to dispatch email."}\n\nUpload link copied to clipboard:\n${url}`);
+                    }
+                  } catch (err: any) {
+                    alert(err?.message || "Failed to send request docs email.");
+                  } finally {
+                    setIsProcessing(false);
                   }
                 }}
-                className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-sm transition flex items-center gap-1.5"
-                title="Copy Document Upload Tracking Link"
+                className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-extrabold text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                title="Send Document Request Email & Copy Link"
               >
                 <Clock className="w-4 h-4" />
                 Request Docs

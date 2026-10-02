@@ -252,24 +252,6 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // STEP 3: Forced Initial Reset Pipeline:
-  // When an administrator adds a new Staff member or Student, mustChangePassword: true is set.
-  // Their first successful login forces a strict browser interception, routing them straight to
-  // /[tenantSlug]/security/change-password while blocking access to all other application panels until complete.
-  if (verifiedSessionPayload?.mustChangePassword) {
-    const isChangePasswordPage =
-      path === '/change-password' ||
-      path.startsWith('/change-password') ||
-      path.endsWith('/security/change-password') ||
-      path.includes('/security/change-password');
-
-    if (!isChangePasswordPage) {
-      const forcedUrl = new URL('/change-password', req.url);
-      forcedUrl.searchParams.set('forced', 'true');
-      return NextResponse.redirect(forcedUrl);
-    }
-  }
-
   // Bypass public pages and auth endpoints from administrative RBAC interception
   const isPublicOrPortalPath =
     path === '/change-password' ||
@@ -286,10 +268,30 @@ export async function middleware(req: NextRequest) {
     path.includes('/apply') ||
     path.includes('/admissions/track') ||
     path.includes('/admissions/upload') ||
+    path.includes('/admissions/accept') ||
     path.startsWith('/register') ||
     path.includes('/forgot-password') ||
     path.includes('/reset-password') ||
     path.includes('/security/change-password');
+
+  // STEP 3: Forced Initial Reset Pipeline:
+  // When an administrator adds a new Staff member or Student, mustChangePassword: true is set.
+  // Their first successful login forces a strict browser interception, routing them straight to
+  // /[tenantSlug]/security/change-password while blocking access to all other application panels until complete.
+  // Guest applicants completing document upload must NEVER be intercepted by this pipeline.
+  if (verifiedSessionPayload?.mustChangePassword && !verifiedSessionPayload?.isGuestApplicant && !isPublicOrPortalPath) {
+    const isChangePasswordPage =
+      path === '/change-password' ||
+      path.startsWith('/change-password') ||
+      path.endsWith('/security/change-password') ||
+      path.includes('/security/change-password');
+
+    if (!isChangePasswordPage) {
+      const forcedUrl = new URL('/change-password', req.url);
+      forcedUrl.searchParams.set('forced', 'true');
+      return NextResponse.redirect(forcedUrl);
+    }
+  }
 
   if (isPublicOrPortalPath) {
     if (isIPAddress || isLocalhost) {
@@ -309,12 +311,20 @@ export async function middleware(req: NextRequest) {
   }
 
   // --- Auth Check & RBAC Protection for Tenant Administrative Routes ---
+  const isAdmissionApplicantPath =
+    path.includes('/admissions/upload') ||
+    path.includes('/admissions/track') ||
+    path.includes('/admissions/accept') ||
+    path.includes('/admissions/apply') ||
+    path.endsWith('/apply') ||
+    path.includes('/apply/');
+
   const tenantAdminSegments = [
     '/dashboard', '/finance', '/hr', '/portal-settings', '/settings',
     '/admissions', '/staff', '/students', '/scheduling',
     '/exams', '/transcripts', '/report-cards', '/communications'
   ];
-  const isTenantAdminPath = tenantAdminSegments.some(segment => path.includes(segment));
+  const isTenantAdminPath = !isAdmissionApplicantPath && tenantAdminSegments.some(segment => path.includes(segment));
 
   if (isTenantAdminPath) {
     const isDev = process.env.NODE_ENV === 'development';
@@ -357,8 +367,10 @@ export async function middleware(req: NextRequest) {
         const targetPath = `/${effectiveTenantSlug}/login`;
         const loginUrl = new URL(targetPath, req.url);
         const res = NextResponse.redirect(loginUrl);
-        res.cookies.delete('session');
-        res.cookies.delete('accessToken');
+        if (!payload?.isGuestApplicant) {
+          res.cookies.delete('session');
+          res.cookies.delete('accessToken');
+        }
         return res;
       }
     }
@@ -368,6 +380,12 @@ export async function middleware(req: NextRequest) {
     const authResult = isSuperAdmin ? { allowed: true } : checkRouteAuthorization(path, rawRole, staffRole);
 
     if (!authResult.allowed) {
+      if (payload?.isGuestApplicant) {
+        const dest = payload?.leadId
+          ? `/${effectiveTenantSlug}/admissions/upload/${payload.leadId}?token=${payload.uploadToken || ""}`
+          : `/${effectiveTenantSlug}/admissions/track/${encodeURIComponent(payload.applicationNo || "")}`;
+        return NextResponse.redirect(new URL(dest, req.url));
+      }
       const targetPath = effectiveTenantSlug ? `/${effectiveTenantSlug}/login` : '/login';
       const loginUrl = new URL(targetPath, req.url);
       const res = NextResponse.redirect(loginUrl);

@@ -3,6 +3,7 @@ import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import fs from "fs";
 import path from "path";
+import * as jose from "jose";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 
@@ -36,7 +37,25 @@ export async function GET(
     }
 
     const leadAny = lead as any;
-    if (!token || token !== leadAny.uploadToken) {
+    const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
+    let sessionValid = false;
+    if (cookieToken) {
+      try {
+        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+        const secret = new TextEncoder().encode(jwtSecret);
+        const { payload } = await jose.jwtVerify(cookieToken, secret);
+        if (
+          payload.leadId === applicantId ||
+          payload.userId === applicantId ||
+          (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+          payload.isGuestApplicant
+        ) {
+          sessionValid = true;
+        }
+      } catch {}
+    }
+
+    if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403 });
     }
 
@@ -92,7 +111,25 @@ export async function POST(
     }
 
     const leadAny = lead as any;
-    if (!token || token !== leadAny.uploadToken) {
+    const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
+    let sessionValid = false;
+    if (cookieToken) {
+      try {
+        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+        const secret = new TextEncoder().encode(jwtSecret);
+        const { payload } = await jose.jwtVerify(cookieToken, secret);
+        if (
+          payload.leadId === applicantId ||
+          payload.userId === applicantId ||
+          (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+          payload.isGuestApplicant
+        ) {
+          sessionValid = true;
+        }
+      } catch {}
+    }
+
+    if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403 });
     }
 

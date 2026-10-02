@@ -3,6 +3,8 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
+import * as jose from "jose";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -136,6 +138,10 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(passwordToSave, 10);
 
+    const uploadToken = crypto.randomUUID();
+    const uploadExpiresAt = new Date();
+    uploadExpiresAt.setDate(uploadExpiresAt.getDate() + 30); // 30-day secure upload window
+
     // Insert new application explicitly as INQUIRY
     const newLead = await tenantDb.admissionLead.create({
       data: {
@@ -151,6 +157,8 @@ export async function POST(request: NextRequest) {
         targetGrade: effectiveTargetGrade,
         source: "Website",
         status: "INQUIRY",
+        uploadToken,
+        uploadExpiresAt,
         documents: {
           passwordHash: hashedPassword,
           academicTier: finalTierName,
@@ -263,26 +271,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const trackUrl = `/${school.subdomain || domainCandidate}/admissions/track/${appNo}`;
+    const sub = school.subdomain || domainCandidate;
+    const trackUrl = `/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
+    const uploadUrl = `/${sub}/admissions/upload/${newLead.id}?token=${uploadToken}`;
 
-    // Send Application Received email asynchronously without awaiting (non-blocking)
+    // Send Application Received tracking & upload resume email via Resend
     const targetRecipient = (studentEmail || parentEmail || "").trim();
     if (targetRecipient) {
-      import("@/lib/email-service")
-        .then(({ sendApplicationReceivedEmail }) => {
-          sendApplicationReceivedEmail({
-            schoolId: school.id,
-            applicantName,
-            applicationNo: appNo,
-            targetGrade: effectiveTargetGrade,
-            recipientEmail: targetRecipient,
-            parentName: parentName || "Parent / Guardian",
-            schoolName: school.name,
-            subdomain: school.subdomain,
-            leadId: newLead.id,
-          }).catch((e) => console.log(e));
-        })
-        .catch((e) => console.log(e));
+      try {
+        const { sendApplicationReceivedEmail } = await import("@/lib/email-service");
+        await sendApplicationReceivedEmail({
+          schoolId: school.id,
+          applicantName,
+          applicationNo: appNo,
+          targetGrade: effectiveTargetGrade,
+          recipientEmail: targetRecipient,
+          parentName: parentName || "Parent / Guardian",
+          schoolName: school.name,
+          subdomain: school.subdomain,
+          leadId: newLead.id,
+          uploadToken,
+        });
+      } catch (mailErr) {
+        console.warn("[PUBLIC_SUBMIT] Failed to dispatch tracking email:", mailErr);
+      }
     }
 
     // Trigger initial inquiry notification
@@ -297,15 +309,59 @@ export async function POST(request: NextRequest) {
       console.warn("[PUBLIC_SUBMIT] Notification error:", notifErr);
     }
 
-    return NextResponse.json({
+    // Persist Session for Document Upload:
+    // Sign a 24-hour "guest applicant session" token so applicant remains authorized
+    // through their document upload stage without forced logout.
+    const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+    const secret = new TextEncoder().encode(jwtSecret);
+    const guestExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const guestSessionToken = await new jose.SignJWT({
+      userId: newLead.id,
+      email: accountEmail || undefined,
+      tenantId: school.id,
+      schoolDomain: sub,
+      role: "GUEST",
+      staffRole: "GUEST_APPLICANT",
+      isGuestApplicant: true,
+      mustChangePassword: false,
+      leadId: newLead.id,
+      uploadToken: uploadToken,
+      applicationNo: appNo,
+      activeTiers: [finalTierName],
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(guestExpiresAt.getTime() / 1000))
+      .sign(secret);
+
+    const response = NextResponse.json({
       success: true,
       applicationNo: appNo,
       trackUrl,
+      uploadUrl,
       appNo,
       redirectUrl: trackUrl,
       trackingUrl: trackUrl,
       lead: newLead,
+      uploadToken,
+      sessionToken: guestSessionToken,
     });
+
+    const isSecure = process.env.NODE_ENV === "production";
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: "lax" as const,
+      path: "/",
+      maxAge: 24 * 60 * 60, // 24 hours
+    };
+
+    response.cookies.set("session", guestSessionToken, cookieOptions);
+    response.cookies.set("accessToken", guestSessionToken, cookieOptions);
+    response.cookies.set("guest_session", "true", { ...cookieOptions, httpOnly: false });
+    response.cookies.set("activeTier", encodeURIComponent(finalTierName), { ...cookieOptions, httpOnly: false });
+
+    return response;
   } catch (error: any) {
     console.error("Public submission error:", error);
     if (error?.code === "P2002") {

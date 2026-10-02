@@ -352,7 +352,7 @@ export default function PublicApplyForm({
           const applicationNo = resData.applicationNo || resData.appNo || resData.lead?.id;
           const derivedDomain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
           const encoded = encodeURIComponent(applicationNo);
-          const finalUrl = `/${derivedDomain}/admissions/track/${encoded}`;
+          const finalUrl = resData.uploadUrl || resData.trackUrl || `/${derivedDomain}/admissions/track/${encoded}`;
           console.log("[PublicApplyForm] Redirect URL built:", finalUrl, { applicationNo, encoded, schoolDomain: derivedDomain });
           setSubmittedAppNo(applicationNo);
           setRedirectUrl(finalUrl);
@@ -417,14 +417,14 @@ export default function PublicApplyForm({
             onClick={() => {
               const domain = typeof window !== "undefined" ? window.location.pathname.split('/')[1] : schoolDomain;
               const encodedAppNo = encodeURIComponent(submittedAppNo || "");
-              const finalUrl = `/${domain}/admissions/track/${encodedAppNo}`;
-              console.log("[PublicApplyForm] Navigating to track page via window.location.replace:", finalUrl);
+              const finalUrl = redirectUrl || `/${domain}/admissions/track/${encodedAppNo}`;
+              console.log("[PublicApplyForm] Navigating to upload/track page via window.location.replace:", finalUrl);
               window.location.replace(finalUrl);
             }}
             className="w-full sm:w-auto px-8 py-3.5 text-white rounded-xl font-bold transition-transform hover:-translate-y-0.5 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             style={{ backgroundColor: brandColor }}
           >
-            <span>Go to track page</span>
+            <span>Proceed to Upload Documents</span>
             <ArrowRight className="w-4 h-4" />
           </button>
           <button 

@@ -2,6 +2,8 @@ import React from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import ApplicantUploadClient from "./ApplicantUploadClient";
 import { ShieldAlert, PhoneCall, Building2 } from "lucide-react";
+import { cookies } from "next/headers";
+import * as jose from "jose";
 
 export default async function ApplicantUploadPage({
   params: paramsPromise,
@@ -14,8 +16,8 @@ export default async function ApplicantUploadPage({
   const { token } = await searchParamsPromise;
 
   // 1. Resolve tenant school
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: schoolDomain },
+  const school = await basePrisma.school.findFirst({
+    where: { OR: [{ subdomain: schoolDomain }, { slug: schoolDomain }, { id: schoolDomain }] },
     select: { id: true, name: true, subdomain: true, contactPhone: true },
   });
 
@@ -41,8 +43,31 @@ export default async function ApplicantUploadPage({
   const isTokenValid = lead && token && leadAny.uploadToken === token;
   const isTokenExpired = leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date();
 
-  // 3. Security Guard: Token validation
-  if (!lead || !isTokenValid || isTokenExpired) {
+  // Allow authorization via active guest applicant session cookie as fallback
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
+  let sessionAuthorized = false;
+  if (sessionToken) {
+    try {
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const { payload } = await jose.jwtVerify(sessionToken, secret);
+      if (
+        payload.leadId === applicantId ||
+        payload.userId === applicantId ||
+        (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+        payload.isGuestApplicant
+      ) {
+        sessionAuthorized = true;
+      }
+    } catch {}
+  }
+
+  const isAuthorized = (isTokenValid || sessionAuthorized) && !isTokenExpired;
+  const effectiveToken = token || leadAny?.uploadToken || "";
+
+  // 3. Security Guard: Token / Session validation
+  if (!lead || !isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
         <div className="max-w-lg w-full bg-white dark:bg-zinc-900 p-8 sm:p-10 rounded-2xl shadow-md border border-rose-100 dark:border-rose-950/40 text-center animate-in fade-in">
@@ -55,7 +80,7 @@ export default async function ApplicantUploadPage({
           <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2.5 leading-relaxed">
             {isTokenExpired
               ? "This secure credential upload link has expired for security reasons. Please reach out to the admissions office to receive a fresh submission link."
-              : "No valid applicant authorization token was found in your link. Please use the direct link provided in your official admissions inquiry email."}
+              : "No valid applicant authorization token or session was found. Please use the direct link provided in your admissions email."}
           </p>
 
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 dark:text-zinc-300">
@@ -74,7 +99,7 @@ export default async function ApplicantUploadPage({
       schoolName={school.name}
       contactPhone={school.contactPhone}
       applicantId={lead.id}
-      token={token}
+      token={effectiveToken}
       applicantName={lead.applicantName}
       parentName={lead.parentName || "Parent / Guardian"}
       targetGrade={lead.targetGrade}

@@ -2,7 +2,7 @@
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
-import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail, sendDocsRequestEmail } from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
@@ -515,5 +515,160 @@ export async function updateLeadStatusAction(payload: {
   } catch (error: any) {
     console.error("Error executing updateLeadStatusAction:", error);
     return { success: false, error: error?.message || "Failed to update lead status." };
+  }
+}
+
+/**
+ * Triggers an automated document request email via Resend to the applicant,
+ * providing them with a direct secure link to the upload portal.
+ */
+export async function requestApplicantDocsAction(payload: {
+  admissionId?: string;
+  applicationNo?: string;
+  schoolId?: string;
+  schoolDomain?: string;
+  recipientEmail?: string;
+  customMessage?: string;
+}) {
+  try {
+    const { admissionId, applicationNo, schoolDomain, customMessage } = payload;
+    if (!admissionId && !applicationNo) {
+      return { success: false, error: "Missing required application identifier." };
+    }
+
+    // 1. Locate AdmissionRegister record
+    const record = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [
+          ...(admissionId ? [{ id: admissionId }] : []),
+          ...(applicationNo ? [{ applicationNo }] : []),
+        ],
+      },
+    });
+
+    const targetSchoolId = await resolveSchoolId(payload.schoolId || record?.tenantId || schoolDomain || "");
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          ...(targetSchoolId ? [{ id: targetSchoolId }, { subdomain: targetSchoolId }] : []),
+          ...(schoolDomain ? [{ subdomain: schoolDomain }, { slug: schoolDomain }] : []),
+        ],
+      },
+    });
+
+    if (!school) {
+      return { success: false, error: "School institution record not found." };
+    }
+
+    // 2. Locate linked AdmissionLead (if exists) or query by application parameters
+    const cleanRef = (record?.applicationNo || applicationNo || "").replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          ...(admissionId ? [{ id: admissionId }] : []),
+          ...(record?.id ? [{ id: record.id }] : []),
+          ...(cleanRef ? [{ id: { startsWith: cleanRef } }] : []),
+          ...(record ? [
+            { applicantName: { equals: `${record.firstName} ${record.lastName}`.trim(), mode: "insensitive" as const } },
+            { applicantName: { equals: `${record.lastName} ${record.firstName}`.trim(), mode: "insensitive" as const } },
+            ...(record.email ? [{ studentEmail: record.email }, { parentEmail: record.email }] : []),
+            ...(record.parentPhone ? [{ parentPhone: record.parentPhone }, { parentContact: record.parentPhone }] : []),
+          ] : []),
+        ],
+      },
+      include: { tier: true },
+    });
+
+    // 3. Ensure valid uploadToken (valid for 30 days)
+    let uploadToken = (lead as any)?.uploadToken;
+    const isTokenExpired = (lead as any)?.uploadExpiresAt && new Date((lead as any).uploadExpiresAt) < new Date();
+
+    if (!uploadToken || isTokenExpired) {
+      uploadToken = crypto.randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // 30-day upload window
+
+      if (lead) {
+        lead = await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: { uploadToken, uploadExpiresAt: expiresAt },
+          include: { tier: true },
+        });
+      }
+    }
+
+    const appNo = record?.applicationNo || applicationNo || (lead?.id ? `APP-${lead.id.slice(-6).toUpperCase()}` : "APP-PENDING");
+    const applicantName = lead?.applicantName || (record ? `${record.firstName} ${record.lastName}`.trim() : "Applicant");
+    const parentName = lead?.parentName || "Parent / Guardian";
+    const targetGrade = lead?.targetGrade || record?.classApplied || "Selected Class";
+
+    const recipientEmail = (
+      payload.recipientEmail ||
+      record?.email ||
+      lead?.parentEmail ||
+      lead?.studentEmail ||
+      (lead?.parentContact?.includes("@") ? lead.parentContact : null) ||
+      ""
+    ).trim();
+
+    if (!recipientEmail || !recipientEmail.includes("@")) {
+      return {
+        success: false,
+        error: `No valid email address registered for applicant "${applicantName}". Please verify the applicant email.`,
+      };
+    }
+
+    const sub = school.subdomain || schoolDomain || "portal";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const uploadUrl = lead?.id && uploadToken
+      ? `${baseUrl}/${sub}/admissions/upload/${lead.id}?token=${uploadToken}`
+      : `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
+    const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
+
+    // 4. Dispatch Email via Resend
+    const mailResult = await sendDocsRequestEmail({
+      schoolId: school.id,
+      applicantName,
+      parentName,
+      applicationNo: appNo,
+      targetGrade,
+      recipientEmail,
+      uploadUrl,
+      trackUrl,
+      schoolName: school.name,
+      subdomain: sub,
+      customMessage,
+    });
+
+    if (!mailResult.success) {
+      return {
+        success: false,
+        error: mailResult.error || "Failed to dispatch email via Resend service.",
+        uploadUrl,
+      };
+    }
+
+    // 5. Update status to docs_pending if currently new
+    if (record && (record.status.toLowerCase() === "new" || !record.status)) {
+      await basePrisma.admissionRegister.update({
+        where: { id: record.id },
+        data: { status: "docs_pending", updatedAt: new Date() },
+      });
+    }
+
+    safeRevalidate(`/${sub}/admissions`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+
+    return {
+      success: true,
+      message: `Document request email successfully dispatched to ${recipientEmail}`,
+      uploadUrl,
+      trackUrl,
+      recipientEmail,
+    };
+  } catch (error: any) {
+    console.error("[requestApplicantDocsAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to request applicant documents." };
   }
 }

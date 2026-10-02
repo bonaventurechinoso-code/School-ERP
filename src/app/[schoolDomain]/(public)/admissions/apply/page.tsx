@@ -16,6 +16,7 @@ export default function ApplyPage({
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
   const [submittedAppNo, setSubmittedAppNo] = useState<string | null>(null);
+  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -53,6 +54,7 @@ export default function ApplyPage({
         }
 
         setSubmittedAppNo(data.applicationNo);
+        setUploadUrl(data.uploadUrl || null);
         setIsSuccess(true);
       } catch (err: any) {
         console.error("[ApplyPage] Submission error:", err);
@@ -102,10 +104,10 @@ export default function ApplyPage({
 
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
             <a
-              href={finalTrackUrl}
+              href={uploadUrl || finalTrackUrl}
               className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-md cursor-pointer"
             >
-              <span>Go to Track Page</span>
+              <span>Proceed to Upload Documents</span>
               <ArrowRight className="w-4 h-4" />
             </a>
             <a

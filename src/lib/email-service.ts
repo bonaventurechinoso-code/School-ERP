@@ -59,10 +59,12 @@ export interface ApplicationReceivedEmailPayload {
   schoolName?: string;
   subdomain?: string;
   leadId?: string;
+  uploadToken?: string;
 }
 
 /**
- * Sends responsive email notifying applicant of received application and next step to upload documents
+ * Sends responsive email notifying applicant of received application and next step to upload documents.
+ * Dispatches via centralized mail service (Resend or SMTP) with tracking and direct upload links.
  */
 export async function sendApplicationReceivedEmail(payload: ApplicationReceivedEmailPayload) {
   try {
@@ -73,52 +75,128 @@ export async function sendApplicationReceivedEmail(payload: ApplicationReceivedE
       targetGrade = "Class 1",
       recipientEmail,
       parentName = "Parent / Guardian",
-      subdomain = "udoka",
+      subdomain = "portal",
+      leadId,
+      uploadToken: propUploadToken,
     } = payload;
 
-    const school = await basePrisma.school.findUnique({
-      where: { id: schoolId },
-      select: { name: true, subdomain: true, contactPhone: true },
+    const school = await basePrisma.school.findFirst({
+      where: { OR: [{ id: schoolId }, { subdomain: schoolId }] },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
     }).catch(() => null);
 
     const tenantName = school?.name || payload.schoolName || "School ERP";
     const sub = school?.subdomain || subdomain;
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-    const trackUrl = `${baseUrl}/${sub}/admissions/track/${applicationNo}`;
+    const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
+    const secondaryColor = "#4338ca";
 
-    const isDev = process.env.NODE_ENV !== "production";
-    const hasSmtp = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
-
-    if (isDev || !hasSmtp) {
-      console.log("[MOCK EMAIL] " + trackUrl);
-      return { success: true, trackUrl, trackingUrl: trackUrl };
+    // Resolve upload token if missing
+    let uploadToken = propUploadToken;
+    if (!uploadToken && leadId) {
+      const lead = await basePrisma.admissionLead.findUnique({
+        where: { id: leadId },
+        select: { uploadToken: true },
+      }).catch(() => null);
+      uploadToken = lead?.uploadToken || undefined;
     }
 
-    try {
-      const nodemailer = await import("nodemailer");
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-        },
-      });
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo)}`;
+    const uploadUrl = leadId && uploadToken
+      ? `${baseUrl}/${sub}/admissions/upload/${leadId}?token=${uploadToken}`
+      : trackUrl;
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || process.env.SMTP_USER || "School ERP <noreply@bonaveeict.com.ng>",
-        to: recipientEmail,
-        subject: `Application Received - App No: ${applicationNo}`,
-        html: `<p>Dear ${parentName || applicantName},</p><p>Your application (App No: ${applicationNo}) has been received for ${tenantName} (${targetGrade}).</p><p>Next step: upload documents at <a href="${trackUrl}">${trackUrl}</a></p>`,
-      });
-    } catch (smtpErr: any) {
-      console.log("[MOCK EMAIL] " + trackUrl);
-    }
+    const subject = `Application Received (App No: ${applicationNo}) - ${tenantName}`;
 
-    return { success: true, trackUrl, trackingUrl: trackUrl };
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 15px; color: #1e293b; }
+    .wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, ${brandColor} 0%, ${secondaryColor} 100%); padding: 36px 32px; text-align: center; color: #ffffff; }
+    .badge { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.35); padding: 5px 14px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 800; }
+    .body { padding: 32px; }
+    .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin: 20px 0; }
+    .info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .btn { display: inline-block; font-size: 14px; font-weight: 700; padding: 14px 32px; text-decoration: none; border-radius: 10px; background-color: ${brandColor}; color: #ffffff; }
+    .footer { padding: 24px 32px; background-color: #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="badge">Application Confirmation</div>
+      <h1>${tenantName}</h1>
+      <p style="margin: 0; opacity: 0.9; font-size: 14px;">Admission Intake Confirmation</p>
+    </div>
+    <div class="body">
+      <h2 style="font-size: 18px; font-weight: 700; margin-top: 0;">Dear ${parentName || applicantName},</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+        Thank you for submitting an admission application to <strong>${tenantName}</strong>. We are pleased to confirm that your application has been received and registered into our admissions intake system.
+      </p>
+
+      <div class="info-card">
+        <div class="info-row">
+          <span style="color: #64748b;">Application Number:</span>
+          <strong style="color: #0f172a; font-family: monospace;">${applicationNo}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Applicant Name:</span>
+          <strong style="color: #0f172a;">${applicantName}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Target Grade / Class:</span>
+          <strong style="color: #0f172a;">${targetGrade}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Current Status:</span>
+          <strong style="color: #d97706;">DOCUMENTS PENDING</strong>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin: 30px 0 20px 0;">
+        <a href="${uploadUrl}" class="btn" style="color: #ffffff !important;">Complete Document Upload Now &rarr;</a>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
+        <strong>Direct Upload &amp; Tracking Portal Link:</strong><br />
+        <a href="${uploadUrl}" style="color: ${secondaryColor}; font-weight: 600;">${uploadUrl}</a><br />
+        <span style="color: #94a3b8;">(Unique secure access token included &bull; Valid for 30 days &bull; Keep this for your records)</span>
+      </div>
+
+      <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+        You can also track your application status at: <a href="${trackUrl}" style="color: ${secondaryColor}; font-weight: 600;">${trackUrl}</a>
+      </p>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} ${tenantName}. All rights reserved.<br>
+      Admissions &amp; Records Bureau &bull; School Contact: ${school?.contactPhone || "+234 (0) 800-SCHOOL-ERP"}
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: recipientEmail,
+      subject,
+      html: emailHtml,
+      schoolId: school?.id || schoolId,
+      recipientType: "PARENT",
+      logCategory: "ADMISSIONS_RECEIVED",
+    });
+
+    console.log(`[EMAIL_SERVICE] Dispatched application received email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
+    return { success: true, trackUrl, uploadUrl, dispatchResult };
   } catch (err: any) {
-    return { success: true };
+    console.error("[EMAIL_SERVICE] Error in sendApplicationReceivedEmail:", err);
+    return { success: false, error: err?.message || String(err) };
   }
 }
 
@@ -539,24 +617,18 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
     }
 
     // Persist to MessageLog table asynchronously in background
-    if (schoolId && recipientEmail) {
-      setImmediate(async () => {
-        try {
-          await basePrisma.messageLog.create({
-            data: {
-              schoolId,
-              recipientEmail: recipientEmail,
-              recipientType: "PARENT",
-              messageType: "EMAIL",
-              subject,
-              body: emailHtml,
-              sentAt: new Date(),
-            },
-          });
-        } catch (dbErr) {
-          // Log failure without halting caller
-        }
+    // Dispatch email via Resend / SMTP service
+    let dispatchResult: any = null;
+    if (recipientEmail && recipientEmail.includes("@")) {
+      dispatchResult = await dispatchEmail({
+        to: recipientEmail,
+        subject,
+        html: emailHtml,
+        schoolId: school?.id || schoolId,
+        recipientType: "PARENT",
+        logCategory: "ADMISSIONS_INQUIRY_ACK",
       });
+      console.log(`[EMAIL_SERVICE] Dispatched inquiry acknowledgment email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
     }
 
     return {
@@ -567,10 +639,158 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
       applicantName,
       subject,
       emailHtml,
+      dispatchResult,
     };
   } catch (err: any) {
     console.error("[EMAIL_SERVICE] Failed to send inquiry acknowledgment email:", err);
     return null;
+  }
+}
+
+export interface DocsRequestEmailPayload {
+  schoolId: string;
+  applicantName: string;
+  parentName?: string;
+  applicationNo: string;
+  targetGrade?: string;
+  recipientEmail: string;
+  uploadUrl: string;
+  trackUrl?: string;
+  schoolName?: string;
+  subdomain?: string;
+  customMessage?: string;
+}
+
+/**
+ * Sends a high-priority, responsive HTML email requesting pending credential documents
+ * with direct authenticated upload link and tracking link via Resend.
+ */
+export async function sendDocsRequestEmail(payload: DocsRequestEmailPayload) {
+  try {
+    const {
+      schoolId,
+      applicantName,
+      parentName = "Parent / Guardian",
+      applicationNo,
+      targetGrade = "Selected Grade",
+      recipientEmail,
+      uploadUrl,
+      trackUrl,
+      schoolName,
+      subdomain,
+      customMessage,
+    } = payload;
+
+    const school = await basePrisma.school.findFirst({
+      where: { OR: [{ id: schoolId }, { subdomain: schoolId }] },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
+    }).catch(() => null);
+
+    const tenantName = school?.name || schoolName || "School ERP";
+    const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
+    const secondaryColor = "#4338ca";
+
+    const subject = `Action Required: Upload Verification Documents (App No: ${applicationNo}) - ${tenantName}`;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 15px; color: #1e293b; }
+    .wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, ${brandColor} 0%, ${secondaryColor} 100%); padding: 36px 32px; text-align: center; color: #ffffff; }
+    .badge { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.35); padding: 5px 14px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 800; }
+    .body { padding: 32px; }
+    .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin: 20px 0; }
+    .info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .btn { display: inline-block; font-size: 14px; font-weight: 700; padding: 14px 32px; text-decoration: none; border-radius: 10px; background-color: ${brandColor}; color: #ffffff; }
+    .doc-item { padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; background-color: #f1f5f9; border-left: 4px solid #f59e0b; font-size: 13px; }
+    .footer { padding: 24px 32px; background-color: #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="badge">Action Required</div>
+      <h1>${tenantName}</h1>
+      <p style="margin: 0; opacity: 0.9; font-size: 14px;">Admissions &amp; Records Bureau</p>
+    </div>
+    <div class="body">
+      <h2 style="font-size: 18px; font-weight: 700; margin-top: 0;">Dear ${parentName || applicantName},</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+        The Admissions Office at <strong>${tenantName}</strong> is actively reviewing the admission file for <strong>${applicantName}</strong>. To advance the application to our admission board review, please upload the requested verification documentation.
+      </p>
+
+      ${customMessage ? `<div style="background-color: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin: 16px 0; font-size: 13px; color: #92400e;"><strong>Registrar Note:</strong> ${customMessage}</div>` : ""}
+
+      <div class="info-card">
+        <div class="info-row">
+          <span style="color: #64748b;">Application Number:</span>
+          <strong style="color: #0f172a; font-family: monospace;">${applicationNo}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Applicant Name:</span>
+          <strong style="color: #0f172a;">${applicantName}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Target Grade:</span>
+          <strong style="color: #0f172a;">${targetGrade}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Status:</span>
+          <strong style="color: #d97706;">DOCUMENTS PENDING</strong>
+        </div>
+      </div>
+
+      <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 20px 0 10px 0;">Required Documents:</h3>
+      <div class="doc-item"><strong>1. Recent Passport Photograph</strong> &ndash; Clear color photo with white background.</div>
+      <div class="doc-item"><strong>2. Previous Academic Results</strong> &ndash; Recent termly report cards or transcripts.</div>
+      <div class="doc-item"><strong>3. Birth Certificate or Valid ID</strong> &ndash; NPC birth certificate or valid ID card.</div>
+      <div class="doc-item"><strong>4. NIN / Medical Fitness</strong> &ndash; National Identity slip or medical report.</div>
+
+      <div style="text-align: center; margin: 30px 0 20px 0;">
+        <a href="${uploadUrl}" class="btn" style="color: #ffffff !important;">Upload Pending Documents Now &rarr;</a>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
+        <strong>Direct Upload Link:</strong><br />
+        <a href="${uploadUrl}" style="color: ${secondaryColor}; font-weight: 600;">${uploadUrl}</a>
+      </div>
+
+      ${trackUrl ? `
+      <p style="font-size: 12px; color: #64748b; margin-top: 16px;">
+        You can also check your live application status at: <a href="${trackUrl}" style="color: ${secondaryColor}; font-weight: 600;">${trackUrl}</a>
+      </p>
+      ` : ""}
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} ${tenantName}. All rights reserved.<br>
+      Admissions &amp; Records Bureau &bull; Contact: ${school?.contactPhone || "+234 (0) 800-SCHOOL-ERP"}
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: recipientEmail,
+      subject,
+      html: emailHtml,
+      schoolId: school?.id || schoolId,
+      recipientType: "PARENT",
+      logCategory: "ADMISSIONS_DOCS_REQUEST",
+    });
+
+    console.log(`[EMAIL_SERVICE] Dispatched docs request email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
+    return { success: true, uploadUrl, dispatchResult };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Error in sendDocsRequestEmail:", err);
+    return { success: false, error: err?.message || String(err) };
   }
 }
 
