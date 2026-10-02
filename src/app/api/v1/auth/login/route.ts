@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { getAdmissionNumberSearchVariants } from "@/lib/tenant-tier-utils";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
@@ -198,24 +199,35 @@ export async function POST(req: Request) {
 
     // 4. VERIFY TENANT EXISTENCE & STATUS
     let tenantSubdomain = schoolDomain ? (schoolDomain as string).toLowerCase().trim() : null;
+    const searchVariants = getAdmissionNumberSearchVariants(email as string);
 
     if (!tenantSubdomain) {
-      const userSchool = await basePrisma.user.findFirst({
-        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+      const userSchool = await (basePrisma.user as any).findFirst({
+        where: {
+          OR: [
+            { email: { equals: normalizedEmail, mode: "insensitive" } },
+            ...searchVariants.map((v) => ({ student: { admissionNumber: { equals: v, mode: "insensitive" } } })),
+          ],
+        },
         include: { school: true },
       });
       if (userSchool?.school) {
         tenantSubdomain = userSchool.school.subdomain;
       } else {
-        const staffSchool = await basePrisma.staff.findFirst({
+        const staffSchool = await (basePrisma.staff as any).findFirst({
           where: { email: { equals: normalizedEmail, mode: "insensitive" } },
           include: { school: true },
         });
         if (staffSchool?.school) {
           tenantSubdomain = staffSchool.school.subdomain;
         } else {
-          const studentSchool = await basePrisma.student.findFirst({
-            where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+          const studentSchool = await (basePrisma.student as any).findFirst({
+            where: {
+              OR: [
+                { email: { equals: normalizedEmail, mode: "insensitive" } },
+                ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
+              ],
+            },
             include: { school: true },
           });
           if (studentSchool?.school) {
@@ -234,6 +246,7 @@ export async function POST(req: Request) {
         OR: [
           { subdomain: tenantSubdomain },
           { slug: tenantSubdomain },
+          { id: tenantSubdomain },
         ],
       },
       include: {
@@ -255,12 +268,13 @@ export async function POST(req: Request) {
     let mustChangePassword = false;
 
     // A. Check User model (Dedicated tenant user scope - authoritative single auth table)
-    const localUser = await basePrisma.user.findFirst({
+    const localUser = await (basePrisma.user as any).findFirst({
       where: {
         schoolId: tenant.id,
         OR: [
           { email: { equals: normalizedEmail, mode: "insensitive" } },
           { student: { admissionNumber: { equals: normalizedEmail, mode: "insensitive" } } },
+          ...searchVariants.map((v) => ({ student: { admissionNumber: { equals: v, mode: "insensitive" } } })),
         ],
       },
       include: {
@@ -284,24 +298,43 @@ export async function POST(req: Request) {
     }
 
     // C. Check Student (STUDENT)
+    // Multi-tenant resilient student authentication: matches by email or admission number variants,
+    // validates against tenant ID rather than failing on cross-tier prefix strings (e.g. NUR vs SEC).
     if (!resolvedRole) {
+      const studentMatchQuery: any = {
+        schoolId: tenant.id,
+        OR: [
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
+        ],
+      };
+
       let student = await basePrisma.student.findFirst({
-        where: {
-          email: normalizedEmail,
-          schoolId: tenant.id,
-        },
+        where: studentMatchQuery,
+        include: { school: true },
       });
 
       if (!student && tenant.databaseUrl) {
         try {
           const tenantDb = await getTenantClient(tenant.id);
           student = await tenantDb.student.findFirst({
-            where: {
-              email: normalizedEmail,
-              schoolId: tenant.id,
-            },
+            where: studentMatchQuery,
+            include: { school: true },
           });
         } catch {}
+      }
+
+      if (!student && tenant.academicTiers?.length) {
+        for (const t of tenant.academicTiers) {
+          try {
+            const tierDb = await getPrismaClientForTier(tenant.id, t.name);
+            student = await tierDb.student.findFirst({
+              where: studentMatchQuery,
+              include: { school: true },
+            });
+            if (student) break;
+          } catch {}
+        }
       }
 
       if (student) {

@@ -159,3 +159,53 @@ export function generateAdmissionNumber(options: {
   return `${prefix}/${tierCode}/${year}/${seq}`;
 }
 
+/**
+ * Generates cross-tier and legacy admission number variants for resilient student authentication.
+ * Handles cases where auto-generated admission numbers contain mismatched tier prefixes
+ * (e.g. 'NUR' vs 'SEC' in 'RIV/NUR/2026/002'), legacy 3-part formats ('RIV/2026/002'),
+ * or alternate delimiters.
+ */
+export function getAdmissionNumberSearchVariants(input: string): string[] {
+  if (!input || typeof input !== "string") return [];
+  const trimmed = input.trim();
+  const set = new Set<string>();
+  set.add(trimmed);
+  set.add(trimmed.toUpperCase());
+  set.add(trimmed.toLowerCase());
+
+  // Extract delimiters (/ or - or \)
+  const slashParts = trimmed.split(/[\/\\]/);
+  const dashParts = trimmed.split("-");
+  const parts = slashParts.length >= 3 ? slashParts : dashParts.length >= 3 ? dashParts : null;
+
+  if (parts && parts.length >= 3) {
+    const delimiter = slashParts.length >= 3 ? "/" : "-";
+    const allTierCodes = ["SEC", "NUR", "PRI", "GEN", "UNI", "POLY", "COL", "BASIC", "JSS", "SSS"];
+
+    if (parts.length === 4) {
+      // 4-part format: [PREFIX, TIER, YEAR, SEQ] (e.g. RIV/NUR/2026/002)
+      const [prefix, , year, seq] = parts;
+      for (const t of allTierCodes) {
+        set.add(`${prefix}${delimiter}${t}${delimiter}${year}${delimiter}${seq}`);
+        set.add(`${prefix}${delimiter}${t}${delimiter}${year}${delimiter}${seq}`.toUpperCase());
+        set.add(`${prefix}${delimiter}${t}${delimiter}${year}${delimiter}${seq}`.toLowerCase());
+      }
+      // 3-part legacy format without tier: RIV/2026/002
+      set.add(`${prefix}${delimiter}${year}${delimiter}${seq}`);
+      set.add(`${prefix}${delimiter}${year}${delimiter}${seq}`.toUpperCase());
+      set.add(`${prefix}${delimiter}${year}${delimiter}${seq}`.toLowerCase());
+    } else if (parts.length === 3) {
+      // 3-part format: [PREFIX, YEAR, SEQ] (e.g. RIV/2026/002)
+      const [prefix, yearOrTier, seq] = parts;
+      if (/^\d{4}$/.test(yearOrTier)) {
+        for (const t of allTierCodes) {
+          set.add(`${prefix}${delimiter}${t}${delimiter}${yearOrTier}${delimiter}${seq}`);
+          set.add(`${prefix}${delimiter}${t}${delimiter}${yearOrTier}${delimiter}${seq}`.toUpperCase());
+          set.add(`${prefix}${delimiter}${t}${delimiter}${yearOrTier}${delimiter}${seq}`.toLowerCase());
+        }
+      }
+    }
+  }
+
+  return Array.from(set);
+}

@@ -406,6 +406,7 @@ export async function enrollApplicantAction(payload: {
           enrolledAt: new Date(),
           tierId: isolatedTierId,
           currentClass: lead.targetGrade || existingStudent.currentClass,
+          admissionNumber: existingStudent.admissionNumber || admissionNumber,
           dynamicFields: {
             ...existingDynamic,
             password: existingDynamic.password || finalPasswordHash,

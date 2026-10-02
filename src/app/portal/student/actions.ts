@@ -19,7 +19,7 @@ import {
   MessageLogItem, 
   SystemNotificationItem 
 } from "./types";
-import { formatTierBadgeCode } from "@/lib/tenant-tier-utils";
+import { formatTierBadgeCode, getAdmissionNumberSearchVariants } from "@/lib/tenant-tier-utils";
 
 /**
  * Loads the complete workspace data for the student portal.
@@ -95,15 +95,19 @@ export async function fetchStudentPortalWorkspace(params: {
   let dbStudent: any = null;
 
   if (loginId && resolvedSchool.id) {
+    const searchVariants = getAdmissionNumberSearchVariants(loginId);
+    const studentMatchOr: any[] = [
+      { id: loginId },
+      { admissionNumber: { equals: loginId, mode: "insensitive" } },
+      { email: { equals: loginId, mode: "insensitive" } },
+      ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
+    ];
+
     try {
       dbStudent = await isolatedDbClient.student.findFirst({
         where: {
           schoolId: resolvedSchool.id,
-          OR: [
-            { id: loginId },
-            { admissionNumber: loginId },
-            { email: loginId }
-          ]
+          OR: studentMatchOr,
         },
         include: {
           tier: true,
@@ -129,11 +133,7 @@ export async function fetchStudentPortalWorkspace(params: {
         dbStudent = await basePrisma.student.findFirst({
           where: {
             schoolId: resolvedSchool.id,
-            OR: [
-              { id: loginId },
-              { admissionNumber: loginId },
-              { email: loginId }
-            ]
+            OR: studentMatchOr,
           },
           include: {
             tier: true,

@@ -42,7 +42,7 @@ const ROLE_CONFIGS: RoleTabConfig[] = [
   {
     id: "student",
     label: "Student",
-    placeholder: "Admission No (e.g. ADA-0143)",
+    placeholder: "Admission No (e.g. RIV/NUR/2026/002)",
     fieldLabel: "Admission Number",
   },
   {
@@ -213,6 +213,13 @@ function UniversalLoginPageContent() {
   }, [searchParams]);
 
   const currentRole = ROLE_CONFIGS.find((r) => r.id === activeRoleTab) || ROLE_CONFIGS[0];
+  const dynamicSchoolPrefix = (resolvedTenant || schoolCodeInput.trim()).slice(0, 3).toUpperCase();
+  const effectivePlaceholder =
+    activeRoleTab === "student"
+      ? dynamicSchoolPrefix
+        ? `Admission No (e.g. ${dynamicSchoolPrefix}/SEC/2026/001 or ${dynamicSchoolPrefix}/NUR/2026/002)`
+        : "Admission No (e.g. RIV/NUR/2026/002 or SCH/2026/001)"
+      : currentRole.placeholder;
 
   const handleCredentialsLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -286,9 +293,9 @@ function UniversalLoginPageContent() {
         }
 
         // 1. Central Admin Routing Logic:
-        // If "School Code" is left blank (as indicated by "Optional for Central Admins") or role is SUPER_ADMIN:
+        // If "School Code" is left blank and user is SUPER_ADMIN (or central platform admin without tenant scope):
         // Authenticate against root platform database and route directly to the Super Admin Console.
-        if (isCentralLogin || user?.role === "SUPER_ADMIN") {
+        if (user?.role === "SUPER_ADMIN" || (isCentralLogin && !user?.schoolDomain)) {
           const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
           router.push(adminTarget);
           return;
@@ -467,7 +474,7 @@ function UniversalLoginPageContent() {
                   autoComplete="username"
                   value={identifier}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIdentifier(e.target.value)}
-                  placeholder={currentRole.placeholder}
+                  placeholder={effectivePlaceholder}
                   className="flex h-10 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 pr-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 transition-colors"
                 />
               </div>

@@ -2,10 +2,11 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { basePrisma, getTenantClient } from "./tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "./tenant-prisma";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "./auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS } from "./session-manager";
 import { isMustChangePassword } from "./security-service";
+import { getAdmissionNumberSearchVariants } from "./tenant-tier-utils";
 
 /**
  * NextAuth.js Configuration for SchoolERP:
@@ -80,10 +81,12 @@ export const authOptions: NextAuthOptions = {
         }
 
         // B. Check Unified User Registry (Authoritative single auth table: Principal, Teacher, Bursar, Student, School Admin)
+        const searchVariants = getAdmissionNumberSearchVariants(credentials.email);
         const userQuery: any = {
           OR: [
             { email: { equals: normalizedEmail, mode: "insensitive" } },
             { student: { admissionNumber: { equals: normalizedEmail, mode: "insensitive" } } },
+            ...searchVariants.map((v) => ({ student: { admissionNumber: { equals: v, mode: "insensitive" } } })),
           ],
         };
         if (requestedDomain) {
@@ -145,13 +148,39 @@ export const authOptions: NextAuthOptions = {
         }
 
         // C. Check Student (STUDENT)
-        const studentQuery: any = { email: normalizedEmail };
+        // Multi-tenant resilient student authentication: matches by email or admission number variants,
+        // validates against tenant ID rather than failing on cross-tier prefix strings (e.g. NUR vs SEC).
+        const studentOrConditions: any[] = [
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
+        ];
+
+        let targetTenant: any = null;
         if (requestedDomain) {
-          studentQuery.school = { subdomain: requestedDomain };
+          targetTenant = await basePrisma.school.findFirst({
+            where: {
+              OR: [
+                { subdomain: requestedDomain.toLowerCase().trim() },
+                { slug: requestedDomain.toLowerCase().trim() },
+                { id: requestedDomain },
+              ],
+            },
+            include: {
+              academicTiers: { orderBy: { level: "asc" } },
+            },
+          });
+        }
+
+        const studentWhere: any = {
+          OR: studentOrConditions,
+        };
+
+        if (targetTenant) {
+          studentWhere.schoolId = targetTenant.id;
         }
 
         let student = await basePrisma.student.findFirst({
-          where: studentQuery,
+          where: studentWhere,
           include: {
             school: {
               include: {
@@ -161,22 +190,101 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
+        // If not found in primary tenant or basePrisma, check across all active schools if no domain was specified
+        if (!student && !requestedDomain) {
+          student = await basePrisma.student.findFirst({
+            where: {
+              OR: studentOrConditions,
+              school: { isActive: true, deletedAt: null },
+            },
+            include: {
+              school: {
+                include: {
+                  academicTiers: { orderBy: { level: "asc" } },
+                },
+              },
+            },
+          });
+        }
+
+        // If still not found and tenant is resolved, check isolated tenant database and tier databases
+        if (!student && targetTenant) {
+          if (targetTenant.databaseUrl) {
+            try {
+              const tenantDb = await getTenantClient(targetTenant.id);
+              student = await tenantDb.student.findFirst({
+                where: {
+                  schoolId: targetTenant.id,
+                  OR: studentOrConditions,
+                },
+                include: {
+                  school: {
+                    include: {
+                      academicTiers: { orderBy: { level: "asc" } },
+                    },
+                  },
+                },
+              });
+            } catch {}
+          }
+
+          if (!student && targetTenant.academicTiers?.length) {
+            for (const tier of targetTenant.academicTiers) {
+              try {
+                const tierDb = await getPrismaClientForTier(targetTenant.id, tier.name);
+                student = await tierDb.student.findFirst({
+                  where: {
+                    schoolId: targetTenant.id,
+                    OR: studentOrConditions,
+                  },
+                  include: {
+                    school: {
+                      include: {
+                        academicTiers: { orderBy: { level: "asc" } },
+                      },
+                    },
+                  },
+                });
+                if (student) break;
+              } catch {}
+            }
+          }
+        }
+
         if (student && student.school && student.school.isActive) {
           if (student.status === "SUSPENDED" || (student.dynamicFields as any)?.portalAccessDisabled) {
             throw new Error("Student portal account is suspended. Please contact administration.");
           }
 
-          // In production students use credentials or standard default password
-          if (rawPassword === "Password123" || isDev) {
-            const activeTiers = student.school.academicTiers.map((t) => t.name);
+          const studentCustomFields = (student.dynamicFields as any) || {};
+          let isPasswordValid = false;
+          let isTemporary = Boolean(studentCustomFields.isTemporaryPassword);
+
+          if (studentCustomFields.password) {
+            isPasswordValid = await bcrypt.compare(rawPassword, studentCustomFields.password).catch(() => false);
+            if (
+              !isPasswordValid &&
+              (studentCustomFields.password === rawPassword ||
+                (isDev && (rawPassword === "Password123" || rawPassword === "Welcome123" || rawPassword === "Password@123")))
+            ) {
+              isPasswordValid = true;
+            }
+          } else if (rawPassword === "Password123" || rawPassword === "Welcome123" || isDev) {
+            isPasswordValid = true;
+            isTemporary = true;
+          }
+
+          if (isPasswordValid) {
+            const activeTiers = student.school.academicTiers?.map((t: any) => t.name) || [];
             const permissions = getDefaultPermissionsForRole("STUDENT");
-            const mustChangePassword = rawPassword === "Password123" || await isMustChangePassword(student.id);
+            const userForced = await isMustChangePassword(student.id);
+            const mustChangePassword = isTemporary || Boolean(student.mustChangePassword) || userForced;
 
             return {
               id: student.id,
               userId: student.id,
-              email: student.email || normalizedEmail,
-              name: `${student.firstName} ${student.lastName}`.trim(),
+              email: student.email || `${student.admissionNumber || student.id}@student.portal`,
+              name: `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student",
               role: "STUDENT",
               staffRole: "Student",
               tenantId: student.schoolId,
@@ -185,6 +293,7 @@ export const authOptions: NextAuthOptions = {
               activeTiers,
               permissions,
               mustChangePassword,
+              forceChangePassword: mustChangePassword,
             };
           }
         }

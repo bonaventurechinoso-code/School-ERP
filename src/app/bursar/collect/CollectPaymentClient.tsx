@@ -198,7 +198,7 @@ export function CollectPaymentClient({ context }: { context: BursarContext }) {
               <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="Admission No (e.g. ADA-0143) or Name"
+                  placeholder="Admission No (e.g. RIV/NUR/2026/002 or ADA-0143) or Name"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full h-10 pl-3 pr-3 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"

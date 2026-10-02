@@ -317,7 +317,7 @@ export default function FeePaymentCheckout({
                   <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
                     <li>Copy the 10-digit school account number above.</li>
                     <li>Open your bank mobile app (Opay, Access, GTBank, Kuda, etc.) and transfer.</li>
-                    <li>Type your admission number (<strong>{student?.admissionNumber || "ADA-0143"}</strong>) into the narration/remarks box.</li>
+                    <li>Type your admission number (<strong>{student?.admissionNumber || "RIV/SEC/2026/001"}</strong>) into the narration/remarks box.</li>
                     <li>Take a screenshot of the debit alert or transfer receipt.</li>
                     <li>Return here and click <strong>&quot;I Have Paid - Upload Proof&quot;</strong> below.</li>
                   </ol>
