@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useTransition } from "react";
+import React, { useState, useRef, useTransition, useMemo } from "react";
 import {
   UploadCloud,
   CheckCircle2,
@@ -42,8 +42,21 @@ interface TrackClientProps {
       url?: string;
       path?: string;
       uploadedAt?: string;
+      status?: string;
+      rejected?: boolean;
+      rejectedAt?: string;
+      remarks?: string;
+      comment?: string;
+      feedback?: string;
     }> | null;
     createdAt: string;
+    rejectionReason?: string | null;
+    adminComments?: string | null;
+    remarks?: string | null;
+    rejectedDocuments?: string[] | null;
+    verificationLogs?: Array<any> | null;
+    documents?: Record<string, any> | null;
+    [key: string]: any;
   };
 }
 
@@ -144,6 +157,171 @@ export default function TrackApplicationClient({
     { number: 4, title: "Admitted & Enrolled", desc: "Official student placement" },
   ];
 
+  // Helper to format document names cleanly
+  const formatDocumentName = (rawName: string): string => {
+    if (!rawName) return "Document";
+    const trimmed = rawName.trim();
+    const lower = trimmed.toLowerCase();
+
+    // Standard document mapping
+    if (lower.includes("passport")) return "Passport Photograph";
+    if (lower.includes("birth")) return "Birth Certificate";
+    if (lower.includes("result") || lower.includes("academic") || lower.includes("transcript")) {
+      return "Previous Academic Results";
+    }
+    if (lower.includes("medical") || lower.includes("fitness")) {
+      return "Medical Fitness Certificate";
+    }
+    if (lower === "nin" || lower.includes("national identity") || lower.includes("nimc")) {
+      return "National Identification Number (NIN)";
+    }
+
+    if (/^[A-Z][a-z0-9]+(\s+[A-Z][a-z0-9]+)*$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    return trimmed
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  };
+
+  // Dynamically resolve list of specific rejected documents
+  const rejectedDocs = useMemo(() => {
+    const rejectedSet = new Set<string>();
+
+    // 1. Explicit rejectedDocuments prop
+    if (Array.isArray(applicant.rejectedDocuments)) {
+      applicant.rejectedDocuments.forEach((doc) => {
+        if (typeof doc === "string" && doc.trim()) {
+          rejectedSet.add(formatDocumentName(doc));
+        }
+      });
+    }
+
+    // 2. Scan credentials state and applicant.credentialsJson
+    const allCreds = [
+      ...(Array.isArray(credentials) ? credentials : []),
+      ...(Array.isArray(applicant.credentialsJson) ? applicant.credentialsJson : []),
+    ];
+
+    allCreds.forEach((cred: any) => {
+      if (!cred || typeof cred !== "object") return;
+      const isRejected =
+        cred.rejected === true ||
+        cred.status?.toString().toUpperCase() === "REJECTED" ||
+        (cred.rejectedAt && cred.status?.toString().toUpperCase() !== "VERIFIED");
+
+      if (isRejected) {
+        const rawName =
+          cred.name ||
+          cred.label ||
+          cred.type ||
+          cred.docType ||
+          cred.key ||
+          cred.altType ||
+          cred.originalName;
+        if (rawName) {
+          rejectedSet.add(formatDocumentName(rawName));
+        }
+      }
+    });
+
+    // 3. Scan applicant.documents (from linked AdmissionLead)
+    let leadDocs = applicant.documents;
+    if (typeof leadDocs === "string") {
+      try {
+        leadDocs = JSON.parse(leadDocs);
+      } catch {
+        leadDocs = null;
+      }
+    }
+    if (leadDocs && typeof leadDocs === "object") {
+      Object.entries(leadDocs).forEach(([key, val]: [string, any]) => {
+        if (!val) return;
+        const isRejected =
+          val === "REJECTED" ||
+          val === "rejected" ||
+          val?.status?.toString().toUpperCase() === "REJECTED" ||
+          val?.rejected === true ||
+          (val?.rejectedAt && val?.status?.toString().toUpperCase() !== "VERIFIED");
+
+        if (isRejected) {
+          const docName = val?.name || val?.label || val?.type || key;
+          rejectedSet.add(formatDocumentName(docName));
+        }
+      });
+    }
+
+    // 4. Scan verificationLogs
+    let logs = applicant.verificationLogs;
+    if (typeof logs === "string") {
+      try {
+        logs = JSON.parse(logs);
+      } catch {
+        logs = null;
+      }
+    }
+    if (Array.isArray(logs)) {
+      logs.forEach((log: any) => {
+        if (!log || typeof log !== "object") return;
+        const isRejectLog =
+          log.action?.toString().toUpperCase().includes("REJECT") ||
+          log.status?.toString().toUpperCase() === "REJECTED";
+
+        if (isRejectLog) {
+          const rawDoc = log.document || log.documentType || log.docType || log.name;
+          if (rawDoc) {
+            rejectedSet.add(formatDocumentName(rawDoc));
+          }
+        }
+      });
+    }
+
+    // 5. Scan adminComments or remarks text for document keyword hints if set is still empty
+    const remarksText = `${applicant.adminComments || ""} ${applicant.rejectionReason || ""} ${applicant.remarks || ""}`.toLowerCase();
+    if (rejectedSet.size === 0 && remarksText) {
+      if (remarksText.includes("passport")) rejectedSet.add("Passport Photograph");
+      if (remarksText.includes("birth certificate") || remarksText.includes("birth cert")) rejectedSet.add("Birth Certificate");
+      if (remarksText.includes("result") || remarksText.includes("transcript")) rejectedSet.add("Previous Academic Results");
+      if (remarksText.includes("medical") || remarksText.includes("fitness")) rejectedSet.add("Medical Fitness Certificate");
+      if (remarksText.includes("nin")) rejectedSet.add("National Identification Number (NIN)");
+    }
+
+    return Array.from(rejectedSet);
+  }, [applicant, credentials]);
+
+  // Dynamic warning text block based on specific rejected documents
+  const rejectionMessage = useMemo(() => {
+    if (rejectedDocs.length === 0) {
+      return "One or more of your submitted documents were rejected by the admissions board and require re-uploading. Please review your documents below and submit a clear replacement.";
+    }
+    if (rejectedDocs.length === 1) {
+      return `Your submitted ${rejectedDocs[0]} was rejected by the admissions board and requires re-uploading. Please review your documents below and submit a clear replacement.`;
+    }
+    if (rejectedDocs.length === 2) {
+      return `Your submitted ${rejectedDocs[0]} and ${rejectedDocs[1]} were rejected by the admissions board and require re-uploading. Please review your documents below and submit a clear replacement.`;
+    }
+    const allExceptLast = rejectedDocs.slice(0, -1).join(", ");
+    const last = rejectedDocs[rejectedDocs.length - 1];
+    return `Your submitted ${allExceptLast}, and ${last} were rejected by the admissions board and require re-uploading. Please review your documents below and submit a clear replacement.`;
+  }, [rejectedDocs]);
+
+  // Extract admin feedback or remarks
+  const adminRemarks = useMemo(() => {
+    if (applicant.adminComments) return applicant.adminComments;
+    if (applicant.rejectionReason) return applicant.rejectionReason;
+    if (applicant.remarks) return applicant.remarks;
+    if (Array.isArray(applicant.credentialsJson)) {
+      const withComment = applicant.credentialsJson.find((c: any) => c.remarks || c.comment || c.feedback);
+      if (withComment) return withComment.remarks || withComment.comment || withComment.feedback;
+    }
+    return null;
+  }, [applicant]);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-100 flex flex-col justify-between">
       {/* BRAND TOP HEADER */}
@@ -233,8 +411,13 @@ export default function TrackApplicationClient({
                 Application Update: Document Rejected
               </h4>
               <p className="text-xs text-rose-700 dark:text-rose-300 mt-1 leading-relaxed">
-                One or more of your submitted documents were rejected by the admissions board and require re-uploading. Please review your documents below and submit a clear replacement.
+                {rejectionMessage}
               </p>
+              {adminRemarks && (
+                <div className="mt-2.5 text-xs text-rose-800 dark:text-rose-300 bg-rose-100/70 dark:bg-rose-900/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800/60 leading-relaxed">
+                  <strong className="font-bold">Admissions Remarks:</strong> {adminRemarks}
+                </div>
+              )}
             </div>
           </div>
         )}

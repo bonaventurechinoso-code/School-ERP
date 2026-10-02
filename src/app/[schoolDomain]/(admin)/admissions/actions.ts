@@ -157,6 +157,7 @@ export async function updateLeadDocumentsAction(payload: {
 
     if (registerRecord) {
       const creds = Array.isArray(registerRecord.credentialsJson) ? [...registerRecord.credentialsJson] : [];
+      let found = false;
       const updatedCreds = creds.map((c: any) => {
         if (
           c.type === payload.documentType ||
@@ -164,6 +165,7 @@ export async function updateLeadDocumentsAction(payload: {
           c.docType === payload.documentType ||
           c.altType === payload.documentType
         ) {
+          found = true;
           return {
             ...c,
             status: payload.status,
@@ -174,6 +176,17 @@ export async function updateLeadDocumentsAction(payload: {
         }
         return c;
       });
+
+      if (!found && payload.status === "REJECTED") {
+        updatedCreds.push({
+          type: payload.documentType,
+          name: payload.documentType,
+          docType: payload.documentType,
+          status: "REJECTED",
+          rejected: true,
+          rejectedAt: new Date().toISOString(),
+        });
+      }
 
       await basePrisma.admissionRegister.update({
         where: { id: registerRecord.id },

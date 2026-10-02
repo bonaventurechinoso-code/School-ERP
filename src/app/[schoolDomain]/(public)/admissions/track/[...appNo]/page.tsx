@@ -129,6 +129,43 @@ export default async function TrackApplicationPage({
     );
   }
 
+  // 4. Resolve linked AdmissionLead for verification logs, rejection remarks, or document metadata
+  let linkedLead: any = null;
+  if (register) {
+    const cleanRef = register.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    const appNoClean = register.applicationNo.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    linkedLead = await basePrisma.admissionLead.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          { id: register.id },
+          ...(cleanRef ? [{ id: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(appNoClean ? [{ id: { contains: appNoClean, mode: "insensitive" as const } }] : []),
+          ...(register.email ? [{ studentEmail: register.email }, { parentEmail: register.email }] : []),
+          ...(register.parentPhone ? [{ parentPhone: register.parentPhone }, { parentContact: register.parentPhone }] : []),
+          { applicantName: `${register.firstName} ${register.lastName}` },
+        ],
+      },
+      include: { notes: { orderBy: { createdAt: "desc" } } },
+    }).catch(() => null);
+  }
+
+  let adminComments: string | null = null;
+  if (linkedLead?.notes && Array.isArray(linkedLead.notes) && linkedLead.notes.length > 0) {
+    adminComments = linkedLead.notes[0]?.content || null;
+  }
+  if (!adminComments && linkedLead?.logs) {
+    try {
+      const logs = typeof linkedLead.logs === "string" ? JSON.parse(linkedLead.logs) : linkedLead.logs;
+      if (Array.isArray(logs)) {
+        const rejectLog = logs.find((l: any) => l.action?.toString().toUpperCase().includes("REJECT") || l.remarks || l.comment);
+        if (rejectLog) {
+          adminComments = rejectLog.remarks || rejectLog.comment || null;
+        }
+      }
+    } catch {}
+  }
+
   const brandColor = "#4f46e5";
 
   return (
@@ -153,6 +190,9 @@ export default async function TrackApplicationPage({
           status: register.status,
           credentialsJson: register.credentialsJson as any,
           createdAt: register.createdAt.toISOString(),
+          documents: linkedLead?.documents as any,
+          adminComments: adminComments || null,
+          verificationLogs: linkedLead?.logs as any,
         }}
       />
     </div>

@@ -45,6 +45,40 @@ export default async function GenericTrackPage({
     where: { id: register.tenantId },
   });
 
+  // Resolve linked AdmissionLead for verification logs, rejection remarks, or document metadata
+  const cleanRef = register.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+  const appNoClean = register.applicationNo.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+  const linkedLead = await basePrisma.admissionLead.findFirst({
+    where: {
+      schoolId: register.tenantId,
+      OR: [
+        { id: register.id },
+        ...(cleanRef ? [{ id: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+        ...(appNoClean ? [{ id: { contains: appNoClean, mode: "insensitive" as const } }] : []),
+        ...(register.email ? [{ studentEmail: register.email }, { parentEmail: register.email }] : []),
+        ...(register.parentPhone ? [{ parentPhone: register.parentPhone }, { parentContact: register.parentPhone }] : []),
+        { applicantName: `${register.firstName} ${register.lastName}` },
+      ],
+    },
+    include: { notes: { orderBy: { createdAt: "desc" } } },
+  }).catch(() => null);
+
+  let adminComments: string | null = null;
+  if (linkedLead?.notes && Array.isArray(linkedLead.notes) && linkedLead.notes.length > 0) {
+    adminComments = linkedLead.notes[0]?.content || null;
+  }
+  if (!adminComments && linkedLead?.logs) {
+    try {
+      const logs = typeof linkedLead.logs === "string" ? JSON.parse(linkedLead.logs) : linkedLead.logs;
+      if (Array.isArray(logs)) {
+        const rejectLog = logs.find((l: any) => l.action?.toString().toUpperCase().includes("REJECT") || l.remarks || l.comment);
+        if (rejectLog) {
+          adminComments = rejectLog.remarks || rejectLog.comment || null;
+        }
+      }
+    } catch {}
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
       <div className="max-w-4xl mx-auto pt-5 px-4 sm:px-6">
@@ -66,6 +100,9 @@ export default async function GenericTrackPage({
           status: register.status,
           credentialsJson: register.credentialsJson as any,
           createdAt: register.createdAt.toISOString(),
+          documents: linkedLead?.documents as any,
+          adminComments: adminComments || null,
+          verificationLogs: linkedLead?.logs as any,
         }}
       />
     </div>
