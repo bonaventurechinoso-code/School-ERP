@@ -16,6 +16,7 @@ import {
   Copy,
   FileCheck,
   Sparkles,
+  Printer,
 } from "lucide-react";
 import { uploadApplicantDocsAction } from "./actions";
 import DocumentViewer from "./components/DocumentViewer";
@@ -322,6 +323,29 @@ export default function TrackApplicationClient({
     return null;
   }, [applicant]);
 
+  // Resolve Entrance Exam schedule if assigned
+  const examSchedule = useMemo(() => {
+    if (applicant.examSchedule) return applicant.examSchedule;
+    if (applicant.documents?.examSchedule) return applicant.documents.examSchedule;
+    if (Array.isArray(applicant.credentialsJson)) {
+      const found = applicant.credentialsJson.find(
+        (c: any) => c.type === "EXAM_SCHEDULE" || c.key === "exam_schedule"
+      );
+      if (found) return found;
+    }
+    return null;
+  }, [applicant]);
+
+  const isInterviewOrExamStage = useMemo(() => {
+    const s = (currentStatus || "").toLowerCase();
+    return (
+      s.includes("interview") ||
+      s.includes("exam") ||
+      Boolean(examSchedule) ||
+      (applicant.documents?.examSchedule !== undefined && applicant.documents?.examSchedule !== null)
+    );
+  }, [currentStatus, examSchedule, applicant.documents]);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-100 flex flex-col justify-between">
       {/* BRAND TOP HEADER */}
@@ -418,6 +442,47 @@ export default function TrackApplicationClient({
                   <strong className="font-bold">Admissions Remarks:</strong> {adminRemarks}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ENTRANCE EXAM ADMIT CARD BANNER */}
+        {isInterviewOrExamStage && (
+          <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-700/50 flex flex-col md:flex-row md:items-center justify-between gap-6 animate-in fade-in">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-400/30">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Screening Examination Scheduled</span>
+                <span>&bull;</span>
+                <span className="font-mono text-amber-300">
+                  {examSchedule?.rollNo || `EXM-${schoolDomain.toUpperCase()}-2026-${(applicant.id || applicant.applicationNo).slice(0, 5).toUpperCase()}`}
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                Entrance Screening Admit Slip Ready
+              </h3>
+              <p className="text-xs sm:text-sm text-indigo-200/90 leading-relaxed max-w-xl">
+                Your examination venue and date have been confirmed:{" "}
+                <strong className="text-white">
+                  {examSchedule?.testDate || "Saturday, 27th September 2026"}
+                </strong>{" "}
+                at{" "}
+                <strong className="text-white">
+                  {examSchedule?.venue || "Main ICT Complex / Hall A"}
+                </strong>.
+              </p>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-3">
+              <a
+                href={`/${schoolDomain}/admissions/admit-slip/${applicant.leadId || applicant.id || applicant.applicationNo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-3 bg-white text-indigo-900 hover:bg-indigo-50 font-black rounded-2xl text-xs sm:text-sm shadow-lg transition flex items-center gap-2 cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-indigo-700" />
+                <span>View &amp; Print Admit Slip</span>
+              </a>
             </div>
           </div>
         )}

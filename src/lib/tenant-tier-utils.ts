@@ -209,3 +209,23 @@ export function getAdmissionNumberSearchVariants(input: string): string[] {
 
   return Array.from(set);
 }
+
+/**
+ * Dynamically resolves the entrance examination test subjects based on academic tier / grade
+ */
+export function getExamSubjectsForTier(tierName?: string, targetGrade?: string): string[] {
+  const t = (tierName || "").toUpperCase().trim();
+  const g = (targetGrade || "").toUpperCase().trim();
+
+  if (t.includes("DAYCARE") || t.includes("CRECHE") || t.includes("CRÈCHE") || g.includes("DAYCARE") || g.includes("PLAYGROUP") || g.includes("PRE-NURSERY")) {
+    return ["Literacy & Phonics", "Numeracy Skills", "Social & Motor Skills"];
+  }
+  if (t.includes("NURSERY") || g.includes("NURSERY")) {
+    return ["Mathematics", "English Language", "General Paper"];
+  }
+  if (t.includes("SECONDARY") || t.includes("HIGH") || g.includes("JSS") || g.includes("SSS") || g.includes("SECONDARY") || g.includes("SS 1") || g.includes("SS 2") || g.includes("SS 3")) {
+    return ["Mathematics", "English Language", "General Paper", "Current Affairs"];
+  }
+  // Default Primary / Elementary
+  return ["Mathematics", "English Language", "General Paper", "Verbal Reasoning"];
+}

@@ -2137,6 +2137,205 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
   }
 }
 
+export interface ExamAdmitSlipEmailPayload {
+  schoolId: string;
+  applicantName: string;
+  parentName?: string;
+  applicationNo?: string;
+  targetGrade?: string;
+  tierName?: string;
+  recipientEmail: string;
+  rollNo: string;
+  examDate?: string;
+  arrivalTime?: string;
+  venue?: string;
+  subjects?: string | string[];
+  admitSlipUrl?: string;
+  schoolName?: string;
+  subdomain?: string;
+}
+
+/**
+ * Sends responsive email notifying applicant and parents of their Entrance Screening & Examination Admit Slip.
+ * Dispatches via centralized Resend email service with complete schedule, venue details, and direct print link.
+ */
+export async function sendExamAdmitSlipEmail(payload: ExamAdmitSlipEmailPayload) {
+  try {
+    const {
+      schoolId,
+      applicantName,
+      parentName = "Parent / Guardian",
+      applicationNo,
+      targetGrade = "Selected Grade",
+      tierName = "General",
+      recipientEmail,
+      rollNo,
+      examDate = "Saturday, 27th September 2026",
+      arrivalTime = "08:30 AM Prompt",
+      venue = "Main ICT Complex / Hall A",
+      subjects = "Maths, English, General Paper",
+      admitSlipUrl: propAdmitSlipUrl,
+      schoolName: propSchoolName,
+      subdomain: propSubdomain,
+    } = payload;
+
+    const school = await basePrisma.school.findFirst({
+      where: { OR: [{ id: schoolId }, { subdomain: schoolId }] },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
+    }).catch(() => null);
+
+    const tenantName = school?.name || propSchoolName || "School ERP";
+    const sub = school?.subdomain || propSubdomain || "portal";
+    const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
+    const secondaryColor = "#4338ca";
+
+    const subjectsString = Array.isArray(subjects) ? subjects.join(", ") : subjects;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const admitSlipUrl = propAdmitSlipUrl || `${baseUrl}/${sub}/admissions/admit-slip/${encodeURIComponent(applicationNo || rollNo)}`;
+
+    const subject = `Entrance Examination Admit Slip (Roll No: ${rollNo}) - ${tenantName}`;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 15px; color: #1e293b; }
+    .wrapper { max-width: 620px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, ${brandColor} 0%, ${secondaryColor} 100%); padding: 36px 32px; text-align: center; color: #ffffff; }
+    .badge { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.35); padding: 5px 14px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 800; }
+    .body { padding: 32px; }
+    .roll-box { background: #0f172a; color: #ffffff; padding: 14px 20px; border-radius: 12px; text-align: center; margin: 20px 0; }
+    .roll-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; }
+    .roll-value { font-size: 20px; font-weight: 900; font-family: monospace; letter-spacing: 1.5px; color: #38bdf8; margin-top: 4px; }
+    .schedule-card { background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 14px; padding: 22px; margin: 24px 0; border-left: 5px solid #4f46e5; }
+    .schedule-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #334155; margin-bottom: 14px; }
+    .schedule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .schedule-item { padding: 4px 0; }
+    .schedule-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 3px; }
+    .schedule-val { font-size: 14px; font-weight: 700; color: #0f172a; }
+    .btn-container { text-align: center; margin: 32px 0 20px 0; }
+    .btn { display: inline-block; font-size: 15px; font-weight: 700; padding: 14px 36px; text-decoration: none; border-radius: 10px; background-color: #4f46e5; color: #ffffff; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4); }
+    .instructions-box { background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px 20px; margin: 24px 0; font-size: 13px; color: #92400e; line-height: 1.5; }
+    .footer { padding: 24px 32px; background-color: #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="badge">Entrance Examination Admit Card</div>
+      <h1>${tenantName}</h1>
+      <p style="margin: 0; opacity: 0.9; font-size: 14px;">Admissions &amp; Academic Board</p>
+    </div>
+    <div class="body">
+      <h2 style="font-size: 18px; font-weight: 700; margin-top: 0; color: #0f172a;">Dear ${parentName || applicantName},</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+        Your entrance screening examination for candidate <strong>${applicantName}</strong> has been officially scheduled. Please review your screening schedule, assigned examination hall, and roll number below:
+      </p>
+
+      <div class="roll-box">
+        <div class="roll-label">Official Examination Roll Number</div>
+        <div class="roll-value">${rollNo}</div>
+      </div>
+
+      <div class="schedule-card">
+        <div class="schedule-title">Screening Schedule &amp; Venue Details</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <td style="padding: 6px 0; width: 45%; vertical-align: top;">
+              <span class="schedule-label">Candidate Name</span>
+              <strong class="schedule-val">${applicantName}</strong>
+            </td>
+            <td style="padding: 6px 0; width: 55%; vertical-align: top;">
+              <span class="schedule-label">Target Cohort / Tier</span>
+              <strong class="schedule-val">${targetGrade} (${tierName})</strong>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0 6px 0; vertical-align: top;">
+              <span class="schedule-label">Test Date</span>
+              <strong class="schedule-val">${examDate}</strong>
+            </td>
+            <td style="padding: 10px 0 6px 0; vertical-align: top;">
+              <span class="schedule-label">Arrival &amp; Accreditation</span>
+              <strong class="schedule-val">${arrivalTime}</strong>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0 6px 0; vertical-align: top;">
+              <span class="schedule-label">Examination Hall</span>
+              <strong class="schedule-val">${venue}</strong>
+            </td>
+            <td style="padding: 10px 0 6px 0; vertical-align: top;">
+              <span class="schedule-label">Tested Subjects</span>
+              <strong class="schedule-val">${subjectsString}</strong>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="btn-container">
+        <a href="${admitSlipUrl}" class="btn" target="_blank" rel="noopener noreferrer">
+          View &amp; Print Exam Admit Slip &rarr;
+        </a>
+      </div>
+
+      <div class="instructions-box">
+        <strong>Important Examination Instructions:</strong>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+          <li>Candidates must arrive with a printed copy of this official Examination Admit Slip.</li>
+          <li>Accreditation begins promptly at ${arrivalTime} at ${venue}.</li>
+          <li>Writing materials (HB Pencils, Erasers, Pens) are required. Calculators and mobile devices are strictly prohibited.</li>
+        </ul>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
+        <strong>Direct Slip Access Link:</strong><br />
+        <a href="${admitSlipUrl}" style="color: #4f46e5; font-weight: 600;">${admitSlipUrl}</a>
+      </div>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} ${tenantName}. All rights reserved.<br>
+      Admissions &amp; Academic Board &bull; Contact: ${school?.contactPhone || "+234 (0) 800-SCHOOL-ERP"}
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    let dispatchResult: any = null;
+    if (recipientEmail && recipientEmail.includes("@")) {
+      dispatchResult = await dispatchEmail({
+        to: recipientEmail,
+        subject,
+        html: emailHtml,
+        schoolId: school?.id || schoolId,
+        recipientType: "PARENT",
+        logCategory: "ADMISSIONS_EXAM_ADMIT_SLIP",
+      });
+      console.log(`[EMAIL_SERVICE] Dispatched exam admit slip email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
+    }
+
+    return {
+      success: true,
+      recipient: recipientEmail,
+      rollNo,
+      tenantName,
+      applicantName,
+      subject,
+      admitSlipUrl,
+      dispatchResult,
+    };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Failed to send exam admit slip email:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 
 
 

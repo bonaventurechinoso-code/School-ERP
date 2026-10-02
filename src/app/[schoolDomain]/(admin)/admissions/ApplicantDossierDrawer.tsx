@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useMemo, useTransition } from "react";
 import {
   X,
   Phone,
@@ -24,13 +24,20 @@ import {
   Save,
   Maximize2,
   Minimize2,
+  Calendar,
+  MapPin,
+  Send,
+  Calculator,
+  Loader2,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
   updateLeadDocumentsAction,
   updateLeadScreeningAction,
   enrollApplicantAction,
+  scheduleAndDispatchExamAdmitSlipAction,
 } from "./actions";
+import { getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 
 export interface ApplicantDossierDrawerProps {
   lead: any | null;
@@ -98,9 +105,15 @@ export default function ApplicantDossierDrawer({
 
   // Screening form state
   const [examScore, setExamScore] = useState<string>("");
+  const [subjectScores, setSubjectScores] = useState<Record<string, string>>({});
+  const [isDispatchingSlip, setIsDispatchingSlip] = useState(false);
   const [interviewRating, setInterviewRating] = useState<number>(4);
   const [recommendation, setRecommendation] = useState<string>("RECOMMENDED");
   const [screeningNotes, setScreeningNotes] = useState<string>("");
+
+  const examSubjects = useMemo(() => {
+    return getExamSubjectsForTier(lead?.tier?.name, lead?.targetGrade);
+  }, [lead?.tier?.name, lead?.targetGrade]);
 
   useEffect(() => {
     if (lead && isOpen) {
@@ -110,11 +123,30 @@ export default function ApplicantDossierDrawer({
       // Extract existing screening logs if available
       const logs = Array.isArray(lead.logs) ? lead.logs : [];
       const screeningLog = logs.slice().reverse().find((l: any) => l.action === "SCREENING_EVALUATED");
+      const docs = lead.documents || {};
+      const savedSubjectScores: Record<string, string> = {};
+
+      if (docs.examScores && typeof docs.examScores === "object") {
+        Object.entries(docs.examScores).forEach(([k, v]) => {
+          savedSubjectScores[k] = v !== undefined && v !== null ? String(v) : "";
+        });
+      } else if (screeningLog?.subjectScores && typeof screeningLog.subjectScores === "object") {
+        Object.entries(screeningLog.subjectScores).forEach(([k, v]) => {
+          savedSubjectScores[k] = v !== undefined && v !== null ? String(v) : "";
+        });
+      }
+      setSubjectScores(savedSubjectScores);
+
       if (screeningLog) {
         setExamScore(screeningLog.examScore !== undefined ? String(screeningLog.examScore) : "");
         setInterviewRating(screeningLog.interviewRating || 4);
         setRecommendation(screeningLog.recommendation || "RECOMMENDED");
         setScreeningNotes(screeningLog.notes || "");
+      } else if (docs.examAggregate !== undefined) {
+        setExamScore(String(docs.examAggregate));
+        setInterviewRating(4);
+        setRecommendation("RECOMMENDED");
+        setScreeningNotes("");
       } else {
         setExamScore("78");
         setInterviewRating(4);
@@ -197,10 +229,76 @@ export default function ApplicantDossierDrawer({
   const handleVerify = (id: string) => () => handleSetDocumentStatus(id, "VERIFIED");
   const handleReject = (id: string) => () => handleSetDocumentStatus(id, "REJECTED");
 
+  const handleSubjectScoreChange = (subject: string, val: string) => {
+    if (val !== "" && isNaN(Number(val))) return;
+    const num = Number(val);
+    if (val !== "" && (num < 0 || num > 100)) return;
+
+    const updated = { ...subjectScores, [subject]: val };
+    setSubjectScores(updated);
+
+    const enteredValues = Object.values(updated)
+      .map((v) => (v !== "" && !isNaN(Number(v)) ? Number(v) : null))
+      .filter((v): v is number => v !== null);
+
+    if (enteredValues.length > 0) {
+      const sum = enteredValues.reduce((acc, curr) => acc + curr, 0);
+      const avg = Math.round(sum / enteredValues.length);
+      setExamScore(String(avg));
+    }
+  };
+
+  const handleRecalculateAverage = () => {
+    const enteredValues = Object.values(subjectScores)
+      .map((v) => (v !== "" && !isNaN(Number(v)) ? Number(v) : null))
+      .filter((v): v is number => v !== null);
+
+    if (enteredValues.length > 0) {
+      const sum = enteredValues.reduce((acc, curr) => acc + curr, 0);
+      const avg = Math.round(sum / enteredValues.length);
+      setExamScore(String(avg));
+    }
+  };
+
+  const handleDispatchAdmitSlip = async () => {
+    if (!lead) return;
+    setIsDispatchingSlip(true);
+    setAlertMsg(null);
+    try {
+      const res = await scheduleAndDispatchExamAdmitSlipAction({
+        leadId: lead.id,
+        schoolId,
+        schoolDomain,
+      });
+      if (res.success) {
+        setAlertMsg({
+          type: "success",
+          text: res.emailSent
+            ? `Admit Slip & screening schedule dispatched to ${res.recipient} via Resend!`
+            : `Admit Slip generated (Roll No: ${res.examSchedule?.rollNo}). Note: No recipient email on file.`,
+        });
+        if (onLeadUpdated) onLeadUpdated();
+      } else {
+        setAlertMsg({ type: "error", text: res.error || "Failed to dispatch Admit Slip." });
+      }
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: err.message || "Failed to dispatch Admit Slip." });
+    } finally {
+      setIsDispatchingSlip(false);
+    }
+  };
+
   const handleSaveScreening = (e: React.FormEvent) => {
     e.preventDefault();
     setAlertMsg(null);
     const scoreNum = examScore ? parseFloat(examScore) : undefined;
+
+    const cleanSubjectScores: Record<string, number> = {};
+    Object.entries(subjectScores).forEach(([k, v]) => {
+      if (v !== "" && !isNaN(Number(v))) {
+        cleanSubjectScores[k] = Number(v);
+      }
+    });
 
     startTransition(async () => {
       const res = await updateLeadScreeningAction({
@@ -208,12 +306,13 @@ export default function ApplicantDossierDrawer({
         schoolId,
         schoolDomain,
         examScore: scoreNum,
+        subjectScores: cleanSubjectScores,
         interviewRating,
         recommendation,
         notes: screeningNotes,
       });
       if (res.success) {
-        setAlertMsg({ type: "success", text: "Screening assessment recorded successfully." });
+        setAlertMsg({ type: "success", text: "Screening assessment & subject score breakdown recorded successfully." });
         if (onLeadUpdated) onLeadUpdated();
       } else {
         setAlertMsg({ type: "error", text: res.error || "Failed to save assessment." });
@@ -732,92 +831,273 @@ export default function ApplicantDossierDrawer({
           })()}
 
           {/* TAB 3: SCREENING, EXAM & INTERVIEW */}
-          {activeTab === "screening" && (
-            <form onSubmit={handleSaveScreening} className="space-y-6">
-              <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                <h4 className="text-sm font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-3">
-                  Entrance Examination &amp; Interview Evaluation
-                </h4>
+          {activeTab === "screening" && (() => {
+            const examSchedule = lead.documents?.examSchedule || {};
+            const defaultRollNo = `EXM-${(schoolDomain || "portal").toUpperCase()}-2026-${lead.id.substring(0, 5).toUpperCase()}`;
+            const rollNo = examSchedule.rollNo || defaultRollNo;
+            const examDate = examSchedule.testDate || "Saturday, 27th September 2026";
+            const arrivalTime = examSchedule.arrivalTime || "08:30 AM Prompt";
+            const venue = examSchedule.venue || "Main ICT Complex / Hall A";
+            const subjectsText = examSchedule.subjects || examSubjects.join(", ");
+            const dispatchedAt = examSchedule.dispatchedAt;
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm">
-                  <div>
-                    <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
-                      Entrance Exam Aggregate Score (%)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      placeholder="e.g. 84"
-                      value={examScore}
-                      onChange={(e) => setExamScore(e.target.value)}
-                      className="w-full h-12 px-4 bg-white border border-slate-300 rounded-xl text-base md:text-lg font-bold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs"
-                    />
-                  </div>
+            return (
+              <div className="space-y-6">
+                {/* ENTRANCE EXAMINATION SCHEDULE & ADMIT SLIP DISPATCH MODULE */}
+                <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-indigo-800/60 relative overflow-hidden">
+                  <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider bg-indigo-500/25 border border-indigo-400/30 text-indigo-200">
+                          Screening Schedule &amp; Admit Slip
+                        </span>
+                        {dispatchedAt && (
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Emailed via Resend</span>
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-lg md:text-xl font-black tracking-tight text-white">
+                        Entrance Screening Examination Admit Slip
+                      </h3>
+                      <p className="text-xs sm:text-sm text-indigo-200/90 leading-relaxed max-w-xl">
+                        Schedule details and official Examination Roll Number assigned to candidate. Dispatched automatically via Resend with public verification link.
+                      </p>
+                    </div>
 
-                  <div>
-                    <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
-                      Interview Rating (1 to 5 Stars)
-                    </label>
-                    <div className="flex items-center gap-2 py-1.5">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setInterviewRating(star)}
-                          className="p-1.5 hover:scale-110 transition cursor-pointer"
-                        >
-                          <Star className={`w-6 h-6 ${
-                            star <= interviewRating ? "text-amber-400 fill-amber-400" : "text-slate-300"
-                          }`} />
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleDispatchAdmitSlip}
+                        disabled={isDispatchingSlip}
+                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
+                      >
+                        {isDispatchingSlip ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                        <span>{isDispatchingSlip ? "Dispatching..." : dispatchedAt ? "Re-dispatch Slip (Resend)" : "Dispatch Admit Slip (Resend)"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onPrintExamSlip) {
+                            onPrintExamSlip(lead);
+                          } else {
+                            window.open(`/${schoolDomain}/admissions/admit-slip/${lead.id}`, "_blank");
+                          }
+                        }}
+                        className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs sm:text-sm border border-white/20 transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Print Admit Slip</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
-                      Admissions Committee Recommendation
-                    </label>
-                    <select
-                      value={recommendation}
-                      onChange={(e) => setRecommendation(e.target.value)}
-                      className="w-full border border-slate-300 rounded-xl p-3 text-sm sm:text-base font-bold bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs cursor-pointer"
-                    >
-                      <option value="RECOMMENDED">Recommended for Immediate Placement</option>
-                      <option value="CONDITIONAL">Conditional Placement (Supplementary Remediation)</option>
-                      <option value="WAITLISTED">Waitlisted (Cohort at Capacity)</option>
-                      <option value="UNSUCCESSFUL">Unsuccessful Candidate</option>
-                    </select>
-                  </div>
+                  {/* SCHEDULE METRICS GRID */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-5 pt-5 border-t border-indigo-800/50">
+                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300/80 block">
+                        Roll Number
+                      </span>
+                      <span className="text-sm font-mono font-black text-amber-300 mt-0.5 block truncate">
+                        {rollNo}
+                      </span>
+                    </div>
 
-                  <div className="sm:col-span-2">
-                    <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
-                      Screening / Examiner Observations
-                    </label>
-                    <textarea
-                      rows={4}
-                      placeholder="Candidate demonstrated exceptional grasp of basic numeracy and verbal reasoning..."
-                      value={screeningNotes}
-                      onChange={(e) => setScreeningNotes(e.target.value)}
-                      className="w-full min-h-[140px] p-4 bg-white border border-slate-300 rounded-xl text-base font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs leading-relaxed"
-                    />
+                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300/80 block">
+                        Exam Date &amp; Arrival
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-white mt-0.5 block truncate">
+                        {examDate} &bull; {arrivalTime}
+                      </span>
+                    </div>
+
+                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300/80 block">
+                        Venue &amp; Hall
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-white mt-0.5 block truncate">
+                        {venue}
+                      </span>
+                    </div>
+
+                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300/80 block">
+                        Screening Subjects
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-white mt-0.5 block truncate">
+                        {subjectsText}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100">
-                  <button
-                    type="submit"
-                    disabled={isPending}
-                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>{isPending ? "Saving..." : "Save Assessment"}</span>
-                  </button>
-                </div>
+                {/* EVALUATION FORM WITH SUBJECT BREAKDOWN & AGGREGATE */}
+                <form onSubmit={handleSaveScreening} className="space-y-6">
+                  <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                    <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">
+                          Entrance Examination &amp; Interview Evaluation
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Input examiner subject scores. The entrance aggregate is automatically computed.
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 self-start sm:self-auto">
+                        Tier: {lead.tier?.name || "Standard Academic Tier"}
+                      </span>
+                    </div>
+
+                    {/* 1. SUBJECT-BY-SUBJECT SCORE BREAKDOWN SHEET */}
+                    <div className="space-y-3 bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                          <Calculator className="w-4 h-4 text-indigo-600" />
+                          <span>Examiner Subject Score Breakdown Sheet</span>
+                        </label>
+                        <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                          Graded per Subject (0 - 100%)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">
+                        {examSubjects.map((subject) => {
+                          const scoreVal = subjectScores[subject] ?? "";
+                          return (
+                            <div
+                              key={subject}
+                              className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-300 transition"
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-xs font-bold text-slate-800 truncate" title={subject}>
+                                  {subject}
+                                </span>
+                                <span className="text-[10px] font-mono font-semibold text-slate-400">/ 100</span>
+                              </div>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                placeholder="0 - 100"
+                                value={scoreVal}
+                                onChange={(e) => handleSubjectScoreChange(subject, e.target.value)}
+                                className="w-full h-10 px-3 bg-slate-50/60 border border-slate-300 rounded-lg text-sm font-black text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 2. AGGREGATE SCORE & INTERVIEW RATING */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm sm:text-base font-bold text-slate-800">
+                            Entrance Exam Aggregate Score (%)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleRecalculateAverage}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                          >
+                            Recalculate Average
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            placeholder="e.g. 84"
+                            value={examScore}
+                            onChange={(e) => setExamScore(e.target.value)}
+                            className="w-full h-12 px-4 bg-white border border-slate-300 rounded-xl text-base md:text-lg font-bold text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs"
+                          />
+                          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                            %
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Automatically calculated from individual subject marks above. Can be fine-tuned manually.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
+                          Interview Rating (1 to 5 Stars)
+                        </label>
+                        <div className="flex items-center gap-2 py-1.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setInterviewRating(star)}
+                              className="p-1.5 hover:scale-110 transition cursor-pointer"
+                            >
+                              <Star className={`w-6 h-6 ${
+                                star <= interviewRating ? "text-amber-400 fill-amber-400" : "text-slate-300"
+                              }`} />
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Oral screening, comprehension, and behavioral assessment score.
+                        </p>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
+                          Admissions Committee Recommendation
+                        </label>
+                        <select
+                          value={recommendation}
+                          onChange={(e) => setRecommendation(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl p-3 text-sm sm:text-base font-bold bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs cursor-pointer"
+                        >
+                          <option value="RECOMMENDED">Recommended for Immediate Placement</option>
+                          <option value="CONDITIONAL">Conditional Placement (Supplementary Remediation)</option>
+                          <option value="WAITLISTED">Waitlisted (Cohort at Capacity)</option>
+                          <option value="UNSUCCESSFUL">Unsuccessful Candidate</option>
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-sm sm:text-base font-bold text-slate-800 mb-2 block">
+                          Screening / Examiner Observations
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Candidate demonstrated exceptional grasp of basic numeracy and verbal reasoning..."
+                          value={screeningNotes}
+                          onChange={(e) => setScreeningNotes(e.target.value)}
+                          className="w-full min-h-[140px] p-4 bg-white border border-slate-300 rounded-xl text-base font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none shadow-xs leading-relaxed"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t border-slate-100">
+                      <button
+                        type="submit"
+                        disabled={isPending}
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{isPending ? "Saving..." : "Save Assessment"}</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
               </div>
-            </form>
-          )}
+            );
+          })()}
 
           {/* TAB 4: OFFER LETTER & MATRICULATION */}
           {activeTab === "offer" && (

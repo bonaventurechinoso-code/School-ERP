@@ -2,9 +2,14 @@
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
-import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail, sendDocsRequestEmail } from "@/lib/email-service";
+import {
+  sendAdmissionOfferEmail,
+  sendStudentEnrollmentConfirmationEmail,
+  sendDocsRequestEmail,
+  sendExamAdmitSlipEmail,
+} from "@/lib/email-service";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
-import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
+import { generateAdmissionNumber, getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword } from "@/lib/security-service";
@@ -251,13 +256,14 @@ export async function updateLeadDocumentsAction(payload: {
 }
 
 /**
- * Record Entrance Examination and Interview Assessment Results
+ * Record Entrance Examination and Interview Assessment Results with Subject Breakdown
  */
 export async function updateLeadScreeningAction(payload: {
   leadId: string;
   schoolId: string;
   schoolDomain?: string;
   examScore?: number;
+  subjectScores?: Record<string, number | string>;
   interviewRating?: number;
   recommendation?: string;
   notes?: string;
@@ -269,11 +275,20 @@ export async function updateLeadScreeningAction(payload: {
     });
     if (!lead) return { success: false, error: "Applicant lead not found." };
 
+    const docs = (lead.documents as any) || {};
+    if (payload.subjectScores) {
+      docs.examScores = payload.subjectScores;
+    }
+    if (payload.examScore !== undefined) {
+      docs.examAggregate = payload.examScore;
+    }
+
     const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
     logs.push({
       timestamp: new Date().toISOString(),
       action: "SCREENING_EVALUATED",
       examScore: payload.examScore ?? null,
+      subjectScores: payload.subjectScores ?? null,
       interviewRating: payload.interviewRating ?? null,
       recommendation: payload.recommendation ?? "RECOMMENDED",
       notes: payload.notes || "",
@@ -281,7 +296,10 @@ export async function updateLeadScreeningAction(payload: {
 
     const updated = await basePrisma.admissionLead.update({
       where: { id: payload.leadId },
-      data: { logs },
+      data: {
+        documents: docs,
+        logs,
+      },
       include: { tier: true },
     });
 
@@ -291,6 +309,168 @@ export async function updateLeadScreeningAction(payload: {
   } catch (error: any) {
     console.error("[updateLeadScreeningAction] Error:", error);
     return { success: false, error: error.message || "Failed to update screening data." };
+  }
+}
+
+/**
+ * Assign Entrance Examination Schedule and automatically dispatch Admit Slip via Resend
+ */
+export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
+  leadId: string;
+  schoolId: string;
+  schoolDomain?: string;
+  examDate?: string;
+  arrivalTime?: string;
+  venue?: string;
+  subjects?: string;
+  recipientEmail?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { id: payload.leadId },
+      include: { tier: true, school: true },
+    });
+    if (!lead) return { success: false, error: "Applicant lead not found." };
+
+    const school = lead.school || (await basePrisma.school.findUnique({ where: { id: schoolId } }));
+    const sub = payload.schoolDomain || school?.subdomain || "portal";
+    const rollNo = `EXM-${sub.toUpperCase()}-2026-${lead.id.substring(0, 5).toUpperCase()}`;
+    const examDate = payload.examDate || "Saturday, 27th September 2026";
+    const arrivalTime = payload.arrivalTime || "08:30 AM Prompt";
+    const venue = payload.venue || "Main ICT Complex / Hall A";
+    const subjects = payload.subjects || getExamSubjectsForTier(lead.tier?.name, lead.targetGrade).join(", ");
+
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const admitSlipUrl = `${baseUrl}/${sub}/admissions/admit-slip/${lead.id}`;
+
+    const examSchedule = {
+      rollNo,
+      testDate: examDate,
+      arrivalTime,
+      venue,
+      subjects,
+      admitSlipUrl,
+      dispatchedAt: new Date().toISOString(),
+    };
+
+    const docs = (lead.documents as any) || {};
+    docs.examSchedule = examSchedule;
+
+    const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
+    logs.push({
+      timestamp: new Date().toISOString(),
+      action: "EXAM_ADMIT_SLIP_DISPATCHED",
+      rollNo,
+      testDate: examDate,
+      venue,
+      dispatchedTo: payload.recipientEmail || lead.studentEmail || lead.parentEmail || lead.parentContact,
+    });
+
+    const updated = await basePrisma.admissionLead.update({
+      where: { id: payload.leadId },
+      data: {
+        documents: docs,
+        logs,
+      },
+      include: { tier: true },
+    });
+
+    // Also sync to admissionRegister if present
+    const cleanRef = lead.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    const nameParts = (lead.applicantName || "").trim().split(" ");
+    const firstName = nameParts[0] || "Student";
+    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        tenantId: schoolId,
+        OR: [
+          { id: lead.id },
+          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+          ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
+          ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+          { firstName, lastName },
+        ],
+      },
+    });
+
+    if (registerRecord) {
+      const creds = Array.isArray(registerRecord.credentialsJson) ? [...registerRecord.credentialsJson] : [];
+      const existingExamIndex = creds.findIndex((c: any) => c.type === "EXAM_SCHEDULE" || c.key === "exam_schedule");
+      const examEntry = {
+        type: "EXAM_SCHEDULE",
+        rollNo,
+        testDate: examDate,
+        venue,
+        admitSlipUrl,
+        dispatchedAt: new Date().toISOString(),
+      };
+      if (existingExamIndex >= 0) {
+        creds[existingExamIndex] = { ...(creds[existingExamIndex] as any), ...examEntry };
+      } else {
+        creds.push(examEntry);
+      }
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: { credentialsJson: creds as any },
+      });
+    }
+
+    // Resolve recipient email address
+    const recipientEmail = (
+      payload.recipientEmail ||
+      lead.studentEmail ||
+      lead.parentEmail ||
+      registerRecord?.email ||
+      (lead.parentContact?.includes("@") ? lead.parentContact : null) ||
+      ""
+    ).trim();
+
+    let emailSent = false;
+    let dispatchResult: any = null;
+
+    if (recipientEmail && recipientEmail.includes("@")) {
+      try {
+        const mailRes = await sendExamAdmitSlipEmail({
+          schoolId,
+          applicantName: lead.applicantName,
+          parentName: lead.parentName || "Parent / Guardian",
+          applicationNo: `ADM-${lead.id.slice(0, 6).toUpperCase()}`,
+          targetGrade: lead.targetGrade,
+          tierName: lead.tier?.name || "General",
+          recipientEmail,
+          rollNo,
+          examDate,
+          arrivalTime,
+          venue,
+          subjects,
+          admitSlipUrl,
+          schoolName: school?.name || "School ERP",
+          subdomain: sub,
+        });
+        emailSent = Boolean(mailRes?.success);
+        dispatchResult = mailRes;
+      } catch (err: any) {
+        console.error("[scheduleAndDispatchExamAdmitSlipAction] Email dispatch failed:", err);
+      }
+    }
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${sub}/admissions`);
+    safeRevalidate(`/${sub}/admissions/track`);
+    return {
+      success: true,
+      lead: updated,
+      examSchedule,
+      emailSent,
+      recipient: recipientEmail,
+      dispatchResult,
+    };
+  } catch (error: any) {
+    console.error("[scheduleAndDispatchExamAdmitSlipAction] Error:", error);
+    return { success: false, error: error.message || "Failed to schedule exam and dispatch admit slip." };
   }
 }
 
@@ -596,6 +776,21 @@ export async function updateLeadStatusAction(payload: {
         where: { id: leadId },
         data: { status },
       });
+
+      if (status === "INTERVIEW") {
+        try {
+          const slipRes = await scheduleAndDispatchExamAdmitSlipAction({
+            leadId,
+            schoolId,
+            schoolDomain,
+          });
+          if (slipRes?.lead) {
+            updatedLead = slipRes.lead;
+          }
+        } catch (slipErr) {
+          console.warn("[updateLeadStatusAction] Failed to auto-dispatch exam admit slip:", slipErr);
+        }
+      }
 
       if (status === "INQUIRY") {
         const school = await basePrisma.school.findUnique({ where: { id: schoolId } });

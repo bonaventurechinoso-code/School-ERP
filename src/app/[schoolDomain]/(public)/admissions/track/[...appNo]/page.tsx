@@ -191,6 +191,7 @@ export default async function TrackApplicationPage({
           credentialsJson: register.credentialsJson as any,
           createdAt: register.createdAt.toISOString(),
           documents: linkedLead?.documents as any,
+          leadId: linkedLead?.id || register.id,
           adminComments: adminComments || null,
           verificationLogs: linkedLead?.logs as any,
         }}
