@@ -124,6 +124,7 @@ export async function updateLeadDocumentsAction(payload: {
     docs[payload.documentType] = {
       status: payload.status,
       verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
+      rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
     };
 
     const updated = await basePrisma.admissionLead.update({
@@ -134,8 +135,101 @@ export async function updateLeadDocumentsAction(payload: {
       include: { tier: true },
     });
 
+    // 2. Sync to AdmissionRegister so applicant's tracking dashboard reflects REJECTED in real-time
+    const cleanRef = lead.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    const nameParts = (lead.applicantName || "").trim().split(" ");
+    const firstName = nameParts[0] || "Student";
+    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+    let registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        tenantId: schoolId,
+        OR: [
+          { id: lead.id },
+          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+          ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
+          ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+          { firstName, lastName },
+        ],
+      },
+    });
+
+    if (registerRecord) {
+      const creds = Array.isArray(registerRecord.credentialsJson) ? [...registerRecord.credentialsJson] : [];
+      const updatedCreds = creds.map((c: any) => {
+        if (
+          c.type === payload.documentType ||
+          c.key === payload.documentType ||
+          c.docType === payload.documentType ||
+          c.altType === payload.documentType
+        ) {
+          return {
+            ...c,
+            status: payload.status,
+            verified: payload.status === "VERIFIED",
+            rejected: payload.status === "REJECTED",
+            rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : c.rejectedAt,
+          };
+        }
+        return c;
+      });
+
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          ...(payload.status === "REJECTED" ? { status: "rejected" } : {}),
+          credentialsJson: updatedCreds as any,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // 3. Dispatch rejection email via Resend if rejected
+    if (payload.status === "REJECTED") {
+      const recipientEmail = (
+        lead.studentEmail ||
+        lead.parentEmail ||
+        registerRecord?.email ||
+        (lead.parentContact?.includes("@") ? lead.parentContact : null) ||
+        ""
+      ).trim();
+
+      if (recipientEmail && recipientEmail.includes("@")) {
+        try {
+          const appNo = registerRecord?.applicationNo || `APP-${lead.id.slice(0, 6).toUpperCase()}`;
+          const sub = payload.schoolDomain || "portal";
+          const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+          const uploadUrl = (lead as any).uploadToken
+            ? `${baseUrl}/${sub}/admissions/upload/${lead.id}?token=${(lead as any).uploadToken}`
+            : `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
+          const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
+
+          const { sendDocumentRejectedEmail } = await import("@/lib/email-service");
+          await sendDocumentRejectedEmail({
+            schoolId,
+            applicantName: lead.applicantName,
+            parentName: lead.parentName || "Parent / Guardian",
+            applicationNo: appNo,
+            targetGrade: lead.targetGrade || "Selected Grade",
+            recipientEmail,
+            documentType: payload.documentType,
+            uploadUrl,
+            trackUrl,
+            subdomain: sub,
+          });
+        } catch (emailErr) {
+          console.error("[updateLeadDocumentsAction] Rejection email dispatch error:", emailErr);
+        }
+      }
+    }
+
     await invalidateAdmissionsNamespace(schoolId);
     safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+    safeRevalidate(`/${payload.schoolDomain || ""}/admissions/track`);
+    if (registerRecord) {
+      safeRevalidate(`/${payload.schoolDomain || ""}/admissions/track/${registerRecord.applicationNo}`);
+    }
     return { success: true, lead: updated };
   } catch (error: any) {
     console.error("[updateLeadDocumentsAction] Error:", error);

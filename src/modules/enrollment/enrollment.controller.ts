@@ -315,9 +315,13 @@ export async function admitApplicant({
 export async function rejectApplicant({
   id,
   tenantId,
+  reason,
+  documentType,
 }: {
   id: string;
   tenantId: string;
+  reason?: string;
+  documentType?: string;
 }) {
   const applicant = await getApplicationById({ id, tenantId });
   if (!applicant) {
@@ -328,8 +332,58 @@ export async function rejectApplicant({
     where: { id: applicant.id },
     data: {
       status: "rejected",
+      updatedAt: new Date(),
     },
   });
+
+  // 1. Sync status to linked AdmissionLead (if exists)
+  try {
+    const lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        schoolId: tenantId,
+        OR: [
+          { id: applicant.id },
+          ...(applicant.email ? [{ studentEmail: applicant.email }, { parentEmail: applicant.email }] : []),
+          ...(applicant.parentPhone ? [{ parentPhone: applicant.parentPhone }, { parentContact: applicant.parentPhone }] : []),
+        ],
+      },
+    });
+
+    if (lead) {
+      const docs = (lead.documents as any) || {};
+      if (documentType) {
+        docs[documentType] = { status: "REJECTED", rejectedAt: new Date().toISOString() };
+      }
+      await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          status: "REJECTED",
+          documents: docs,
+        },
+      });
+    }
+  } catch (leadSyncErr) {
+    console.warn("[rejectApplicant] Warning syncing to admissionLead:", leadSyncErr);
+  }
+
+  // 2. Dispatch rejection notification email via Resend
+  const recipientEmail = applicant.email;
+  if (recipientEmail && recipientEmail.includes("@")) {
+    try {
+      const { sendDocumentRejectedEmail } = await import("@/lib/email-service");
+      await sendDocumentRejectedEmail({
+        schoolId: tenantId,
+        applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
+        applicationNo: applicant.applicationNo,
+        targetGrade: applicant.classApplied,
+        recipientEmail,
+        documentType: documentType || "Application Credential",
+        feedback: reason,
+      });
+    } catch (mailErr) {
+      console.error("[rejectApplicant] Failed to dispatch rejection email via Resend:", mailErr);
+    }
+  }
 
   return updated;
 }
@@ -342,11 +396,15 @@ export async function updateApplicantStatus({
   tenantId,
   status,
   verifiedBy,
+  reason,
+  documentType,
 }: {
   id: string;
   tenantId: string;
   status: string;
   verifiedBy?: string;
+  reason?: string;
+  documentType?: string;
 }) {
   const applicant = await getApplicationById({ id, tenantId });
   if (!applicant) {
@@ -363,6 +421,51 @@ export async function updateApplicantStatus({
     where: { id: applicant.id },
     data,
   });
+
+  // If status is rejected, sync to admissionLead and dispatch Resend email
+  if (status.toLowerCase() === "rejected") {
+    try {
+      const lead = await basePrisma.admissionLead.findFirst({
+        where: {
+          schoolId: tenantId,
+          OR: [
+            { id: applicant.id },
+            ...(applicant.email ? [{ studentEmail: applicant.email }, { parentEmail: applicant.email }] : []),
+            ...(applicant.parentPhone ? [{ parentPhone: applicant.parentPhone }, { parentContact: applicant.parentPhone }] : []),
+          ],
+        },
+      });
+
+      if (lead) {
+        const docs = (lead.documents as any) || {};
+        if (documentType) {
+          docs[documentType] = { status: "REJECTED", rejectedAt: new Date().toISOString() };
+        }
+        await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: {
+            status: "REJECTED",
+            documents: docs,
+          },
+        });
+      }
+
+      if (applicant.email && applicant.email.includes("@")) {
+        const { sendDocumentRejectedEmail } = await import("@/lib/email-service");
+        await sendDocumentRejectedEmail({
+          schoolId: tenantId,
+          applicantName: `${applicant.firstName} ${applicant.lastName}`.trim(),
+          applicationNo: applicant.applicationNo,
+          targetGrade: applicant.classApplied,
+          recipientEmail: applicant.email,
+          documentType: documentType || "Application Credentials",
+          feedback: reason,
+        });
+      }
+    } catch (syncErr) {
+      console.warn("[updateApplicantStatus] Rejection sync error:", syncErr);
+    }
+  }
 
   return updated;
 }

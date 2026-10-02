@@ -202,8 +202,12 @@ export default function TrackApplicationClient({
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 text-xs space-y-2 shrink-0 min-w-[260px]">
               <div className="flex justify-between items-center">
                 <span className="text-indigo-200">Current Status:</span>
-                <span className="font-bold text-amber-300 uppercase tracking-wide px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/30">
-                  {currentStatus.replace("_", " ")}
+                <span className={`font-bold uppercase tracking-wide px-2.5 py-1 rounded-md ${
+                  currentStatus.toLowerCase().includes("reject")
+                    ? "bg-rose-500/25 text-rose-300 border border-rose-500/40"
+                    : "text-amber-300 bg-amber-500/20 border border-amber-500/30"
+                }`}>
+                  {currentStatus.toLowerCase().includes("reject") ? "Rejected / Needs Attention" : currentStatus.replace("_", " ")}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -219,6 +223,21 @@ export default function TrackApplicationClient({
             </div>
           </div>
         </div>
+
+        {/* REJECTION ALERT BANNER */}
+        {currentStatus.toLowerCase().includes("reject") && (
+          <div className="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-900 dark:text-rose-100 flex items-start gap-3.5 shadow-xs animate-in fade-in">
+            <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-extrabold text-sm text-rose-900 dark:text-rose-200">
+                Application Update: Document Rejected
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-1 leading-relaxed">
+                One or more of your submitted documents were rejected by the admissions board and require re-uploading. Please review your documents below and submit a clear replacement.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* STATUS STEPPER */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 shadow-xs border border-slate-200/80 dark:border-zinc-800">

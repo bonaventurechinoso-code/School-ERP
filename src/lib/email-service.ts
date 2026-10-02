@@ -794,6 +794,157 @@ export async function sendDocsRequestEmail(payload: DocsRequestEmailPayload) {
   }
 }
 
+export interface DocumentRejectedEmailPayload {
+  schoolId: string;
+  applicantName: string;
+  parentName?: string;
+  applicationNo: string;
+  targetGrade?: string;
+  recipientEmail: string;
+  documentType?: string;
+  feedback?: string;
+  uploadUrl?: string;
+  trackUrl?: string;
+  schoolName?: string;
+  subdomain?: string;
+}
+
+/**
+ * Sends a notification email via Resend to the applicant when an uploaded document
+ * is rejected by an admissions administrator.
+ */
+export async function sendDocumentRejectedEmail(payload: DocumentRejectedEmailPayload) {
+  try {
+    const {
+      schoolId,
+      applicantName,
+      parentName = "Parent / Guardian",
+      applicationNo,
+      targetGrade = "Selected Grade",
+      recipientEmail,
+      documentType = "Credential Document",
+      feedback,
+      uploadUrl,
+      trackUrl,
+      schoolName,
+      subdomain,
+    } = payload;
+
+    const school = await basePrisma.school.findFirst({
+      where: { OR: [{ id: schoolId }, { subdomain: schoolId }] },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
+    }).catch(() => null);
+
+    const tenantName = school?.name || schoolName || "School ERP";
+    const sub = school?.subdomain || subdomain || "portal";
+    const brandColor = (school as any)?.branding?.primaryColor || "#991b1b";
+    const secondaryColor = "#dc2626";
+
+    const subject = `Application Update: Document Rejected (App No: ${applicationNo}) - ${tenantName}`;
+
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const effectiveTrackUrl = trackUrl || `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo)}`;
+    const effectiveUploadUrl = uploadUrl || effectiveTrackUrl;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 30px 15px; color: #1e293b; }
+    .wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, ${brandColor} 0%, ${secondaryColor} 100%); padding: 36px 32px; text-align: center; color: #ffffff; }
+    .badge { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.35); padding: 5px 14px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 800; }
+    .body { padding: 32px; }
+    .alert-banner { background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 18px; margin: 18px 0; color: #991b1b; font-size: 14px; font-weight: 600; }
+    .info-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin: 20px 0; }
+    .info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .btn { display: inline-block; font-size: 14px; font-weight: 700; padding: 14px 32px; text-decoration: none; border-radius: 10px; background-color: #dc2626; color: #ffffff; }
+    .footer { padding: 24px 32px; background-color: #f1f5f9; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="badge">Action Required</div>
+      <h1>${tenantName}</h1>
+      <p style="margin: 0; opacity: 0.9; font-size: 14px;">Admissions &amp; Records Bureau</p>
+    </div>
+    <div class="body">
+      <h2 style="font-size: 18px; font-weight: 700; margin-top: 0; color: #0f172a;">Dear ${parentName || applicantName},</h2>
+      
+      <div class="alert-banner">
+        Application Update: Document Rejected. Please log into your portal to view feedback and re-upload.
+      </div>
+
+      <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+        During the admissions verification review for <strong>${applicantName}</strong>, the submitted file for <strong>${documentType}</strong> was reviewed and could not be accepted.
+      </p>
+
+      ${feedback ? `<div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px 16px; margin: 16px 0; font-size: 13px; color: #92400e;"><strong>Registrar Feedback:</strong> ${feedback}</div>` : ""}
+
+      <div class="info-card">
+        <div class="info-row">
+          <span style="color: #64748b;">Application Number:</span>
+          <strong style="color: #0f172a; font-family: monospace;">${applicationNo}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Applicant Name:</span>
+          <strong style="color: #0f172a;">${applicantName}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Rejected Item:</span>
+          <strong style="color: #dc2626;">${documentType}</strong>
+        </div>
+        <div class="info-row">
+          <span style="color: #64748b;">Current Status:</span>
+          <strong style="color: #dc2626;">REJECTED / NEEDS ATTENTION</strong>
+        </div>
+      </div>
+
+      <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+        Please click below to access your applicant portal and re-upload a clear, valid copy of the required document.
+      </p>
+
+      <div style="text-align: center; margin: 30px 0 20px 0;">
+        <a href="${effectiveUploadUrl}" class="btn" style="color: #ffffff !important;">Log In to Re-Upload Document &rarr;</a>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.6; word-break: break-all;">
+        <strong>Direct Portal Link:</strong><br />
+        <a href="${effectiveUploadUrl}" style="color: #dc2626; font-weight: 600;">${effectiveUploadUrl}</a>
+      </div>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} ${tenantName}. All rights reserved.<br>
+      Admissions &amp; Records Bureau &bull; Contact: ${school?.contactPhone || "+234 (0) 800-SCHOOL-ERP"}
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    const dispatchResult = await dispatchEmail({
+      to: recipientEmail,
+      subject,
+      html: emailHtml,
+      schoolId: school?.id || schoolId,
+      recipientType: "PARENT",
+      logCategory: "ADMISSIONS_DOC_REJECTED",
+    });
+
+    console.log(`[EMAIL_SERVICE] Dispatched document rejection email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
+    return { success: true, dispatchResult };
+  } catch (err: any) {
+    console.error("[EMAIL_SERVICE] Error in sendDocumentRejectedEmail:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 /**
  * Sends admission offer email when an applicant is approved.
  */
