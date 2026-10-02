@@ -401,22 +401,24 @@ export async function enrollApplicantAction(payload: {
     safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
 
     // Dispatch enrollment confirmation email to student / parent
-    sendStudentEnrollmentConfirmationEmail({
-      schoolId: lead.schoolId,
-      studentId: newStudent.id,
-      schoolName: school?.name,
-      subdomain: domain,
-      studentName: `${firstName} ${lastName}`.trim(),
-      admissionNumber,
-      currentClass: lead.targetGrade,
-      tierName: targetTier || lead.tier?.name,
-      studentEmail: lead.studentEmail,
-      parentEmail: lead.parentEmail,
-      parentName: lead.parentName,
-      temporaryPassword: isTemporary ? "Welcome123" : undefined,
-    }).catch((emailErr) => {
+    try {
+      await sendStudentEnrollmentConfirmationEmail({
+        schoolId: lead.schoolId,
+        studentId: newStudent.id,
+        schoolName: school?.name,
+        subdomain: domain,
+        studentName: `${firstName} ${lastName}`.trim(),
+        admissionNumber,
+        currentClass: lead.targetGrade,
+        tierName: targetTier || lead.tier?.name,
+        studentEmail: lead.studentEmail,
+        parentEmail: lead.parentEmail,
+        parentName: lead.parentName,
+        temporaryPassword: isTemporary ? "Welcome123" : undefined,
+      });
+    } catch (emailErr) {
       console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in enrollLead:", emailErr);
-    });
+    }
 
     return {
       success: true,

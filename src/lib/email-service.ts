@@ -894,6 +894,360 @@ export async function sendPasswordResetEmail(payload: {
   }
 }
 
+export interface MailConfig {
+  resendApiKey?: string;
+  smtp?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: {
+      user: string;
+      pass: string;
+    };
+  };
+  fromEmail: string;
+  fromName: string;
+  fullFrom: string;
+  isConfigured: boolean;
+}
+
+/**
+ * Resolves email configuration from environment variables, supporting all standard
+ * variable names and hosting provider conventions (Render, Heroku, Docker, etc.).
+ */
+export function getMailConfig(): MailConfig {
+  const resendApiKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || "").trim() || undefined;
+
+  const host = (
+    process.env.SMTP_HOST ||
+    process.env.MAIL_HOST ||
+    process.env.EMAIL_HOST ||
+    ""
+  ).trim();
+
+  const portStr = (
+    process.env.SMTP_PORT ||
+    process.env.MAIL_PORT ||
+    process.env.EMAIL_PORT ||
+    ""
+  ).trim();
+  const port = parseInt(portStr || "587", 10);
+
+  const user = (
+    process.env.SMTP_USER ||
+    process.env.SMTP_USERNAME ||
+    process.env.MAIL_USERNAME ||
+    process.env.MAIL_USER ||
+    process.env.EMAIL_USER ||
+    ""
+  ).trim();
+
+  const pass = (
+    process.env.SMTP_PASS ||
+    process.env.SMTP_PASSWORD ||
+    process.env.MAIL_PASSWORD ||
+    process.env.MAIL_PASS ||
+    process.env.EMAIL_PASSWORD ||
+    ""
+  ).trim();
+
+  const secureEnv = (
+    process.env.SMTP_SECURE ||
+    process.env.MAIL_SECURE ||
+    process.env.MAIL_ENCRYPTION ||
+    ""
+  ).trim().toLowerCase();
+  const secure = secureEnv === "true" || secureEnv === "ssl" || port === 465;
+
+  let smtp: MailConfig["smtp"] = undefined;
+  if (host && user && pass) {
+    smtp = {
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    };
+  }
+
+  // From Name
+  const fromName = (
+    process.env.EMAIL_FROM_NAME ||
+    process.env.MAIL_FROM_NAME ||
+    "School ERP"
+  ).trim();
+
+  // Raw From Address (priority: EMAIL_FROM -> MAIL_FROM -> SMTP_FROM)
+  const rawFrom = (
+    process.env.EMAIL_FROM ||
+    process.env.MAIL_FROM ||
+    process.env.SMTP_FROM ||
+    ""
+  ).trim();
+
+  let fullFrom: string;
+  let fromEmail: string;
+
+  if (rawFrom) {
+    const match = rawFrom.match(/^(.*?)\s*<(.+?)>$/);
+    if (match) {
+      const parsedName = match[1].trim() || fromName;
+      fromEmail = match[2].trim();
+      fullFrom = `${parsedName} <${fromEmail}>`;
+    } else {
+      fromEmail = rawFrom;
+      fullFrom = `${fromName} <${fromEmail}>`;
+    }
+  } else if (user && user.includes("@")) {
+    fromEmail = user;
+    fullFrom = `${fromName} <${fromEmail}>`;
+  } else {
+    fromEmail = "noreply@bonaveeict.com.ng";
+    fullFrom = `${fromName} <${fromEmail}>`;
+  }
+
+  const isConfigured = Boolean(resendApiKey || smtp);
+
+  return {
+    resendApiKey,
+    smtp,
+    fromEmail,
+    fromName,
+    fullFrom,
+    isConfigured,
+  };
+}
+
+export interface DispatchEmailOptions {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  schoolId?: string;
+  recipientType?: "ADMIN" | "STUDENT" | "PARENT" | "STAFF";
+  logCategory?: string;
+}
+
+export interface DispatchEmailResult {
+  success: boolean;
+  deliveryStatus: string;
+  error?: string;
+  provider: "RESEND" | "SMTP" | "SIMULATED" | "NONE";
+  messageId?: string;
+  recipients: string[];
+}
+
+/**
+ * Universal resilient email dispatcher with multi-provider failover, timeout protection,
+ * comprehensive status reporting, and database audit logging.
+ */
+export async function dispatchEmail(options: DispatchEmailOptions): Promise<DispatchEmailResult> {
+  const { to, subject, html, text, schoolId, recipientType = "STAFF", logCategory = "GENERAL" } = options;
+
+  const rawRecipients = Array.isArray(to) ? to : [to];
+  const recipients = Array.from(
+    new Set(
+      rawRecipients
+        .filter((e): e is string => typeof e === "string" && e.trim().length > 0 && e.includes("@"))
+        .map((e) => e.trim().toLowerCase())
+    )
+  );
+
+  if (recipients.length === 0) {
+    const errorMsg = "No valid recipient email address provided.";
+    console.warn(`[EMAIL_DISPATCH] [${logCategory}] Rejected dispatch: ${errorMsg}`);
+    return {
+      success: false,
+      deliveryStatus: "FAILED_NO_RECIPIENT",
+      error: errorMsg,
+      provider: "NONE",
+      recipients: [],
+    };
+  }
+
+  const config = getMailConfig();
+  console.log(`[EMAIL_DISPATCH] [${logCategory}] Initiating delivery to [${recipients.join(", ")}].`);
+  console.log(
+    `[EMAIL_DISPATCH] [${logCategory}] Config check: Resend=${Boolean(config.resendApiKey)}, SMTP=${Boolean(config.smtp)} (Host: ${config.smtp?.host || "none"}, Port: ${config.smtp?.port || "none"}), Sender="${config.fullFrom}"`
+  );
+
+  let deliveryStatus = "UNATTEMPTED";
+  let deliveryError: string | undefined = undefined;
+  let activeProvider: DispatchEmailResult["provider"] = "NONE";
+  let resultMessageId: string | undefined = undefined;
+
+  // 1. Dispatch via Resend API if configured
+  if (config.resendApiKey) {
+    try {
+      console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting delivery via Resend API (From: "${config.fullFrom}", To: [${recipients.join(", ")}])...`);
+      const resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: config.fullFrom,
+          to: recipients,
+          subject,
+          html,
+          text,
+        }),
+      });
+
+      const resendData = await resendRes.json();
+      console.log(`[EMAIL_DISPATCH] [${logCategory}] Resend HTTP Status: ${resendRes.status}, Response:`, JSON.stringify(resendData));
+
+      if (resendRes.ok && resendData?.id) {
+        resultMessageId = resendData.id;
+        deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
+        activeProvider = "RESEND";
+        console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend API to [${recipients.join(", ")}] (id: ${resendData.id})`);
+      } else {
+        const resendErrString = resendData?.message || JSON.stringify(resendData);
+        deliveryError = `Resend Error (${resendRes.status}): ${resendErrString}`;
+        console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend returned error:`, deliveryError);
+
+        // Fallback for Resend test sandbox sender if domain unverified
+        if (config.fullFrom !== "School ERP <onboarding@resend.dev>") {
+          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Primary sender rejected. Retrying dispatch via Resend test sandbox 'onboarding@resend.dev'...`);
+          try {
+            const fallbackRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${config.resendApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "School ERP <onboarding@resend.dev>",
+                to: recipients,
+                subject,
+                html,
+                text,
+              }),
+            });
+            const fallbackData = await fallbackRes.json();
+            if (fallbackRes.ok && fallbackData?.id) {
+              resultMessageId = fallbackData.id;
+              deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
+              activeProvider = "RESEND";
+              deliveryError = undefined;
+              console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend fallback to [${recipients.join(", ")}] (id: ${fallbackData.id})`);
+            } else {
+              console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend sandbox fallback also failed:`, fallbackData);
+            }
+          } catch (fbEx: any) {
+            console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend sandbox fallback exception:`, fbEx?.message || fbEx);
+          }
+        }
+      }
+    } catch (resendEx: any) {
+      deliveryError = `Resend network exception: ${resendEx?.message || resendEx}`;
+      console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend network exception:`, resendEx);
+    }
+  }
+
+  // 2. Dispatch via SMTP (Nodemailer) if Resend did not deliver and SMTP is configured
+  if (!activeProvider || activeProvider === "NONE") {
+    if (config.smtp) {
+      try {
+        console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting SMTP delivery via ${config.smtp.host}:${config.smtp.port} (User: ${config.smtp.auth.user})...`);
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: config.smtp.host,
+          port: config.smtp.port,
+          secure: config.smtp.secure,
+          auth: {
+            user: config.smtp.auth.user,
+            pass: config.smtp.auth.pass,
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 15000,
+        });
+
+        const info = await transporter.sendMail({
+          from: config.fullFrom,
+          to: recipients,
+          subject,
+          html,
+          text,
+        });
+
+        resultMessageId = info.messageId;
+        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
+        activeProvider = "SMTP";
+        deliveryError = undefined;
+        console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully sent via SMTP to [${recipients.join(", ")}]: ${info.messageId}`);
+      } catch (smtpEx: any) {
+        deliveryError = `SMTP dispatch failed: ${smtpEx?.message || smtpEx}`;
+        console.error(`[EMAIL_DISPATCH] [${logCategory}] SMTP dispatch exception:`, smtpEx);
+      }
+    }
+  }
+
+  // 3. Fallback for unconfigured or local dev environments
+  if (!activeProvider || activeProvider === "NONE") {
+    if (!config.isConfigured) {
+      const isProd = process.env.NODE_ENV === "production";
+      deliveryStatus = isProd ? "FAILED_NO_PROVIDER_CONFIGURED" : "SIMULATED_DEV";
+      deliveryError =
+        "No transactional email provider configured. Please set RESEND_API_KEY or SMTP credentials (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) in Render Environment Variables.";
+      if (isProd) {
+        console.error(`[EMAIL_DISPATCH] [${logCategory}] ❌ CRITICAL: ${deliveryError}`);
+      } else {
+        console.warn(`[EMAIL_DISPATCH] [${logCategory}] ℹ️ Local Dev: Email simulated for [${recipients.join(", ")}]. Subject: "${subject}".`);
+      }
+      activeProvider = isProd ? "NONE" : "SIMULATED";
+    } else {
+      deliveryStatus = "FAILED_DELIVERY_ERROR";
+      console.error(`[EMAIL_DISPATCH] [${logCategory}] ❌ All configured delivery mechanisms failed for [${recipients.join(", ")}]: ${deliveryError}`);
+    }
+  }
+
+  const isSuccess = activeProvider === "RESEND" || activeProvider === "SMTP" || activeProvider === "SIMULATED";
+
+  // Append to local transport audit log
+  try {
+    const logsDir = path.join(process.cwd(), "logs");
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const logFilePath = path.join(logsDir, "transactional-emails.log");
+    const logEntry = `[${new Date().toISOString()}] CATEGORY=${logCategory} STATUS=${deliveryStatus} PROVIDER=${activeProvider} TO="${recipients.join(", ")}" SUBJECT="${subject}" ERROR="${deliveryError || "none"}"\n`;
+    fs.appendFileSync(logFilePath, logEntry, "utf8");
+  } catch {}
+
+  // Record in Database MessageLog
+  if (schoolId) {
+    for (const recipient of recipients) {
+      try {
+        await basePrisma.messageLog.create({
+          data: {
+            schoolId,
+            recipientEmail: recipient,
+            recipientType,
+            messageType: "EMAIL",
+            subject,
+            body: html,
+            sentAt: new Date(),
+          },
+        });
+      } catch (dbErr) {
+        console.warn(`[EMAIL_DISPATCH] [${logCategory}] Warning: Could not record message log in DB:`, dbErr);
+      }
+    }
+  }
+
+  return {
+    success: isSuccess,
+    deliveryStatus,
+    error: deliveryError,
+    provider: activeProvider,
+    messageId: resultMessageId,
+    recipients,
+  };
+}
+
 export interface SchoolRegistrationEmailPayload {
   schoolName: string;
   subdomain: string;
@@ -914,7 +1268,6 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const portalUrl = `${baseUrl}/login?school=${encodeURIComponent(subdomain)}`;
     const brandColor = "#4f46e5";
-    const messageId = `<reg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
     const subject = `🎉 Welcome to School ERP - ${schoolName} Portal Access Credentials`;
 
     const emailHtml = `
@@ -995,151 +1348,34 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
       </html>
     `.trim();
 
-    let deliveryStatus = "SIMULATED";
+    const dispatchResult = await dispatchEmail({
+      to: adminEmail,
+      subject,
+      html: emailHtml,
+      schoolId,
+      recipientType: "ADMIN",
+      logCategory: "TENANT_REGISTRATION",
+    });
 
-    console.log(`[EMAIL_SERVICE] Initiating registration success email for: ${adminEmail}`);
-    console.log(`[EMAIL_SERVICE] Config check: RESEND_API_KEY=${!!process.env.RESEND_API_KEY} (length: ${process.env.RESEND_API_KEY?.length || 0}), SMTP_HOST=${process.env.SMTP_HOST || "none"}`);
-
-    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const fromAddress = process.env.EMAIL_FROM || "School ERP <noreply@bonaveeict.com.ng>";
-        console.log(`[EMAIL_SERVICE] Sending via Resend API (From: "${fromAddress}", To: "${adminEmail}")...`);
-        const resendRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: fromAddress,
-            to: [adminEmail],
-            subject,
-            html: emailHtml,
-          }),
-        });
-        const resendData = await resendRes.json();
-        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
-        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
-
-        if (resendRes.ok) {
-          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
-          console.log(`[EMAIL_DISPATCH] Resend email successfully delivered to ${adminEmail} (id: ${resendData.id})`);
-        } else {
-          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${adminEmail}:`, resendData);
-          if (fromAddress !== "onboarding@resend.dev" && fromAddress !== "School ERP <onboarding@resend.dev>") {
-            console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
-            try {
-              const fallbackRes = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  from: "School ERP <onboarding@resend.dev>",
-                  to: [adminEmail],
-                  subject,
-                  html: emailHtml,
-                }),
-              });
-              const fallbackData = await fallbackRes.json();
-              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
-              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
-              if (fallbackRes.ok) {
-                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
-                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${adminEmail} (id: ${fallbackData.id})`);
-              }
-            } catch (fbErr: any) {
-              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
-            }
-          }
-        }
-      } catch (resendErr: any) {
-        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
-      }
-    }
-
-    // 2. Dispatch via SMTP (Nodemailer) if SMTP is configured
-    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
-      try {
-        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
-        const nodemailer = await import("nodemailer");
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || "587"),
-          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-          },
-        });
-        const info = await transporter.sendMail({
-          from: process.env.EMAIL_FROM || process.env.SMTP_USER || "School ERP <noreply@bonaveeict.com.ng>",
-          to: adminEmail,
-          subject,
-          html: emailHtml,
-        });
-        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
-        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${adminEmail}:`, info.messageId);
-      } catch (smtpErr: any) {
-        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
-      }
-    }
-
-    if (deliveryStatus === "SIMULATED" && !process.env.RESEND_API_KEY && !process.env.SMTP_HOST) {
-      console.warn(`[EMAIL_SERVICE] NOTICE: No email provider configured on Render! Add RESEND_API_KEY to Render Environment Variables.`);
-    }
-
-    // 3. Fallback / Transport Logging
     console.log("----------------------------------------------------------------");
     console.log(`[REGISTRATION_EMAIL] Dispatched to: ${adminEmail}`);
     console.log(`School: ${schoolName} (${subdomain})`);
     console.log(`Portal URL: ${portalUrl}`);
-    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log(`Delivery Status: ${dispatchResult.deliveryStatus}`);
     console.log("----------------------------------------------------------------");
 
-    // Write to local log file
-    try {
-      const logsDir = path.join(process.cwd(), "logs");
-      if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
-      }
-      const logFilePath = path.join(logsDir, "registration-emails.log");
-      const logEntry = `[${new Date().toISOString()}] STATUS=${deliveryStatus} TO="${adminEmail}" SCHOOL="${schoolName}" PORTAL="${portalUrl}"\n`;
-      fs.appendFileSync(logFilePath, logEntry, "utf8");
-    } catch {}
-
-    // Persist to MessageLog table
-    if (schoolId) {
-      try {
-        await basePrisma.messageLog.create({
-          data: {
-            schoolId,
-            recipientEmail: adminEmail.toLowerCase().trim(),
-            recipientType: "STAFF",
-            messageType: "EMAIL",
-            subject,
-            body: emailHtml,
-            sentAt: new Date(),
-          },
-        });
-      } catch (dbErr) {
-        console.warn("[EMAIL_SERVICE] Warning: Could not save message log to DB:", dbErr);
-      }
-    }
-
     return {
-      success: true,
-      deliveryStatus,
+      success: dispatchResult.success,
+      deliveryStatus: dispatchResult.deliveryStatus,
       recipient: adminEmail,
       schoolName,
       portalUrl,
       subject,
+      error: dispatchResult.error,
     };
   } catch (err: any) {
     console.error("[EMAIL_SERVICE] Failed to dispatch registration success email:", err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, deliveryStatus: "FAILED_EXCEPTION" };
   }
 }
 
@@ -1173,9 +1409,7 @@ export interface StaffEnrollmentConfirmationEmailPayload {
 
 /**
  * Sends a confirmation email to the student and/or parent when a student is enrolled.
- * Dispatches via Resend API using FROM = "School ERP <noreply@bonaveeict.com.ng>".
- * Uses the same email template style as the school registration welcome email.
- * Non-blocking: logs failures without throwing exceptions.
+ * Dispatches via centralized mail service (Resend or SMTP) with automatic failovers.
  */
 export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnrollmentConfirmationEmailPayload) {
   try {
@@ -1214,7 +1448,6 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
     const brandColor = "#4f46e5";
-    const messageId = `<student-enroll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
     const subject = `🎉 Enrollment Confirmation - ${studentName} (${tenantName})`;
 
     // Collect valid recipients (student email and/or parent email)
@@ -1225,7 +1458,7 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
 
     if (recipients.length === 0) {
       console.warn(`[EMAIL_SERVICE] Cannot dispatch student enrollment confirmation: No valid recipient email provided for ${studentName} (ID: ${studentId || "unknown"})`);
-      return { success: false, error: "No recipient email address" };
+      return { success: false, deliveryStatus: "NO_RECIPIENT", error: "No recipient email address" };
     }
 
     const emailHtml = `
@@ -1323,154 +1556,40 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
       </html>
     `.trim();
 
-    let deliveryStatus = "SIMULATED";
-    const fromAddress = "School ERP <noreply@bonaveeict.com.ng>";
+    const dispatchResult = await dispatchEmail({
+      to: recipients,
+      subject,
+      html: emailHtml,
+      schoolId,
+      recipientType: "STUDENT",
+      logCategory: "STUDENT_ENROLLMENT",
+    });
 
-    console.log(`[EMAIL_SERVICE] Initiating student enrollment confirmation for: ${recipients.join(", ")}`);
-
-    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
-    if (process.env.RESEND_API_KEY) {
-      try {
-        console.log(`[EMAIL_SERVICE] Sending student enrollment confirmation via Resend API (From: "${fromAddress}", To: ${JSON.stringify(recipients)})...`);
-        const resendRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: fromAddress,
-            to: recipients,
-            subject,
-            html: emailHtml,
-          }),
-        });
-        const resendData = await resendRes.json();
-        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
-        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
-
-        if (resendRes.ok) {
-          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
-          console.log(`[EMAIL_DISPATCH] Student enrollment confirmation delivered to ${recipients.join(", ")} (id: ${resendData.id})`);
-        } else {
-          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${recipients.join(", ")}:`, resendData);
-          console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
-          try {
-              const fallbackRes = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  from: "School ERP <onboarding@resend.dev>",
-                  to: recipients,
-                  subject,
-                  html: emailHtml,
-                }),
-              });
-              const fallbackData = await fallbackRes.json();
-              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
-              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
-              if (fallbackRes.ok) {
-                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
-                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${recipients.join(", ")} (id: ${fallbackData.id})`);
-              }
-            } catch (fbErr: any) {
-              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
-            }
-        }
-      } catch (resendErr: any) {
-        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
-      }
-    }
-
-    // 2. Dispatch via SMTP if configured and Resend not delivered
-    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
-      try {
-        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
-        const nodemailer = await import("nodemailer");
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || "587"),
-          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-          },
-        });
-        const info = await transporter.sendMail({
-          from: fromAddress,
-          to: recipients,
-          subject,
-          html: emailHtml,
-        });
-        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
-        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${recipients.join(", ")}:`, info.messageId);
-      } catch (smtpErr: any) {
-        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
-      }
-    }
-
-    // 3. Fallback / Transport Logging
     console.log("----------------------------------------------------------------");
     console.log(`[STUDENT_ENROLLMENT_EMAIL] Dispatched to: ${recipients.join(", ")}`);
     console.log(`School: ${tenantName} (${subdomain || "default"})`);
     console.log(`Student: ${studentName} (${admissionNumber || "N/A"})`);
-    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log(`Delivery Status: ${dispatchResult.deliveryStatus}`);
     console.log("----------------------------------------------------------------");
 
-    // Local file log
-    try {
-      const logsDir = path.join(process.cwd(), "logs");
-      if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
-      }
-      const logFilePath = path.join(logsDir, "enrollment-emails.log");
-      const logEntry = `[${new Date().toISOString()}] TYPE=STUDENT STATUS=${deliveryStatus} TO="${recipients.join(", ")}" SCHOOL="${tenantName}" STUDENT="${studentName}"\n`;
-      fs.appendFileSync(logFilePath, logEntry, "utf8");
-    } catch {}
-
-    // Persist to MessageLog table
-    if (schoolId) {
-      for (const recipient of recipients) {
-        try {
-          await basePrisma.messageLog.create({
-            data: {
-              schoolId,
-              recipientEmail: recipient,
-              recipientType: recipient === parentEmail?.toLowerCase().trim() ? "PARENT" : "STUDENT",
-              messageType: "EMAIL",
-              subject,
-              body: emailHtml,
-              sentAt: new Date(),
-            },
-          });
-        } catch (dbErr) {
-          console.warn("[EMAIL_SERVICE] Warning: Could not save student enrollment message log to DB:", dbErr);
-        }
-      }
-    }
-
     return {
-      success: true,
-      deliveryStatus,
+      success: dispatchResult.success,
+      deliveryStatus: dispatchResult.deliveryStatus,
       recipients,
       studentName,
       schoolName: tenantName,
       subject,
+      error: dispatchResult.error,
     };
   } catch (err: any) {
     console.error("[EMAIL_SERVICE] Failed to dispatch student enrollment confirmation email:", err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, deliveryStatus: "FAILED_EXCEPTION" };
   }
 }
 
 /**
  * Sends a confirmation email to the staff member upon enrollment.
- * Dispatches via Resend API using FROM = "School ERP <noreply@bonaveeict.com.ng>".
- * Uses the same email template style as the school registration welcome email.
- * Non-blocking: logs failures without throwing exceptions.
+ * Dispatches via centralized mail service (Resend or SMTP).
  */
 export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollmentConfirmationEmailPayload) {
   try {
@@ -1520,13 +1639,12 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
     const brandColor = "#4f46e5";
-    const messageId = `<staff-enroll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@schoolerp.internal>`;
     const subject = `🎉 Staff Enrollment Confirmation - Welcome to ${tenantName}`;
 
     const normalizedStaffEmail = staffEmail?.trim().toLowerCase();
     if (!normalizedStaffEmail || !normalizedStaffEmail.includes("@")) {
       console.warn(`[EMAIL_SERVICE] Cannot dispatch staff enrollment confirmation: No valid email provided for ${staffName} (ID: ${staffId || "unknown"})`);
-      return { success: false, error: "No valid staff email address" };
+      return { success: false, deliveryStatus: "NO_RECIPIENT", error: "No valid staff email address" };
     }
 
     const emailHtml = `
@@ -1617,144 +1735,34 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
       </html>
     `.trim();
 
-    let deliveryStatus = "SIMULATED";
-    const fromAddress = "School ERP <noreply@bonaveeict.com.ng>";
+    const dispatchResult = await dispatchEmail({
+      to: normalizedStaffEmail,
+      subject,
+      html: emailHtml,
+      schoolId,
+      recipientType: "STAFF",
+      logCategory: "STAFF_ENROLLMENT",
+    });
 
-    console.log(`[EMAIL_SERVICE] Initiating staff enrollment confirmation for: ${normalizedStaffEmail}`);
-
-    // 1. Dispatch via Resend API if RESEND_API_KEY is configured
-    if (process.env.RESEND_API_KEY) {
-      try {
-        console.log(`[EMAIL_SERVICE] Sending staff enrollment confirmation via Resend API (From: "${fromAddress}", To: "${normalizedStaffEmail}")...`);
-        const resendRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: fromAddress,
-            to: [normalizedStaffEmail],
-            subject,
-            html: emailHtml,
-          }),
-        });
-        const resendData = await resendRes.json();
-        console.log(`[EMAIL_SERVICE] Resend HTTP Status: ${resendRes.status}`);
-        console.log(`[EMAIL_SERVICE] Resend API Response:`, JSON.stringify(resendData));
-
-        if (resendRes.ok) {
-          deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
-          console.log(`[EMAIL_DISPATCH] Staff enrollment confirmation delivered to ${normalizedStaffEmail} (id: ${resendData.id})`);
-        } else {
-          console.error(`[EMAIL_DISPATCH] Resend returned error status ${resendRes.status} for ${normalizedStaffEmail}:`, resendData);
-          console.warn(`[EMAIL_SERVICE] Primary sender '${fromAddress}' failed. Retrying dispatch with fallback 'onboarding@resend.dev'...`);
-          try {
-              const fallbackRes = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  from: "School ERP <onboarding@resend.dev>",
-                  to: [normalizedStaffEmail],
-                  subject,
-                  html: emailHtml,
-                }),
-              });
-              const fallbackData = await fallbackRes.json();
-              console.log(`[EMAIL_SERVICE] Fallback Resend HTTP Status: ${fallbackRes.status}`);
-              console.log(`[EMAIL_SERVICE] Fallback Resend API Response:`, JSON.stringify(fallbackData));
-              if (fallbackRes.ok) {
-                deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
-                console.log(`[EMAIL_DISPATCH] Fallback Resend email delivered to ${normalizedStaffEmail} (id: ${fallbackData.id})`);
-              }
-            } catch (fbErr: any) {
-              console.error("[EMAIL_DISPATCH] Fallback Resend exception:", fbErr?.message || fbErr);
-            }
-        }
-      } catch (resendErr: any) {
-        console.error("[EMAIL_DISPATCH] Resend fetch exception:", resendErr?.message || resendErr);
-      }
-    }
-
-    // 2. Dispatch via SMTP if configured and Resend not delivered
-    if (deliveryStatus === "SIMULATED" && process.env.SMTP_HOST && process.env.SMTP_USER) {
-      try {
-        console.log(`[EMAIL_SERVICE] Attempting SMTP dispatch via ${process.env.SMTP_HOST}...`);
-        const nodemailer = await import("nodemailer");
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || "587"),
-          secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-          },
-        });
-        const info = await transporter.sendMail({
-          from: fromAddress,
-          to: normalizedStaffEmail,
-          subject,
-          html: emailHtml,
-        });
-        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
-        console.log(`[EMAIL_DISPATCH] SMTP email sent successfully to ${normalizedStaffEmail}:`, info.messageId);
-      } catch (smtpErr: any) {
-        console.error("[EMAIL_DISPATCH] SMTP dispatch exception:", smtpErr?.message || smtpErr);
-      }
-    }
-
-    // 3. Fallback / Transport Logging
     console.log("----------------------------------------------------------------");
     console.log(`[STAFF_ENROLLMENT_EMAIL] Dispatched to: ${normalizedStaffEmail}`);
     console.log(`School: ${tenantName} (${subdomain || "default"})`);
     console.log(`Staff: ${staffName} (${role || "Staff Member"})`);
-    console.log(`Delivery Status: ${deliveryStatus}`);
+    console.log(`Delivery Status: ${dispatchResult.deliveryStatus}`);
     console.log("----------------------------------------------------------------");
 
-    // Local file log
-    try {
-      const logsDir = path.join(process.cwd(), "logs");
-      if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
-      }
-      const logFilePath = path.join(logsDir, "enrollment-emails.log");
-      const logEntry = `[${new Date().toISOString()}] TYPE=STAFF STATUS=${deliveryStatus} TO="${normalizedStaffEmail}" SCHOOL="${tenantName}" STAFF="${staffName}"\n`;
-      fs.appendFileSync(logFilePath, logEntry, "utf8");
-    } catch {}
-
-    // Persist to MessageLog table
-    if (schoolId) {
-      try {
-        await basePrisma.messageLog.create({
-          data: {
-            schoolId,
-            recipientEmail: normalizedStaffEmail,
-            recipientType: "STAFF",
-            messageType: "EMAIL",
-            subject,
-            body: emailHtml,
-            sentAt: new Date(),
-          },
-        });
-      } catch (dbErr) {
-        console.warn("[EMAIL_SERVICE] Warning: Could not save staff enrollment message log to DB:", dbErr);
-      }
-    }
-
     return {
-      success: true,
-      deliveryStatus,
+      success: dispatchResult.success,
+      deliveryStatus: dispatchResult.deliveryStatus,
       recipient: normalizedStaffEmail,
       staffName,
       schoolName: tenantName,
       subject,
+      error: dispatchResult.error,
     };
   } catch (err: any) {
     console.error("[EMAIL_SERVICE] Failed to dispatch staff enrollment confirmation email:", err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, deliveryStatus: "FAILED_EXCEPTION" };
   }
 }
 

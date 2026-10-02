@@ -132,21 +132,23 @@ export async function POST(
     }
 
     // Dispatch enrollment confirmation email to student / parent
-    sendStudentEnrollmentConfirmationEmail({
-      schoolId: lead.schoolId,
-      studentId: newStudent.id,
-      schoolName: school?.name,
-      subdomain: school?.subdomain,
-      studentName: `${firstName} ${lastName}`.trim(),
-      admissionNumber,
-      currentClass: lead.targetGrade,
-      tierName: lead.tier?.name,
-      studentEmail: lead.studentEmail,
-      parentEmail: lead.parentEmail,
-      parentName: lead.parentName,
-    }).catch((emailErr) => {
+    try {
+      await sendStudentEnrollmentConfirmationEmail({
+        schoolId: lead.schoolId,
+        studentId: newStudent.id,
+        schoolName: school?.name,
+        subdomain: school?.subdomain,
+        studentName: `${firstName} ${lastName}`.trim(),
+        admissionNumber,
+        currentClass: lead.targetGrade,
+        tierName: lead.tier?.name,
+        studentEmail: lead.studentEmail,
+        parentEmail: lead.parentEmail,
+        parentName: lead.parentName,
+      });
+    } catch (emailErr) {
       console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api enroll route:", emailErr);
-    });
+    }
 
     return NextResponse.json({
       success: true,

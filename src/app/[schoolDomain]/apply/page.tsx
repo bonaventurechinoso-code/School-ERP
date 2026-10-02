@@ -28,34 +28,92 @@ export default async function ApplyPage({
     );
   }
 
+  // Determine effective academic tiers for this tenant
+  let effectiveTiers = school.academicTiers;
+  if (!effectiveTiers || effectiveTiers.length === 0) {
+    if ((school as any).tierDatabases && (school as any).tierDatabases.length > 0) {
+      effectiveTiers = (school as any).tierDatabases.map((td: any) => {
+        let name = "Secondary School";
+        const tn = (td.tierName || "").toUpperCase();
+        if (tn.includes("DAYCARE") || tn.includes("NURSERY")) name = "Daycare / Nursery";
+        else if (tn.includes("PRIMARY")) name = "Primary School";
+        else if (tn.includes("TERTIARY") || tn.includes("HIGHER")) name = "Higher Education";
+        return {
+          id: td.id,
+          schoolId: school.id,
+          name,
+          level: 1,
+          databaseUrl: td.databaseUrl,
+          databaseName: td.databaseName,
+          tierDatabaseId: td.id,
+          createdAt: td.createdAt,
+          updatedAt: td.updatedAt,
+        } as any;
+      });
+    } else {
+      const sName = (school.name || "").toLowerCase();
+      let defaultTierName = "Secondary School";
+      if (sName.includes("primary") || sName.includes("basic") || sName.includes("elementary")) {
+        defaultTierName = "Primary School";
+      } else if (sName.includes("daycare") || sName.includes("nursery") || sName.includes("creche")) {
+        defaultTierName = "Daycare / Nursery";
+      } else if (sName.includes("university") || sName.includes("college") || sName.includes("polytechnic")) {
+        defaultTierName = "Higher Education";
+      }
+
+      effectiveTiers = [
+        {
+          id: "default-tier",
+          schoolId: school.id,
+          name: defaultTierName,
+          level: 1,
+          databaseUrl: null,
+          databaseName: null,
+          tierDatabaseId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any,
+      ];
+    }
+  }
+
   // 1. Resolve school tier for domain / trial-sandbox
   const cookieStore = await cookies();
   const rawCookieTier = cookieStore.get("activeTier")?.value;
-  const cookieTier = rawCookieTier ? decodeURIComponent(rawCookieTier) : undefined;
-  const requestedTier = (searchParams?.tier || cookieTier || "").trim();
+  const cookieTier = rawCookieTier ? decodeURIComponent(rawCookieTier).trim() : undefined;
+  const queryTier = searchParams?.tier ? searchParams.tier.trim() : undefined;
 
-  // Find matching tier record if exists in school.academicTiers
-  const matchedTier = school.academicTiers.find((t) => {
-    if (!requestedTier) return false;
+  // Strict tenant-tier isolation: candidate tier must match an actual registered tier for this tenant
+  const candidateTier = queryTier || cookieTier;
+  const matchedTier = effectiveTiers.find((t) => {
+    if (!candidateTier) return false;
     const tLower = t.name.toLowerCase();
-    const reqLower = requestedTier.toLowerCase();
-    return tLower === reqLower || tLower.includes(reqLower) || reqLower.includes(tLower);
+    const candLower = candidateTier.toLowerCase();
+    return tLower === candLower || tLower.includes(candLower) || candLower.includes(tLower);
   });
 
-  const schoolTier = matchedTier?.name || requestedTier || school.academicTiers[0]?.name || "Secondary School";
-  const initialTierId = matchedTier?.id || school.academicTiers[0]?.id || "";
+  // If candidate tier does not belong to this school, strictly fallback to the school's registered tier
+  const activeTierObj = matchedTier || effectiveTiers[0];
+  const schoolTier = activeTierObj?.name || "Secondary School";
+  const initialTierId = activeTierObj?.id || "";
 
-  // Log tier to console first as requested
+  // Log tier to console for traceability
   console.log(`[ApplyPage] Active school tier for ${params.schoolDomain}:`, {
     schoolTier,
     initialTierId,
-    requestedTier,
-    cookieTier,
-    searchParamTier: searchParams?.tier,
+    candidateTier,
+    matchedTier: matchedTier?.name,
+    effectiveTiers: effectiveTiers.map((t) => t.name),
   });
 
-  const tenantDb = getTenantClient(school.id);
-  const classrooms = await tenantDb.classroom.findMany();
+  let classrooms: any[] = [];
+  try {
+    const tenantDb = getTenantClient(school.id);
+    classrooms = await tenantDb.classroom.findMany();
+  } catch (err) {
+    console.warn(`[ApplyPage] Could not fetch tenant classrooms for ${school.id}:`, err);
+    classrooms = [];
+  }
 
   const brandColor = (school as any).branding?.primaryColor || "#0f172a";
 
@@ -66,7 +124,7 @@ export default async function ApplyPage({
           schoolName={school.name}
           schoolDomain={school.subdomain}
           schoolTier={schoolTier}
-          tiers={school.academicTiers}
+          tiers={effectiveTiers}
           initialTierId={initialTierId}
           classrooms={classrooms}
           brandColor={brandColor}

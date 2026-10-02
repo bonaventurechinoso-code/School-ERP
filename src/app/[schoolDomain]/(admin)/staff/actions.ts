@@ -427,17 +427,19 @@ export async function createStaff(
     safeRevalidate(`/[schoolDomain]/staff`, "page");
 
     // Dispatch enrollment confirmation email to staff member
-    sendStaffEnrollmentConfirmationEmail({
-      schoolId,
-      staffId: staff.id,
-      staffName: `${data.firstName.trim()} ${data.lastName.trim()}`,
-      staffEmail: data.email.trim().toLowerCase(),
-      role: canonicalRole,
-      departmentId: data.departmentId || null,
-      temporaryPassword: isTemporary ? staffPasswordToSave : undefined,
-    }).catch((emailErr) => {
+    try {
+      await sendStaffEnrollmentConfirmationEmail({
+        schoolId,
+        staffId: staff.id,
+        staffName: `${data.firstName.trim()} ${data.lastName.trim()}`,
+        staffEmail: data.email.trim().toLowerCase(),
+        role: canonicalRole,
+        departmentId: data.departmentId || null,
+        temporaryPassword: isTemporary ? staffPasswordToSave : undefined,
+      });
+    } catch (emailErr) {
       console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in createStaff:", emailErr);
-    });
+    }
 
     return { success: true, data: staff };
   } catch (error: any) {

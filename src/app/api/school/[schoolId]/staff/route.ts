@@ -152,19 +152,21 @@ export async function POST(
     await setUserMustChangePassword(user.id, schoolId, true);
 
     // Dispatch enrollment confirmation email to staff member
-    sendStaffEnrollmentConfirmationEmail({
-      schoolId,
-      staffId: staff.id,
-      schoolName: school.name,
-      subdomain: school.subdomain,
-      staffName: `${firstName.trim()} ${lastName.trim()}`,
-      staffEmail: normalizedEmail,
-      role: userRole,
-      departmentId: finalDeptId || null,
-      temporaryPassword: generatedTempPassword,
-    }).catch((emailErr) => {
+    try {
+      await sendStaffEnrollmentConfirmationEmail({
+        schoolId,
+        staffId: staff.id,
+        schoolName: school.name,
+        subdomain: school.subdomain,
+        staffName: `${firstName.trim()} ${lastName.trim()}`,
+        staffEmail: normalizedEmail,
+        role: userRole,
+        departmentId: finalDeptId || null,
+        temporaryPassword: generatedTempPassword,
+      });
+    } catch (emailErr) {
       console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in api/school/[schoolId]/staff:", emailErr);
-    });
+    }
 
     return NextResponse.json(
       {

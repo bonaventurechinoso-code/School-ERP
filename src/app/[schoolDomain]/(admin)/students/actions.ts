@@ -327,22 +327,24 @@ export async function createStudent(
 
     // Dispatch enrollment confirmation email if enrolled
     if (data.status === "ENROLLED" || !data.status) {
-      sendStudentEnrollmentConfirmationEmail({
-        schoolId,
-        studentId: createdStudent.id,
-        schoolName: school?.name,
-        subdomain: school?.subdomain,
-        studentName: `${data.firstName.trim()} ${data.lastName.trim()}`,
-        admissionNumber: finalAdmissionNumber,
-        currentClass: data.currentClass || null,
-        tierName: tierContext,
-        studentEmail: userEmail,
-        parentEmail: data.parentEmail || null,
-        parentName: data.parentName || null,
-        temporaryPassword: isTemporary ? passwordToSave : undefined,
-      }).catch((emailErr) => {
+      try {
+        await sendStudentEnrollmentConfirmationEmail({
+          schoolId,
+          studentId: createdStudent.id,
+          schoolName: school?.name,
+          subdomain: school?.subdomain,
+          studentName: `${data.firstName.trim()} ${data.lastName.trim()}`,
+          admissionNumber: finalAdmissionNumber,
+          currentClass: data.currentClass || null,
+          tierName: tierContext,
+          studentEmail: userEmail,
+          parentEmail: data.parentEmail || null,
+          parentName: data.parentName || null,
+          temporaryPassword: isTemporary ? passwordToSave : undefined,
+        });
+      } catch (emailErr) {
         console.error("[EMAIL_DISPATCH] Student enrollment confirmation error:", emailErr);
-      });
+      }
     }
 
     // Write-Through Cache Invalidation
@@ -460,9 +462,10 @@ export async function updateStudentStatus(
     });
 
     if (newStatus === "ENROLLED") {
-      tenantDb.student.findUnique({ where: { id: studentId } }).then((st: any) => {
+      try {
+        const st: any = await tenantDb.student.findUnique({ where: { id: studentId } });
         if (st) {
-          sendStudentEnrollmentConfirmationEmail({
+          await sendStudentEnrollmentConfirmationEmail({
             schoolId,
             studentId: st.id,
             studentName: `${st.firstName} ${st.lastName}`.trim(),
@@ -472,11 +475,11 @@ export async function updateStudentStatus(
             studentEmail: st.email,
             parentEmail: st.parentEmail,
             parentName: st.parentName,
-          }).catch((emailErr) => {
-            console.error("[EMAIL_DISPATCH] Student enrollment confirmation error:", emailErr);
           });
         }
-      }).catch(() => {});
+      } catch (emailErr) {
+        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error on status update:", emailErr);
+      }
     }
 
     // Write-Through Cache Invalidation

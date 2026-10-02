@@ -12,6 +12,7 @@ import {
   recordTenantDeleted,
   sendSuperAdminTenantRegistrationEmail,
 } from "@/lib/admin-notifications";
+import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -145,21 +146,44 @@ export async function createSchool(formData: FormData) {
         }
       });
 
-      // Record tenant registered notification & trigger Super Admin email
-      recordTenantCreated({
-        schoolName: name,
-        subdomain,
-        adminEmail,
-        tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
-      }).catch((err) => console.error("[NOTIF_ERROR]", err));
+      // Dispatch registration email to tenant admin
+      try {
+        await sendSchoolRegistrationSuccessEmail({
+          schoolName: name,
+          subdomain,
+          adminEmail,
+          adminPassword: password,
+          contactPhone: contactPhone || null,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          schoolId: undefined,
+        });
+      } catch (err) {
+        console.error("[TENANT_WELCOME_EMAIL_ERROR]", err);
+      }
 
-      sendSuperAdminTenantRegistrationEmail({
-        schoolName: name,
-        subdomain,
-        adminEmail,
-        contactPhone: contactPhone || null,
-        tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
-      }).catch((err) => console.error("[SUPER_ADMIN_EMAIL_ERROR]", err));
+      // Record tenant registered notification & trigger Super Admin email
+      try {
+        await recordTenantCreated({
+          schoolName: name,
+          subdomain,
+          adminEmail,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+        });
+      } catch (err) {
+        console.error("[NOTIF_ERROR]", err);
+      }
+
+      try {
+        await sendSuperAdminTenantRegistrationEmail({
+          schoolName: name,
+          subdomain,
+          adminEmail,
+          contactPhone: contactPhone || null,
+          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+        });
+      } catch (err) {
+        console.error("[SUPER_ADMIN_EMAIL_ERROR]", err);
+      }
     } else {
         let createdSchoolId: string | undefined;
         await basePrisma.$transaction(async (tx) => {
@@ -226,23 +250,46 @@ export async function createSchool(formData: FormData) {
             adminEmail,
           }).catch((err) => console.warn("[PROVISIONING_DEFERRED]", err?.message));
 
-          // Record tenant registered notification & trigger Super Admin email
-          recordTenantCreated({
-            schoolId: createdSchoolId,
-            schoolName: name,
-            subdomain,
-            adminEmail,
-            tiers,
-          }).catch((err) => console.error("[NOTIF_ERROR]", err));
+          // Dispatch registration email to tenant admin
+          try {
+            await sendSchoolRegistrationSuccessEmail({
+              schoolName: name,
+              subdomain,
+              adminEmail,
+              adminPassword: password,
+              contactPhone: contactPhone || null,
+              tiers,
+              schoolId: createdSchoolId,
+            });
+          } catch (err) {
+            console.error("[TENANT_WELCOME_EMAIL_ERROR]", err);
+          }
 
-          sendSuperAdminTenantRegistrationEmail({
-            schoolName: name,
-            subdomain,
-            adminEmail,
-            contactPhone: contactPhone || null,
-            tiers,
-            schoolId: createdSchoolId,
-          }).catch((err) => console.error("[SUPER_ADMIN_EMAIL_ERROR]", err));
+          // Record tenant registered notification & trigger Super Admin email
+          try {
+            await recordTenantCreated({
+              schoolId: createdSchoolId,
+              schoolName: name,
+              subdomain,
+              adminEmail,
+              tiers,
+            });
+          } catch (err) {
+            console.error("[NOTIF_ERROR]", err);
+          }
+
+          try {
+            await sendSuperAdminTenantRegistrationEmail({
+              schoolName: name,
+              subdomain,
+              adminEmail,
+              contactPhone: contactPhone || null,
+              tiers,
+              schoolId: createdSchoolId,
+            });
+          } catch (err) {
+            console.error("[SUPER_ADMIN_EMAIL_ERROR]", err);
+          }
         }
     }
 

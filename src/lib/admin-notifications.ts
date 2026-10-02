@@ -523,15 +523,6 @@ export async function sendSuperAdminTenantRegistrationEmail(payload: {
   tiers?: string[];
   schoolId?: string;
 }): Promise<{ delivered: boolean; mode: string }> {
-  const isSmtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
-
-  if (!isSmtpConfigured) {
-    console.log(
-      `[SUPER_ADMIN_EMAIL] SMTP not configured (SMTP_HOST/SMTP_USER missing). Skipped email delivery for new tenant: "${payload.schoolName}".`
-    );
-    return { delivered: false, mode: "SKIPPED_NOT_CONFIGURED" };
-  }
-
   const superAdminEmail =
     process.env.SUPER_ADMIN_EMAIL ||
     process.env.ADMIN_EMAIL ||
@@ -628,26 +619,18 @@ export async function sendSuperAdminTenantRegistrationEmail(payload: {
   `;
 
   try {
-    console.log(`[SUPER_ADMIN_EMAIL] Attempting SMTP dispatch to ${superAdminEmail} via ${process.env.SMTP_HOST}...`);
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.SMTP_USER || "School ERP Platform <noreply@bonaveeict.com.ng>",
+    const { dispatchEmail } = await import("./email-service");
+    const result = await dispatchEmail({
       to: superAdminEmail,
       subject: `[New Tenant] ${payload.schoolName} (${payload.subdomain})`,
       html: htmlContent,
+      schoolId: payload.schoolId,
+      recipientType: "STAFF",
+      logCategory: "SUPER_ADMIN_ALERT",
     });
 
-    console.log(`[SUPER_ADMIN_EMAIL] Successfully sent notification to ${superAdminEmail}:`, info.messageId);
-    return { delivered: true, mode: `SMTP (${info.messageId})` };
+    console.log(`[SUPER_ADMIN_EMAIL] Dispatched to ${superAdminEmail} with status: ${result.deliveryStatus}`);
+    return { delivered: result.success, mode: result.deliveryStatus };
   } catch (err: any) {
     console.error("[SUPER_ADMIN_EMAIL_EXCEPTION]:", err?.message || err);
     return { delivered: false, mode: "FAILED" };

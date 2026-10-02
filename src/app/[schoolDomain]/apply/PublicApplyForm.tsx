@@ -8,6 +8,7 @@ import { useNumericInput } from "@/hooks/useNumericInput";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatTierLabel } from "@/lib/guestPortalUtils";
 import { NIGERIAN_UNIVERSITY_HIERARCHY, POLYTECHNIC_HIERARCHY, COLLEGE_HIERARCHY } from "@/lib/academicHierarchies";
+import { isClassInTier } from "@/lib/tier-config";
 
 const TIER_CLASSES = {
   "daycare_nursery": ["Daycare", "Playgroup", "Pre-Nursery", "Nursery 1", "Nursery 2", "Nursery 3"],
@@ -46,14 +47,33 @@ export default function PublicApplyForm({
   const [tier, setTier] = useState<string | null>(schoolTier || "secondary");
   const [loadingTier, setLoadingTier] = useState<boolean>(false);
 
-  // Sync / resolve tier on mount
+  // Sync / resolve tier on mount with strict tenant boundary enforcement
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const urlTier = urlParams.get("tier");
       const cookieTierMatch = document.cookie.match(/(?:^|;\s*)activeTier=([^;]*)/);
       const cookieTier = cookieTierMatch ? decodeURIComponent(cookieTierMatch[1]) : null;
-      const resolved = urlTier || cookieTier || schoolTier || "secondary";
+
+      const candidate = urlTier || cookieTier;
+      let resolved = schoolTier;
+
+      // Candidate must strictly match one of this tenant's registered tiers
+      if (candidate && tiers && tiers.length > 0) {
+        const cLower = candidate.toLowerCase();
+        const match = tiers.find((t) => {
+          const tLower = t.name.toLowerCase();
+          return tLower === cLower || tLower.includes(cLower) || cLower.includes(tLower);
+        });
+        if (match) {
+          resolved = match.name;
+        }
+      }
+
+      if (!resolved) {
+        resolved = (tiers && tiers[0]?.name) || schoolTier || "Secondary School";
+      }
+
       console.log(`[PublicApplyForm] Resolved school tier:`, resolved);
       setTier(resolved);
       setLoadingTier(false);
@@ -61,13 +81,13 @@ export default function PublicApplyForm({
   }, [schoolTier, tiers]);
 
   // 1. Automatic Tier Selection matching resolved tier
-  const matchedTierRecord = tiers.find(
+  const matchedTierRecord = (tiers || []).find(
     (t) =>
       (tier && t.name.toLowerCase() === tier.toLowerCase()) ||
       (tier && t.name.toLowerCase().includes(tier.toLowerCase())) ||
       (tier && tier.toLowerCase().includes(t.name.toLowerCase()))
-  );
-  const initialTierId = propInitialTierId || matchedTierRecord?.id || (tiers.length > 0 ? tiers[0].id : "");
+  ) || (tiers && tiers.length > 0 ? tiers[0] : undefined);
+  const initialTierId = propInitialTierId || matchedTierRecord?.id || (tiers && tiers.length > 0 ? tiers[0].id : "default-tier");
   
   const [formData, setFormData] = useState({
     applicantName: "",
@@ -89,8 +109,8 @@ export default function PublicApplyForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const selectedTier = tiers.find(t => t.id === formData.tierId) || matchedTierRecord;
-  const selectedTierName = tier || selectedTier?.name || formData.academicTier || "";
+  const selectedTier = (tiers || []).find(t => t.id === formData.tierId) || matchedTierRecord;
+  const selectedTierName = selectedTier?.name || tier || formData.academicTier || schoolTier || "";
 
   // On Tier change, reset Target Grade/Class to "" (Select a class...) so user must re-pick
   useEffect(() => {
@@ -105,7 +125,34 @@ export default function PublicApplyForm({
 
   // Complete filter logic according to selectedTier
   const filteredClasses = React.useMemo(() => {
-    const rawTier = (selectedTierName || selectedTier?.name || tier || "").toLowerCase().trim();
+    const rawTier = (selectedTierName || selectedTier?.name || tier || schoolTier || "").toLowerCase().trim();
+    
+    // Check if secondary: either explicit secondary cues in tier, or school name cues
+    const isSecondary =
+      rawTier.includes("secondary") ||
+      rawTier.includes("high") ||
+      rawTier.includes("jss") ||
+      rawTier.includes("sss") ||
+      (!rawTier && (schoolName.toLowerCase().includes("secondary") || schoolName.toLowerCase().includes("high")));
+
+    if (isSecondary) {
+      const defaultSec = TIER_CLASSES.secondary;
+      if (Array.isArray(classrooms) && classrooms.length > 0) {
+        const matchingCustom = classrooms
+          .filter((c: any) => {
+            const cName = typeof c === "string" ? c : c?.name;
+            const cTierId = typeof c === "object" ? c?.tierId : null;
+            if (formData.tierId && cTierId && cTierId === formData.tierId) return true;
+            return isClassInTier(cName || "", "SECONDARY");
+          })
+          .map((c: any) => (typeof c === "string" ? c : c?.name))
+          .filter(Boolean);
+
+        return Array.from(new Set([...defaultSec, ...matchingCustom]));
+      }
+      return defaultSec;
+    }
+
     if (
       rawTier === "daycare / nursery" ||
       rawTier.includes("daycare") ||
@@ -113,11 +160,41 @@ export default function PublicApplyForm({
       rawTier.includes("creche") ||
       rawTier.includes("early")
     ) {
-      return TIER_CLASSES.daycare_nursery;
+      const defaultDaycare = TIER_CLASSES.daycare_nursery;
+      if (Array.isArray(classrooms) && classrooms.length > 0) {
+        const matchingCustom = classrooms
+          .filter((c: any) => {
+            const cName = typeof c === "string" ? c : c?.name;
+            const cTierId = typeof c === "object" ? c?.tierId : null;
+            if (formData.tierId && cTierId && cTierId === formData.tierId) return true;
+            return isClassInTier(cName || "", "DAYCARE_NURSERY");
+          })
+          .map((c: any) => (typeof c === "string" ? c : c?.name))
+          .filter(Boolean);
+
+        return Array.from(new Set([...defaultDaycare, ...matchingCustom]));
+      }
+      return defaultDaycare;
     }
+
     if (rawTier.includes("primary") || rawTier.includes("basic") || rawTier.includes("elementary")) {
-      return TIER_CLASSES.primary;
+      const defaultPrimary = TIER_CLASSES.primary;
+      if (Array.isArray(classrooms) && classrooms.length > 0) {
+        const matchingCustom = classrooms
+          .filter((c: any) => {
+            const cName = typeof c === "string" ? c : c?.name;
+            const cTierId = typeof c === "object" ? c?.tierId : null;
+            if (formData.tierId && cTierId && cTierId === formData.tierId) return true;
+            return isClassInTier(cName || "", "PRIMARY");
+          })
+          .map((c: any) => (typeof c === "string" ? c : c?.name))
+          .filter(Boolean);
+
+        return Array.from(new Set([...defaultPrimary, ...matchingCustom]));
+      }
+      return defaultPrimary;
     }
+
     if (
       rawTier.includes("higher") ||
       rawTier.includes("university") ||
@@ -127,11 +204,17 @@ export default function PublicApplyForm({
     ) {
       return TIER_CLASSES.higher;
     }
-    if (rawTier.includes("secondary") || rawTier.includes("high")) {
+
+    // Heuristics by school name if rawTier is ambiguous
+    if (schoolName.toLowerCase().includes("secondary") || schoolName.toLowerCase().includes("high")) {
       return TIER_CLASSES.secondary;
     }
-    return TIER_CLASSES.daycare_nursery;
-  }, [selectedTierName, selectedTier, tier]);
+    if (schoolName.toLowerCase().includes("primary") || schoolName.toLowerCase().includes("elementary")) {
+      return TIER_CLASSES.primary;
+    }
+
+    return TIER_CLASSES.secondary;
+  }, [selectedTierName, selectedTier, tier, schoolTier, formData.tierId, classrooms, schoolName]);
   
   // Determine if context is Higher Education
   const isHigherEd = selectedTierName.toLowerCase().includes("higher ed") || 

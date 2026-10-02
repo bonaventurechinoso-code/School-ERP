@@ -142,20 +142,22 @@ export async function PATCH(
       }
 
       // Dispatch enrollment confirmation email to student / parent
-      sendStudentEnrollmentConfirmationEmail({
-        schoolId: lead.schoolId,
-        schoolName: school?.name,
-        subdomain: school?.subdomain,
-        studentName: `${firstName} ${lastName}`.trim(),
-        admissionNumber,
-        currentClass: lead.targetGrade,
-        tierName: lead.tier?.name,
-        studentEmail: lead.studentEmail,
-        parentEmail: lead.parentEmail,
-        parentName: lead.parentName,
-      }).catch((emailErr) => {
+      try {
+        await sendStudentEnrollmentConfirmationEmail({
+          schoolId: lead.schoolId,
+          schoolName: school?.name,
+          subdomain: school?.subdomain,
+          studentName: `${firstName} ${lastName}`.trim(),
+          admissionNumber,
+          currentClass: lead.targetGrade,
+          tierName: lead.tier?.name,
+          studentEmail: lead.studentEmail,
+          parentEmail: lead.parentEmail,
+          parentName: lead.parentName,
+        });
+      } catch (emailErr) {
         console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in status route:", emailErr);
-      });
+      }
     } else {
       updatedLead = await basePrisma.admissionLead.update({
         where: { id },

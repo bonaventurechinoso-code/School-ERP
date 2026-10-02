@@ -159,20 +159,24 @@ export async function POST(req: Request) {
     });
 
     // Dispatch enrollment confirmation email to student / parent
-    sendStudentEnrollmentConfirmationEmail({
-      schoolId,
-      studentId: student.id,
-      studentName: `${firstName.trim()} ${lastName.trim()}`,
-      admissionNumber: finalAdmissionNumber,
-      currentClass: currentClass || "JSS 1",
-      tierName: null,
-      studentEmail: userEmail,
-      parentEmail: parentEmail || null,
-      parentName: parentName || null,
-      temporaryPassword: generatedTempPassword,
-    }).catch((emailErr) => {
+    try {
+      await sendStudentEnrollmentConfirmationEmail({
+        schoolId,
+        studentId: student.id,
+        schoolName: school.name,
+        subdomain: school.subdomain,
+        studentName: `${firstName.trim()} ${lastName.trim()}`,
+        admissionNumber: finalAdmissionNumber,
+        currentClass: currentClass || "JSS 1",
+        tierName: null,
+        studentEmail: userEmail,
+        parentEmail: parentEmail || null,
+        parentName: parentName || null,
+        temporaryPassword: generatedTempPassword,
+      });
+    } catch (emailErr) {
       console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api/students/create:", emailErr);
-    });
+    }
 
     return NextResponse.json(
       {
