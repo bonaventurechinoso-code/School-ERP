@@ -156,6 +156,8 @@ export async function POST(
     const updateData: any = {};
     const uploadedFileList: string[] = [];
 
+    const { uploadToUploadthing } = await import("@/lib/uploadthing");
+
     for (const item of fileFields) {
       const file = formData.get(item.field);
       if (file && typeof file === "object" && "arrayBuffer" in file && (file as File).size > 0) {
@@ -181,18 +183,39 @@ export async function POST(
           );
         }
 
-        // Determine extension safely
-        const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
-        const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
-        const fileName = `${item.prefix}-${Date.now()}${safeExt}`;
-        const filePath = path.join(targetDir, fileName);
+        // 1. Direct cloud upload to Uploadthing if UPLOADTHING_TOKEN is configured
+        let publicUrl: string | null = null;
+        let savedName = fileObj.name;
 
-        // Write file buffer to disk
-        const arrayBuffer = await fileObj.arrayBuffer();
-        fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+        try {
+          const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
+          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+          const customName = `${item.prefix}-${lead.id.slice(0, 8)}-${Date.now()}${safeExt}`;
 
-        // Public static URL
-        const publicUrl = `/uploads/admissions/${schoolId}/${lead.id}/${fileName}`;
+          const utResult = await uploadToUploadthing(fileObj, customName);
+          if (utResult && utResult.url) {
+            publicUrl = utResult.url;
+            savedName = utResult.name || customName;
+            console.log(`[UPLOAD_API_POST] Uploaded ${item.field} directly to Uploadthing:`, publicUrl);
+          }
+        } catch (utErr) {
+          console.warn(`[UPLOAD_API_POST] Uploadthing upload failed for ${item.field}:`, utErr);
+        }
+
+        // 2. Fallback to local disk storage if Uploadthing token is not set or failed (e.g., local dev)
+        if (!publicUrl) {
+          const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
+          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+          const fileName = `${item.prefix}-${Date.now()}${safeExt}`;
+          const filePath = path.join(targetDir, fileName);
+
+          // Write file buffer to disk
+          const arrayBuffer = await fileObj.arrayBuffer();
+          fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+          publicUrl = `/uploads/admissions/${schoolId}/${lead.id}/${fileName}`;
+          savedName = fileName;
+        }
 
         // Map to update columns
         if (item.field === "passportPhoto") updateData.passportPhotoUrl = publicUrl;
@@ -202,8 +225,10 @@ export async function POST(
 
         currentDocs[item.field] = {
           url: publicUrl,
+          fileUrl: publicUrl,
+          path: publicUrl,
           fileName: fileObj.name,
-          savedName: fileName,
+          savedName,
           size: fileObj.size,
           mimeType: fileObj.type,
           uploadedAt: new Date().toISOString(),

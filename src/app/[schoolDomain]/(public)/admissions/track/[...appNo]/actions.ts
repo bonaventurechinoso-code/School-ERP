@@ -57,6 +57,8 @@ export async function uploadApplicantDocsAction(formData: FormData) {
     const leadColumns: Record<string, any> = {};
     let uploadCount = 0;
 
+    const { uploadToUploadthing } = await import("@/lib/uploadthing");
+
     for (const config of fileConfigs) {
       const file = formData.get(config.key);
       if (file && typeof file === "object" && "arrayBuffer" in file && (file as File).size > 0) {
@@ -69,16 +71,39 @@ export async function uploadApplicantDocsAction(formData: FormData) {
           };
         }
 
-        const originalExt = path.extname(fileObj.name) || ".pdf";
-        const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
-        const fileName = `${config.key}-${Date.now()}${safeExt}`;
-        const filePath = path.join(targetDir, fileName);
+        // 1. Direct upload to Uploadthing if UPLOADTHING_TOKEN is present
+        let publicUrl: string | null = null;
+        let savedFileName = fileObj.name;
 
-        const arrayBuffer = await fileObj.arrayBuffer();
-        fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
-        console.log("[UPLOAD_DIAGNOSE] file path saved:", filePath);
+        try {
+          const originalExt = path.extname(fileObj.name) || ".pdf";
+          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+          const customName = `${config.key}-${applicant.applicationNo}-${Date.now()}${safeExt}`;
 
-        const publicUrl = `/uploads/admissions/${schoolId}/${applicant.applicationNo}/${fileName}`;
+          const utResult = await uploadToUploadthing(fileObj, customName);
+          if (utResult && utResult.url) {
+            publicUrl = utResult.url;
+            savedFileName = utResult.name || customName;
+            console.log(`[UPLOAD_TRACK_ACTION] Uploaded ${config.key} to Uploadthing:`, publicUrl);
+          }
+        } catch (utErr) {
+          console.warn(`[UPLOAD_TRACK_ACTION] Uploadthing upload failed for ${config.key}:`, utErr);
+        }
+
+        // 2. Fallback to local storage if Uploadthing is unavailable
+        if (!publicUrl) {
+          const originalExt = path.extname(fileObj.name) || ".pdf";
+          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+          const fileName = `${config.key}-${Date.now()}${safeExt}`;
+          const filePath = path.join(targetDir, fileName);
+
+          const arrayBuffer = await fileObj.arrayBuffer();
+          fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+          console.log("[UPLOAD_DIAGNOSE] file path saved locally:", filePath);
+
+          publicUrl = `/uploads/admissions/${schoolId}/${applicant.applicationNo}/${fileName}`;
+          savedFileName = fileName;
+        }
 
         const docEntry = {
           type: config.type,
@@ -88,7 +113,7 @@ export async function uploadApplicantDocsAction(formData: FormData) {
           name: config.label,
           originalName: fileObj.name,
           fileName: fileObj.name,
-          filename: fileName,
+          filename: savedFileName,
           fileUrl: publicUrl,
           url: publicUrl,
           path: publicUrl,

@@ -568,24 +568,28 @@ export default function ApplicantDossierDrawer({
                 key: "passportPhoto",
                 aliases: ["Recent Passport", "passportPhoto", "passport_photo", "passport"],
                 label: "Recent Passport",
+                directUrl: application.passportPhotoUrl,
               },
               {
                 type: "NPC Birth Cert",
                 key: "birthCertificate",
                 aliases: ["NPC Birth Cert", "birthCertificate", "birth_certificate", "birthCert"],
                 label: "NPC Birth Cert",
+                directUrl: application.birthCertificateUrl,
               },
               {
                 type: "Previous Academic Results",
                 key: "academicResults",
                 aliases: ["Previous Academic Results", "academicResults", "academic_results", "lastResult", "last_result", "result"],
                 label: "Previous Academic Results",
+                directUrl: application.academicResultsUrl,
               },
               {
                 type: "Medical Fitness",
                 key: "medicalRecords",
                 aliases: ["Medical Fitness", "medicalRecords", "medical_records", "medical_fitness", "nin"],
                 label: "Medical Fitness",
+                directUrl: application.medicalRecordsUrl,
               },
             ];
 
@@ -619,15 +623,26 @@ export default function ApplicantDossierDrawer({
                       const doc = docs.find((d: any) =>
                         d.type === req.type ||
                         d.type === req.key ||
-                        (req.aliases && (req.aliases.includes(d.type) || req.aliases.includes(d.docType)))
+                        (req.aliases && (req.aliases.includes(d.type) || req.aliases.includes(d.docType) || req.aliases.includes(d.key)))
                       ) || {};
 
-                      const rawFileUrl = doc.fileUrl || doc.url;
+                      const rawFileUrl = (doc.fileUrl || doc.url || doc.path || req.directUrl || "").trim();
                       let resolvedFileUrl = rawFileUrl;
-                      if (resolvedFileUrl && resolvedFileUrl.startsWith("/uploads/")) {
-                        resolvedFileUrl = `/api${resolvedFileUrl}`;
+                      if (resolvedFileUrl) {
+                        if (resolvedFileUrl.startsWith("http://") || resolvedFileUrl.startsWith("https://")) {
+                          // Already an Uploadthing secure public URL or full URL
+                          resolvedFileUrl = rawFileUrl;
+                        } else if (resolvedFileUrl.startsWith("/api/uploads/")) {
+                          resolvedFileUrl = rawFileUrl;
+                        } else if (resolvedFileUrl.startsWith("/uploads/")) {
+                          resolvedFileUrl = `/api${resolvedFileUrl}`;
+                        } else if (resolvedFileUrl.startsWith("/")) {
+                          resolvedFileUrl = rawFileUrl;
+                        } else {
+                          resolvedFileUrl = `/api/uploads/${resolvedFileUrl}`;
+                        }
                       }
-                      const hasFile = Boolean(rawFileUrl);
+                      const hasFile = Boolean(resolvedFileUrl);
                       const isVerified = doc.status === "VERIFIED";
                       const isRejected = doc.status === "REJECTED";
                       const docId = doc.id || req.key;
@@ -666,10 +681,14 @@ export default function ApplicantDossierDrawer({
                           <div className="flex gap-2">
                             <button
                               type="button"
-                              onClick={() => window.open(doc.fileUrl || doc.url || resolvedFileUrl, '_blank')}
-                              disabled={!doc.fileUrl && !doc.url}
+                              onClick={() => {
+                                if (resolvedFileUrl) {
+                                  window.open(resolvedFileUrl, '_blank', 'noopener,noreferrer');
+                                }
+                              }}
+                              disabled={!resolvedFileUrl}
                               className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 transition border ${
-                                !doc.fileUrl && !doc.url
+                                !resolvedFileUrl
                                   ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                                   : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 cursor-pointer"
                               }`}
@@ -679,11 +698,11 @@ export default function ApplicantDossierDrawer({
                             <button
                               type="button"
                               onClick={handleVerify(doc.id || docId)}
-                              disabled={doc.status === 'VERIFIED' || !doc.fileUrl}
+                              disabled={doc.status === 'VERIFIED' || !resolvedFileUrl}
                               className={`px-3 py-1.5 rounded-lg font-bold text-xs transition ${
                                 doc.status === 'VERIFIED'
                                   ? "bg-emerald-600 text-white shadow-xs cursor-default"
-                                  : !doc.fileUrl
+                                  : !resolvedFileUrl
                                   ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
                                   : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
                               }`}
