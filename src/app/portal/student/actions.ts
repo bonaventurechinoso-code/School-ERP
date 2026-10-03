@@ -75,7 +75,8 @@ export async function fetchStudentPortalWorkspace(params: {
   };
 
   // 2. Resolve Active Academic Tier Preliminary
-  const sessionTier = session?.activeTiers?.[0];
+  const sessionAssignedTier = (session as any)?.assignedTier;
+  const sessionTier = sessionAssignedTier || session?.activeTiers?.[0];
   const requestedTier = params.tierParam || sessionTier || resolvedSchool.academicTiers[0]?.name || "Primary School";
   let tierConfig = getTierPresentationConfig(requestedTier);
 
@@ -257,12 +258,24 @@ export async function fetchStudentPortalWorkspace(params: {
     fallbackTier: requestedTier,
   });
 
-  // If tierParam wasn't explicitly supplied, use the student's real academic tier
-  const effectiveTier = params.tierParam ? requestedTier : studentAcademicTierInfo.tierName;
+  // If tierParam wasn't explicitly supplied, check if sessionAssignedTier is set, else use student's real academic tier
+  const effectiveTier = params.tierParam 
+    ? requestedTier 
+    : (sessionAssignedTier || studentAcademicTierInfo.tierName);
   const effectiveTierConfig = params.tierParam 
     ? getTierPresentationConfig(params.tierParam) 
-    : studentAcademicTierInfo.config;
-  const effectiveBadgeCode = studentAcademicTierInfo.badgeCode;
+    : (sessionAssignedTier ? getTierPresentationConfig(sessionAssignedTier) : studentAcademicTierInfo.config);
+  const effectiveBadgeCode = sessionAssignedTier 
+    ? formatClassAlignedBadgeCode(dbStudent?.currentClass, sessionAssignedTier) 
+    : studentAcademicTierInfo.badgeCode;
+
+  // Cross-Domain JWT Session: If user is PARENT, automatically render Parent tracking view
+  const isParentUser = (session as any)?.userRole === "PARENT" || session?.role === "PARENT";
+  if (isParentUser) {
+    effectiveTierConfig.hasParentOrientation = true;
+    effectiveTierConfig.audienceFocus = "Parent & Guardian Tracking Portal";
+  }
+
   tierConfig = effectiveTierConfig;
 
   // 7. Shape Data Models with Class-Aligned ID and Conditional Logic

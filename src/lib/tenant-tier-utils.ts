@@ -229,3 +229,97 @@ export function getExamSubjectsForTier(tierName?: string, targetGrade?: string):
   // Default Primary / Elementary
   return ["Mathematics", "English Language", "General Paper", "Verbal Reasoning"];
 }
+
+export interface ParsedInstitutionalIdentifier {
+  schoolToken: string | null;
+  tierToken: string | null;
+  candidateTierName: string | null;
+  yearToken: string | null;
+  seqToken: string | null;
+  rawIdentifier: string;
+}
+
+/**
+ * Maps a parsed tier abbreviation token (e.g. "NUR", "SEC", "PRI") to canonical tier name
+ */
+export function mapTierTokenToTierName(tierToken?: string | null): string | null {
+  if (!tierToken) return null;
+  const t = tierToken.toUpperCase().trim();
+  if (t === "NUR" || t === "CRE" || t === "DAY" || t === "NURSERY" || t === "CRECHE" || t === "DAYCARE" || t === "CRÈCHE") {
+    return "Daycare / Nursery";
+  }
+  if (t === "PRI" || t === "ELE" || t === "BAS" || t === "PRIMARY" || t === "BASIC" || t === "ELEMENTARY") {
+    return "Primary School";
+  }
+  if (t === "SEC" || t === "HIG" || t === "JSS" || t === "SSS" || t === "SECONDARY" || t === "HIGH" || t === "HIGH SCHOOL") {
+    return "Secondary School";
+  }
+  if (t === "UNI" || t === "DEG" || t === "UNIVERSITY") {
+    return "University";
+  }
+  if (t === "POLY" || t === "ND" || t === "HND" || t === "POLYTECHNIC") {
+    return "Polytechnic";
+  }
+  if (t === "COL" || t === "NCE" || t === "COLLEGE") {
+    return "College";
+  }
+  return null;
+}
+
+/**
+ * Parses institutional identifiers from 'School Code' or admission number strings
+ * (e.g. extracting 'RIV' and 'NUR' from 'RIV/NUR/2026/002').
+ */
+export function parseInstitutionalIdentifier(
+  identifier?: string | null,
+  explicitSchoolCode?: string | null
+): ParsedInstitutionalIdentifier {
+  const raw = (identifier || "").trim();
+  const cleanExplicit = (explicitSchoolCode || "").trim();
+
+  let schoolToken: string | null = cleanExplicit ? cleanExplicit.toLowerCase() : null;
+  let tierToken: string | null = null;
+  let yearToken: string | null = null;
+  let seqToken: string | null = null;
+
+  if (raw) {
+    const slashParts = raw.split(/[\/\\]/);
+    const dashParts = raw.split("-");
+    const parts = slashParts.length >= 3 ? slashParts : dashParts.length >= 3 ? dashParts : null;
+
+    if (parts && parts.length >= 3) {
+      const p0 = parts[0].trim();
+      const p1 = parts[1].trim();
+
+      if (!schoolToken && p0) {
+        schoolToken = p0.toLowerCase();
+      }
+
+      if (parts.length === 4) {
+        // [PREFIX, TIER, YEAR, SEQ] -> RIV / NUR / 2026 / 002
+        tierToken = p1.toUpperCase();
+        yearToken = parts[2].trim();
+        seqToken = parts[3].trim();
+      } else if (parts.length === 3) {
+        if (/^\d{4}$/.test(p1)) {
+          yearToken = p1;
+          seqToken = parts[2].trim();
+        } else {
+          tierToken = p1.toUpperCase();
+          seqToken = parts[2].trim();
+        }
+      }
+    }
+  }
+
+  const candidateTierName = mapTierTokenToTierName(tierToken);
+
+  return {
+    schoolToken,
+    tierToken,
+    candidateTierName,
+    yearToken,
+    seqToken,
+    rawIdentifier: raw,
+  };
+}

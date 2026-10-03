@@ -49,6 +49,8 @@ export interface CreateSessionParams {
   schoolDomain?: string | null;
   tenantName?: string | null;
   role: UserRole | string;
+  userRole?: string | null;
+  assignedTier?: string | null;
   staffRole?: string | null;
   activeTiers?: string[];
   permissions?: string[];
@@ -72,6 +74,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
   const sessionToken = params.sessionToken || crypto.randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE_MS);
+  const effectiveRole = params.userRole || params.role;
 
   // 1. Create authoritative database record
   await basePrisma.session.create({
@@ -81,7 +84,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
       email: params.email || null,
       tenantId: params.tenantId || null,
       schoolDomain: params.schoolDomain || null,
-      role: params.role,
+      role: effectiveRole,
       staffRole: params.staffRole || null,
       expiresAt,
       lastActiveAt: now,
@@ -103,7 +106,9 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
     tenantId: params.tenantId || "global-saas",
     schoolDomain: params.schoolDomain || "admin",
     tenantName: params.tenantName || undefined,
-    role: params.role,
+    role: effectiveRole,
+    userRole: effectiveRole,
+    assignedTier: params.assignedTier ?? null,
     staffRole: params.staffRole || undefined,
     activeTiers: params.activeTiers || [],
     permissions: params.permissions || [],
@@ -252,20 +257,24 @@ export async function validateDatabaseSession(
     }
 
     // 8. Return server-authoritative session state including sessionToken
+    const anyPayload = payload as any;
     return {
       userId: dbSession.userId,
-      email: dbSession.email || (payload.email as string),
-      tenantId: dbSession.tenantId || (payload.tenantId as string) || "global-saas",
-      schoolDomain: dbSession.schoolDomain || (payload.schoolDomain as string) || "admin",
-      tenantName: (payload.tenantName as string) || undefined,
+      email: dbSession.email || (anyPayload.email as string),
+      tenantId: dbSession.tenantId || (anyPayload.tenantId as string) || "global-saas",
+      schoolDomain: dbSession.schoolDomain || (anyPayload.schoolDomain as string) || "admin",
+      tenantName: (anyPayload.tenantName as string) || undefined,
       role: dbSession.role as UserRole | string,
-      staffRole: dbSession.staffRole || (payload.staffRole as string) || undefined,
-      activeTiers: (payload.activeTiers as string[]) || [],
-      permissions: (payload.permissions as string[]) || [],
+      userRole: (anyPayload.userRole as string) || (dbSession.role as string),
+      assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
+      staffRole: dbSession.staffRole || (anyPayload.staffRole as string) || undefined,
+      activeTiers: (anyPayload.activeTiers as string[]) || [],
+      permissions: (anyPayload.permissions as string[]) || [],
       sessionToken: dbSession.sessionToken,
       sessionId: dbSession.sessionToken,
       token: token,
       dbSessionId: dbSession.id,
+
       expiresAt: dbSession.expiresAt,
       mustChangePassword,
       forceChangePassword: mustChangePassword,

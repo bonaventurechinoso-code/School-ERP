@@ -16,7 +16,14 @@ const ALG = "HS256";
 export interface AccessTokenClaims {
   userId: string;
   schoolId: string;
+  tenantId?: string;
   role: string;
+  userRole?: string;
+  assignedTier?: string | null;
+  activeTiers?: string[];
+  schoolDomain?: string;
+  tenantSlug?: string;
+  tenantName?: string;
   email?: string;
   isSuperAdmin?: boolean;
   mustChangePassword?: boolean;
@@ -31,15 +38,25 @@ export function hashToken(rawToken: string): string {
 }
 
 /**
- * Signs a short-lived (15 minutes) Access Token JWT.
+ * Signs a short-lived (15 minutes) Access Token JWT containing cross-domain multi-tenant and multi-tier claims.
  */
 export async function signAccessToken(claims: AccessTokenClaims): Promise<string> {
+  const effectiveTenantId = claims.tenantId || claims.schoolId;
+  const effectiveRole = claims.userRole || claims.role;
+
   return new jose.SignJWT({
     userId: claims.userId,
-    schoolId: claims.schoolId,
-    role: claims.role,
+    schoolId: claims.schoolId || effectiveTenantId,
+    tenantId: effectiveTenantId,
+    role: claims.role || effectiveRole,
+    userRole: effectiveRole,
+    assignedTier: claims.assignedTier ?? null,
+    activeTiers: claims.activeTiers || [],
+    schoolDomain: claims.schoolDomain,
+    tenantSlug: claims.tenantSlug || claims.schoolDomain,
+    tenantName: claims.tenantName,
     email: claims.email,
-    isSuperAdmin: Boolean(claims.isSuperAdmin || claims.role === "SUPER_ADMIN"),
+    isSuperAdmin: Boolean(claims.isSuperAdmin || claims.role === "SUPER_ADMIN" || effectiveRole === "SUPER_ADMIN"),
     mustChangePassword: Boolean(claims.mustChangePassword),
   })
     .setProtectedHeader({ alg: ALG })
@@ -49,15 +66,24 @@ export async function signAccessToken(claims: AccessTokenClaims): Promise<string
 }
 
 /**
- * Verifies a short-lived Access Token JWT.
+ * Verifies a short-lived Access Token JWT and extracts tenantId, userRole, and assignedTier.
  */
 export async function verifyAccessToken(token: string): Promise<AccessTokenClaims | null> {
   try {
     const { payload } = await jose.jwtVerify(token, SECRET_KEY);
+    const tenantId = (payload.tenantId || payload.schoolId) as string;
+    const userRole = (payload.userRole || payload.role) as string;
     return {
       userId: payload.userId as string,
-      schoolId: payload.schoolId as string,
-      role: payload.role as string,
+      schoolId: (payload.schoolId || tenantId) as string,
+      tenantId: tenantId,
+      role: (payload.role || userRole) as string,
+      userRole: userRole,
+      assignedTier: (payload.assignedTier as string) || null,
+      activeTiers: (payload.activeTiers as string[]) || [],
+      schoolDomain: payload.schoolDomain as string,
+      tenantSlug: payload.tenantSlug as string,
+      tenantName: payload.tenantName as string,
       email: payload.email as string | undefined,
       isSuperAdmin: Boolean(payload.isSuperAdmin),
       mustChangePassword: Boolean(payload.mustChangePassword),

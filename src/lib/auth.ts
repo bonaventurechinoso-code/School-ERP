@@ -215,17 +215,21 @@ export async function getSession(tokenOverride?: string | null): Promise<Session
       (payload.id as string) ||
       rawToken;
 
+    const anyPayload = payload as any;
     return {
-      ...(payload as any),
+      ...anyPayload,
       sessionToken,
       sessionId: sessionToken,
-      userId: (payload.userId as string) || (payload.id as string) || "stateless-user",
-      role: (payload.role as UserRole) || "STAFF",
-      tenantId: (payload.tenantId as string) || "global-saas",
-      schoolDomain: (payload.schoolDomain as string) || "admin",
-      activeTiers: (payload.activeTiers as string[]) || [],
-      permissions: (payload.permissions as string[]) || [],
+      userId: (anyPayload.userId as string) || (anyPayload.id as string) || "stateless-user",
+      role: (anyPayload.role as UserRole) || (anyPayload.userRole as UserRole) || "STAFF",
+      userRole: (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF",
+      assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
+      tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || "global-saas",
+      schoolDomain: (anyPayload.schoolDomain as string) || "admin",
+      activeTiers: (anyPayload.activeTiers as string[]) || [],
+      permissions: (anyPayload.permissions as string[]) || [],
     } as SessionPayload;
+
   } catch (error) {
     console.error("Failed to decode session token:", error);
     return null;

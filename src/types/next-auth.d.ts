@@ -16,6 +16,8 @@ declare module "next-auth" {
       schoolDomain: string;
       tenantName?: string | null;
       activeTiers?: string[];
+      assignedTier?: string | null;
+      userRole?: string;
       permissions?: string[];
       sessionToken?: string;
       dbSessionId?: string;
@@ -25,10 +27,12 @@ declare module "next-auth" {
   interface User extends DefaultUser {
     userId?: string;
     role?: UserRole | string;
+    userRole?: string;
     staffRole?: string | null;
     tenantId?: string;
     schoolDomain?: string;
     tenantName?: string | null;
+    assignedTier?: string | null;
     activeTiers?: string[];
     permissions?: string[];
     sessionToken?: string;
@@ -39,13 +43,16 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     userId?: string;
     role?: UserRole | string;
+    userRole?: string;
     staffRole?: string | null;
     tenantId?: string;
     schoolDomain?: string;
     tenantName?: string | null;
+    assignedTier?: string | null;
     activeTiers?: string[];
     permissions?: string[];
     sessionToken?: string;
     dbSessionId?: string;
   }
 }
+

@@ -305,7 +305,9 @@ function UniversalLoginPageContent() {
           schoolDomain: apiLoginData.schoolDomain || targetDomain,
           tenantName: apiLoginData.tenantName || formatTenantDisplayName(apiLoginData.schoolDomain || targetDomain),
           role: apiLoginData.role,
+          userRole: apiLoginData.userRole || apiLoginData.role,
           staffRole: apiLoginData.staffRole || apiLoginData.role,
+          assignedTier: apiLoginData.assignedTier || null,
           activeTiers: apiLoginData.activeTiers || [],
           permissions: apiLoginData.permissions || [],
           sessionToken: apiLoginData.sessionToken || effectiveToken,
@@ -343,7 +345,9 @@ function UniversalLoginPageContent() {
                 schoolDomain: user.schoolDomain,
                 tenantName: user.tenantName,
                 role: user.role,
+                userRole: (user as any).userRole || user.role,
                 staffRole: user.staffRole,
+                assignedTier: (user as any).assignedTier || null,
                 activeTiers: user.activeTiers || [],
                 permissions: user.permissions || [],
                 sessionToken: user.sessionToken,
@@ -361,7 +365,7 @@ function UniversalLoginPageContent() {
         }
         persistStoredSession(sessionPayload);
 
-        // Synchronize persistent tenant context in local storage for PWP container
+        // Synchronize persistent tenant and tier context in local storage for PWA container
         if (typeof window !== "undefined") {
           const finalDomain = sessionPayload.schoolDomain || targetDomain;
           if (finalDomain) {
@@ -370,6 +374,12 @@ function UniversalLoginPageContent() {
           }
           if (sessionPayload.tenantId) {
             window.localStorage.setItem("tenantId", sessionPayload.tenantId);
+          }
+          if (sessionPayload.assignedTier) {
+            window.localStorage.setItem("schoolerp_assigned_tier", sessionPayload.assignedTier);
+          }
+          if (sessionPayload.userRole) {
+            window.localStorage.setItem("schoolerp_user_role", sessionPayload.userRole);
           }
           window.localStorage.setItem("schoolerp_active_role", activeRoleTab);
         }
@@ -405,15 +415,18 @@ function UniversalLoginPageContent() {
         staffRoleStr.includes("CASHIER") ||
         staffRoleStr.includes("FINANCE");
 
+      const assignedTierParam = user?.assignedTier ? `?tier=${encodeURIComponent(user.assignedTier)}` : "";
+
       if (canonicalRole === "STUDENT" || activeRoleTab === "student" || activeRoleTab === "parent") {
-        router.push(`/${tenantSlug}/portal/student`);
+        router.push(`/${tenantSlug}/portal/student${assignedTierParam}`);
       } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
-        router.push(`/${tenantSlug}/portal/staff`);
+        router.push(`/${tenantSlug}/portal/staff${assignedTierParam}`);
       } else if (isBursarRole) {
         router.push("/bursar");
       } else {
         router.push(`/${tenantSlug}/dashboard`);
       }
+
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred. Please try again.");
       setIsSubmitting(false);
