@@ -619,8 +619,8 @@ export async function sendSuperAdminTenantRegistrationEmail(payload: {
   `;
 
   try {
-    const { dispatchEmail } = await import("./email-service");
-    const result = await dispatchEmail({
+    const { sendMail } = await import("./mail");
+    const result = await sendMail({
       to: superAdminEmail,
       subject: `[New Tenant] ${payload.schoolName} (${payload.subdomain})`,
       html: htmlContent,
@@ -630,9 +630,12 @@ export async function sendSuperAdminTenantRegistrationEmail(payload: {
     });
 
     console.log(`[SUPER_ADMIN_EMAIL] Dispatched to ${superAdminEmail} with status: ${result.deliveryStatus}`);
+    if (!result.success) {
+      console.error("[EMAIL_SYNC_ERROR] [SUPER_ADMIN_ALERT] Delivery failure:", result.error);
+    }
     return { delivered: result.success, mode: result.deliveryStatus };
   } catch (err: any) {
-    console.error("[SUPER_ADMIN_EMAIL_EXCEPTION]:", err?.message || err);
+    console.error("[EMAIL_SYNC_ERROR] [SUPER_ADMIN_EMAIL_EXCEPTION]:", err?.message || err);
     return { delivered: false, mode: "FAILED" };
   }
 }

@@ -1,4 +1,5 @@
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 import fs from "fs";
 import path from "path";
 
@@ -301,6 +302,31 @@ export async function admitApplicant({
   const student = await tenantDb.student.create({
     data: studentData,
   });
+
+  // 5. Dispatch enrollment confirmation email via unified mail service
+  if (applicant.email) {
+    try {
+      const emailResult = await sendStudentEnrollmentConfirmationEmail({
+        schoolId: school?.id || tenantId,
+        studentId: student.id,
+        schoolName: school?.name,
+        subdomain: school?.subdomain,
+        studentName: `${applicant.firstName} ${applicant.lastName}`.trim(),
+        admissionNumber: applicant.applicationNo,
+        currentClass: applicant.classApplied,
+        tierName: tier?.name || null,
+        studentEmail: applicant.email,
+        parentEmail: applicant.email,
+        parentName: `${applicant.lastName} Family`,
+      });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [ENROLLMENT_CONTROLLER] Failed to send enrollment confirmation to ${applicant.email}:`, emailResult.error);
+      }
+    } catch (emailErr) {
+      console.error("[EMAIL_SYNC_ERROR] [ENROLLMENT_CONTROLLER] Error sending enrollment confirmation email:", emailErr);
+    }
+  }
 
   return {
     success: true,

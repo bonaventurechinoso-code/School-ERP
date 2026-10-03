@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { BCRYPT_ROUNDS } from "@/lib/security-service";
-import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 
 export async function POST(req: Request) {
   try {
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
 
     // Dispatch enrollment confirmation email to student / parent
     try {
-      await sendStudentEnrollmentConfirmationEmail({
+      const emailResult = await sendStudentEnrollmentConfirmationEmail({
         schoolId,
         studentId: student.id,
         schoolName: school.name,
@@ -174,8 +174,12 @@ export async function POST(req: Request) {
         parentName: parentName || null,
         temporaryPassword: generatedTempPassword,
       });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for student ${student.id} (${userEmail}):`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api/students/create:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in api/students/create:", emailErr);
     }
 
     return NextResponse.json(

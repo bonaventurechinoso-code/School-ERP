@@ -7,7 +7,7 @@ import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/secur
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
-import { sendStaffEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStaffEnrollmentConfirmationEmail } from "@/lib/mail";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -428,7 +428,7 @@ export async function createStaff(
 
     // Dispatch enrollment confirmation email to staff member
     try {
-      await sendStaffEnrollmentConfirmationEmail({
+      const emailResult = await sendStaffEnrollmentConfirmationEmail({
         schoolId,
         staffId: staff.id,
         staffName: `${data.firstName.trim()} ${data.lastName.trim()}`,
@@ -437,8 +437,11 @@ export async function createStaff(
         departmentId: data.departmentId || null,
         temporaryPassword: isTemporary ? staffPasswordToSave : undefined,
       });
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Delivery failure for staff ${staff.id}:`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in createStaff:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Staff enrollment confirmation error in createStaff:", emailErr);
     }
 
     return { success: true, data: staff };

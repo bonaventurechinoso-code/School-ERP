@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
-import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 
 export async function POST(
   req: NextRequest,
@@ -133,7 +133,7 @@ export async function POST(
 
     // Dispatch enrollment confirmation email to student / parent
     try {
-      await sendStudentEnrollmentConfirmationEmail({
+      const emailResult = await sendStudentEnrollmentConfirmationEmail({
         schoolId: lead.schoolId,
         studentId: newStudent.id,
         schoolName: school?.name,
@@ -146,8 +146,12 @@ export async function POST(
         parentEmail: lead.parentEmail,
         parentName: lead.parentName,
       });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for student ${newStudent.id}:`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in api enroll route:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in api enroll route:", emailErr);
     }
 
     return NextResponse.json({

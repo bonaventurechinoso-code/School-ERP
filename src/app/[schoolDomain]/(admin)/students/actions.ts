@@ -10,7 +10,7 @@ import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
-import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -328,7 +328,7 @@ export async function createStudent(
     // Dispatch enrollment confirmation email if enrolled
     if (data.status === "ENROLLED" || !data.status) {
       try {
-        await sendStudentEnrollmentConfirmationEmail({
+        const emailResult = await sendStudentEnrollmentConfirmationEmail({
           schoolId,
           studentId: createdStudent.id,
           schoolName: school?.name,
@@ -342,8 +342,12 @@ export async function createStudent(
           parentName: data.parentName || null,
           temporaryPassword: isTemporary ? passwordToSave : undefined,
         });
+
+        if (!emailResult.success) {
+          console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for student ${createdStudent.id}:`, emailResult.error);
+        }
       } catch (emailErr) {
-        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error:", emailErr);
+        console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error:", emailErr);
       }
     }
 
@@ -465,7 +469,7 @@ export async function updateStudentStatus(
       try {
         const st: any = await tenantDb.student.findUnique({ where: { id: studentId } });
         if (st) {
-          await sendStudentEnrollmentConfirmationEmail({
+          const emailResult = await sendStudentEnrollmentConfirmationEmail({
             schoolId,
             studentId: st.id,
             studentName: `${st.firstName} ${st.lastName}`.trim(),
@@ -476,9 +480,13 @@ export async function updateStudentStatus(
             parentEmail: st.parentEmail,
             parentName: st.parentName,
           });
+
+          if (!emailResult.success) {
+            console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure on status update for student ${st.id}:`, emailResult.error);
+          }
         }
       } catch (emailErr) {
-        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error on status update:", emailErr);
+        console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error on status update:", emailErr);
       }
     }
 

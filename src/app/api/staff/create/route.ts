@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
-import { sendStaffEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStaffEnrollmentConfirmationEmail } from "@/lib/mail";
 
 export async function POST(req: Request) {
   try {
@@ -161,7 +161,7 @@ export async function POST(req: Request) {
 
     // Dispatch enrollment confirmation email to staff member
     try {
-      await sendStaffEnrollmentConfirmationEmail({
+      const emailResult = await sendStaffEnrollmentConfirmationEmail({
         schoolId,
         staffId: staff.id,
         schoolName: school.name,
@@ -172,8 +172,12 @@ export async function POST(req: Request) {
         departmentId: finalDeptId || null,
         temporaryPassword: generatedTempPassword,
       });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Delivery failure for staff ${staff.id} (${normalizedEmail}):`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Staff enrollment confirmation error in api/staff/create:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Staff enrollment confirmation error in api/staff/create:", emailErr);
     }
 
     return NextResponse.json(

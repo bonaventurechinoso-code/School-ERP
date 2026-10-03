@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { createPasswordResetToken } from "@/lib/security-service";
-import { sendPasswordResetEmail } from "@/lib/email-service";
+import { sendPasswordResetEmail } from "@/lib/mail";
 import { BASE_TENANT_DOMAIN } from "@/lib/session-manager";
 
 export async function POST(req: Request) {
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     // 5. Transmit transactional email via mail delivery service
-    await sendPasswordResetEmail({
+    const mailResult = await sendPasswordResetEmail({
       school,
       recipientEmail: normalizedEmail,
       recipientName: userName,
@@ -135,13 +135,17 @@ export async function POST(req: Request) {
       expiresMinutes: 15,
     });
 
+    if (!mailResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [PASSWORD_RESET] Failed to dispatch password reset to ${normalizedEmail}:`, mailResult.error);
+    }
+
     return NextResponse.json({
       success: true,
       message: "A password recovery email with instructions has been dispatched to your email address.",
       resetUrlPreview: process.env.NODE_ENV === "development" ? resetUrl : undefined,
     });
   } catch (error: any) {
-    console.error("[AUTH_FORGOT_PASSWORD_ERROR]:", error);
+    console.error("[EMAIL_SYNC_ERROR] [AUTH_FORGOT_PASSWORD_ERROR]:", error);
     return NextResponse.json(
       { error: "Could not initiate password recovery.", code: "INTERNAL_ERROR" },
       { status: 500 }

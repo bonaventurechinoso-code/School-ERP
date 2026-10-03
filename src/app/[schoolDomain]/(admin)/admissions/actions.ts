@@ -7,7 +7,7 @@ import {
   sendStudentEnrollmentConfirmationEmail,
   sendDocsRequestEmail,
   sendExamAdmitSlipEmail,
-} from "@/lib/email-service";
+} from "@/lib/mail";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber, getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
@@ -690,7 +690,7 @@ export async function enrollApplicantAction(payload: {
 
     // Dispatch enrollment confirmation email to student / parent
     try {
-      await sendStudentEnrollmentConfirmationEmail({
+      const emailResult = await sendStudentEnrollmentConfirmationEmail({
         schoolId: lead.schoolId,
         studentId: newStudent.id,
         schoolName: school?.name,
@@ -704,8 +704,12 @@ export async function enrollApplicantAction(payload: {
         parentName: lead.parentName,
         temporaryPassword: isTemporary ? "Welcome123" : undefined,
       });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure in enrollLead for student ${newStudent.id}:`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in enrollLead:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in enrollLead:", emailErr);
     }
 
     return {
@@ -768,7 +772,7 @@ export async function updateLeadStatusAction(payload: {
         try {
           await sendAdmissionOfferEmail(updatedLead, school, token);
         } catch (mailErr) {
-          console.warn("Failed to dispatch admission offer email:", mailErr);
+          console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] Failed to dispatch admission offer email:", mailErr);
         }
       }
     } else {
@@ -945,6 +949,7 @@ export async function requestApplicantDocsAction(payload: {
     });
 
     if (!mailResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [REQUEST_DOCS] Delivery failure for ${recipientEmail}:`, mailResult.error);
       return {
         success: false,
         error: mailResult.error || "Failed to dispatch email via Resend service.",
@@ -971,7 +976,7 @@ export async function requestApplicantDocsAction(payload: {
       recipientEmail,
     };
   } catch (error: any) {
-    console.error("[requestApplicantDocsAction] Error:", error);
+    console.error("[EMAIL_SYNC_ERROR] [REQUEST_DOCS] Action error:", error);
     return { success: false, error: error?.message || "Failed to request applicant documents." };
   }
 }

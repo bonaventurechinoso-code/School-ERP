@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
-import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
@@ -47,7 +47,7 @@ export async function PATCH(
         try {
           await sendAdmissionOfferEmail(updatedLead, school as any, token);
         } catch (mailErr) {
-          console.warn("Failed to dispatch admission offer email:", mailErr);
+          console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] Failed to dispatch admission offer email:", mailErr);
         }
       }
     } else if (status === "ENROLLED") {
@@ -143,7 +143,7 @@ export async function PATCH(
 
       // Dispatch enrollment confirmation email to student / parent
       try {
-        await sendStudentEnrollmentConfirmationEmail({
+        const emailResult = await sendStudentEnrollmentConfirmationEmail({
           schoolId: lead.schoolId,
           schoolName: school?.name,
           subdomain: school?.subdomain,
@@ -155,8 +155,12 @@ export async function PATCH(
           parentEmail: lead.parentEmail,
           parentName: lead.parentName,
         });
+
+        if (!emailResult.success) {
+          console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for lead ${lead.id}:`, emailResult.error);
+        }
       } catch (emailErr) {
-        console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in status route:", emailErr);
+        console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in status route:", emailErr);
       }
     } else {
       updatedLead = await basePrisma.admissionLead.update({

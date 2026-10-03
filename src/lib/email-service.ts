@@ -3,6 +3,8 @@ import { basePrisma } from "./tenant-prisma";
 import fs from "fs";
 import path from "path";
 import { generateExamAdmitSlipPdf } from "./admit-slip-pdf";
+import { sendMail, resend } from "./mail";
+export { sendMail, resend };
 
 /**
  * Mock Email Service for sending transactional emails.
@@ -193,10 +195,15 @@ export async function sendApplicationReceivedEmail(payload: ApplicationReceivedE
       logCategory: "ADMISSIONS_RECEIVED",
     });
 
+    if (!dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_RECEIVED] Failed to dispatch application received email to ${recipientEmail}:`, dispatchResult.error);
+      return { success: false, trackUrl, uploadUrl, dispatchResult, error: dispatchResult.error };
+    }
+
     console.log(`[EMAIL_SERVICE] Dispatched application received email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
     return { success: true, trackUrl, uploadUrl, dispatchResult };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Error in sendApplicationReceivedEmail:", err);
+    console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_RECEIVED] Error in sendApplicationReceivedEmail:", err);
     return { success: false, error: err?.message || String(err) };
   }
 }
@@ -787,10 +794,15 @@ export async function sendDocsRequestEmail(payload: DocsRequestEmailPayload) {
       logCategory: "ADMISSIONS_DOCS_REQUEST",
     });
 
+    if (!dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_DOCS_REQUEST] Failed to dispatch docs request to ${recipientEmail}:`, dispatchResult.error);
+      return { success: false, uploadUrl, dispatchResult, error: dispatchResult.error };
+    }
+
     console.log(`[EMAIL_SERVICE] Dispatched docs request email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
     return { success: true, uploadUrl, dispatchResult };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Error in sendDocsRequestEmail:", err);
+    console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_DOCS_REQUEST] Error in sendDocsRequestEmail:", err);
     return { success: false, error: err?.message || String(err) };
   }
 }
@@ -938,10 +950,15 @@ export async function sendDocumentRejectedEmail(payload: DocumentRejectedEmailPa
       logCategory: "ADMISSIONS_DOC_REJECTED",
     });
 
+    if (!dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_DOC_REJECTED] Failed to dispatch document rejection email to ${recipientEmail}:`, dispatchResult.error);
+      return { success: false, dispatchResult, error: dispatchResult.error };
+    }
+
     console.log(`[EMAIL_SERVICE] Dispatched document rejection email via ${dispatchResult.provider} to ${recipientEmail}:`, dispatchResult);
     return { success: true, dispatchResult };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Error in sendDocumentRejectedEmail:", err);
+    console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_DOC_REJECTED] Error in sendDocumentRejectedEmail:", err);
     return { success: false, error: err?.message || String(err) };
   }
 }
@@ -1012,10 +1029,32 @@ export async function sendAdmissionOfferEmail(
   `;
 
   console.log("----------------------------------------------------------------");
-  console.log(`[EMAIL DISPATCH] Mocking email send to: ${lead.parentEmail || lead.parentContact}`);
+  console.log(`[EMAIL DISPATCH] [ADMISSIONS_OFFER] Dispatching admission offer to: ${lead.parentEmail || lead.parentContact}`);
   console.log(`Subject: 🎉 Admission Offer - ${school.name}`);
   console.log(`Token Link: ${secureLink}`);
   console.log("----------------------------------------------------------------");
+
+  const recipient = (lead.parentEmail || lead.parentContact || "").trim();
+  if (recipient && recipient.includes("@")) {
+    try {
+      const dispatchResult = await dispatchEmail({
+        to: recipient,
+        subject: `🎉 Admission Offer - ${school.name}`,
+        html: emailHtml,
+        schoolId: school.id,
+        recipientType: "PARENT",
+        logCategory: "ADMISSIONS_OFFER",
+      });
+
+      if (!dispatchResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] Failed to deliver admission offer to ${recipient}:`, dispatchResult.error);
+      }
+    } catch (offerErr) {
+      console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] Exception sending offer to ${recipient}:`, offerErr);
+    }
+  } else {
+    console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] No valid parent email found for applicant ${lead.applicantName}`);
+  }
   
   return emailHtml;
 }
@@ -1073,15 +1112,28 @@ export async function sendDirectCommunicationEmail(payload: {
       </html>
     `.trim();
 
-    console.log(`[EMAIL_DISPATCH] Sent direct message to ${payload.recipientEmail} (${payload.recipientType}) | Subject: ${payload.subject}`);
+    const dispatchResult = await dispatchEmail({
+      to: payload.recipientEmail,
+      subject: payload.subject,
+      html: emailHtml,
+      schoolId: payload.schoolId,
+      recipientType: (payload.recipientType as any) || "STAFF",
+      logCategory: "DIRECT_COMMUNICATION",
+    });
+
+    if (!dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [DIRECT_COMMUNICATION] Failed to dispatch to ${payload.recipientEmail}:`, dispatchResult.error);
+    }
 
     return {
-      success: true,
-      messageId,
+      success: dispatchResult.success,
+      messageId: dispatchResult.messageId || messageId,
       html: emailHtml,
+      deliveryStatus: dispatchResult.deliveryStatus,
+      error: dispatchResult.error,
     };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Failed to send direct communication:", err);
+    console.error("[EMAIL_SYNC_ERROR] [DIRECT_COMMUNICATION] Failed to send direct communication:", err);
     return { success: false, error: err.message };
   }
 }
@@ -1149,13 +1201,28 @@ export async function sendBroadcastNoticeEmail(payload: {
 
     await Promise.allSettled(logPromises);
 
+    if (recipientEmails.length > 0) {
+      const dispatchResult = await dispatchEmail({
+        to: recipientEmails,
+        subject: `[ANNOUNCEMENT] ${notice.title} - ${school.name}`,
+        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #1e293b;"><h2 style="color: #0f172a;">${notice.title}</h2><div style="font-size: 15px; line-height: 1.6; margin: 16px 0;">${notice.content}</div><hr style="border: none; border-top: 1px solid #e2e8f0; margin-top: 24px;"/><p style="color: #64748b; font-size: 12px;">Sent from ${school.name} via School ERP</p></div>`,
+        schoolId: payload.schoolId,
+        recipientType: notice.targetAudience === "STUDENTS" ? "STUDENT" : notice.targetAudience === "PARENTS" ? "PARENT" : "STAFF",
+        logCategory: "BROADCAST_NOTICE",
+      });
+
+      if (!dispatchResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [BROADCAST_NOTICE] Broadcast dispatch error:`, dispatchResult.error);
+      }
+    }
+
     return {
       success: true,
       recipientsCount: recipientEmails.length,
       noticeTitle: notice.title,
     };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Failed to broadcast notice email:", err);
+    console.error("[EMAIL_SYNC_ERROR] [BROADCAST_NOTICE] Failed to broadcast notice email:", err);
     return { success: false, error: err.message };
   }
 }
@@ -1232,37 +1299,34 @@ export async function sendPasswordResetEmail(payload: {
     `.trim();
 
     console.log("----------------------------------------------------------------");
-    console.log(`[PASSWORD_RESET_EMAIL] Dispatched to: ${recipientEmail} for ${tenantName}`);
+    console.log(`[PASSWORD_RESET_EMAIL] Initiating dispatch to: ${recipientEmail} for ${tenantName}`);
     console.log(`Reset Link: ${resetUrl}`);
     console.log("----------------------------------------------------------------");
 
-    // Persist message record in MessageLog
-    try {
-      if (school?.id) {
-        await basePrisma.messageLog.create({
-          data: {
-            schoolId: school.id,
-            recipientEmail: recipientEmail.toLowerCase().trim(),
-            recipientType: "STAFF",
-            messageType: "EMAIL",
-            subject: `[SECURITY] Password Reset Request - ${tenantName}`,
-            body: `Password recovery initiated. Reset link: ${resetUrl}`,
-            sentAt: new Date(),
-          },
-        });
-      }
-    } catch (logErr) {
-      console.warn("[EMAIL_SERVICE] Notice log warning:", logErr);
+    // Unified dispatch through centralized email service
+    const dispatchResult = await dispatchEmail({
+      to: recipientEmail,
+      subject: `[SECURITY] Password Reset Request - ${tenantName}`,
+      html: emailHtml,
+      schoolId: school?.id,
+      recipientType: "STAFF",
+      logCategory: "PASSWORD_RESET",
+    });
+
+    if (!dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [PASSWORD_RESET] Failed to deliver password reset to ${recipientEmail}:`, dispatchResult.error);
     }
 
     return {
-      success: true,
-      messageId,
+      success: dispatchResult.success,
+      messageId: dispatchResult.messageId || messageId,
       html: emailHtml,
+      deliveryStatus: dispatchResult.deliveryStatus,
+      error: dispatchResult.error,
     };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Failed to dispatch password reset email:", err);
-    return { success: false, error: err.message };
+    console.error("[EMAIL_SYNC_ERROR] [PASSWORD_RESET] Failed to dispatch password reset email:", err);
+    return { success: false, error: err.message, deliveryStatus: "FAILED_EXCEPTION" };
   }
 }
 
@@ -1420,223 +1484,24 @@ export interface DispatchEmailResult {
  * comprehensive status reporting, and database audit logging.
  */
 export async function dispatchEmail(options: DispatchEmailOptions): Promise<DispatchEmailResult> {
-  const { to, subject, html, text, schoolId, recipientType = "STAFF", logCategory = "GENERAL", attachments } = options;
-
-  const rawRecipients = Array.isArray(to) ? to : [to];
-  const recipients = Array.from(
-    new Set(
-      rawRecipients
-        .filter((e): e is string => typeof e === "string" && e.trim().length > 0 && e.includes("@"))
-        .map((e) => e.trim().toLowerCase())
-    )
-  );
-
-  if (recipients.length === 0) {
-    const errorMsg = "No valid recipient email address provided.";
-    console.warn(`[EMAIL_DISPATCH] [${logCategory}] Rejected dispatch: ${errorMsg}`);
-    return {
-      success: false,
-      deliveryStatus: "FAILED_NO_RECIPIENT",
-      error: errorMsg,
-      provider: "NONE",
-      recipients: [],
-    };
-  }
-
-  const config = getMailConfig();
-  console.log(`[EMAIL_DISPATCH] [${logCategory}] Initiating delivery to [${recipients.join(", ")}].`);
-  console.log(
-    `[EMAIL_DISPATCH] [${logCategory}] Config check: Resend=${Boolean(config.resendApiKey)}, SMTP=${Boolean(config.smtp)} (Host: ${config.smtp?.host || "none"}, Port: ${config.smtp?.port || "none"}), Sender="${config.fullFrom}", Attachments=${attachments?.length || 0}`
-  );
-
-  let deliveryStatus = "UNATTEMPTED";
-  let deliveryError: string | undefined = undefined;
-  let activeProvider: DispatchEmailResult["provider"] = "NONE";
-  let resultMessageId: string | undefined = undefined;
-
-  // Format attachments for Resend (base64 string if Buffer)
-  const resendAttachments = attachments?.map((att) => ({
-    filename: att.filename,
-    content: Buffer.isBuffer(att.content) ? att.content.toString("base64") : att.content,
-  }));
-
-  // 1. Dispatch via Resend API if configured
-  if (config.resendApiKey) {
-    try {
-      console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting delivery via Resend API (From: "${config.fullFrom}", To: [${recipients.join(", ")}], Attachments: ${resendAttachments?.length || 0})...`);
-      const resendRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: config.fullFrom,
-          to: recipients,
-          subject,
-          html,
-          text,
-          ...(resendAttachments && resendAttachments.length > 0 ? { attachments: resendAttachments } : {}),
-        }),
-      });
-
-      const resendData = await resendRes.json();
-      console.log(`[EMAIL_DISPATCH] [${logCategory}] Resend HTTP Status: ${resendRes.status}, Response:`, JSON.stringify(resendData));
-
-      if (resendRes.ok && resendData?.id) {
-        resultMessageId = resendData.id;
-        deliveryStatus = `DELIVERED_RESEND (id: ${resendData.id})`;
-        activeProvider = "RESEND";
-        console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend API to [${recipients.join(", ")}] (id: ${resendData.id})`);
-      } else {
-        const resendErrString = resendData?.message || JSON.stringify(resendData);
-        deliveryError = `Resend Error (${resendRes.status}): ${resendErrString}`;
-        console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend returned error:`, deliveryError);
-
-        // Fallback for Resend test sandbox sender if domain unverified
-        if (config.fullFrom !== "School ERP <onboarding@resend.dev>") {
-          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Primary sender rejected. Retrying dispatch via Resend test sandbox 'onboarding@resend.dev'...`);
-          try {
-            const fallbackRes = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${config.resendApiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: "School ERP <onboarding@resend.dev>",
-                to: recipients,
-                subject,
-                html,
-                text,
-                ...(resendAttachments && resendAttachments.length > 0 ? { attachments: resendAttachments } : {}),
-              }),
-            });
-            const fallbackData = await fallbackRes.json();
-            if (fallbackRes.ok && fallbackData?.id) {
-              resultMessageId = fallbackData.id;
-              deliveryStatus = `DELIVERED_RESEND_FALLBACK (id: ${fallbackData.id})`;
-              activeProvider = "RESEND";
-              deliveryError = undefined;
-              console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend fallback to [${recipients.join(", ")}] (id: ${fallbackData.id})`);
-            } else {
-              console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend sandbox fallback also failed:`, fallbackData);
-            }
-          } catch (fbEx: any) {
-            console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend sandbox fallback exception:`, fbEx?.message || fbEx);
-          }
-        }
-      }
-    } catch (resendEx: any) {
-      deliveryError = `Resend network exception: ${resendEx?.message || resendEx}`;
-      console.error(`[EMAIL_DISPATCH] [${logCategory}] Resend network exception:`, resendEx);
-    }
-  }
-
-  // 2. Dispatch via SMTP (Nodemailer) if Resend did not deliver and SMTP is configured
-  if (!activeProvider || activeProvider === "NONE") {
-    if (config.smtp) {
-      try {
-        console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting SMTP delivery via ${config.smtp.host}:${config.smtp.port} (User: ${config.smtp.auth.user})...`);
-        const nodemailer = await import("nodemailer");
-        const transporter = nodemailer.createTransport({
-          host: config.smtp.host,
-          port: config.smtp.port,
-          secure: config.smtp.secure,
-          auth: {
-            user: config.smtp.auth.user,
-            pass: config.smtp.auth.pass,
-          },
-          connectionTimeout: 10000,
-          greetingTimeout: 10000,
-          socketTimeout: 15000,
-        });
-
-        const info = await transporter.sendMail({
-          from: config.fullFrom,
-          to: recipients,
-          subject,
-          html,
-          text,
-          attachments: attachments?.map((att) => ({
-            filename: att.filename,
-            content: att.content,
-            contentType: att.contentType,
-          })),
-        });
-
-        resultMessageId = info.messageId;
-        deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
-        activeProvider = "SMTP";
-        deliveryError = undefined;
-        console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully sent via SMTP to [${recipients.join(", ")}]: ${info.messageId}`);
-      } catch (smtpEx: any) {
-        deliveryError = `SMTP dispatch failed: ${smtpEx?.message || smtpEx}`;
-        console.error(`[EMAIL_DISPATCH] [${logCategory}] SMTP dispatch exception:`, smtpEx);
-      }
-    }
-  }
-
-  // 3. Fallback for unconfigured or local dev environments
-  if (!activeProvider || activeProvider === "NONE") {
-    if (!config.isConfigured) {
-      const isProd = process.env.NODE_ENV === "production";
-      deliveryStatus = isProd ? "FAILED_NO_PROVIDER_CONFIGURED" : "SIMULATED_DEV";
-      deliveryError =
-        "No transactional email provider configured. Please set RESEND_API_KEY or SMTP credentials (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) in Render Environment Variables.";
-      if (isProd) {
-        console.error(`[EMAIL_DISPATCH] [${logCategory}] ❌ CRITICAL: ${deliveryError}`);
-      } else {
-        console.warn(`[EMAIL_DISPATCH] [${logCategory}] ℹ️ Local Dev: Email simulated for [${recipients.join(", ")}]. Subject: "${subject}".`);
-      }
-      activeProvider = isProd ? "NONE" : "SIMULATED";
-    } else {
-      deliveryStatus = "FAILED_DELIVERY_ERROR";
-      console.error(`[EMAIL_DISPATCH] [${logCategory}] ❌ All configured delivery mechanisms failed for [${recipients.join(", ")}]: ${deliveryError}`);
-    }
-  }
-
-  const isSuccess = activeProvider === "RESEND" || activeProvider === "SMTP" || activeProvider === "SIMULATED";
-
-  // Append to local transport audit log
-  try {
-    const logsDir = path.join(process.cwd(), "logs");
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-    const logFilePath = path.join(logsDir, "transactional-emails.log");
-    const logEntry = `[${new Date().toISOString()}] CATEGORY=${logCategory} STATUS=${deliveryStatus} PROVIDER=${activeProvider} TO="${recipients.join(", ")}" SUBJECT="${subject}" ERROR="${deliveryError || "none"}"\n`;
-    fs.appendFileSync(logFilePath, logEntry, "utf8");
-  } catch {}
-
-  // Record in Database MessageLog
-  if (schoolId) {
-    for (const recipient of recipients) {
-      try {
-        await basePrisma.messageLog.create({
-          data: {
-            schoolId,
-            recipientEmail: recipient,
-            recipientType,
-            messageType: "EMAIL",
-            subject,
-            body: html,
-            sentAt: new Date(),
-          },
-        });
-      } catch (dbErr) {
-        console.warn(`[EMAIL_DISPATCH] [${logCategory}] Warning: Could not record message log in DB:`, dbErr);
-      }
-    }
-  }
+  const result = await sendMail({
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+    schoolId: options.schoolId,
+    recipientType: options.recipientType,
+    logCategory: options.logCategory,
+    attachments: options.attachments,
+  });
 
   return {
-    success: isSuccess,
-    deliveryStatus,
-    error: deliveryError,
-    provider: activeProvider,
-    messageId: resultMessageId,
-    recipients,
+    success: result.success,
+    deliveryStatus: result.deliveryStatus,
+    error: result.error,
+    provider: result.provider,
+    messageId: result.messageId,
+    recipients: result.recipients,
   };
 }
 
@@ -2547,6 +2412,23 @@ export async function sendExamAdmitSlipEmail(payload: ExamAdmitSlipEmailPayload)
       console.log(`[EMAIL_SERVICE] Dispatched exam admit slip email via ${dispatchResult.provider} to ${recipientEmail} with ${pdfAttachment ? 1 : 0} attachment(s):`, dispatchResult);
     }
 
+    if (dispatchResult && !dispatchResult.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [ADMISSIONS_EXAM_ADMIT_SLIP] Failed to dispatch exam admit slip email to ${recipientEmail}:`, dispatchResult.error);
+      return {
+        success: false,
+        recipient: recipientEmail,
+        rollNo,
+        tenantName,
+        applicantName,
+        subject,
+        admitSlipUrl,
+        hasAttachment: Boolean(pdfAttachment),
+        pdfFilename: pdfAttachment ? pdfFilename : null,
+        dispatchResult,
+        error: dispatchResult.error,
+      };
+    }
+
     return {
       success: true,
       recipient: recipientEmail,
@@ -2560,7 +2442,7 @@ export async function sendExamAdmitSlipEmail(payload: ExamAdmitSlipEmailPayload)
       dispatchResult,
     };
   } catch (err: any) {
-    console.error("[EMAIL_SERVICE] Failed to send exam admit slip email:", err);
+    console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_EXAM_ADMIT_SLIP] Failed to send exam admit slip email:", err);
     return { success: false, error: err?.message || String(err) };
   }
 }

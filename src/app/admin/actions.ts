@@ -12,7 +12,7 @@ import {
   recordTenantDeleted,
   sendSuperAdminTenantRegistrationEmail,
 } from "@/lib/admin-notifications";
-import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
+import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -148,7 +148,7 @@ export async function createSchool(formData: FormData) {
 
       // Dispatch registration email to tenant admin
       try {
-        await sendSchoolRegistrationSuccessEmail({
+        const emailResult = await sendSchoolRegistrationSuccessEmail({
           schoolName: name,
           subdomain,
           adminEmail,
@@ -157,8 +157,11 @@ export async function createSchool(formData: FormData) {
           tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
           schoolId: undefined,
         });
+        if (!emailResult.success) {
+          console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Delivery failure:", emailResult.error);
+        }
       } catch (err) {
-        console.error("[TENANT_WELCOME_EMAIL_ERROR]", err);
+        console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Exception:", err);
       }
 
       // Record tenant registered notification & trigger Super Admin email
@@ -252,7 +255,7 @@ export async function createSchool(formData: FormData) {
 
           // Dispatch registration email to tenant admin
           try {
-            await sendSchoolRegistrationSuccessEmail({
+            const emailResult = await sendSchoolRegistrationSuccessEmail({
               schoolName: name,
               subdomain,
               adminEmail,
@@ -261,8 +264,11 @@ export async function createSchool(formData: FormData) {
               tiers,
               schoolId: createdSchoolId,
             });
+            if (!emailResult.success) {
+              console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Delivery failure:", emailResult.error);
+            }
           } catch (err) {
-            console.error("[TENANT_WELCOME_EMAIL_ERROR]", err);
+            console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Exception:", err);
           }
 
           // Record tenant registered notification & trigger Super Admin email

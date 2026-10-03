@@ -4,7 +4,7 @@ import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTi
 import { revalidatePath } from "next/cache";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
-import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 
 export async function acceptOfferAction(token: string, schoolDomain: string) {
   try {
@@ -113,7 +113,7 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
 
     // Dispatch enrollment confirmation email to student / parent
     try {
-      await sendStudentEnrollmentConfirmationEmail({
+      const emailResult = await sendStudentEnrollmentConfirmationEmail({
         schoolId: school.id,
         schoolName: school.name,
         subdomain: school.subdomain,
@@ -125,8 +125,12 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
         parentEmail: lead.parentEmail,
         parentName: lead.parentName,
       });
+
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure in acceptOfferAction for lead ${lead.id}:`, emailResult.error);
+      }
     } catch (emailErr) {
-      console.error("[EMAIL_DISPATCH] Student enrollment confirmation error in acceptOfferAction:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in acceptOfferAction:", emailErr);
     }
 
     return { success: true };

@@ -13,7 +13,7 @@ import {
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 import { logAuditEvent } from "@/lib/audit-logger";
-import { sendSchoolRegistrationSuccessEmail } from "@/lib/email-service";
+import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "@/lib/admin-notifications";
 
 const VALID_TIERS = [
@@ -230,8 +230,11 @@ export async function POST(request: Request) {
           schoolId: primarySchool.id,
         });
         console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
+        if (!emailResult?.success) {
+          console.error(`[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Delivery failure:`, emailResult?.error);
+        }
       } catch (emailErr) {
-        console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
+        console.error("[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Exception:", emailErr);
       }
 
       // Trigger Super-Admin notification record and email alert
@@ -441,8 +444,11 @@ export async function POST(request: Request) {
         schoolId: newSchool.school.id,
       });
       console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
+      if (!emailResult?.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Delivery failure:`, emailResult?.error);
+      }
     } catch (emailErr) {
-      console.error("[REGISTER_EMAIL_SEND_EXCEPTION]:", emailErr);
+      console.error("[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Exception:", emailErr);
     }
 
     // Trigger Super-Admin notification record and email alert

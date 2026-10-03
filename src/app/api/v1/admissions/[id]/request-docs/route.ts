@@ -23,7 +23,7 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error("[API_REQUEST_DOCS_POST] Error:", err);
+    console.error("[EMAIL_SYNC_ERROR] [API_REQUEST_DOCS_POST] Error:", err);
     return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
-import { sendAdmissionOfferEmail } from "@/lib/email-service";
+import { sendAdmissionOfferEmail, sendStudentEnrollmentConfirmationEmail } from "@/lib/mail";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { revalidatePath } from "next/cache";
 
@@ -40,7 +40,7 @@ export async function PATCH(
         try {
           await sendAdmissionOfferEmail(updatedLead, school as any, token);
         } catch (mailErr) {
-          console.warn("Failed to dispatch offer email:", mailErr);
+          console.error("[EMAIL_SYNC_ERROR] [ADMISSIONS_OFFER] Failed to dispatch offer email:", mailErr);
         }
       }
     } else if (status === "ENROLLED") {
@@ -117,6 +117,28 @@ export async function PATCH(
         where: { id: resolvedParams.id },
         data: { status: "ENROLLED", updatedAt: new Date() }
       });
+
+      // Dispatch enrollment confirmation email via unified mail service
+      try {
+        const emailResult = await sendStudentEnrollmentConfirmationEmail({
+          schoolId,
+          schoolName: school?.subdomain,
+          subdomain: school?.subdomain,
+          studentName: `${firstName} ${lastName}`.trim(),
+          admissionNumber,
+          currentClass: lead.targetGrade || undefined,
+          tierName: lead.tier?.name,
+          studentEmail: lead.studentEmail,
+          parentEmail: lead.parentEmail,
+          parentName: lead.parentName,
+        });
+
+        if (!emailResult.success) {
+          console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for lead ${lead.id}:`, emailResult.error);
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in leads status route:", emailErr);
+      }
 
       // Clear connection cache and revalidate paths
       invalidateTierConnection();
