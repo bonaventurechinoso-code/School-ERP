@@ -18,7 +18,86 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!schoolDomain) {
+    const normalizedDomain = (schoolDomain || "").trim().toLowerCase();
+
+    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+    const proto = req.headers.get("x-forwarded-proto") || "https";
+
+    let baseUrl = `${proto}://${hostHeader}`;
+    if (!hostHeader) {
+      baseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || `https://${BASE_TENANT_DOMAIN}`).replace(/\/$/, "");
+    }
+
+    // =========================================================================
+    // 1. CENTRAL SUPERADMIN RECOVERY ROUTING
+    // =========================================================================
+    // Query the global 'superadmins' central collection to verify platform administrators.
+    const isSuperAdminDomain =
+      !normalizedDomain ||
+      ["superadmin", "platform", "central", "saas", "super-admin", "admin"].includes(normalizedDomain);
+
+    const superAdmin = await basePrisma.superAdmin.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    const platformAdmin = !superAdmin
+      ? await basePrisma.platformAdmin.findUnique({
+          where: { email: normalizedEmail },
+        })
+      : null;
+
+    const isMasterDevAdmin =
+      process.env.NODE_ENV !== "production" &&
+      (normalizedEmail === "superadmin@platform.com" ||
+       normalizedEmail === "superadmin@school.edu" ||
+       normalizedEmail === "admin@bonaveeict.com.ng");
+
+    if (superAdmin || platformAdmin || (isSuperAdminDomain && isMasterDevAdmin)) {
+      const adminId = superAdmin?.id || platformAdmin?.id || "master-superadmin-001";
+
+      // Locate anchor school to bind token foreign key in database
+      const anchorSchool = await basePrisma.school.findFirst({
+        where: { isActive: true },
+      }) || await basePrisma.school.findFirst();
+
+      const anchorSchoolId = anchorSchool?.id || "global-saas";
+
+      const resetToken = await createPasswordResetToken({
+        schoolId: anchorSchoolId,
+        email: normalizedEmail,
+        userId: adminId,
+        userType: "PLATFORM_ADMIN",
+        expiresMinutes: 15,
+        ip: clientIp,
+      });
+
+      const targetSlug = anchorSchool?.slug || anchorSchool?.subdomain || "admin";
+      const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+      const mailResult = await sendPasswordResetEmail({
+        school: anchorSchool || { name: "School ERP Platform", branding: { primaryColor: "#4f46e5" } },
+        recipientEmail: normalizedEmail,
+        recipientName: "Platform Superadmin",
+        resetUrl,
+        expiresMinutes: 15,
+      });
+
+      if (!mailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [SUPERADMIN_PASSWORD_RESET] Failed to dispatch password reset to ${normalizedEmail}:`, mailResult.error);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "A password recovery email with instructions has been dispatched to your email address.",
+        resetUrlPreview: process.env.NODE_ENV === "development" ? resetUrl : undefined,
+      });
+    }
+
+    // =========================================================================
+    // 2. TENANT CONTEXT RESOLUTION
+    // =========================================================================
+    if (!normalizedDomain) {
       return NextResponse.json(
         { error: "School domain context is required.", code: "DOMAIN_REQUIRED" },
         { status: 400 }
@@ -29,8 +108,8 @@ export async function POST(req: Request) {
     const school = await basePrisma.school.findFirst({
       where: {
         OR: [
-          { subdomain: schoolDomain.toLowerCase().trim() },
-          { slug: schoolDomain.toLowerCase().trim() },
+          { subdomain: normalizedDomain },
+          { slug: normalizedDomain },
         ],
       },
       include: { academicTiers: true },
@@ -43,27 +122,73 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Verify email belongs to that specific tenant school
-    // A. Check Staff first
-    let userType: "STAFF" | "STUDENT" | null = null;
+    // =========================================================================
+    // 3. RECIPIENT VERIFICATION WITHIN TENANT CONTEXT
+    // =========================================================================
+    let userType: "USER" | "STAFF" | "STUDENT" | null = null;
     let userId = "";
     let userName = "";
 
-    const staff = await basePrisma.staff.findFirst({
+    // A. Query tenant 'admins/users' collection linked to the tenant context
+    let adminUser = await basePrisma.user.findFirst({
       where: {
         schoolId: school.id,
         email: normalizedEmail,
-        status: { not: "TERMINATED" },
+        status: { not: "DEACTIVATED" },
       },
     });
 
-    if (staff) {
-      userType = "STAFF";
-      userId = staff.id;
-      userName = `${staff.firstName} ${staff.lastName}`.trim();
+    if (!adminUser && school.databaseUrl) {
+      try {
+        const tenantDb = await getTenantClient(school.id);
+        adminUser = await tenantDb.user.findFirst({
+          where: {
+            schoolId: school.id,
+            email: normalizedEmail,
+            status: { not: "DEACTIVATED" },
+          },
+        });
+      } catch {}
     }
 
-    // B. Check Student if not found in Staff
+    if (adminUser) {
+      userType = "USER";
+      userId = adminUser.id;
+      const fullName = `${adminUser.firstName || ""} ${adminUser.lastName || ""}`.trim();
+      userName = fullName || (adminUser.role ? `${adminUser.role.replace(/_/g, " ")}` : "School Administrator");
+    }
+
+    // B. Check Staff if not found in User table
+    if (!userType) {
+      let staff = await basePrisma.staff.findFirst({
+        where: {
+          schoolId: school.id,
+          email: normalizedEmail,
+          status: { not: "TERMINATED" },
+        },
+      });
+
+      if (!staff && school.databaseUrl) {
+        try {
+          const tenantDb = await getTenantClient(school.id);
+          staff = await tenantDb.staff.findFirst({
+            where: {
+              schoolId: school.id,
+              email: normalizedEmail,
+              status: { not: "TERMINATED" },
+            },
+          });
+        } catch {}
+      }
+
+      if (staff) {
+        userType = "STAFF";
+        userId = staff.id;
+        userName = `${staff.firstName} ${staff.lastName}`.trim();
+      }
+    }
+
+    // C. Check Student if not found in Staff (Exact, untouched student logic)
     if (!userType) {
       let student = await basePrisma.student.findFirst({
         where: {
@@ -101,9 +226,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
-
-    // 3. Generate secure time-limited token (strict 15-minute expiration timestamp)
+    // 4. Generate secure time-limited token (strict 15-minute expiration timestamp)
     const resetToken = await createPasswordResetToken({
       schoolId: school.id,
       email: normalizedEmail,
@@ -113,20 +236,11 @@ export async function POST(req: Request) {
       ip: clientIp,
     });
 
-    // 4. Compile recovery link preserving the tenant slug
-    const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-    const proto = req.headers.get("x-forwarded-proto") || "https";
-
-    let baseUrl = `${proto}://${hostHeader}`;
-    if (!hostHeader) {
-      baseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || `https://${BASE_TENANT_DOMAIN}`).replace(/\/$/, "");
-    }
-
-    // Preserve the tenant slug cleanly
+    // 5. Compile recovery link preserving the tenant slug
     const targetSlug = school.slug || school.subdomain;
     const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-    // 5. Transmit transactional email via mail delivery service
+    // 6. Transmit transactional email via mail delivery service
     const mailResult = await sendPasswordResetEmail({
       school,
       recipientEmail: normalizedEmail,

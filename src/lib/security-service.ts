@@ -267,8 +267,14 @@ export async function verifyPasswordResetToken(rawToken: string, schoolDomain?: 
       return { valid: false, error: "This recovery link has expired (15-minute validity exceeded). Please request a new link." };
     }
 
-    // Verify schoolDomain match if provided
-    if (schoolDomain && tokenRecord.school) {
+    // Verify schoolDomain match if provided (bypass for superadmin accounts)
+    const isSuperAdminAccount =
+      tokenRecord.schoolId === "global-saas" ||
+      ["superadmin", "platform", "admin", "central"].includes((schoolDomain || "").toLowerCase().trim()) ||
+      Boolean(await basePrisma.superAdmin.findUnique({ where: { id: tokenRecord.userId } }).catch(() => null)) ||
+      Boolean(await basePrisma.platformAdmin.findUnique({ where: { id: tokenRecord.userId } }).catch(() => null));
+
+    if (schoolDomain && tokenRecord.school && !isSuperAdminAccount) {
       const match =
         tokenRecord.school.subdomain.toLowerCase() === schoolDomain.toLowerCase() ||
         tokenRecord.school.slug?.toLowerCase() === schoolDomain.toLowerCase();
@@ -297,7 +303,23 @@ export async function verifyPasswordResetToken(rawToken: string, schoolDomain?: 
           where: { id: tokenRecord.userId },
           select: { email: true },
         });
-        if (user) userEmail = user.email;
+        if (user) {
+          userEmail = user.email;
+        } else {
+          const superAdmin = await basePrisma.superAdmin.findUnique({
+            where: { id: tokenRecord.userId },
+            select: { email: true },
+          });
+          if (superAdmin) {
+            userEmail = superAdmin.email;
+          } else {
+            const platformAdmin = await basePrisma.platformAdmin.findUnique({
+              where: { id: tokenRecord.userId },
+              select: { email: true },
+            });
+            if (platformAdmin) userEmail = platformAdmin.email;
+          }
+        }
       }
     }
 
