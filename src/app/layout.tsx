@@ -40,32 +40,20 @@ export default function RootLayout({
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)" />
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" />
         <meta name="theme-color" content="#4A90E2" />
-        <meta
-          httpEquiv="Content-Security-Policy"
-          content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://bonaveeict.com.ng https://*.bonaveeict.com.ng https://school-erp-1-mfc3.onrender.com https://*.onrender.com http://localhost:* http://127.0.0.1:* ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://bonaveeict.com.ng https://*.bonaveeict.com.ng; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; worker-src 'self' blob:; manifest-src 'self' https://bonaveeict.com.ng https://*.bonaveeict.com.ng;"
-        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 if (typeof window !== 'undefined') {
-                  var prodBaseUrl = (window.location.origin.indexOf('bonaveeict.com.ng') !== -1 || window.location.origin.indexOf('onrender.com') !== -1)
-                    ? window.location.origin
-                    : '${process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng"}';
-
                   try {
-                    window.localStorage.setItem('schoolerp_api_base_url', prodBaseUrl);
+                    window.localStorage.removeItem('schoolerp_api_base_url');
                   } catch (e) {}
 
                   if ('serviceWorker' in navigator) {
                     window.addEventListener('load', function() {
-                      var swUrl = '/sw.js?apiUrl=' + encodeURIComponent(prodBaseUrl);
-                      navigator.serviceWorker.register(swUrl, { scope: '/' })
+                      navigator.serviceWorker.register('/sw.js', { scope: '/' })
                         .then(function(registration) {
                           console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
-                          if (registration.active) {
-                            registration.active.postMessage({ type: 'SYNC_API_BASE', apiUrl: prodBaseUrl });
-                          }
                         })
                         .catch(function(error) {
                           console.error('[PWA] Service Worker registration failed:', error);

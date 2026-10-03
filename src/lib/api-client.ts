@@ -17,61 +17,7 @@ let activeAuthToken: string | null = null;
 let isTokenReadyPromise: Promise<string | null> | null = null;
 let resolveTokenReady: ((token: string | null) => void) | null = null;
 
-/**
- * Dynamically resolves the active production multi-tenant API base URL.
- * Prioritizes configured environment strings, live production hosts,
- * or persistent local storage configuration over static local fallbacks.
- */
-export function getProductionBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    // 1. If running in a browser context matching production platform or Render
-    const origin = window.location.origin;
-    if (origin.includes("bonaveeict.com.ng") || origin.includes("onrender.com")) {
-      return origin.replace(/\/$/, "");
-    }
 
-    // 2. Check if persistent PWA configuration has established a live production URL
-    const storedBase = window.localStorage.getItem("schoolerp_api_base_url");
-    if (storedBase && storedBase.startsWith("http")) {
-      return storedBase.replace(/\/$/, "");
-    }
-  }
-
-  // 3. Fallback to production environment strings or production apex
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL;
-  if (envUrl && envUrl.startsWith("http")) {
-    return envUrl.replace(/\/$/, "");
-  }
-
-  return "https://bonaveeict.com.ng";
-}
-
-/**
- * Resolves any API route path against the live production base URL
- * when running inside the PWA container or external wrappers.
- */
-export function resolveApiUrl(input: RequestInfo | URL): string {
-  const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-
-  // If already an absolute URL with protocol, preserve it
-  if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
-    return urlStr;
-  }
-
-  // If executing in standard production browser on apex/subdomain, relative URLs naturally route to origin
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname.toLowerCase();
-    const isProdHost = hostname.includes("bonaveeict.com.ng") || hostname.includes("onrender.com");
-    if (isProdHost) {
-      return urlStr;
-    }
-  }
-
-  // Bind to live production base URL for PWA/PWP container environments
-  const baseUrl = getProductionBaseUrl();
-  const normalizedPath = urlStr.startsWith("/") ? urlStr : `/${urlStr}`;
-  return `${baseUrl}${normalizedPath}`;
-}
 
 /**
  * Sets the active authentication token in memory and storage,
@@ -158,7 +104,7 @@ const inFlightRequests = new Map<string, Promise<Response>>();
 
 /**
  * Custom Fetch Helper with Request Interceptor:
- * - Dynamically binds production base URL for PWA/PWP container environments
+ * - Direct native routing to origin API endpoints
  * - Awaits token readiness if a token generation cycle is in progress
  * - Automatically injects Authorization, x-session-token, and multi-tenant context headers
  * - Deduplicates concurrent GET requests to avoid rapid polling loops
@@ -168,8 +114,24 @@ export async function customFetch(
   init?: RequestInit
 ): Promise<Response> {
   const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-  const resolvedTarget = resolveApiUrl(rawUrl);
   const method = (init?.method || "GET").toUpperCase();
+
+  // Guard: Do not execute /api/v1/auth/session on unauthenticated layouts when no token exists
+  if (rawUrl.includes("/api/v1/auth/session") && typeof window !== "undefined") {
+    const path = window.location.pathname.toLowerCase();
+    const isUnauthRoute =
+      path.includes("/login") ||
+      path.includes("/register") ||
+      path.includes("/apply") ||
+      path.includes("/access-denied") ||
+      path.includes("/trial-expired");
+    if (isUnauthRoute && !getAuthToken()) {
+      return new Response(
+        JSON.stringify({ success: false, authenticated: false, session: null }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }
 
   // If waiting for freshly generated token, await readiness before firing session queries
   if (isTokenReadyPromise && rawUrl.includes("/api/v1/auth/session")) {
@@ -178,8 +140,8 @@ export async function customFetch(
 
   // Deduplicate identical in-flight GET requests
   const isDeduplicatable = method === "GET";
-  if (isDeduplicatable && inFlightRequests.has(resolvedTarget)) {
-    const activePromise = inFlightRequests.get(resolvedTarget)!;
+  if (isDeduplicatable && inFlightRequests.has(rawUrl)) {
+    const activePromise = inFlightRequests.get(rawUrl)!;
     return activePromise.then((res) => res.clone());
   }
 
@@ -220,18 +182,18 @@ export async function customFetch(
     headers.set("Pragma", "no-cache");
   }
 
-  const fetchPromise = fetch(resolvedTarget, {
+  const fetchPromise = fetch(input, {
     ...init,
     headers,
     credentials: init?.credentials || "include",
   }).finally(() => {
     if (isDeduplicatable) {
-      inFlightRequests.delete(resolvedTarget);
+      inFlightRequests.delete(rawUrl);
     }
   });
 
   if (isDeduplicatable) {
-    inFlightRequests.set(resolvedTarget, fetchPromise);
+    inFlightRequests.set(rawUrl, fetchPromise);
   }
 
   return fetchPromise;

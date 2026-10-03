@@ -72,7 +72,11 @@ function ForgotPasswordContent() {
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = {};
+      if (contentType.includes("application/json")) {
+        data = await res.json().catch(() => ({}));
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to initiate password recovery.");

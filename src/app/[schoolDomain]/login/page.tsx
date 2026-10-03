@@ -34,7 +34,14 @@ export default function TenantLoginPage() {
         body: JSON.stringify({ email, password, schoolDomain: tenant.subdomain })
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = {};
+      if (contentType.includes("application/json")) {
+        data = await res.json().catch(() => ({}));
+      } else {
+        setAuthToken(null);
+        throw new Error("Unable to connect to login service. Please try again.");
+      }
 
       if (res.ok) {
         // Extract validated role and schoolDomain from payload

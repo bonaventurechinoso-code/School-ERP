@@ -318,7 +318,8 @@ function UniversalLoginPageContent() {
       if (!sessionPayload) {
         try {
           const v1SessionRes = await customFetch("/api/v1/auth/session");
-          if (v1SessionRes.ok) {
+          const v1ContentType = v1SessionRes.headers.get("content-type") || "";
+          if (v1SessionRes.ok && v1ContentType.includes("application/json")) {
             const v1Data = await v1SessionRes.json();
             if (v1Data.authenticated && v1Data.session) {
               sessionPayload = v1Data.session;
@@ -328,24 +329,29 @@ function UniversalLoginPageContent() {
       }
 
       if (!sessionPayload) {
-        const sessionRes = await customFetch("/api/auth/session");
-        const sessionData = await sessionRes.json();
-        const user = sessionData?.user;
-        if (user) {
-          sessionPayload = {
-            userId: user.id || user.userId,
-            email: user.email,
-            tenantId: user.tenantId,
-            schoolDomain: user.schoolDomain,
-            tenantName: user.tenantName,
-            role: user.role,
-            staffRole: user.staffRole,
-            activeTiers: user.activeTiers || [],
-            permissions: user.permissions || [],
-            sessionToken: user.sessionToken,
-            token: user.sessionToken,
-          };
-        }
+        try {
+          const sessionRes = await customFetch("/api/auth/session");
+          const contentType = sessionRes.headers.get("content-type") || "";
+          if (sessionRes.ok && contentType.includes("application/json")) {
+            const sessionData = await sessionRes.json();
+            const user = sessionData?.user;
+            if (user) {
+              sessionPayload = {
+                userId: user.id || user.userId,
+                email: user.email,
+                tenantId: user.tenantId,
+                schoolDomain: user.schoolDomain,
+                tenantName: user.tenantName,
+                role: user.role,
+                staffRole: user.staffRole,
+                activeTiers: user.activeTiers || [],
+                permissions: user.permissions || [],
+                sessionToken: user.sessionToken,
+                token: user.sessionToken,
+              };
+            }
+          }
+        } catch {}
       }
 
       if (sessionPayload) {
