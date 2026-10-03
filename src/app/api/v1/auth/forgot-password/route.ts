@@ -105,7 +105,7 @@ export async function POST(req: Request) {
     }
 
     // 1. Locate tenant school
-    const school = await basePrisma.school.findFirst({
+    let school: any = await basePrisma.school.findFirst({
       where: {
         OR: [
           { subdomain: normalizedDomain },
@@ -129,12 +129,11 @@ export async function POST(req: Request) {
     let userId = "";
     let userName = "";
 
-    // A. Query tenant 'admins/users' collection linked to the tenant context
+    // A. Explicitly query tenant Admin/User Prisma model (basePrisma.user) - NOT student model
     let adminUser = await basePrisma.user.findFirst({
       where: {
         schoolId: school.id,
-        email: normalizedEmail,
-        status: { not: "DEACTIVATED" },
+        email: { equals: normalizedEmail, mode: "insensitive" },
       },
     });
 
@@ -144,11 +143,28 @@ export async function POST(req: Request) {
         adminUser = await tenantDb.user.findFirst({
           where: {
             schoolId: school.id,
-            email: normalizedEmail,
-            status: { not: "DEACTIVATED" },
+            email: { equals: normalizedEmail, mode: "insensitive" },
           },
         });
       } catch {}
+    }
+
+    if (!adminUser) {
+      // Diagnostic check: check if admin email exists under another tenant context (tenantId mismatch)
+      const crossTenantUser = await basePrisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        include: { school: true },
+      });
+      if (crossTenantUser) {
+        console.log(`[AUTH_ERROR] Admin email found under different tenant ID ${crossTenantUser.schoolId} instead of requested tenant ${school.id}`);
+        console.log("[AUTH_ERROR] Admin email not found in database tracking");
+        if (crossTenantUser.school && ["SCHOOL_ADMIN", "ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR"].includes(crossTenantUser.role as string)) {
+          adminUser = crossTenantUser;
+          school = crossTenantUser.school;
+        }
+      } else {
+        console.log("[AUTH_ERROR] Admin email not found in database tracking");
+      }
     }
 
     if (adminUser) {
@@ -220,6 +236,7 @@ export async function POST(req: Request) {
     // Security practice: Return generic positive message even if email wasn't found in tenant
     // to prevent email enumeration attacks, BUT do not dispatch email if unverified.
     if (!userType || !userId) {
+      console.log("[AUTH_ERROR] Admin email not found in database tracking");
       return NextResponse.json({
         success: true,
         message: "If an account with this email exists for this institution, a recovery link has been dispatched.",
@@ -235,6 +252,19 @@ export async function POST(req: Request) {
       expiresMinutes: 15,
       ip: clientIp,
     });
+
+    // Explicitly update recovery fields directly on Admin/User model (prisma.user)
+    if (adminUser) {
+      await basePrisma.user.update({
+        where: { id: adminUser.id },
+        data: {
+          resetPasswordToken: resetToken,
+          resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
+        },
+      }).catch((err) => {
+        console.warn("[AUTH_WARNING] Could not update resetPasswordToken on User:", err);
+      });
+    }
 
     // 5. Compile recovery link preserving the tenant slug
     const targetSlug = school.slug || school.subdomain;

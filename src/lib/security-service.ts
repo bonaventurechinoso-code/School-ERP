@@ -208,6 +208,34 @@ export async function createPasswordResetToken(params: {
     },
   });
 
+  // Sync recovery fields directly on User model
+  await basePrisma.user.updateMany({
+    where: {
+      OR: [
+        { id: params.userId },
+        { email: { equals: params.email.trim(), mode: "insensitive" } },
+      ],
+    },
+    data: {
+      resetPasswordToken: rawToken,
+      resetPasswordExpires: expiresAt,
+    },
+  }).catch(() => {});
+
+  // Sync recovery fields directly on SuperAdmin model if applicable
+  await basePrisma.superAdmin.updateMany({
+    where: {
+      OR: [
+        { id: params.userId },
+        { email: { equals: params.email.trim(), mode: "insensitive" } },
+      ],
+    },
+    data: {
+      resetPasswordToken: rawToken,
+      resetPasswordExpires: expiresAt,
+    },
+  }).catch(() => {});
+
   // Legacy sync
   await ensureSecurityTables();
   try {
@@ -407,7 +435,13 @@ export async function completePasswordReset(
           { student: { id: tokenCheck.userId } },
         ],
       },
-      data: { passwordHash: hashedPassword, mustChangePassword: false, updatedAt: new Date() },
+      data: {
+        passwordHash: hashedPassword,
+        mustChangePassword: false,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        updatedAt: new Date(),
+      },
     });
 
     // 4. Update PlatformAdmin / SuperAdmin if matching
@@ -417,7 +451,12 @@ export async function completePasswordReset(
     });
     await basePrisma.superAdmin.updateMany({
       where: { id: tokenCheck.userId },
-      data: { passwordHash: hashedPassword },
+      data: {
+        passwordHash: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        updatedAt: new Date(),
+      },
     });
 
     // 5. Invalidate all active sessions and refresh tokens for this user

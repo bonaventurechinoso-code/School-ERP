@@ -149,11 +149,13 @@ model PlatformAdmin {
 }
 
 model SuperAdmin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  passwordHash         String
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model PasswordResetToken {
@@ -199,14 +201,17 @@ model User {
   lastName           String?
   role               Role     @default(STUDENT)
   status             String   @default("ACTIVE")
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  mustChangePassword   Boolean   @default(false)
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   staff              Staff?
   student            Student?
 
   @@index([schoolId])
+  @@index([resetPasswordToken])
   @@unique([schoolId, email])
 }
 

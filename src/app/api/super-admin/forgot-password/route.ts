@@ -35,6 +35,7 @@ export async function POST(req: Request) {
        normalizedEmail === "admin@bonaveeict.com.ng");
 
     if (!superAdmin && !platformAdmin && !isMasterDevAdmin) {
+      console.log("[AUTH_ERROR] Admin email not found in database tracking");
       return NextResponse.json({
         success: true,
         message: "If a platform superadmin account with this email exists, a recovery link has been dispatched.",
@@ -64,6 +65,18 @@ export async function POST(req: Request) {
       expiresMinutes: 15,
       ip: clientIp,
     });
+
+    if (superAdmin) {
+      await basePrisma.superAdmin.update({
+        where: { id: superAdmin.id },
+        data: {
+          resetPasswordToken: resetToken,
+          resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
+        },
+      }).catch((err) => {
+        console.warn("[AUTH_WARNING] Could not update reset fields on SuperAdmin:", err);
+      });
+    }
 
     const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
     const proto = req.headers.get("x-forwarded-proto") || "https";
