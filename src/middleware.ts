@@ -24,6 +24,7 @@ export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'bonav
 const SYSTEM_RESERVED_ROOTS = new Set([
   'admin', 'super-admin', 'access-denied', 'trial-expired',
   'login', 'register', 'choice', 'me', 'api', 'portal-settings', 'change-password',
+  'forgot-password', 'reset-password',
   'sw.js', 'manifest.json', 'uploads'
 ]);
 

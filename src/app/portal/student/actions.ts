@@ -3,6 +3,7 @@
 import { basePrisma, getPrismaClientForTier, TenantConnectionManager } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { 
   getTierPresentationConfig, 
   classifyTierCategory, 
@@ -32,14 +33,24 @@ export async function fetchStudentPortalWorkspace(params: {
 }): Promise<StudentPortalWorkspaceData> {
   const session = await getSession();
 
+  let headerDomain: string | undefined;
+  let headerTenantId: string | undefined;
+  try {
+    const headerList = await headers();
+    headerDomain = headerList.get("x-tenant-slug") || undefined;
+    headerTenantId = headerList.get("x-tenant-id") || undefined;
+  } catch {}
+
   // 1. Resolve Target School
-  const targetSubdomain = params.schoolDomain || session?.schoolDomain || "demo";
+  const targetSubdomain = params.schoolDomain || session?.schoolDomain || headerDomain || "demo";
+  const targetTenantId = session?.tenantId || headerTenantId;
   
   const school = await basePrisma.school.findFirst({
     where: {
       OR: [
         { subdomain: targetSubdomain },
-        { id: session?.tenantId || "non-existent" }
+        { slug: targetSubdomain },
+        ...(targetTenantId ? [{ id: targetTenantId }] : []),
       ]
     },
     include: {

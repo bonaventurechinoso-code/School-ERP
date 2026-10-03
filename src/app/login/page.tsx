@@ -160,6 +160,9 @@ function UniversalLoginPageContent() {
     if (querySchool && querySchool.trim()) {
       const clean = querySchool.trim().toLowerCase();
       setResolvedTenant(clean);
+      try {
+        window.localStorage.setItem("schoolerp_tenant", clean);
+      } catch {}
       return;
     }
 
@@ -168,24 +171,14 @@ function UniversalLoginPageContent() {
     const configuredRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim();
     const renderHostingDomain = "school-erp-1-mfc3.onrender.com";
 
-    // Platform Root Apex / Localhost without subdomain: strictly no tenant
-    if (
-      hostname === configuredRoot ||
-      hostname === "bonaveeict.com.ng" ||
-      hostname === renderHostingDomain ||
-      (hostname.endsWith(".onrender.com") && hostname.split(".").length === 3) ||
-      hostname === "localhost" ||
-      hostname === "127.0.0.1"
-    ) {
-      setResolvedTenant(null);
-      return;
-    }
-
     // Localhost subdomain: e.g. greenwood.localhost
     if (hostname.endsWith(".localhost")) {
       const localParts = hostname.split(".");
       if (localParts.length >= 2 && localParts[0] !== "localhost") {
         setResolvedTenant(localParts[0]);
+        try {
+          window.localStorage.setItem("schoolerp_tenant", localParts[0]);
+        } catch {}
         return;
       }
     }
@@ -195,6 +188,9 @@ function UniversalLoginPageContent() {
       const sub = hostname.slice(0, -(configuredRoot.length + 1));
       if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
         setResolvedTenant(sub);
+        try {
+          window.localStorage.setItem("schoolerp_tenant", sub);
+        } catch {}
         return;
       }
     }
@@ -204,9 +200,24 @@ function UniversalLoginPageContent() {
       const sub = hostname.slice(0, -(renderHostingDomain.length + 1));
       if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
         setResolvedTenant(sub);
+        try {
+          window.localStorage.setItem("schoolerp_tenant", sub);
+        } catch {}
         return;
       }
     }
+
+    // Rule 3: For PWP/PWA containers running at root or standalone mode, hydrate last active tenant from storage
+    try {
+      const storedTenant =
+        window.localStorage.getItem("schoolerp_tenant") ||
+        window.localStorage.getItem("schoolDomain") ||
+        window.localStorage.getItem("schoolerp_school_domain");
+      if (storedTenant && storedTenant.trim() && storedTenant !== "demo") {
+        setResolvedTenant(storedTenant.trim().toLowerCase());
+        return;
+      }
+    } catch {}
 
     // Fallback: Root domain with no query parameters
     setResolvedTenant(null);
@@ -230,21 +241,81 @@ function UniversalLoginPageContent() {
     const targetDomain = (resolvedTenant || trimmedSchoolCode).trim().toLowerCase();
     const isCentralLogin = !targetDomain;
 
+    const trimmedIdentifier = identifier.trim();
+    const normalizedIdentifier = trimmedIdentifier.toLowerCase();
+
+    // Prepare synchronized client payload configurations identical to Chrome
+    const loginPayload: Record<string, any> = {
+      email: normalizedIdentifier,
+      password,
+      schoolDomain: targetDomain || undefined,
+      role: activeRoleTab.toUpperCase(),
+    };
+
+    if (activeRoleTab === "student") {
+      loginPayload.admissionNumber = trimmedIdentifier;
+    } else if (activeRoleTab === "parent") {
+      loginPayload.parentPhone = trimmedIdentifier;
+      loginPayload.parentEmail = normalizedIdentifier;
+      loginPayload.phone = trimmedIdentifier;
+    } else if (activeRoleTab === "teacher") {
+      loginPayload.staffId = trimmedIdentifier;
+    }
+
     try {
       beginTokenWait();
+
+      // 1. Direct fetch to live multi-tenant authentication endpoint via customFetch (bound to production API URL)
+      let apiLoginData: any = null;
+      try {
+        const loginRes = await customFetch("/api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(loginPayload),
+        });
+        if (loginRes.ok) {
+          apiLoginData = await loginRes.json();
+        }
+      } catch (directErr) {
+        console.warn("[PWA Login] Direct API query attempted, falling back to NextAuth provider:", directErr);
+      }
+
+      // 2. NextAuth signIn wrapper synchronization
       const res = await signIn("credentials", {
-        email: identifier.trim().toLowerCase(),
-        password,
-        schoolDomain: targetDomain || undefined,
+        ...loginPayload,
         redirect: false,
       });
 
-      if (res?.error) {
+      if (res?.error && !apiLoginData?.success) {
         setAuthToken(null);
         setErrorMsg("Invalid credentials. Please verify your details and password.");
         setIsSubmitting(false);
-      } else if (res?.ok) {
-        let sessionPayload: any = null;
+        return;
+      }
+
+      let sessionPayload: any = null;
+
+      // Extract session payload from live API response if available
+      if (apiLoginData && apiLoginData.success) {
+        const effectiveToken = apiLoginData.token || apiLoginData.accessToken || apiLoginData.sessionToken;
+        sessionPayload = {
+          userId: apiLoginData.userId,
+          email: normalizedIdentifier,
+          tenantId: apiLoginData.schoolId || apiLoginData.tenantId,
+          schoolDomain: apiLoginData.schoolDomain || targetDomain,
+          tenantName: apiLoginData.tenantName || formatTenantDisplayName(apiLoginData.schoolDomain || targetDomain),
+          role: apiLoginData.role,
+          staffRole: apiLoginData.staffRole || apiLoginData.role,
+          activeTiers: apiLoginData.activeTiers || [],
+          permissions: apiLoginData.permissions || [],
+          sessionToken: apiLoginData.sessionToken || effectiveToken,
+          token: effectiveToken,
+          mustChangePassword: Boolean(apiLoginData.mustChangePassword),
+        };
+      }
+
+      // Fallback: Query session verification endpoint
+      if (!sessionPayload) {
         try {
           const v1SessionRes = await customFetch("/api/v1/auth/session");
           if (v1SessionRes.ok) {
@@ -254,77 +325,88 @@ function UniversalLoginPageContent() {
             }
           }
         } catch {}
+      }
 
-        if (!sessionPayload) {
-          const sessionRes = await customFetch("/api/auth/session");
-          const sessionData = await sessionRes.json();
-          const user = sessionData?.user;
-          if (user) {
-            sessionPayload = {
-              userId: user.id || user.userId,
-              email: user.email,
-              tenantId: user.tenantId,
-              schoolDomain: user.schoolDomain,
-              tenantName: user.tenantName,
-              role: user.role,
-              staffRole: user.staffRole,
-              activeTiers: user.activeTiers || [],
-              permissions: user.permissions || [],
-              sessionToken: user.sessionToken,
-            };
+      if (!sessionPayload) {
+        const sessionRes = await customFetch("/api/auth/session");
+        const sessionData = await sessionRes.json();
+        const user = sessionData?.user;
+        if (user) {
+          sessionPayload = {
+            userId: user.id || user.userId,
+            email: user.email,
+            tenantId: user.tenantId,
+            schoolDomain: user.schoolDomain,
+            tenantName: user.tenantName,
+            role: user.role,
+            staffRole: user.staffRole,
+            activeTiers: user.activeTiers || [],
+            permissions: user.permissions || [],
+            sessionToken: user.sessionToken,
+            token: user.sessionToken,
+          };
+        }
+      }
+
+      if (sessionPayload) {
+        const tokenToSet = sessionPayload.token || sessionPayload.sessionToken;
+        if (tokenToSet) {
+          setAuthToken(tokenToSet, sessionPayload.sessionToken);
+        }
+        persistStoredSession(sessionPayload);
+
+        // Synchronize persistent tenant context in local storage for PWP container
+        if (typeof window !== "undefined") {
+          const finalDomain = sessionPayload.schoolDomain || targetDomain;
+          if (finalDomain) {
+            window.localStorage.setItem("schoolerp_tenant", finalDomain);
+            window.localStorage.setItem("schoolDomain", finalDomain);
           }
-        }
-
-        if (sessionPayload) {
-          if (sessionPayload.sessionToken) {
-            setAuthToken(sessionPayload.token || sessionPayload.sessionToken, sessionPayload.sessionToken);
+          if (sessionPayload.tenantId) {
+            window.localStorage.setItem("tenantId", sessionPayload.tenantId);
           }
-          persistStoredSession(sessionPayload);
-          window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
+          window.localStorage.setItem("schoolerp_active_role", activeRoleTab);
         }
 
-        router.refresh();
+        window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
+      }
 
-        const user = sessionPayload;
+      router.refresh();
 
-        if (user?.mustChangePassword) {
-          router.push("/change-password");
-          return;
-        }
+      const user = sessionPayload;
 
-        // 1. Central Admin Routing Logic:
-        // If "School Code" is left blank and user is SUPER_ADMIN (or central platform admin without tenant scope):
-        // Authenticate against root platform database and route directly to the Super Admin Console.
-        if (user?.role === "SUPER_ADMIN" || (isCentralLogin && !user?.schoolDomain)) {
-          const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
-          router.push(adminTarget);
-          return;
-        }
+      if (user?.mustChangePassword) {
+        router.push("/change-password");
+        return;
+      }
 
-        // 2. Tenant Workspace Routing Logic:
-        // If "School Code" is filled out (e.g., typing "york"):
-        // Automatically route and log them into that specific tenant's path workspace.
-        const tenantSlug = targetDomain || user?.schoolDomain || trimmedSchoolCode || "york";
-        const canonicalRole = (user?.role || "").toUpperCase();
-        const staffRoleStr = (user?.staffRole || "").toUpperCase();
-        const isBursarRole =
-          canonicalRole === "BURSAR" ||
-          canonicalRole === "ACCOUNTANT" ||
-          staffRoleStr.includes("BURSAR") ||
-          staffRoleStr.includes("ACCOUNTANT") ||
-          staffRoleStr.includes("CASHIER") ||
-          staffRoleStr.includes("FINANCE");
+      // 1. Central Admin Routing Logic:
+      if (user?.role === "SUPER_ADMIN" || (isCentralLogin && !user?.schoolDomain)) {
+        const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
+        router.push(adminTarget);
+        return;
+      }
 
-        if (canonicalRole === "STUDENT") {
-          router.push(`/${tenantSlug}/portal/student`);
-        } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
-          router.push(`/${tenantSlug}/portal/staff`);
-        } else if (isBursarRole) {
-          router.push("/bursar");
-        } else {
-          // School Admin / Principal / Default tenant workspace
-          router.push(`/${tenantSlug}/dashboard`);
-        }
+      // 2. Tenant Workspace Routing Logic:
+      const tenantSlug = targetDomain || user?.schoolDomain || trimmedSchoolCode || "york";
+      const canonicalRole = (user?.role || activeRoleTab || "").toUpperCase();
+      const staffRoleStr = (user?.staffRole || "").toUpperCase();
+      const isBursarRole =
+        canonicalRole === "BURSAR" ||
+        canonicalRole === "ACCOUNTANT" ||
+        staffRoleStr.includes("BURSAR") ||
+        staffRoleStr.includes("ACCOUNTANT") ||
+        staffRoleStr.includes("CASHIER") ||
+        staffRoleStr.includes("FINANCE");
+
+      if (canonicalRole === "STUDENT" || activeRoleTab === "student" || activeRoleTab === "parent") {
+        router.push(`/${tenantSlug}/portal/student`);
+      } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
+        router.push(`/${tenantSlug}/portal/staff`);
+      } else if (isBursarRole) {
+        router.push("/bursar");
+      } else {
+        router.push(`/${tenantSlug}/dashboard`);
       }
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred. Please try again.");
@@ -556,7 +638,13 @@ function UniversalLoginPageContent() {
                 <span>Remember me</span>
               </label>
               <Link
-                href="/forgot-password"
+                href={
+                  resolvedTenant
+                    ? `/${resolvedTenant}/forgot-password`
+                    : schoolCodeInput.trim()
+                    ? `/${schoolCodeInput.trim().toLowerCase()}/forgot-password`
+                    : "/forgot-password"
+                }
                 className="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium transition-colors"
               >
                 Forgot Password?

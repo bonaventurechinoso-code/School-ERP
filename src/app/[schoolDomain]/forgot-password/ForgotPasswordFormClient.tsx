@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, Building2, KeyRound } from "lucide-react";
 
+import { customFetch } from "@/lib/api-client";
+
 interface ForgotPasswordFormClientProps {
   schoolName: string;
   schoolDomain: string;
@@ -35,7 +37,7 @@ export default function ForgotPasswordFormClient({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/v1/auth/forgot-password", {
+      const res = await customFetch("/api/v1/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

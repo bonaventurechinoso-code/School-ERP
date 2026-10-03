@@ -44,19 +44,73 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Dynamic Production API URL Resolution
+const swParams = new URLSearchParams(self.location.search);
+let LIVE_API_BASE_URL = swParams.get('apiUrl') || 'https://bonaveeict.com.ng';
+
+// Listen for runtime configuration updates from client context
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SYNC_API_BASE' && event.data.apiUrl) {
+    LIVE_API_BASE_URL = event.data.apiUrl.replace(/\/$/, '');
+    console.log('[PWA ServiceWorker] Synced LIVE_API_BASE_URL:', LIVE_API_BASE_URL);
+  }
+});
+
 // Fetch event: Strict Network-First strategy
-// Ensures live School ERP data is ALWAYS fetched from bonaveeict.com.ng when online.
+// Ensures live School ERP data is ALWAYS fetched from the active production multi-tenant database when online.
 // Cache acts strictly as an offline fallback or shell container.
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+  const url = new URL(request.url);
 
-  // Only handle GET requests from http / https protocols
-  if (request.method !== 'GET') {
+  if (!url.protocol.startsWith('http')) {
     return;
   }
 
-  const url = new URL(request.url);
-  if (!url.protocol.startsWith('http')) {
+  // 1. API Endpoints: Strictly Network-First/Network-Only, dynamically route to live production database
+  if (url.pathname.startsWith('/api/')) {
+    let targetUrl = request.url;
+    const isLocalContainer =
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      (!url.hostname.includes('bonaveeict.com.ng') && !url.hostname.includes('onrender.com'));
+
+    if (isLocalContainer && LIVE_API_BASE_URL) {
+      try {
+        const prodUrl = new URL(url.pathname + url.search, LIVE_API_BASE_URL);
+        targetUrl = prodUrl.href;
+      } catch (e) {
+        // Fallback to original url
+      }
+    }
+
+    event.respondWith(
+      fetch(targetUrl, {
+        method: request.method,
+        headers: request.headers,
+        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.clone().blob() : undefined,
+        credentials: 'include',
+        mode: 'cors',
+      }).catch(async (err) => {
+        return new Response(
+          JSON.stringify({
+            error: 'Live multi-tenant database connection offline or unavailable.',
+            details: err?.message || 'Network request failed',
+          }),
+          {
+            status: 503,
+            headers: new Headers({
+              'Content-Type': 'application/json',
+            }),
+          }
+        );
+      })
+    );
+    return;
+  }
+
+  // Only handle GET requests for static / navigation caching
+  if (request.method !== 'GET') {
     return;
   }
 

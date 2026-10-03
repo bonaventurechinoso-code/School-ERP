@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import * as jose from "jose";
 import crypto from "crypto";
 import { basePrisma } from "./tenant-prisma";
@@ -143,10 +143,23 @@ export async function validateDatabaseSession(
   if (!token) {
     try {
       const cookieStore = await cookies();
-      token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+      token = cookieStore.get(SESSION_COOKIE_NAME)?.value || cookieStore.get("accessToken")?.value;
     } catch {
       // Outside active request scope
     }
+  }
+
+  if (!token) {
+    try {
+      const headerList = await headers();
+      const authHeader = headerList.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+      }
+      if (!token) {
+        token = headerList.get("x-session-token");
+      }
+    } catch {}
   }
 
   if (!token) return null;

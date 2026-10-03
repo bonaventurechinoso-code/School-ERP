@@ -8,7 +8,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { Lock, Mail, ArrowRight, Building2, Eye, EyeOff } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
-import { beginTokenWait, setAuthToken } from "@/lib/api-client";
+import { beginTokenWait, setAuthToken, customFetch } from "@/lib/api-client";
 
 export default function TenantLoginPage() {
 
@@ -28,7 +28,7 @@ export default function TenantLoginPage() {
 
     try {
       beginTokenWait();
-      const res = await fetch("/api/v1/auth/login", {
+      const res = await customFetch("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, schoolDomain: tenant.subdomain })
@@ -65,6 +65,11 @@ export default function TenantLoginPage() {
           token: data.token,
         };
         persistStoredSession(sessionPayload);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("schoolerp_tenant", targetDomain);
+          window.localStorage.setItem("schoolDomain", targetDomain);
+          window.localStorage.setItem("tenantId", tenant.id);
+        }
         window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
 
         // Invalidate Next.js client router cache so layouts re-read cookies

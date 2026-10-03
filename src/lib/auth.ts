@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import * as jose from "jose";
 
 export enum Role {
@@ -182,7 +182,20 @@ export async function getSession(tokenOverride?: string | null): Promise<Session
   if (!rawToken) {
     try {
       const cookieStore = await cookies();
-      rawToken = cookieStore.get("session")?.value;
+      rawToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
+    } catch {}
+  }
+
+  if (!rawToken) {
+    try {
+      const headerList = await headers();
+      const authHeader = headerList.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        rawToken = authHeader.substring(7);
+      }
+      if (!rawToken) {
+        rawToken = headerList.get("x-session-token");
+      }
     } catch {}
   }
 
