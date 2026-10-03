@@ -84,14 +84,14 @@ export function getMailConfig() {
       fullFrom = `${fromName} <${fromEmail}>`;
     }
   } else if (resendApiKey) {
-    // If no explicit from is provided, default to onboarding@resend.dev for Resend
-    fromEmail = "onboarding@resend.dev";
+    // Primary verified system address registered under Resend account
+    fromEmail = "noreply@bonaveeict.com.ng";
     fullFrom = `${fromName} <${fromEmail}>`;
   } else if (user && user.includes("@")) {
     fromEmail = user;
     fullFrom = `${fromName} <${fromEmail}>`;
   } else {
-    fromEmail = "onboarding@resend.dev";
+    fromEmail = "noreply@bonaveeict.com.ng";
     fullFrom = `${fromName} <${fromEmail}>`;
   }
 
@@ -150,7 +150,8 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
   }
 
   const config = getMailConfig();
-  const effectiveFrom = customFrom || config.fullFrom;
+  const verifiedSystemFrom = `${config.fromName} <noreply@bonaveeict.com.ng>`;
+  const effectiveFrom = customFrom || verifiedSystemFrom;
 
   console.log(`[EMAIL_DISPATCH] [${logCategory}] Initiating delivery to [${recipients.join(", ")}] | Subject: "${subject}" | From: "${effectiveFrom}"`);
 
@@ -190,17 +191,17 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
           subject,
         });
 
-        // If domain verification failed and custom from was used, retry with onboarding@resend.dev sandbox
+        // If domain verification failed and custom from was used, retry with verified system domain
         if (
           error.message?.toLowerCase().includes("domain") ||
           error.message?.toLowerCase().includes("verify") ||
           error.message?.toLowerCase().includes("from") ||
           error.name === "validation_error"
         ) {
-          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Sender domain unverified. Retrying with 'School ERP <onboarding@resend.dev>'...`);
+          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Sender domain unverified. Retrying with '${verifiedSystemFrom}'...`);
           try {
             const fallbackResult = await resendClient.emails.send({
-              from: `School ERP <onboarding@resend.dev>`,
+              from: verifiedSystemFrom,
               to: recipients,
               subject,
               html,

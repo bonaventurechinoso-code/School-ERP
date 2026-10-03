@@ -1236,6 +1236,7 @@ export async function sendPasswordResetEmail(payload: {
   recipientName: string;
   resetUrl: string;
   expiresMinutes?: number;
+  from?: string;
 }) {
   try {
     const { school, recipientEmail, recipientName, resetUrl, expiresMinutes = 60 } = payload;
@@ -1306,6 +1307,7 @@ export async function sendPasswordResetEmail(payload: {
     // Unified dispatch through centralized email service
     const dispatchResult = await dispatchEmail({
       to: recipientEmail,
+      from: payload.from || "noreply@bonaveeict.com.ng",
       subject: `[SECURITY] Password Reset Request - ${tenantName}`,
       html: emailHtml,
       schoolId: school?.id,
@@ -1464,6 +1466,7 @@ export interface DispatchEmailOptions {
   subject: string;
   html: string;
   text?: string;
+  from?: string;
   schoolId?: string;
   recipientType?: "ADMIN" | "STUDENT" | "PARENT" | "STAFF";
   logCategory?: string;
@@ -1486,6 +1489,7 @@ export interface DispatchEmailResult {
 export async function dispatchEmail(options: DispatchEmailOptions): Promise<DispatchEmailResult> {
   const result = await sendMail({
     to: options.to,
+    from: options.from,
     subject: options.subject,
     html: options.html,
     text: options.text,

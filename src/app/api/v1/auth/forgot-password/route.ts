@@ -104,18 +104,59 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Locate tenant school
+    console.log(`[DEBUG_FORGOT_PW] Lookup initiated for email: "${normalizedEmail}" domain: "${normalizedDomain}"`);
+
+    // 1. Locate tenant institution
     let school: any = await basePrisma.school.findFirst({
       where: {
         OR: [
           { subdomain: normalizedDomain },
           { slug: normalizedDomain },
+          { subdomain: { equals: normalizedDomain, mode: "insensitive" } },
+          { slug: { equals: normalizedDomain, mode: "insensitive" } },
+          { subdomain: { startsWith: normalizedDomain, mode: "insensitive" } },
+          { slug: { startsWith: normalizedDomain, mode: "insensitive" } },
         ],
       },
       include: { academicTiers: true },
     });
 
+    // Fallback: If school not found by domain slug, resolve school by registered user email
     if (!school) {
+      const userMatch = await basePrisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        include: { school: true },
+      });
+      if (userMatch?.school) {
+        school = userMatch.school;
+        console.log(`[DEBUG_FORGOT_PW] School resolved via User record: ${school.name} (${school.subdomain})`);
+      }
+    }
+
+    if (!school) {
+      const staffMatch = await basePrisma.staff.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        include: { school: true },
+      });
+      if (staffMatch?.school) {
+        school = staffMatch.school;
+        console.log(`[DEBUG_FORGOT_PW] School resolved via Staff record: ${school.name} (${school.subdomain})`);
+      }
+    }
+
+    if (!school) {
+      const studentMatch = await basePrisma.student.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+        include: { school: true },
+      });
+      if (studentMatch?.school) {
+        school = studentMatch.school;
+        console.log(`[DEBUG_FORGOT_PW] School resolved via Student record: ${school.name} (${school.subdomain})`);
+      }
+    }
+
+    if (!school) {
+      console.log(`[DEBUG_FORGOT_PW] No institution found for domain "${normalizedDomain}" or email "${normalizedEmail}"`);
       return NextResponse.json(
         { error: "School institution not found.", code: "TENANT_NOT_FOUND" },
         { status: 404 }
@@ -123,74 +164,93 @@ export async function POST(req: Request) {
     }
 
     // =========================================================================
-    // 3. RECIPIENT VERIFICATION WITHIN TENANT CONTEXT
+    // 3. UNIFIED RECIPIENT LOOKUP ACROSS ALL AUTH TABLES
     // =========================================================================
-    let userType: "USER" | "STAFF" | "STUDENT" | null = null;
-    let userId = "";
-    let userName = "";
+    const institutionId = school.id;
+    const prisma = basePrisma as any;
+    let foundUser: {
+      id: string;
+      name: string;
+      role: string;
+      userType: "USER" | "STAFF" | "STUDENT" | "PLATFORM_ADMIN";
+    } | null = null;
 
-    // A. Explicitly query tenant Admin/User Prisma model (basePrisma.user) - NOT student model
-    let adminUser = await basePrisma.user.findFirst({
-      where: {
-        schoolId: school.id,
-        email: { equals: normalizedEmail, mode: "insensitive" },
-      },
-    });
-
-    if (!adminUser && school.databaseUrl) {
-      try {
-        const tenantDb = await getTenantClient(school.id);
-        adminUser = await tenantDb.user.findFirst({
-          where: {
-            schoolId: school.id,
-            email: { equals: normalizedEmail, mode: "insensitive" },
-          },
-        });
-      } catch {}
+    // A. prisma.institution.findFirst + admins relation OR prisma.tenantAdmin.findFirst({ where: { email, institutionId } })
+    // Also checking prisma.user (admin roles)
+    let tenantAdmin: any = null;
+    if (prisma.tenantAdmin) {
+      tenantAdmin = await prisma.tenantAdmin.findFirst({
+        where: {
+          email: normalizedEmail,
+          institutionId,
+        },
+      }).catch(() => null);
     }
 
-    if (!adminUser) {
-      // Diagnostic check: check if admin email exists under another tenant context (tenantId mismatch)
-      const crossTenantUser = await basePrisma.user.findFirst({
-        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
-        include: { school: true },
-      });
-      if (crossTenantUser) {
-        console.log(`[AUTH_ERROR] Admin email found under different tenant ID ${crossTenantUser.schoolId} instead of requested tenant ${school.id}`);
-        console.log("[AUTH_ERROR] Admin email not found in database tracking");
-        if (crossTenantUser.school && ["SCHOOL_ADMIN", "ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR"].includes(crossTenantUser.role as string)) {
-          adminUser = crossTenantUser;
-          school = crossTenantUser.school;
-        }
-      } else {
-        console.log("[AUTH_ERROR] Admin email not found in database tracking");
+    if (!tenantAdmin && prisma.institution) {
+      const institutionWithAdmins = await prisma.institution.findFirst({
+        where: { id: institutionId },
+        include: { admins: true },
+      }).catch(() => null);
+      if (institutionWithAdmins?.admins) {
+        const matched = institutionWithAdmins.admins.find((a: any) => (a.email || "").toLowerCase() === normalizedEmail);
+        if (matched) tenantAdmin = matched;
       }
     }
 
-    if (adminUser) {
-      userType = "USER";
-      userId = adminUser.id;
-      const fullName = `${adminUser.firstName || ""} ${adminUser.lastName || ""}`.trim();
-      userName = fullName || (adminUser.role ? `${adminUser.role.replace(/_/g, " ")}` : "School Administrator");
+    let adminUser = null;
+    if (!tenantAdmin) {
+      adminUser = await basePrisma.user.findFirst({
+        where: {
+          schoolId: institutionId,
+          email: { equals: normalizedEmail, mode: "insensitive" },
+          role: { in: ["SCHOOL_ADMIN", "ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR", "DIRECTOR"] as any },
+        },
+      });
+
+      if (!adminUser && school.databaseUrl) {
+        try {
+          const tenantDb = await getTenantClient(institutionId);
+          adminUser = await tenantDb.user.findFirst({
+            where: {
+              schoolId: institutionId,
+              email: { equals: normalizedEmail, mode: "insensitive" },
+              role: { in: ["SCHOOL_ADMIN", "ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR", "DIRECTOR"] as any },
+            },
+          });
+        } catch {}
+      }
     }
 
-    // B. Check Staff if not found in User table
-    if (!userType) {
-      let staff = await basePrisma.staff.findFirst({
+    if (tenantAdmin || adminUser) {
+      const u: any = tenantAdmin || adminUser;
+      const fullName = (u.name || u.fullName || `${u.firstName || ""} ${u.lastName || ""}`).trim();
+      foundUser = {
+        id: u.id,
+        name: fullName || (u.role ? `${String(u.role).replace(/_/g, " ")}` : "Tenant Administrator"),
+        role: u.role || "SCHOOL_ADMIN",
+        userType: "USER",
+      };
+      console.log(`[DEBUG_FORGOT_PW] Found Tenant Admin: ${foundUser.name} (${foundUser.id}) role: ${foundUser.role}`);
+    }
+
+    // B. prisma.staff.findFirst({ where: { email, institutionId } })
+    if (!foundUser) {
+      let staff: any = await basePrisma.staff.findFirst({
         where: {
-          schoolId: school.id,
-          email: normalizedEmail,
+          schoolId: institutionId,
+          email: { equals: normalizedEmail, mode: "insensitive" },
           status: { not: "TERMINATED" },
         },
       });
 
       if (!staff && school.databaseUrl) {
         try {
-          const tenantDb = await getTenantClient(school.id);
+          const tenantDb = await getTenantClient(institutionId);
           staff = await tenantDb.staff.findFirst({
             where: {
-              schoolId: school.id,
-              email: normalizedEmail,
+              schoolId: institutionId,
+              email: { equals: normalizedEmail, mode: "insensitive" },
               status: { not: "TERMINATED" },
             },
           });
@@ -198,89 +258,148 @@ export async function POST(req: Request) {
       }
 
       if (staff) {
-        userType = "STAFF";
-        userId = staff.id;
-        userName = `${staff.firstName} ${staff.lastName}`.trim();
+        const fullName = (staff.name || staff.fullName || `${staff.firstName || ""} ${staff.lastName || ""}`).trim();
+        foundUser = {
+          id: staff.id,
+          name: fullName || "Staff Member",
+          role: staff.role || "STAFF",
+          userType: "STAFF",
+        };
+        console.log(`[DEBUG_FORGOT_PW] Found Staff: ${foundUser.name} (${foundUser.id}) role: ${foundUser.role}`);
       }
     }
 
-    // C. Check Student if not found in Staff (Exact, untouched student logic)
-    if (!userType) {
-      let student = await basePrisma.student.findFirst({
+    // C. prisma.student.findFirst({ where: { email, institutionId } })
+    if (!foundUser) {
+      let student: any = await basePrisma.student.findFirst({
         where: {
-          schoolId: school.id,
-          email: normalizedEmail,
+          schoolId: institutionId,
+          email: { equals: normalizedEmail, mode: "insensitive" },
           status: { notIn: ["EXPELLED"] },
         },
       });
 
       if (!student && school.databaseUrl) {
         try {
-          const tenantDb = await getTenantClient(school.id);
+          const tenantDb = await getTenantClient(institutionId);
           student = await tenantDb.student.findFirst({
             where: {
-              schoolId: school.id,
-              email: normalizedEmail,
+              schoolId: institutionId,
+              email: { equals: normalizedEmail, mode: "insensitive" },
             },
           });
         } catch {}
       }
 
       if (student) {
-        userType = "STUDENT";
-        userId = student.id;
-        userName = `${student.firstName} ${student.lastName}`.trim();
+        const fullName = (student.name || student.fullName || `${student.firstName || ""} ${student.lastName || ""}`).trim();
+        foundUser = {
+          id: student.id,
+          name: fullName || "Student",
+          role: student.role || "STUDENT",
+          userType: "STUDENT",
+        };
+        console.log(`[DEBUG_FORGOT_PW] Found Student: ${foundUser.name} (${foundUser.id}) role: ${foundUser.role}`);
+      }
+    }
+
+    // D. prisma.user fallback
+    if (!foundUser) {
+      let fallbackUser: any = await basePrisma.user.findFirst({
+        where: {
+          schoolId: institutionId,
+          email: { equals: normalizedEmail, mode: "insensitive" },
+        },
+      });
+
+      if (!fallbackUser && school.databaseUrl) {
+        try {
+          const tenantDb = await getTenantClient(institutionId);
+          fallbackUser = await tenantDb.user.findFirst({
+            where: {
+              schoolId: institutionId,
+              email: { equals: normalizedEmail, mode: "insensitive" },
+            },
+          });
+        } catch {}
+      }
+
+      if (!fallbackUser) {
+        const crossUser: any = await basePrisma.user.findFirst({
+          where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+          include: { school: true },
+        });
+        if (crossUser) {
+          fallbackUser = crossUser;
+          if (crossUser.school) {
+            school = crossUser.school;
+          }
+        }
+      }
+
+      if (fallbackUser) {
+        const fullName = (fallbackUser.name || fallbackUser.fullName || `${fallbackUser.firstName || ""} ${fallbackUser.lastName || ""}`).trim();
+        foundUser = {
+          id: fallbackUser.id,
+          name: fullName || (fallbackUser.role ? `${String(fallbackUser.role).replace(/_/g, " ")}` : "User"),
+          role: fallbackUser.role || "USER",
+          userType: "USER",
+        };
+        console.log(`[DEBUG_FORGOT_PW] Found User Fallback: ${foundUser.name} (${foundUser.id}) role: ${foundUser.role}`);
       }
     }
 
     // Security practice: Return generic positive message even if email wasn't found in tenant
-    // to prevent email enumeration attacks, BUT do not dispatch email if unverified.
-    if (!userType || !userId) {
-      console.log("[AUTH_ERROR] Admin email not found in database tracking");
+    if (!foundUser) {
+      console.log(`[DEBUG_FORGOT_PW] Account not found for email "${normalizedEmail}" in institution "${institutionId}" (${school.name})`);
       return NextResponse.json({
         success: true,
         message: "If an account with this email exists for this institution, a recovery link has been dispatched.",
       });
     }
 
-    // 4. Generate secure time-limited token (strict 15-minute expiration timestamp)
+    // 4. Generate same reset token for any role (strict 15-minute expiration timestamp)
     const resetToken = await createPasswordResetToken({
       schoolId: school.id,
       email: normalizedEmail,
-      userId,
-      userType,
+      userId: foundUser.id,
+      userType: foundUser.userType === "USER" ? "USER" : (foundUser.userType as any),
       expiresMinutes: 15,
       ip: clientIp,
     });
 
-    // Explicitly update recovery fields directly on Admin/User model (prisma.user)
-    if (adminUser) {
-      await basePrisma.user.update({
-        where: { id: adminUser.id },
-        data: {
-          resetPasswordToken: resetToken,
-          resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
-        },
-      }).catch((err) => {
-        console.warn("[AUTH_WARNING] Could not update resetPasswordToken on User:", err);
-      });
-    }
+    // Explicitly sync reset token fields directly on User model (prisma.user)
+    await basePrisma.user.updateMany({
+      where: {
+        OR: [
+          { id: foundUser.id },
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+        ],
+      },
+      data: {
+        resetPasswordToken: resetToken,
+        resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    }).catch(() => {});
 
     // 5. Compile recovery link preserving the tenant slug
     const targetSlug = school.slug || school.subdomain;
     const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-    // 6. Transmit transactional email via mail delivery service
-    const mailResult = await sendPasswordResetEmail({
+    // 6. Transmit transactional email with verified sender domain & explicit name
+    const info = await sendPasswordResetEmail({
       school,
       recipientEmail: normalizedEmail,
-      recipientName: userName,
+      recipientName: foundUser.name,
       resetUrl,
       expiresMinutes: 15,
+      from: "noreply@bonaveeict.com.ng",
     });
 
-    if (!mailResult.success) {
-      console.error(`[EMAIL_SYNC_ERROR] [PASSWORD_RESET] Failed to dispatch password reset to ${normalizedEmail}:`, mailResult.error);
+    console.log("Reset token for", email, "role:", foundUser.role, "sent:", info.messageId);
+
+    if (!info.success) {
+      console.error(`[EMAIL_SYNC_ERROR] [PASSWORD_RESET] Failed to dispatch password reset to ${normalizedEmail}:`, info.error);
     }
 
     return NextResponse.json({
