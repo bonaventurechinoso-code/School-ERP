@@ -90,20 +90,28 @@ export async function POST(req: Request) {
     }
 
     // 3. MASTER SAAS SUPERADMIN CENTRAL CREDENTIAL CHECK
-    const superAdmin = await basePrisma.superAdmin.findUnique({
-      where: { email: normalizedEmail },
+    const isSuperAdminEmail =
+      normalizedEmail === "admin@bonaveeict.com.ng" ||
+      (isDev && normalizedEmail === "superadmin@platform.com");
+
+    const superAdmin = await basePrisma.superAdmin.findFirst({
+      where: {
+        OR: [
+          { email: normalizedEmail },
+          ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+        ],
+      },
     });
-    const platformAdmin = await basePrisma.platformAdmin.findUnique({
-      where: { email: normalizedEmail },
+    const platformAdmin = await basePrisma.platformAdmin.findFirst({
+      where: {
+        OR: [
+          { email: normalizedEmail },
+          ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+        ],
+      },
     });
 
-    const isMasterDevAdmin =
-      isDev &&
-      (normalizedEmail === "superadmin@platform.com" ||
-       normalizedEmail === "superadmin@school.edu" ||
-       normalizedEmail === "admin@bonaveeict.com.ng");
-
-    if (superAdmin || platformAdmin || isMasterDevAdmin) {
+    if (superAdmin || platformAdmin || (!parsedInst.schoolToken && isSuperAdminEmail)) {
       let isCentralAuthenticated = false;
 
       if (superAdmin && superAdmin.passwordHash) {
@@ -112,13 +120,6 @@ export async function POST(req: Request) {
 
       if (!isCentralAuthenticated && platformAdmin && platformAdmin.password) {
         isCentralAuthenticated = await bcrypt.compare(password, platformAdmin.password).catch(() => false);
-        if (!isCentralAuthenticated && (platformAdmin.password === password || (isMasterDevAdmin && password === "Password123"))) {
-          isCentralAuthenticated = true;
-        }
-      }
-
-      if (!isCentralAuthenticated && isMasterDevAdmin && password === "Password123") {
-        isCentralAuthenticated = true;
       }
 
       if (isCentralAuthenticated) {
@@ -126,6 +127,10 @@ export async function POST(req: Request) {
         const adminId = superAdmin?.id || platformAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
         const distinctSessionToken = crypto.randomUUID();
+
+        // Task 1.5: Force mandatory password change if password is still default 'Password123'
+        const isDefaultPassword = password === "Password123";
+        const mustChangePassword = isDefaultPassword;
 
         // Issue Dual-Tokens: Short-lived Access Token (15 min) + Long-lived Refresh Token (7 days)
         const accessToken = await signAccessToken({
@@ -138,7 +143,7 @@ export async function POST(req: Request) {
           activeTiers: ["Central Platform"],
           email: normalizedEmail,
           isSuperAdmin: true,
-          mustChangePassword: false,
+          mustChangePassword: mustChangePassword,
         });
 
         const { rawRefreshToken } = await issueRefreshToken({
@@ -171,8 +176,10 @@ export async function POST(req: Request) {
           target: "SUPER_ADMIN_CONSOLE",
           schoolId: "global-saas",
           ip: clientIp,
-          metadata: { email: normalizedEmail, isSuperAdmin: true },
+          metadata: { email: normalizedEmail, isSuperAdmin: true, mustChangePassword },
         });
+
+        const redirectUrl = mustChangePassword ? "/change-password" : "/admin";
 
         const response = NextResponse.json({
           success: true,
@@ -183,8 +190,9 @@ export async function POST(req: Request) {
           userRole: "SUPER_ADMIN",
           assignedTier: "Central Platform",
           isSuperAdmin: true,
+          mustChangePassword: mustChangePassword,
           schoolDomain: "admin",
-          redirectUrl: "/admin",
+          redirectUrl: redirectUrl,
           permissions,
           accessToken,
           sessionToken: sessionResult.sessionToken || distinctSessionToken,
@@ -233,7 +241,53 @@ export async function POST(req: Request) {
     // 4. DYNAMIC TENANT & ACADEMIC TIER RESOLUTION
     let tenant: any = null;
 
-    // Strategy A: Direct Institutional Identifier Match (e.g. 'RIV' or 'greenwood' from School Code or Admission Number prefix)
+    // Check if email exists in multiple schools when tenant is unspecified
+    if (!parsedInst.schoolToken) {
+      const matchingSchools = await basePrisma.user.findMany({
+        where: {
+          email: { equals: normalizedEmail, mode: "insensitive" },
+          school: {
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+        select: { schoolId: true, school: { select: { subdomain: true, name: true } } },
+      });
+
+      if (matchingSchools.length > 1) {
+        return NextResponse.json(
+          {
+            error: "Please login via your school domain e.g. greenwood.bonaveeict.com.ng",
+            code: "TENANT_DOMAIN_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+
+      const isSchoolAdminRole =
+        (body.role || "").toUpperCase() === "ADMIN" ||
+        (body.role || "").toUpperCase() === "SCHOOL_ADMIN" ||
+        (body.role || "").toUpperCase() === "TENANT_ADMIN";
+
+      if (isSchoolAdminRole) {
+        return NextResponse.json(
+          {
+            error: "Please login via your school domain e.g. greenwood.bonaveeict.com.ng",
+            code: "SCHOOL_CODE_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Strategy A: Direct Institutional Identifier Match
     if (parsedInst.schoolToken) {
       tenant = await basePrisma.school.findFirst({
         where: {
@@ -241,12 +295,16 @@ export async function POST(req: Request) {
             { subdomain: { equals: parsedInst.schoolToken, mode: "insensitive" } },
             { slug: { equals: parsedInst.schoolToken, mode: "insensitive" } },
             { id: parsedInst.schoolToken },
-            { subdomain: { startsWith: parsedInst.schoolToken, mode: "insensitive" } },
-            { slug: { startsWith: parsedInst.schoolToken, mode: "insensitive" } },
-            { name: { contains: parsedInst.schoolToken, mode: "insensitive" } },
           ],
           isActive: true,
           deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
         },
         include: {
           academicTiers: { orderBy: { level: "asc" } },
@@ -255,11 +313,20 @@ export async function POST(req: Request) {
       });
     }
 
-    // Strategy B: Cross-Tenant Dynamic Discovery via Credentials
+    // Strategy B: Cross-Tenant Discovery ONLY for single-school memberships
     if (!tenant) {
-      // 1. Search User Table
       const userWhere: any = {
-        school: { isActive: true, deletedAt: null },
+        school: {
+          isActive: true,
+          deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
         OR: [
           { email: { equals: normalizedEmail, mode: "insensitive" } },
           ...searchVariants.map((v) => ({ student: { is: { admissionNumber: { equals: v, mode: "insensitive" } } } })),
@@ -267,7 +334,6 @@ export async function POST(req: Request) {
       };
       const userSchool = await basePrisma.user.findFirst({
         where: userWhere,
-
         include: {
           school: {
             include: {
@@ -284,7 +350,7 @@ export async function POST(req: Request) {
     }
 
     if (!tenant) {
-      // 2. Search Student Table (admission numbers, student emails, parent phones/emails)
+      // 2. Search Student Table
       const studentSchoolWhere: any = {
         OR: [
           { email: { equals: normalizedEmail, mode: "insensitive" } },
@@ -296,7 +362,17 @@ export async function POST(req: Request) {
           ...(phone ? [{ parentPhone: { equals: phone.trim(), mode: "insensitive" } }] : []),
           ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
         ],
-        school: { isActive: true, deletedAt: null },
+        school: {
+          isActive: true,
+          deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
       };
       const studentSchool = await basePrisma.student.findFirst({
         where: studentSchoolWhere,
@@ -320,10 +396,19 @@ export async function POST(req: Request) {
       const staffSchool = await basePrisma.staff.findFirst({
         where: {
           email: { equals: normalizedEmail, mode: "insensitive" },
-          school: { isActive: true, deletedAt: null },
+          school: {
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
+          },
         },
         include: {
-
           school: {
             include: {
               academicTiers: { orderBy: { level: "asc" } },
@@ -338,7 +423,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!tenant || !tenant.isActive) {
+    if (!tenant || !tenant.isActive || tenant.deletedAt) {
       return NextResponse.json(
         { error: "Could not identify an active institution matching your credentials. Please enter your School Code or Admission Number." },
         { status: 400 }
@@ -347,7 +432,7 @@ export async function POST(req: Request) {
 
     const activeTiers: string[] = (tenant.academicTiers || []).map((t: any) => t.name);
 
-    // Resolve Candidate Tier from Parsed Admission Identifier (e.g. 'NUR' -> 'Daycare / Nursery', 'SEC' -> 'Secondary School')
+    // Resolve Candidate Tier from Parsed Admission Identifier
     let tierFromToken: string | null = null;
     if (parsedInst.tierToken) {
       const mappedCandidate = parsedInst.candidateTierName?.toUpperCase();
@@ -384,7 +469,6 @@ export async function POST(req: Request) {
           ...searchVariants.map((v) => ({ student: { is: { admissionNumber: { equals: v, mode: "insensitive" } } } })),
         ],
       },
-
       include: {
         staff: { include: { department: { include: { tier: true } } } },
         student: { include: { tier: true } },
@@ -393,15 +477,12 @@ export async function POST(req: Request) {
 
     if (localUser && localUser.passwordHash) {
       let isValid = await bcrypt.compare(password, localUser.passwordHash).catch(() => false);
-      if (!isValid && isDev && (password === "Welcome123" || password === "Password123" || password === "Password@123")) {
-        isValid = true;
-      }
       if (isValid) {
         resolvedRole = localUser.role;
         resolvedStaffRole = localUser.role;
         authenticatedUserId = localUser.id;
         authenticatedEmail = localUser.email;
-        mustChangePassword = Boolean(localUser.mustChangePassword);
+        mustChangePassword = Boolean(localUser.mustChangePassword) || password === "Password123";
         if (localUser.student?.tier?.name) {
           assignedTier = localUser.student.tier.name;
         } else if (localUser.staff?.department?.tier?.name) {

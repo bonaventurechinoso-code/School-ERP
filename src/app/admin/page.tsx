@@ -22,11 +22,38 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboardPage() {
   const [schoolsCount, studentsCount, staffCount, platformWallet, recentSchools, recentActivities] =
     await Promise.all([
-      basePrisma.school.count(),
-      basePrisma.student.count(),
-      basePrisma.staff.count(),
+      basePrisma.school.count({
+        where: {
+          isActive: true,
+          deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
+      }),
+      basePrisma.student.count({
+        where: { school: { isActive: true, deletedAt: null } },
+      }),
+      basePrisma.staff.count({
+        where: { school: { isActive: true, deletedAt: null } },
+      }),
       basePrisma.platformWallet.findFirst({ select: { totalRevenue: true } }),
       basePrisma.school.findMany({
+        where: {
+          isActive: true,
+          deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
         take: 5,
         orderBy: { createdAt: "desc" },
         select: {

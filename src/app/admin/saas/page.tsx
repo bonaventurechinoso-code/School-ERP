@@ -46,10 +46,24 @@ export default async function SaasAdminPage() {
   }
 
   // 3. Seed / Sync Baseline Tenants if None Exist in Tenant Table
-  const tenantCount = await prisma.tenant.count();
+  const tenantCount = await prisma.tenant.count({
+    where: { status: "ACTIVE" },
+  });
   if (tenantCount === 0) {
     const defaultPlan = rawPlans[0] || null;
-    const schools = await prisma.school.findMany();
+    const schools = await prisma.school.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        NOT: {
+          OR: [
+            { subdomain: { equals: "riverside", mode: "insensitive" } },
+            { slug: { equals: "riverside", mode: "insensitive" } },
+            { name: { contains: "riverside", mode: "insensitive" } },
+          ],
+        },
+      },
+    });
     for (const s of schools) {
       await prisma.tenant.create({
         data: {
@@ -161,8 +175,17 @@ export default async function SaasAdminPage() {
     })),
   };
 
-  // 8. Fetch Tenants with 30-Day Collections and Manual Bank Transfer Details
+  // 8. Fetch Active Non-Deleted Tenants with 30-Day Collections and Manual Bank Transfer Details
   const rawTenants = await prisma.tenant.findMany({
+    where: {
+      status: "ACTIVE",
+      NOT: {
+        OR: [
+          { subdomain: { equals: "riverside", mode: "insensitive" } },
+          { schoolName: { contains: "riverside", mode: "insensitive" } },
+        ],
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 

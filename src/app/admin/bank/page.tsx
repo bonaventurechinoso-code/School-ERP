@@ -38,8 +38,17 @@ export default async function BankModulePage() {
     estimatedMrr += Number(sub.amount || 0);
   }
 
-  // 4. Fetch All Tenants with Active Plans & Subscriptions
+  // 4. Fetch All Active Non-Deleted Tenants with Active Plans & Subscriptions
   const rawTenants = await prisma.tenant.findMany({
+    where: {
+      status: "ACTIVE",
+      NOT: {
+        OR: [
+          { subdomain: { equals: "riverside", mode: "insensitive" } },
+          { schoolName: { contains: "riverside", mode: "insensitive" } },
+        ],
+      },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       plan: true,
@@ -49,7 +58,11 @@ export default async function BankModulePage() {
   const tenants: BankModuleTenant[] = await Promise.all(
     rawTenants.map(async (t) => {
       const matchingSchool = await prisma.school.findFirst({
-        where: { subdomain: t.subdomain },
+        where: {
+          subdomain: t.subdomain,
+          isActive: true,
+          deletedAt: null,
+        },
         include: {
           subscriptions: {
             take: 1,

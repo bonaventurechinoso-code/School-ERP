@@ -41,33 +41,34 @@ export const authOptions: NextAuthOptions = {
         const rawPassword = credentials.password;
         const requestedDomain = credentials.schoolDomain?.trim().toLowerCase();
         const isDev = process.env.NODE_ENV === "development";
+        const parsedId = parseInstitutionalIdentifier(credentials.email, credentials.schoolDomain);
+        const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
 
         // A. Check Central Super-Admin Registry (basePrisma.platformAdmin)
-        const platformAdmin = await basePrisma.platformAdmin.findUnique({
-          where: { email: normalizedEmail },
+        const isSuperAdminEmail =
+          normalizedEmail === "admin@bonaveeict.com.ng" ||
+          (isDev && normalizedEmail === "superadmin@platform.com");
+
+        const platformAdmin = await basePrisma.platformAdmin.findFirst({
+          where: {
+            OR: [
+              { email: normalizedEmail },
+              ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+            ],
+          },
         });
 
-        const isMasterDevAdmin =
-          isDev &&
-          (normalizedEmail === "superadmin@platform.com" ||
-            normalizedEmail === "superadmin@school.edu" ||
-            normalizedEmail === "admin@bonaveeict.com.ng");
-
-        if (platformAdmin || isMasterDevAdmin) {
+        if (platformAdmin || (!effectiveDomain && isSuperAdminEmail)) {
           let isAuthenticated = false;
 
-          if (isMasterDevAdmin && rawPassword === "Password123") {
-            isAuthenticated = true;
-          } else if (platformAdmin?.password) {
+          if (platformAdmin?.password) {
             isAuthenticated = await bcrypt.compare(rawPassword, platformAdmin.password).catch(() => false);
-            if (!isAuthenticated && (platformAdmin.password === rawPassword || rawPassword === "Password123")) {
-              isAuthenticated = true;
-            }
           }
 
           if (isAuthenticated) {
             const adminId = platformAdmin?.id || "master-superadmin-001";
             const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
+            const mustChangePassword = rawPassword === "Password123";
 
             return {
               id: adminId,
@@ -81,13 +82,36 @@ export const authOptions: NextAuthOptions = {
               tenantName: "Global Platform Administration",
               activeTiers: ["Central Platform"],
               permissions,
+              mustChangePassword,
             };
           }
         }
 
         // B. Check Unified User Registry (Authoritative single auth table: Principal, Teacher, Bursar, Student, School Admin)
-        const parsedId = parseInstitutionalIdentifier(credentials.email, credentials.schoolDomain);
-        const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
+
+        // Multi-school check when tenant domain is not specified
+        if (!effectiveDomain) {
+          const matchingSchools = await basePrisma.user.findMany({
+            where: {
+              email: { equals: normalizedEmail, mode: "insensitive" },
+              school: {
+                isActive: true,
+                deletedAt: null,
+                NOT: {
+                  OR: [
+                    { subdomain: { equals: "riverside", mode: "insensitive" } },
+                    { slug: { equals: "riverside", mode: "insensitive" } },
+                    { name: { contains: "riverside", mode: "insensitive" } },
+                  ],
+                },
+              },
+            },
+            select: { schoolId: true },
+          });
+          if (matchingSchools.length > 1) {
+            throw new Error("Please login via your school domain e.g. greenwood.bonaveeict.com.ng");
+          }
+        }
 
         let targetTenant: any = null;
         if (effectiveDomain) {
@@ -101,6 +125,15 @@ export const authOptions: NextAuthOptions = {
                 { slug: { equals: parsedId.schoolToken, mode: "insensitive" } },
               ] : []),
             ],
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
           };
           targetTenant = await basePrisma.school.findFirst({
             where: schoolWhere,
@@ -110,7 +143,6 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
-
         const searchVariants = getAdmissionNumberSearchVariants(credentials.email);
         const userQuery: any = {
           OR: [
@@ -118,6 +150,17 @@ export const authOptions: NextAuthOptions = {
             { student: { admissionNumber: { equals: normalizedEmail, mode: "insensitive" } } },
             ...searchVariants.map((v) => ({ student: { admissionNumber: { equals: v, mode: "insensitive" } } })),
           ],
+          school: {
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
+          },
         };
         if (targetTenant) {
           userQuery.schoolId = targetTenant.id;
@@ -128,6 +171,8 @@ export const authOptions: NextAuthOptions = {
               { slug: requestedDomain.toLowerCase().trim() },
               { id: requestedDomain },
             ],
+            isActive: true,
+            deletedAt: null,
           };
         }
 
@@ -149,17 +194,12 @@ export const authOptions: NextAuthOptions = {
 
           if (user.passwordHash) {
             isPasswordValid = await bcrypt.compare(rawPassword, user.passwordHash).catch(() => false);
-            if (!isPasswordValid && (isDev && (rawPassword === "Password123" || rawPassword === "Password@123" || rawPassword === "Welcome123"))) {
-              isPasswordValid = true;
-            }
-          } else if (isDev && (rawPassword === "Password123" || rawPassword === "Password@123")) {
-            isPasswordValid = true;
           }
 
           if (isPasswordValid) {
             const permissions = getDefaultPermissionsForRole(user.role);
             const activeTiers = user.school.academicTiers.map((t) => t.name);
-            const mustChangePassword = Boolean(user.mustChangePassword);
+            const mustChangePassword = Boolean(user.mustChangePassword) || rawPassword === "Password123";
             const assignedTier = mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
 
             return {

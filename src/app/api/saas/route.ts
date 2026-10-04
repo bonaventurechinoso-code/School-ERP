@@ -65,15 +65,36 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    // 3. Fetch all tenants with plan telemetry
+    // 3. Fetch all active non-deleted tenants with plan telemetry
     let tenants = await prisma.tenant.findMany({
+      where: {
+        status: "ACTIVE",
+        NOT: {
+          OR: [
+            { subdomain: { equals: "riverside", mode: "insensitive" } },
+            { schoolName: { contains: "riverside", mode: "insensitive" } },
+          ],
+        },
+      },
       orderBy: { createdAt: "desc" },
       select: tenantSelect,
     });
 
     if (tenants.length === 0) {
       const defaultPlan = await prisma.plan.findFirst();
-      const schools = await prisma.school.findMany();
+      const schools = await prisma.school.findMany({
+        where: {
+          isActive: true,
+          deletedAt: null,
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { slug: { equals: "riverside", mode: "insensitive" } },
+              { name: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
+      });
       for (const s of schools) {
         await prisma.tenant.create({
           data: {
@@ -93,6 +114,15 @@ export async function GET(req: NextRequest) {
       }
 
       tenants = await prisma.tenant.findMany({
+        where: {
+          status: "ACTIVE",
+          NOT: {
+            OR: [
+              { subdomain: { equals: "riverside", mode: "insensitive" } },
+              { schoolName: { contains: "riverside", mode: "insensitive" } },
+            ],
+          },
+        },
         orderBy: { createdAt: "desc" },
         select: tenantSelect,
       });

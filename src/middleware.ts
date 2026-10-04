@@ -131,16 +131,18 @@ export async function middleware(req: NextRequest) {
       const secret = new TextEncoder().encode(jwtSecret);
       const verified = await jwtVerify(sessionToken, secret);
       verifiedSessionPayload = verified.payload;
-      const userRole = ((verifiedSessionPayload.role as string) || '').trim().toUpperCase();
+      const userRole = ((verifiedSessionPayload.role as string) || (verifiedSessionPayload.userRole as string) || '').trim().toUpperCase();
       const userEmail = ((verifiedSessionPayload.email as string) || '').trim().toLowerCase();
 
       const isMasterAdminEmail =
-        userEmail === 'superadmin@platform.com' ||
-        userEmail === 'superadmin@school.edu' ||
         userEmail === 'admin@bonaveeict.com.ng' ||
-        userEmail.startsWith('superadmin@');
+        (process.env.NODE_ENV !== 'production' && userEmail === 'superadmin@platform.com');
 
-      if (userRole === 'SUPER_ADMIN' || verifiedSessionPayload.isSuperAdmin === true || isMasterAdminEmail) {
+      const rawTenantId = (verifiedSessionPayload.tenantId || verifiedSessionPayload.schoolId) as string | undefined;
+      const hasTenantScope = Boolean(rawTenantId && rawTenantId !== 'global-saas');
+
+      // Problem 4: Super Admin: Route /admin only. Cannot be part of any tenant. Reject if tenant_id is present.
+      if ((userRole === 'SUPER_ADMIN' || verifiedSessionPayload.isSuperAdmin === true || isMasterAdminEmail) && !hasTenantScope) {
         isSuperAdmin = true;
       }
     } catch {
@@ -148,43 +150,60 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // STEP 2: SuperAdmin Bypass:
-  // Grant unrestricted global access bypass to authenticated requests originating from the master SuperAdmin scope,
-  // explicitly marking their session state with isSuperAdmin = true.
-  if (isSuperAdmin) {
-    req.headers.set('x-is-super-admin', 'true');
-    req.headers.set('x-user-role', 'SUPER_ADMIN');
-    if (verifiedSessionPayload?.userId) {
-      req.headers.set('x-user-id', verifiedSessionPayload.userId as string);
-    }
-    if (effectiveTenantSlug) {
-      req.headers.set('x-tenant-slug', effectiveTenantSlug);
-    }
+  const rawTenantId = (verifiedSessionPayload?.tenantId || verifiedSessionPayload?.schoolId) as string | undefined;
+  const hasTenantScope = Boolean(rawTenantId && rawTenantId !== 'global-saas');
+  const userRole = ((verifiedSessionPayload?.role as string) || (verifiedSessionPayload?.userRole as string) || '').trim().toUpperCase();
+  const isTenantAdmin = Boolean(
+    (userRole === 'SCHOOL_ADMIN' || userRole === 'TENANT_ADMIN' || userRole === 'ADMIN') &&
+    hasTenantScope
+  );
 
-    // If super admin is accessing master platform admin pages or any tenant panel, let them through
-    if (path === '/admin' || path.startsWith('/admin/') || path === '/super-admin' || path.startsWith('/super-admin/')) {
-      return NextResponse.next({ request: { headers: req.headers } });
+  // Route /school-admin or /tenant-admin: Scope = single tenant_id only
+  if (path === '/school-admin' || path.startsWith('/school-admin') || path === '/tenant-admin' || path.startsWith('/tenant-admin')) {
+    if (!verifiedSessionPayload) {
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', path);
+      return NextResponse.redirect(loginUrl);
     }
+    if (isSuperAdmin) {
+      return NextResponse.redirect(new URL('/admin', req.url));
+    }
+    const tenantSlug = verifiedSessionPayload.schoolDomain || verifiedSessionPayload.tenantSlug || effectiveTenantSlug;
+    if (tenantSlug) {
+      return NextResponse.redirect(new URL(`/${tenantSlug}/dashboard`, req.url));
+    }
+    return NextResponse.redirect(new URL('/login', req.url));
   }
 
   // MASTER SAAS CONTROLLER / SUPER-ADMIN CONSOLE LOCKDOWN:
   const isGlobalAdminPath =
-    (!subdomain || isApexOrPlatformHost) &&
-    (path === '/admin' ||
-     path.startsWith('/admin/') ||
-     path === '/super-admin' ||
-     path.startsWith('/super-admin/'));
+    path === '/admin' ||
+    path.startsWith('/admin/') ||
+    path === '/super-admin' ||
+    path.startsWith('/super-admin/');
 
   if (isGlobalAdminPath) {
-    if (!isSuperAdmin) {
+    // Tenant middleware must reject if trying to access /admin. Super Admin must not have tenant_id.
+    if (hasTenantScope || isTenantAdmin || !isSuperAdmin) {
       const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('callbackUrl', path);
-      const res = NextResponse.redirect(loginUrl);
-      if (sessionToken && !verifiedSessionPayload) {
-        res.cookies.delete('session');
-        res.cookies.delete('accessToken');
+      loginUrl.searchParams.set('error', 'Unauthorized: Tenant users cannot access the Super Admin control plane.');
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // Force mandatory password change on Super Admin if flagged
+    if (verifiedSessionPayload?.mustChangePassword) {
+      const isChangePasswordPage = path === '/change-password' || path.startsWith('/change-password') || path === '/admin/security';
+      if (!isChangePasswordPage) {
+        const forcedUrl = new URL('/change-password', req.url);
+        forcedUrl.searchParams.set('forced', 'true');
+        return NextResponse.redirect(forcedUrl);
       }
-      return res;
+    }
+
+    req.headers.set('x-is-super-admin', 'true');
+    req.headers.set('x-user-role', 'SUPER_ADMIN');
+    if (verifiedSessionPayload?.userId) {
+      req.headers.set('x-user-id', verifiedSessionPayload.userId as string);
     }
     return NextResponse.next({ request: { headers: req.headers } });
   }

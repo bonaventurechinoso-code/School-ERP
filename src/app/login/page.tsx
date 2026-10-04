@@ -42,7 +42,7 @@ const ROLE_CONFIGS: RoleTabConfig[] = [
   {
     id: "student",
     label: "Student",
-    placeholder: "Admission No (e.g. RIV/NUR/2026/002)",
+    placeholder: "Admission No (e.g. GWD/NUR/2026/002)",
     fieldLabel: "Admission Number",
   },
   {
@@ -229,7 +229,7 @@ function UniversalLoginPageContent() {
     activeRoleTab === "student"
       ? dynamicSchoolPrefix
         ? `Admission No (e.g. ${dynamicSchoolPrefix}/SEC/2026/001 or ${dynamicSchoolPrefix}/NUR/2026/002)`
-        : "Admission No (e.g. RIV/NUR/2026/002 or SCH/2026/001)"
+        : "Admission No (e.g. GWD/NUR/2026/002 or SCH/2026/001)"
       : currentRole.placeholder;
 
   const handleCredentialsLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -397,7 +397,7 @@ function UniversalLoginPageContent() {
       }
 
       // 1. Central Admin Routing Logic:
-      if (user?.role === "SUPER_ADMIN" || (isCentralLogin && !user?.schoolDomain)) {
+      if (user?.role === "SUPER_ADMIN" || user?.userRole === "SUPER_ADMIN" || user?.isSuperAdmin || (isCentralLogin && !user?.schoolDomain)) {
         const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
         router.push(adminTarget);
         return;

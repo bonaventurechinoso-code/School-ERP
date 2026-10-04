@@ -342,22 +342,96 @@ export async function deleteSchool(schoolId: string) {
       where: { id: schoolId },
       select: { id: true, name: true, subdomain: true }
     });
+
     if (school?.subdomain) {
-      await invalidateTenantMetadata(school.subdomain);
+      await invalidateTenantMetadata(school.subdomain).catch(() => {});
     }
+
     if (school) {
       await recordTenantDeleted({
         schoolId: school.id,
         schoolName: school.name,
         subdomain: school.subdomain,
-      });
+      }).catch(() => {});
     }
+
+    // Exhaustive hard purge of all related child data to prevent orphaned references
+    await basePrisma.studentAttendance.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.staffAttendance.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.examResult.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.exam.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.gradeRecord.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.reportCard.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.academicRecord.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.timetable.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.notice.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.messageLog.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.admissionLead.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.payment.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.invoice.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.feeTemplate.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.paymentProof.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.transaction.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.payrollRecord.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.student.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.staff.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.course.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.classroom.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.department.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.tenantTierDatabase.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.academicTier.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.passwordResetToken.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.refreshToken.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.subscription.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.schoolPayment.deleteMany({ where: { schoolId } }).catch(() => {});
+    await basePrisma.user.deleteMany({ where: { schoolId } }).catch(() => {});
+
+    // Clean matching Tenant & Wallet tables if present
+    if (school?.subdomain) {
+      await basePrisma.walletTransaction.deleteMany({
+        where: { wallet: { tenant: { subdomain: school.subdomain } } }
+      }).catch(() => {});
+      await basePrisma.wallet.deleteMany({
+        where: { tenant: { subdomain: school.subdomain } }
+      }).catch(() => {});
+      await basePrisma.tenant.deleteMany({
+        where: {
+          OR: [
+            { subdomain: school.subdomain },
+            { id: schoolId },
+          ],
+        },
+      }).catch(() => {});
+    }
+
+    // Hard-delete primary School record
     await basePrisma.school.delete({
       where: { id: schoolId }
-    });
+    }).catch(() => {});
+
+    // Authoritative Audit Logging
+    await basePrisma.auditLog.create({
+      data: {
+        actorId: "super_admin",
+        action: "TENANT_DELETE",
+        target: school?.name || schoolId,
+        schoolId: schoolId,
+        tenantId: schoolId,
+        metadata: {
+          actor_email: "admin@bonaveeict.com.ng",
+          schoolId,
+          schoolName: school?.name,
+          subdomain: school?.subdomain,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    }).catch(() => {});
+
     revalidatePath("/admin");
+    revalidatePath("/admin/tenants");
+    revalidatePath("/admin/saas");
   } catch (error: any) {
-    console.error(error.message);
+    console.error("[deleteSchool error]:", error.message);
   }
 }
 

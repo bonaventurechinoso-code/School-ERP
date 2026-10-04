@@ -132,10 +132,12 @@ export default function SecurityPasswordForm({
       }
 
       // If forced reset, automatically redirect after a brief notice
-      if (isForcedReset && schoolDomain) {
+      if (isForcedReset) {
         setTimeout(() => {
           const canonical = (data.role || userRole || "").toUpperCase();
-          if (canonical === "STUDENT") {
+          if (canonical === "SUPER_ADMIN" || schoolDomain === "admin") {
+            router.push("/admin");
+          } else if (canonical === "STUDENT") {
             router.push(`/${schoolDomain}/portal/student`);
           } else if (canonical === "STAFF" || canonical === "TEACHER" || canonical.includes("TEACHER")) {
             router.push(`/${schoolDomain}/portal/staff`);

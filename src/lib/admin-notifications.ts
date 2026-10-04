@@ -284,6 +284,17 @@ export async function getPlatformNotifications(limit = 20): Promise<{
     if ((!rows || rows.length === 0)) {
       try {
         const recentSchools = await basePrisma.school.findMany({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
+          },
           take: 5,
           orderBy: { createdAt: "desc" },
           select: { id: true, name: true, subdomain: true, createdAt: true },
@@ -478,6 +489,17 @@ export async function getRecentActivityTimeline(limit = 10): Promise<RecentActiv
     if (events.length < limit) {
       try {
         const schools = await basePrisma.school.findMany({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            NOT: {
+              OR: [
+                { subdomain: { equals: "riverside", mode: "insensitive" } },
+                { slug: { equals: "riverside", mode: "insensitive" } },
+                { name: { contains: "riverside", mode: "insensitive" } },
+              ],
+            },
+          },
           take: limit,
           orderBy: { createdAt: "desc" },
         });

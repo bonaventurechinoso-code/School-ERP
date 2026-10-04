@@ -13,49 +13,39 @@ const getRandomItem = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
 
 async function main() {
-  console.log("Seeding database with Nigerian mock data...")
+  console.log("Checking database before seeding...")
 
-  const defaultPasswordHash = await bcrypt.hash("Password123", 10)
+  // Guard: Do not run seed if tenants already exist in the database
+  const existingSchoolsCount = await prisma.school.count();
+  if (existingSchoolsCount > 0) {
+    console.log("Database already contains active school tenants. Skipping seed to prevent restoring deleted tenants or overwriting live data.");
+    return;
+  }
 
-  // Clean the database
-  await prisma.session.deleteMany().catch(() => {})
-  await prisma.admissionNote.deleteMany().catch(() => {})
-  await prisma.admissionLead.deleteMany().catch(() => {})
-  await prisma.examResult.deleteMany().catch(() => {})
-  await prisma.exam.deleteMany().catch(() => {})
-  await prisma.studentAttendance.deleteMany().catch(() => {})
-  await prisma.staffAttendance.deleteMany().catch(() => {})
-  await prisma.invoice.deleteMany().catch(() => {})
-  await prisma.payment.deleteMany().catch(() => {})
-  await prisma.student.deleteMany().catch(() => {})
-  await prisma.staff.deleteMany().catch(() => {})
-  await prisma.classroom.deleteMany().catch(() => {})
-  await prisma.course.deleteMany().catch(() => {})
-  await prisma.academicTier.deleteMany().catch(() => {})
-  await prisma.school.deleteMany().catch(() => {})
-  await prisma.platformAdmin.deleteMany().catch(() => {})
+  const defaultPasswordHash = await bcrypt.hash("Password123", 12)
 
-  // Seed Platform Admins
-  await prisma.platformAdmin.create({
-    data: {
-      email: "admin@bonaveeict.com.ng",
-      password: defaultPasswordHash,
-    },
-  })
+  // Seed Platform Admins (Keep ONLY admin@bonaveeict.com.ng, do not overwrite if exists)
+  const existingAdmin = await prisma.platformAdmin.findUnique({
+    where: { email: "admin@bonaveeict.com.ng" }
+  });
+  if (!existingAdmin) {
+    await prisma.platformAdmin.create({
+      data: {
+        email: "admin@bonaveeict.com.ng",
+        password: defaultPasswordHash,
+      },
+    });
+  }
 
-  await prisma.platformAdmin.create({
-    data: {
-      email: "superadmin@platform.com",
-      password: defaultPasswordHash,
-    },
-  })
-
+  // Purge superadmin@platform.com if it exists
+  await prisma.platformAdmin.deleteMany({
+    where: { email: "superadmin@platform.com" }
+  }).catch(() => {});
 
   const schoolsConfig = [
     { name: "Demo School", subdomain: "demo", tiers: ["Daycare / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
     { name: "Greenwood Academy", subdomain: "greenwood", tiers: ["Daycare / Nursery", "Primary School", "Secondary School"] },
     { name: "Summit High School", subdomain: "summit", tiers: ["Secondary School"] },
-    { name: "Riverside University", subdomain: "riverside", tiers: ["Higher Institution / University"] },
   ]
 
   for (const s of schoolsConfig) {

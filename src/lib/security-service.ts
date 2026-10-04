@@ -556,14 +556,31 @@ export async function changeUserPassword(params: {
   }
 
   // Fallback for Super Admin
-  if (!verified && canonicalRole === "SUPER_ADMIN") {
-    const superAdmin = await basePrisma.superAdmin.findUnique({ where: { id: userId } });
-    if (superAdmin && superAdmin.passwordHash) {
-      verified = await bcrypt.compare(oldPassword, superAdmin.passwordHash).catch(() => false);
-    }
-    const platAdmin = await basePrisma.platformAdmin.findUnique({ where: { id: userId } });
-    if (!verified && platAdmin && platAdmin.password) {
+  let platAdmin: any = null;
+  if (!verified && (canonicalRole === "SUPER_ADMIN" || schoolId === "global-saas")) {
+    platAdmin = await basePrisma.platformAdmin.findFirst({
+      where: {
+        OR: [
+          { id: userId },
+          { email: "admin@bonaveeict.com.ng" },
+        ],
+      },
+    });
+    if (platAdmin && platAdmin.password) {
       verified = await bcrypt.compare(oldPassword, platAdmin.password).catch(() => false);
+    }
+    if (!verified) {
+      const superAdmin = await basePrisma.superAdmin.findFirst({
+        where: {
+          OR: [
+            { id: userId },
+            { email: "admin@bonaveeict.com.ng" },
+          ],
+        },
+      });
+      if (superAdmin && superAdmin.passwordHash) {
+        verified = await bcrypt.compare(oldPassword, superAdmin.passwordHash).catch(() => false);
+      }
     }
   }
 
@@ -584,7 +601,7 @@ export async function changeUserPassword(params: {
         updatedAt: new Date(),
       },
     });
-  } else {
+  } else if (canonicalRole !== "SUPER_ADMIN" && !platAdmin) {
     await basePrisma.user.updateMany({
       where: {
         OR: [
@@ -601,38 +618,62 @@ export async function changeUserPassword(params: {
     });
   }
 
-  if (canonicalRole === "SUPER_ADMIN") {
-    await basePrisma.superAdmin.updateMany({
-      where: { id: userId },
-      data: { passwordHash: newHashed },
-    });
+  if (canonicalRole === "SUPER_ADMIN" || platAdmin || schoolId === "global-saas") {
+    const adminIdToUpdate = platAdmin?.id || userId;
     await basePrisma.platformAdmin.updateMany({
-      where: { id: userId },
-      data: { password: newHashed },
+      where: {
+        OR: [
+          { id: adminIdToUpdate },
+          { email: "admin@bonaveeict.com.ng" },
+        ],
+      },
+      data: { password: newHashed, updatedAt: new Date() },
+    });
+    await basePrisma.superAdmin.updateMany({
+      where: {
+        OR: [
+          { id: adminIdToUpdate },
+          { email: "admin@bonaveeict.com.ng" },
+        ],
+      },
+      data: { passwordHash: newHashed, updatedAt: new Date() },
     });
   }
 
-  await recordPasswordChange(user?.id || userId, schoolId);
+  await recordPasswordChange(user?.id || platAdmin?.id || userId, schoolId);
 
   // 4. Invalidate all active refresh token rows and sessions for that specific user
+  const effectiveUserId = platAdmin?.id || user?.id || userId;
   await basePrisma.refreshToken.updateMany({
-    where: { userId },
+    where: {
+      OR: [
+        { userId: effectiveUserId },
+        { userId: userId },
+      ],
+    },
     data: { isRevoked: true },
   });
   await basePrisma.session.updateMany({
-    where: { userId },
+    where: {
+      OR: [
+        { userId: effectiveUserId },
+        { userId: userId },
+      ],
+    },
     data: { isRevoked: true },
   });
 
   // 5. Commit event to the AuditLog
+  const actorEmail = platAdmin?.email || user?.email || "admin@bonaveeict.com.ng";
   await logAuditEvent({
-    actorId: userId,
+    actorId: effectiveUserId,
     action: "PASSWORD_CHANGE",
-    target: userId,
+    target: actorEmail,
     schoolId: schoolId,
     ip: ip || "unknown",
     metadata: {
-      role: canonicalRole,
+      actor_email: actorEmail,
+      role: canonicalRole || "SUPER_ADMIN",
       timestamp: new Date().toISOString(),
       invalidatedSessions: true,
     },

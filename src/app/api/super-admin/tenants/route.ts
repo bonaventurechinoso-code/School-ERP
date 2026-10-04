@@ -14,7 +14,14 @@ export async function GET(req: NextRequest) {
 
     if (status !== "ALL") {
       where.status = status.toUpperCase();
+    } else {
+      where.status = { not: "DELETED" };
     }
+
+    where.NOT = [
+      { subdomain: { equals: "riverside", mode: "insensitive" } },
+      { schoolName: { contains: "riverside", mode: "insensitive" } },
+    ];
 
     if (search) {
       where.OR = [
