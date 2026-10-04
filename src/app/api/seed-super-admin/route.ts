@@ -37,8 +37,13 @@ async function handleSeed(req: Request) {
 
     // 2. Prevent re-seeding if tenants already exist
     const existingTenantsCount = await basePrisma.school.count();
-    const existingAdmin = await basePrisma.platformAdmin.findUnique({
-      where: { email: "admin@bonaveeict.com.ng" },
+    const existingAdmin = await basePrisma.platformAdmin.findFirst({
+      where: {
+        OR: [
+          { email: "bonaventure.chinoso@gmail.com" },
+          { email: "admin@bonaveeict.com.ng" },
+        ],
+      },
     });
 
     if (existingTenantsCount > 0 && existingAdmin) {
@@ -53,13 +58,13 @@ async function handleSeed(req: Request) {
       return NextResponse.json({
         success: true,
         message: "Tenants and Super Admin already exist in database. Seed skipped to protect tenant isolation.",
-        superAdmins: [{ email: "admin@bonaveeict.com.ng" }],
+        superAdmins: [{ email: "bonaventure.chinoso@gmail.com" }],
       });
     }
 
-    // 3. Upsert Super Admin Account (Keep ONLY admin@bonaveeict.com.ng, NEVER overwrite existing password)
-    const defaultPasswordHash = await bcrypt.hash("Password123", 12);
-    const adminEmail = "admin@bonaveeict.com.ng";
+    // 3. Upsert Super Admin Account (Keep ONLY bonaventure.chinoso@gmail.com, NEVER overwrite existing password)
+    const defaultPasswordHash = await bcrypt.hash("Password123", 10);
+    const adminEmail = "bonaventure.chinoso@gmail.com";
 
     const admin = await basePrisma.platformAdmin.upsert({
       where: { email: adminEmail },

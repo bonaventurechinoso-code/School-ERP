@@ -89,7 +89,7 @@ export default function TierSwitcher({
   const tenant = useTenant();
 
   // Determine whether current environment is specifically the demo trial sandbox
-  const isTrialSandbox = schoolDomain === "trial-sandbox";
+  const isTrialSandbox = schoolDomain === "trial-sandbox" || schoolDomain === "sandbox";
 
   // 2. Fetch Tenant Subscriptions: Read from database tiers, fallback to tenant profile/session
   const rawSubscribedTiers: TierItem[] = useMemo(() => {

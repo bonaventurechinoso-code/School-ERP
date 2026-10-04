@@ -91,6 +91,7 @@ export async function POST(req: Request) {
 
     // 3. MASTER SAAS SUPERADMIN CENTRAL CREDENTIAL CHECK
     const isSuperAdminEmail =
+      normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
       (isDev && normalizedEmail === "superadmin@platform.com");
 
@@ -98,7 +99,12 @@ export async function POST(req: Request) {
       where: {
         OR: [
           { email: normalizedEmail },
-          ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+          ...(isSuperAdminEmail
+            ? [
+                { email: "bonaventure.chinoso@gmail.com" },
+                { email: "admin@bonaveeict.com.ng" },
+              ]
+            : []),
         ],
       },
     });
@@ -106,7 +112,12 @@ export async function POST(req: Request) {
       where: {
         OR: [
           { email: normalizedEmail },
-          ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+          ...(isSuperAdminEmail
+            ? [
+                { email: "bonaventure.chinoso@gmail.com" },
+                { email: "admin@bonaveeict.com.ng" },
+              ]
+            : []),
         ],
       },
     });

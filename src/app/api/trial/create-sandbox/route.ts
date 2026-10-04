@@ -3,7 +3,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { createDatabaseSession } from "@/lib/session-manager";
 
-const SANDBOX_SUBDOMAIN = "trial-sandbox";
+const SANDBOX_SUBDOMAIN = "sandbox";
 const SANDBOX_SCHOOL_NAME = "Trial Sandbox Academy";
 const SANDBOX_ADMIN_EMAIL = "trial.admin@schoolerp.local";
 
@@ -41,8 +41,15 @@ async function provisionOrGetTrialSandbox() {
   // Wrap the entire sandbox initialization in a transaction so partial retries don't leave duplicates
   const result = await basePrisma.$transaction(async (tx) => {
     // 1. Check if sandbox school already exists
-    let school = await tx.school.findUnique({
-      where: { subdomain: SANDBOX_SUBDOMAIN },
+    let school = await tx.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: "sandbox" },
+          { subdomain: "trial-sandbox" },
+          { slug: "sandbox" },
+          { slug: "trial-sandbox" },
+        ],
+      },
       include: {
         academicTiers: true,
         staff: true,

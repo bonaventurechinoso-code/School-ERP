@@ -32,13 +32,14 @@ async function getAuthenticatedSuperAdmin(req: Request) {
       const payload = verified.payload;
       const role = ((payload.role as string) || (payload.userRole as string) || "").toUpperCase();
       const email = ((payload.email as string) || "").toLowerCase().trim();
-      const isSuper = Boolean(payload.isSuperAdmin || role === "SUPER_ADMIN" || email === "admin@bonaveeict.com.ng");
+      const isSuper = Boolean(payload.isSuperAdmin || role === "SUPER_ADMIN" || email === "bonaventure.chinoso@gmail.com" || email === "admin@bonaveeict.com.ng");
 
       if (isSuper) {
         const admin = await basePrisma.platformAdmin.findFirst({
           where: {
             OR: [
               ...(payload.userId ? [{ id: payload.userId as string }] : []),
+              { email: "bonaventure.chinoso@gmail.com" },
               { email: "admin@bonaveeict.com.ng" },
             ],
           },
@@ -49,9 +50,14 @@ async function getAuthenticatedSuperAdmin(req: Request) {
   }
 
   // Fallback: look up default super admin record
-  return await basePrisma.platformAdmin.findUnique({
-    where: { email: "admin@bonaveeict.com.ng" },
-  });
+  return (
+    (await basePrisma.platformAdmin.findUnique({
+      where: { email: "bonaventure.chinoso@gmail.com" },
+    })) ||
+    (await basePrisma.platformAdmin.findUnique({
+      where: { email: "admin@bonaveeict.com.ng" },
+    }))
+  );
 }
 
 export async function GET(req: Request) {
@@ -136,6 +142,7 @@ export async function POST(req: Request) {
       where: {
         OR: [
           { id: admin.id },
+          { email: "bonaventure.chinoso@gmail.com" },
           { email: "admin@bonaveeict.com.ng" },
         ],
       },
@@ -149,6 +156,7 @@ export async function POST(req: Request) {
       where: {
         OR: [
           { id: admin.id },
+          { email: "bonaventure.chinoso@gmail.com" },
           { email: "admin@bonaveeict.com.ng" },
         ],
       },

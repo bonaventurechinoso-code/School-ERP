@@ -22,30 +22,45 @@ async function main() {
     return;
   }
 
-  const defaultPasswordHash = await bcrypt.hash("Password123", 12)
+  const defaultPasswordHash = await bcrypt.hash("Password123", 10)
 
-  // Seed Platform Admins (Keep ONLY admin@bonaveeict.com.ng, do not overwrite if exists)
-  const existingAdmin = await prisma.platformAdmin.findUnique({
-    where: { email: "admin@bonaveeict.com.ng" }
+  // Seed Platform Admins (Keep ONLY bonaventure.chinoso@gmail.com, do not overwrite if exists)
+  const existingAdmin = await prisma.platformAdmin.findFirst({
+    where: {
+      OR: [
+        { email: "bonaventure.chinoso@gmail.com" },
+        { email: "admin@bonaveeict.com.ng" },
+      ],
+    },
   });
   if (!existingAdmin) {
     await prisma.platformAdmin.create({
       data: {
-        email: "admin@bonaveeict.com.ng",
+        email: "bonaventure.chinoso@gmail.com",
         password: defaultPasswordHash,
       },
     });
   }
 
-  // Purge superadmin@platform.com if it exists
+  // Purge other admin accounts if they exist
   await prisma.platformAdmin.deleteMany({
-    where: { email: "superadmin@platform.com" }
+    where: {
+      email: {
+        not: "bonaventure.chinoso@gmail.com",
+      },
+    },
+  }).catch(() => {});
+  await prisma.superAdmin.deleteMany({
+    where: {
+      email: {
+        not: "bonaventure.chinoso@gmail.com",
+      },
+    },
   }).catch(() => {});
 
   const schoolsConfig = [
-    { name: "Demo School", subdomain: "demo", tiers: ["Daycare / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
-    { name: "Greenwood Academy", subdomain: "greenwood", tiers: ["Daycare / Nursery", "Primary School", "Secondary School"] },
-    { name: "Summit High School", subdomain: "summit", tiers: ["Secondary School"] },
+    { name: "Demo School", subdomain: "demo", slug: "demo", tiers: ["Daycare / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
+    { name: "Trial Sandbox Academy", subdomain: "sandbox", slug: "sandbox", tiers: ["Daycare / Nursery", "Primary School", "Secondary School"] },
   ]
 
   for (const s of schoolsConfig) {

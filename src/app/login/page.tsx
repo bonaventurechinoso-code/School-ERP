@@ -638,7 +638,7 @@ function UniversalLoginPageContent() {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setSchoolCodeInput(e.target.value.toLowerCase())
                     }
-                    placeholder="e.g. greenwood"
+                    placeholder="e.g. demo"
                     className="flex h-10 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 pr-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 transition-colors"
                   />
                 </div>

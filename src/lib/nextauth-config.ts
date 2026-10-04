@@ -44,8 +44,9 @@ export const authOptions: NextAuthOptions = {
         const parsedId = parseInstitutionalIdentifier(credentials.email, credentials.schoolDomain);
         const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
 
-        // A. Check Central Super-Admin Registry (basePrisma.platformAdmin)
+        // A. Check Central Super-Admin Registry (basePrisma.platformAdmin or basePrisma.superAdmin)
         const isSuperAdminEmail =
+          normalizedEmail === "bonaventure.chinoso@gmail.com" ||
           normalizedEmail === "admin@bonaveeict.com.ng" ||
           (isDev && normalizedEmail === "superadmin@platform.com");
 
@@ -53,7 +54,12 @@ export const authOptions: NextAuthOptions = {
           where: {
             OR: [
               { email: normalizedEmail },
-              ...(isSuperAdminEmail ? [{ email: "admin@bonaveeict.com.ng" }] : []),
+              ...(isSuperAdminEmail
+                ? [
+                    { email: "bonaventure.chinoso@gmail.com" },
+                    { email: "admin@bonaveeict.com.ng" },
+                  ]
+                : []),
             ],
           },
         });

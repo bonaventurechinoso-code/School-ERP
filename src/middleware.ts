@@ -135,6 +135,7 @@ export async function middleware(req: NextRequest) {
       const userEmail = ((verifiedSessionPayload.email as string) || '').trim().toLowerCase();
 
       const isMasterAdminEmail =
+        userEmail === 'bonaventure.chinoso@gmail.com' ||
         userEmail === 'admin@bonaveeict.com.ng' ||
         (process.env.NODE_ENV !== 'production' && userEmail === 'superadmin@platform.com');
 
@@ -369,7 +370,7 @@ export async function middleware(req: NextRequest) {
         role: mockRoleConfig.role,
         staffRole: mockRoleConfig.staffRole,
         tenantId: activeSchoolRecord?.schoolId || 'mock-dev-tenant',
-        schoolDomain: effectiveTenantSlug || 'greenwood',
+        schoolDomain: effectiveTenantSlug || 'demo',
       };
     }
 

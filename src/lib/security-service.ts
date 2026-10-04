@@ -562,6 +562,7 @@ export async function changeUserPassword(params: {
       where: {
         OR: [
           { id: userId },
+          { email: "bonaventure.chinoso@gmail.com" },
           { email: "admin@bonaveeict.com.ng" },
         ],
       },
@@ -574,6 +575,7 @@ export async function changeUserPassword(params: {
         where: {
           OR: [
             { id: userId },
+            { email: "bonaventure.chinoso@gmail.com" },
             { email: "admin@bonaveeict.com.ng" },
           ],
         },
@@ -624,6 +626,7 @@ export async function changeUserPassword(params: {
       where: {
         OR: [
           { id: adminIdToUpdate },
+          { email: "bonaventure.chinoso@gmail.com" },
           { email: "admin@bonaveeict.com.ng" },
         ],
       },
@@ -633,6 +636,7 @@ export async function changeUserPassword(params: {
       where: {
         OR: [
           { id: adminIdToUpdate },
+          { email: "bonaventure.chinoso@gmail.com" },
           { email: "admin@bonaveeict.com.ng" },
         ],
       },
@@ -664,7 +668,7 @@ export async function changeUserPassword(params: {
   });
 
   // 5. Commit event to the AuditLog
-  const actorEmail = platAdmin?.email || user?.email || "admin@bonaveeict.com.ng";
+  const actorEmail = platAdmin?.email || user?.email || "bonaventure.chinoso@gmail.com";
   await logAuditEvent({
     actorId: effectiveUserId,
     action: "PASSWORD_CHANGE",
