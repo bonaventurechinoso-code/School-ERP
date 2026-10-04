@@ -338,8 +338,8 @@ export function checkRouteAuthorization(
     };
   }
 
-  // 8. Student Directory
-  if (pathname.includes("/students")) {
+  // 8. Student and Parent Directory
+  if (pathname.includes("/students") || pathname.includes("/parents")) {
     // Accessible by faculty, financial officers (fees info), academic admins, and support
     return { allowed: true, category, effectiveRoleName };
   }

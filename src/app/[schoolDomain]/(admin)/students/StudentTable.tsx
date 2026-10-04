@@ -197,6 +197,7 @@ export default function StudentTable({
     parentName: "",
     parentPhone: "",
     parentEmail: "",
+    relationship: "Parent",
     password: "",
     confirmPassword: "",
     dynamicFields: {} as Record<string, any> 
@@ -273,6 +274,7 @@ export default function StudentTable({
       parentName: "",
       parentPhone: "",
       parentEmail: "",
+      relationship: "Parent",
       password: "",
       confirmPassword: "",
       dynamicFields: {} 
@@ -299,6 +301,7 @@ export default function StudentTable({
       parentName: student.parentName || "",
       parentPhone: student.parentPhone || "",
       parentEmail: (student as any).parentEmail || "",
+      relationship: (student as any).relationship || "Parent",
       password: "",
       confirmPassword: "",
       dynamicFields: parsedFields
@@ -316,6 +319,21 @@ export default function StudentTable({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (!editingStudentId) {
+      if (!formData.parentName?.trim()) {
+        setErrorMsg("Guardian / Parent Full Name is required.");
+        return;
+      }
+      if (!formData.parentEmail?.trim() || !formData.parentEmail.includes("@")) {
+        setErrorMsg("Valid Parent Email (real Gmail) is required for parent portal activation.");
+        return;
+      }
+      if (!formData.parentPhone?.trim()) {
+        setErrorMsg("Parent Phone Number is required.");
+        return;
+      }
+    }
 
     if (!editingStudentId && (formData.password.trim() || formData.confirmPassword.trim())) {
       if (formData.password.length < 8) {
@@ -339,7 +357,10 @@ export default function StudentTable({
         currentClass: formData.currentClass || undefined,
         admissionNumber: formData.admissionNumber || undefined,
         stateOfOrigin: formData.stateOfOrigin || undefined,
-        parentEmail: formData.parentEmail || undefined,
+        parentName: formData.parentName?.trim() || undefined,
+        parentEmail: formData.parentEmail?.trim() || undefined,
+        parentPhone: formData.parentPhone?.trim() || undefined,
+        relationship: formData.relationship || "Parent",
         password: formData.password ? formData.password.trim() : undefined,
         dynamicFields: formData.dynamicFields
       };
@@ -949,9 +970,12 @@ export default function StudentTable({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Guardian Full Name</label>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
+                      Guardian / Parent Full Name <span className="text-rose-500">*</span>
+                    </label>
                     <input 
                       type="text" 
+                      required
                       placeholder="e.g., Ike Mmadu"
                       className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
                       value={formData.parentName} 
@@ -960,14 +984,48 @@ export default function StudentTable({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Guardian Phone</label>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
+                      Parent Email (Real Gmail) <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="email"
+                      required
+                      placeholder="parent@gmail.com"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.parentEmail} 
+                      onChange={e => setFormData({...formData, parentEmail: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
+                      Parent Phone Number <span className="text-rose-500">*</span>
+                    </label>
                     <input 
                       type="tel"
+                      required
                       placeholder="+234..."
                       className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
                       value={formData.parentPhone} 
                       onChange={e => setFormData({...formData, parentPhone: e.target.value})} 
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
+                      Relationship <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.relationship || "Parent"}
+                      onChange={e => setFormData({...formData, relationship: e.target.value})}
+                    >
+                      <option value="Father">Father</option>
+                      <option value="Mother">Mother</option>
+                      <option value="Guardian">Guardian</option>
+                      <option value="Parent">Parent</option>
+                      <option value="Sponsor">Sponsor</option>
+                    </select>
                   </div>
                 </div>
               </div>

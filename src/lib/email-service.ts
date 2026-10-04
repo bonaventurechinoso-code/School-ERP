@@ -1960,6 +1960,10 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
                 <span class="cred-value">${departmentName}</span>
               </div>` : ""}
               <div class="cred-row">
+                <span class="cred-label">School Code</span>
+                <span class="cred-value" style="color: ${brandColor}; font-weight: 800;">${subdomain || "demo"}</span>
+              </div>
+              <div class="cred-row">
                 <span class="cred-label">Portal URL</span>
                 <span class="cred-value">${portalUrl}</span>
               </div>
@@ -1969,7 +1973,7 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
               </div>
               ${temporaryPassword ? `
               <div class="cred-row">
-                <span class="cred-label">Temporary Password</span>
+                <span class="cred-label">Default Password</span>
                 <span class="cred-value">${temporaryPassword}</span>
               </div>` : ""}
             </div>
@@ -2451,6 +2455,311 @@ export async function sendExamAdmitSlipEmail(payload: ExamAdmitSlipEmailPayload)
   }
 }
 
+// =========================================================================
+// PARENT & ALL ROLES NOTIFICATION SYSTEM
+// =========================================================================
 
+export interface ParentWelcomeEmailPayload {
+  schoolId: string;
+  parentName: string;
+  parentEmail: string;
+  studentName: string;
+  schoolName?: string;
+  schoolCode?: string;
+  defaultPassword?: string;
+  loginUrl?: string;
+}
 
+/**
+ * Dispatches welcome email to newly registered parents with their credentials.
+ */
+export async function sendParentWelcomeEmail(payload: ParentWelcomeEmailPayload) {
+  try {
+    const {
+      schoolId,
+      parentName,
+      parentEmail,
+      studentName,
+      schoolName: propSchoolName,
+      schoolCode: propSchoolCode,
+      defaultPassword = "Parent123",
+      loginUrl: propLoginUrl,
+    } = payload;
 
+    let schoolName = propSchoolName;
+    let schoolCode = propSchoolCode;
+
+    if ((!schoolName || !schoolCode) && schoolId) {
+      try {
+        const sc = await basePrisma.school.findUnique({
+          where: { id: schoolId },
+          select: { name: true, subdomain: true, slug: true },
+        });
+        if (sc) {
+          schoolName = schoolName || sc.name;
+          schoolCode = schoolCode || sc.slug || sc.subdomain;
+        }
+      } catch {}
+    }
+
+    const tenantName = schoolName || "Bonavee School";
+    const code = schoolCode || "demo";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+    const loginLink = propLoginUrl || `${baseUrl}/login`;
+    const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
+
+    const subject = `Welcome to ${tenantName} Parent Portal`;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>${subject}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+          .header { background: #4f46e5; padding: 36px 32px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+          .header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
+          .content { padding: 32px; line-height: 1.6; }
+          .cred-box { background: #f1f5f9; border-radius: 12px; padding: 20px; margin: 20px 0; border-left: 4px solid #4f46e5; }
+          .cred-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+          .cred-line:last-child { border-bottom: none; }
+          .label { font-size: 13px; font-weight: 600; color: #64748b; }
+          .val { font-size: 14px; font-weight: 700; color: #0f172a; word-break: break-all; }
+          .btn { display: inline-block; background: #4f46e5; color: #ffffff !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; margin: 20px 0; }
+          .footer { padding: 20px 32px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${tenantName}</h1>
+            <p>Parent Portal Access Notification</p>
+          </div>
+          <div class="content">
+            <p>Dear <strong>${parentName}</strong>,</p>
+            <p>Welcome to the <strong>${tenantName}</strong> Parent Portal! Your parent account has been created in connection with your child, <strong>${studentName}</strong>.</p>
+            
+            <div class="cred-box">
+              <div class="cred-line">
+                <span class="label">School Code:</span>
+                <span class="val">${code}</span>
+              </div>
+              <div class="cred-line">
+                <span class="label">Parent Login Email:</span>
+                <span class="val">${parentEmail}</span>
+              </div>
+              <div class="cred-line">
+                <span class="label">Default Password:</span>
+                <span class="val">${defaultPassword}</span>
+              </div>
+              <div class="cred-line">
+                <span class="label">Portal Role:</span>
+                <span class="val">Parent</span>
+              </div>
+            </div>
+
+            <p>You can use these credentials to log in, track academic performance, view report cards, inspect attendance, and manage school fees.</p>
+
+            <div style="text-align: center;">
+              <a href="${loginLink}" class="btn" target="_blank" rel="noopener noreferrer">Login to Parent Portal</a>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b;">
+              Login link: <a href="${loginLink}" style="color: #4f46e5;">${loginLink}</a><br/>
+              <em>Instructions: On the login page, select the <strong>Parent</strong> tab, enter your School Code (<code>${code}</code>), your email, and your password.</em>
+            </p>
+          </div>
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by Bonavee ICT School ERP
+          </div>
+        </div>
+      </body>
+      </html>
+    `.trim();
+
+    const dispatchResult = await sendMail({
+      to: parentEmail,
+      from: fromAddress,
+      subject,
+      html: emailHtml,
+      schoolId,
+      recipientType: "PARENT",
+      logCategory: "PARENT_WELCOME",
+    });
+
+    console.log(`[EMAIL_DISPATCH] [PARENT_WELCOME] Sent to ${parentEmail} (Status: ${dispatchResult.deliveryStatus})`);
+    return dispatchResult;
+  } catch (err: any) {
+    console.error("[EMAIL_SYNC_ERROR] [PARENT_WELCOME] Failed:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Dispatches approval notification to School Admin when Super Admin activates their institution.
+ */
+export async function sendSchoolApprovalEmail(payload: {
+  schoolId: string;
+  schoolName: string;
+  adminEmail: string;
+  subdomain: string;
+  slug?: string;
+}) {
+  try {
+    const { schoolId, schoolName, adminEmail, subdomain, slug } = payload;
+    const code = slug || subdomain;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+    const loginLink = `${baseUrl}/login`;
+    const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
+    const subject = `🎉 Congratulations! Your School ${schoolName} has been Approved`;
+
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #4f46e5;">Your School has been Approved!</h2>
+        <p>Hello,</p>
+        <p>We are delighted to notify you that <strong>${schoolName}</strong> has been officially approved and activated on the Bonavee ICT School ERP platform.</p>
+        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p><strong>School Code:</strong> ${code}</p>
+          <p><strong>Admin Login:</strong> ${adminEmail}</p>
+          <p><strong>Portal Link:</strong> <a href="${loginLink}">${loginLink}</a></p>
+        </div>
+        <p>You can now sign in as School Admin, set up academic tiers, invite teachers, and register students.</p>
+        <p>Best regards,<br/>The Bonavee ICT Team</p>
+      </div>
+    `.trim();
+
+    return await sendMail({
+      to: adminEmail,
+      from: fromAddress,
+      subject,
+      html,
+      schoolId,
+      recipientType: "ADMIN",
+      logCategory: "SCHOOL_APPROVAL",
+    });
+  } catch (err: any) {
+    console.error("[EMAIL_SYNC_ERROR] [SCHOOL_APPROVAL] Failed:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Dispatches student or parent result publication notification.
+ */
+export async function sendAcademicResultPublishedNotification(payload: {
+  schoolId: string;
+  studentName: string;
+  studentEmail?: string | null;
+  parentEmail?: string | null;
+  termOrExamName: string;
+  schoolName?: string;
+  schoolCode?: string;
+}) {
+  const recipient = payload.studentEmail || payload.parentEmail;
+  if (!recipient) return { success: false, error: "No recipient email available" };
+
+  const tenantName = payload.schoolName || "Bonavee School";
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+  const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
+  const subject = `Academic Results Published: ${payload.termOrExamName} - ${tenantName}`;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+      <h2 style="color: #4f46e5;">Academic Results Available</h2>
+      <p>Academic results for <strong>${payload.studentName}</strong> for <strong>${payload.termOrExamName}</strong> have been published.</p>
+      <p>Log in to view the full report card: <a href="${baseUrl}/login">${baseUrl}/login</a></p>
+      <p style="font-size: 13px; color: #64748b;">School Code: <strong>${payload.schoolCode || "demo"}</strong></p>
+    </div>
+  `.trim();
+
+  return await sendMail({
+    to: recipient,
+    from: fromAddress,
+    subject,
+    html,
+    schoolId: payload.schoolId,
+    recipientType: payload.studentEmail ? "STUDENT" : "PARENT",
+    logCategory: "RESULT_NOTIFICATION",
+  });
+}
+
+/**
+ * Dispatches parent fee reminder notification.
+ */
+export async function sendParentFeeReminderEmail(payload: {
+  schoolId: string;
+  parentEmail: string;
+  parentName: string;
+  studentName: string;
+  amountDue: number;
+  dueDate?: string;
+  schoolName?: string;
+  schoolCode?: string;
+}) {
+  const tenantName = payload.schoolName || "Bonavee School";
+  const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+  const subject = `Fee Reminder for ${payload.studentName} - ${tenantName}`;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+      <h2 style="color: #4f46e5;">School Fee Payment Reminder</h2>
+      <p>Dear <strong>${payload.parentName}</strong>,</p>
+      <p>This is a friendly reminder regarding the outstanding school fees for <strong>${payload.studentName}</strong> at <strong>${tenantName}</strong>.</p>
+      <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p><strong>Amount Outstanding:</strong> ₦${payload.amountDue.toLocaleString()}</p>
+        ${payload.dueDate ? `<p><strong>Due Date:</strong> ${payload.dueDate}</p>` : ""}
+      </div>
+      <p>Log in to your parent portal to view invoices and submit payment proof: <a href="${baseUrl}/login">${baseUrl}/login</a></p>
+    </div>
+  `.trim();
+
+  return await sendMail({
+    to: payload.parentEmail,
+    from: fromAddress,
+    subject,
+    html,
+    schoolId: payload.schoolId,
+    recipientType: "PARENT",
+    logCategory: "FEE_REMINDER",
+  });
+}
+
+/**
+ * Dispatches parent attendance alert notification.
+ */
+export async function sendParentAttendanceAlertEmail(payload: {
+  schoolId: string;
+  parentEmail: string;
+  parentName: string;
+  studentName: string;
+  status: "ABSENT" | "LATE";
+  date: string;
+  schoolName?: string;
+}) {
+  const tenantName = payload.schoolName || "Bonavee School";
+  const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
+  const subject = `Attendance Alert: ${payload.studentName} marked ${payload.status} today`;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+      <h2 style="color: ${payload.status === "ABSENT" ? "#dc2626" : "#f59e0b"};">Attendance Notification</h2>
+      <p>Dear <strong>${payload.parentName}</strong>,</p>
+      <p>Please be informed that <strong>${payload.studentName}</strong> was marked <strong>${payload.status}</strong> for classes on <strong>${payload.date}</strong> at <strong>${tenantName}</strong>.</p>
+      <p>If you have any questions or this was an excused absence, please contact the school administration.</p>
+    </div>
+  `.trim();
+
+  return await sendMail({
+    to: payload.parentEmail,
+    from: fromAddress,
+    subject,
+    html,
+    schoolId: payload.schoolId,
+    recipientType: "PARENT",
+    logCategory: "ATTENDANCE_ALERT",
+  });
+}

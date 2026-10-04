@@ -133,6 +133,8 @@ model School {
   users                User[]
   passwordResetTokens  PasswordResetToken[]
   refreshTokens        RefreshToken[]
+  parents              Parent[]
+  studentParents       StudentParent[]
 }
 
 model PlatformAdmin {
@@ -276,6 +278,7 @@ model Student {
   GradeRecord       GradeRecord[]
   academicRecords   AcademicRecord[]
   reportCards       ReportCard[]
+  parents           StudentParent[]
 
   @@index([schoolId])
   @@unique([schoolId, email])
@@ -287,6 +290,43 @@ model Student {
   @@index([schoolId, lastName, firstName])
   @@index([tierId])
   @@unique([schoolId, admissionNumber]) // Ensure admission numbers are unique per tenant
+}
+
+model Parent {
+  id           String          @id @default(uuid())
+  schoolId     String          @map("tenant_id")
+  school       School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name         String
+  email        String
+  phone        String?
+  passwordHash String          @map("password_hash")
+  relationship String?         @default("Parent")
+  isActive     Boolean         @default(true) @map("is_active")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  students     StudentParent[]
+
+  @@unique([schoolId, email])
+  @@index([schoolId])
+  @@index([email])
+  @@map("parents")
+}
+
+model StudentParent {
+  id        String   @id @default(uuid())
+  studentId String   @map("student_id")
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parentId  String   @map("parent_id")
+  parent    Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  schoolId  String   @map("tenant_id")
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([studentId, parentId])
+  @@index([studentId])
+  @@index([parentId])
+  @@index([schoolId])
+  @@map("student_parents")
 }
 
 // ------------------------------------------------------

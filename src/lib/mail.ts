@@ -373,4 +373,9 @@ export {
   sendDirectCommunicationEmail,
   sendBroadcastNoticeEmail,
   sendApplicationReceivedEmail,
+  sendParentWelcomeEmail,
+  sendSchoolApprovalEmail,
+  sendAcademicResultPublishedNotification,
+  sendParentFeeReminderEmail,
+  sendParentAttendanceAlertEmail,
 } from "./email-service";
