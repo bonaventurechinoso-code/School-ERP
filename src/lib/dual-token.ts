@@ -3,8 +3,8 @@ import crypto from "crypto";
 import { cookies } from "next/headers";
 import { basePrisma } from "./tenant-prisma";
 
-export const ACCESS_TOKEN_MAX_AGE_SECONDS = 15 * 60; // 15 minutes
-export const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
+export const ACCESS_TOKEN_MAX_AGE_SECONDS = 15 * 60;
+export const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 export const ACCESS_TOKEN_COOKIE_NAME = "accessToken";
 export const REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
@@ -30,20 +30,13 @@ export interface AccessTokenClaims {
   [key: string]: any;
 }
 
-/**
- * Computes SHA-256 hash of a raw token string for secure database persistence.
- */
 export function hashToken(rawToken: string): string {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
 }
 
-/**
- * Signs a short-lived (15 minutes) Access Token JWT containing cross-domain multi-tenant and multi-tier claims.
- */
 export async function signAccessToken(claims: AccessTokenClaims): Promise<string> {
   const effectiveTenantId = claims.tenantId || claims.schoolId;
   const effectiveRole = claims.userRole || claims.role;
-
   return new jose.SignJWT({
     userId: claims.userId,
     schoolId: claims.schoolId || effectiveTenantId,
@@ -65,9 +58,6 @@ export async function signAccessToken(claims: AccessTokenClaims): Promise<string
     .sign(SECRET_KEY);
 }
 
-/**
- * Verifies a short-lived Access Token JWT and extracts tenantId, userRole, and assignedTier.
- */
 export async function verifyAccessToken(token: string): Promise<AccessTokenClaims | null> {
   try {
     const { payload } = await jose.jwtVerify(token, SECRET_KEY);
@@ -93,10 +83,6 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenClaim
   }
 }
 
-/**
- * Creates a cryptographically secure 7-day Refresh Token, stores its SHA-256 hash in the database,
- * and sets the HttpOnly, Secure, SameSite=Strict cookie.
- */
 export async function issueRefreshToken(params: {
   userId: string;
   schoolId?: string | null;
@@ -106,11 +92,10 @@ export async function issueRefreshToken(params: {
   const rawRefreshToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(rawRefreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000);
-
   await basePrisma.refreshToken.create({
     data: {
       userId: params.userId,
-      schoolId: params.schoolId || null,
+      schoolId: params.schoolId === "global-saas" ? null : params.schoolId,
       tokenHash,
       expiresAt,
       isRevoked: false,
@@ -118,17 +103,9 @@ export async function issueRefreshToken(params: {
       userAgent: params.userAgent || null,
     },
   });
-
   return { rawRefreshToken, expiresAt };
 }
 
-/**
- * Strict Refresh Token Rotation:
- * Validates incoming refresh token hash against the database, revokes it, issues a new refresh token,
- * and produces a new short-lived access token.
- * 
- * If a revoked token is presented, detects possible replay attack and purges all active tokens for that user.
- */
 export async function rotateRefreshToken(params: {
   rawRefreshToken: string;
   ipAddress?: string | null;
@@ -141,16 +118,12 @@ export async function rotateRefreshToken(params: {
   claims?: AccessTokenClaims;
 }> {
   const oldHash = hashToken(params.rawRefreshToken);
-
   const existingToken = await basePrisma.refreshToken.findUnique({
     where: { tokenHash: oldHash },
   });
-
   if (!existingToken) {
     return { success: false, error: "Invalid refresh token." };
   }
-
-  // Token reuse detection: if token is already revoked, potential security breach!
   if (existingToken.isRevoked) {
     console.warn(`[SECURITY_ALERT]: Replayed refresh token detected for userId: ${existingToken.userId}. Revoking all sessions.`);
     await basePrisma.refreshToken.updateMany({
@@ -159,22 +132,17 @@ export async function rotateRefreshToken(params: {
     });
     return { success: false, error: "Token reuse detected. All active sessions have been terminated for security." };
   }
-
   const now = new Date();
   if (existingToken.expiresAt < now) {
     return { success: false, error: "Refresh token has expired. Please sign in again." };
   }
-
-  // Resolve user identity from User table (authoritative single auth source)
   let userRole = "STUDENT";
   let userEmail = "";
   let isSuperAdmin = false;
   let mustChangePassword = false;
-
   const superAdmin = await basePrisma.superAdmin.findUnique({
     where: { id: existingToken.userId },
   });
-
   if (superAdmin) {
     userRole = "SUPER_ADMIN";
     userEmail = superAdmin.email;
@@ -189,20 +157,15 @@ export async function rotateRefreshToken(params: {
         ],
       },
     });
-
     if (user) {
       userRole = user.role;
       userEmail = user.email;
       mustChangePassword = Boolean(user.mustChangePassword);
     }
   }
-
-  // Generate new refresh token pair
   const newRawRefreshToken = crypto.randomBytes(32).toString("hex");
   const newHash = hashToken(newRawRefreshToken);
   const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000);
-
-  // Invalidate old token and link to replacement (chain tracking)
   await basePrisma.refreshToken.update({
     where: { id: existingToken.id },
     data: {
@@ -210,12 +173,10 @@ export async function rotateRefreshToken(params: {
       replacedByTokenHash: newHash,
     },
   });
-
-  // Save new refresh token
   await basePrisma.refreshToken.create({
     data: {
       userId: existingToken.userId,
-      schoolId: existingToken.schoolId,
+      schoolId: existingToken.schoolId === "global-saas" ? null : existingToken.schoolId,
       tokenHash: newHash,
       expiresAt: newExpiresAt,
       isRevoked: false,
@@ -223,7 +184,6 @@ export async function rotateRefreshToken(params: {
       userAgent: params.userAgent || null,
     },
   });
-
   const claims: AccessTokenClaims = {
     userId: existingToken.userId,
     schoolId: existingToken.schoolId || "global-saas",
@@ -232,9 +192,7 @@ export async function rotateRefreshToken(params: {
     isSuperAdmin,
     mustChangePassword,
   };
-
   const newAccessToken = await signAccessToken(claims);
-
   return {
     success: true,
     accessToken: newAccessToken,
@@ -243,9 +201,6 @@ export async function rotateRefreshToken(params: {
   };
 }
 
-/**
- * Cookie configuration strictly adhering to HttpOnly, Secure, SameSite=Strict
- */
 export function getRefreshTokenCookieOptions() {
   const isProd = process.env.NODE_ENV === "production";
   return {

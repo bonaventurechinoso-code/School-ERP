@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
-import { 
-  getAdmissionNumberSearchVariants, 
-  parseInstitutionalIdentifier, 
+import {
+  getAdmissionNumberSearchVariants,
+  parseInstitutionalIdentifier,
   mapTierTokenToTierName,
   formatTierBadgeCode,
   resolveTierCode
@@ -12,7 +12,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, getSecureCookieOptions } from "@/lib/session-manager";
-import { isMustChangePassword, BCRYPT_ROUNDS } from "@/lib/security-service";
+import { isMustChangePassword } from "@/lib/security-service";
 import { checkIpRateLimit, checkAccountLockout, recordCredentialFailure, recordCredentialSuccess } from "@/lib/rate-limiter";
 import { logAuditEvent } from "@/lib/audit-logger";
 import {
@@ -55,7 +55,6 @@ export async function POST(req: Request) {
     const searchVariants = getAdmissionNumberSearchVariants(rawIdentifier);
     const accountKey = `${(parsedInst.schoolToken || "global").toLowerCase().trim()}:${normalizedEmail}`;
 
-    // 1. BRUTE-FORCE RATE LIMITING (Max 5 attempts per 15 mins per IP)
     const ipCheck = checkIpRateLimit(clientIp);
     if (!ipCheck.allowed) {
       await logAuditEvent({
@@ -76,7 +75,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. TARGETED ACCOUNT LOCKOUT (30-min lockout after 5 consecutive failures)
     const accountCheck = checkAccountLockout(accountKey);
     if (accountCheck.locked) {
       return NextResponse.json(
@@ -89,7 +87,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. MASTER SAAS SUPERADMIN CENTRAL CREDENTIAL CHECK
     const isSuperAdminEmail =
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
@@ -101,9 +98,9 @@ export async function POST(req: Request) {
           { email: normalizedEmail },
           ...(isSuperAdminEmail
             ? [
-                { email: "bonaventure.chinoso@gmail.com" },
-                { email: "admin@bonaveeict.com.ng" },
-              ]
+              { email: "bonaventure.chinoso@gmail.com" },
+              { email: "admin@bonaveeict.com.ng" },
+            ]
             : []),
         ],
       },
@@ -114,9 +111,9 @@ export async function POST(req: Request) {
           { email: normalizedEmail },
           ...(isSuperAdminEmail
             ? [
-                { email: "bonaventure.chinoso@gmail.com" },
-                { email: "admin@bonaveeict.com.ng" },
-              ]
+              { email: "bonaventure.chinoso@gmail.com" },
+              { email: "admin@bonaveeict.com.ng" },
+            ]
             : []),
         ],
       },
@@ -129,8 +126,8 @@ export async function POST(req: Request) {
         isCentralAuthenticated = await bcrypt.compare(password, superAdmin.passwordHash).catch(() => false);
       }
 
-      if (!isCentralAuthenticated && platformAdmin && platformAdmin.password) {
-        isCentralAuthenticated = await bcrypt.compare(password, platformAdmin.password).catch(() => false);
+      if (!isCentralAuthenticated && platformAdmin && (platformAdmin as any).password) {
+        isCentralAuthenticated = await bcrypt.compare(password, (platformAdmin as any).password).catch(() => false);
       }
 
       if (isCentralAuthenticated) {
@@ -138,12 +135,9 @@ export async function POST(req: Request) {
         const adminId = superAdmin?.id || platformAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
         const distinctSessionToken = crypto.randomUUID();
-
-        // Task 1.5: Force mandatory password change if password is still default 'Password123'
         const isDefaultPassword = password === "Password123";
         const mustChangePassword = isDefaultPassword;
 
-        // Issue Dual-Tokens: Short-lived Access Token (15 min) + Long-lived Refresh Token (7 days)
         const accessToken = await signAccessToken({
           userId: adminId,
           schoolId: "global-saas",
@@ -164,7 +158,6 @@ export async function POST(req: Request) {
           userAgent,
         });
 
-        // Authoritative database session for backwards compatibility
         const sessionResult = await createDatabaseSession({
           userId: adminId,
           email: normalizedEmail,
@@ -211,16 +204,12 @@ export async function POST(req: Request) {
           maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
         });
 
-        // HttpOnly, Secure, SameSite=Strict cookie wrapper for Refresh Token
         response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());
-        // Access Token cookie
         response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, getAccessTokenCookieOptions());
-        // Backward-compatible session cookie
         response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
 
         return response;
       } else if (!parsedInst.schoolToken) {
-        // Record credential failure for superadmin attempt
         const failureResult = recordCredentialFailure(clientIp, accountKey);
         await logAuditEvent({
           actorId: "ANONYMOUS",
@@ -249,10 +238,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. DYNAMIC TENANT & ACADEMIC TIER RESOLUTION
     let tenant: any = null;
 
-    // Check if email exists in multiple schools when tenant is unspecified
     if (!parsedInst.schoolToken) {
       const matchingSchools = await basePrisma.user.findMany({
         where: {
@@ -298,7 +285,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Strategy A: Direct Institutional Identifier Match
     if (parsedInst.schoolToken) {
       tenant = await basePrisma.school.findFirst({
         where: {
@@ -324,7 +310,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Strategy B: Cross-Tenant Discovery ONLY for single-school memberships
     if (!tenant) {
       const userWhere: any = {
         school: {
@@ -361,17 +346,14 @@ export async function POST(req: Request) {
     }
 
     if (!tenant) {
-      // 2. Search Student Table
       const studentSchoolWhere: any = {
         OR: [
           { email: { equals: normalizedEmail, mode: "insensitive" } },
-          { parentPhone: { equals: normalizedEmail, mode: "insensitive" } },
           { parentEmail: { equals: normalizedEmail, mode: "insensitive" } },
-          { parentWhatsApp: { equals: normalizedEmail, mode: "insensitive" } },
-          ...(parentPhone ? [{ parentPhone: { equals: parentPhone.trim(), mode: "insensitive" } }] : []),
-          ...(parentEmail ? [{ parentEmail: { equals: parentEmail.trim().toLowerCase(), mode: "insensitive" } }] : []),
-          ...(phone ? [{ parentPhone: { equals: phone.trim(), mode: "insensitive" } }] : []),
           ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
+          ...(parentEmail ? [{ parentEmail: { equals: parentEmail.trim().toLowerCase(), mode: "insensitive" } }] : []),
+          ...(parentPhone ? [{ parentPhone: { equals: parentPhone.trim(), mode: "insensitive" } }] : []),
+          ...(phone ? [{ parentPhone: { equals: phone.trim(), mode: "insensitive" } }] : []),
         ],
         school: {
           isActive: true,
@@ -443,7 +425,6 @@ export async function POST(req: Request) {
 
     const activeTiers: string[] = (tenant.academicTiers || []).map((t: any) => t.name);
 
-    // Resolve Candidate Tier from Parsed Admission Identifier
     let tierFromToken: string | null = null;
     if (parsedInst.tierToken) {
       const mappedCandidate = parsedInst.candidateTierName?.toUpperCase();
@@ -470,7 +451,6 @@ export async function POST(req: Request) {
     let authenticatedEmail = normalizedEmail;
     let mustChangePassword = false;
 
-    // A. Check User model (Dedicated tenant user scope - authoritative single auth table)
     const localUser = await (basePrisma.user as any).findFirst({
       where: {
         schoolId: tenant.id,
@@ -502,7 +482,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // B. Check Student (STUDENT)
     if (!resolvedRole) {
       const studentMatchQuery: any = {
         schoolId: tenant.id,
@@ -524,7 +503,7 @@ export async function POST(req: Request) {
             where: studentMatchQuery,
             include: { school: true, tier: true },
           });
-        } catch {}
+        } catch { }
       }
 
       if (!student && tenant.academicTiers?.length) {
@@ -536,7 +515,7 @@ export async function POST(req: Request) {
               include: { school: true, tier: true },
             });
             if (student) break;
-          } catch {}
+          } catch { }
         }
       }
 
@@ -576,7 +555,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // C0. Check Dedicated Parents Table (PARENT)
     if (!resolvedRole && ((requestedRole || "").toUpperCase() === "PARENT" || normalizedEmail.length > 5)) {
       const parentRecord = await basePrisma.parent.findFirst({
         where: {
@@ -611,54 +589,52 @@ export async function POST(req: Request) {
       }
     }
 
-    // C1. Check Parent Tracking on Student record (PARENT fallback)
-    if (!resolvedRole && ((requestedRole || "").toUpperCase() === "PARENT" || normalizedEmail.length > 5)) {
-      const parentQuery: any = {
-        schoolId: tenant.id,
-        OR: [
-          { parentPhone: { equals: normalizedEmail, mode: "insensitive" } },
-          { parentEmail: { equals: normalizedEmail, mode: "insensitive" } },
-          { parentWhatsApp: { equals: normalizedEmail, mode: "insensitive" } },
-          ...(parentPhone ? [{ parentPhone: { equals: parentPhone.trim(), mode: "insensitive" } }] : []),
-          ...(parentEmail ? [{ parentEmail: { equals: parentEmail.trim().toLowerCase(), mode: "insensitive" } }] : []),
-          ...(phone ? [{ parentPhone: { equals: phone.trim(), mode: "insensitive" } }] : []),
-        ],
-      };
+    if (!resolvedRole) {
+      const parentEmailConditions: any[] = [];
+      const parentPhoneConditions: any[] = [];
+      if (normalizedEmail.includes("@")) {
+        parentEmailConditions.push({ parentEmail: { equals: normalizedEmail, mode: "insensitive" } });
+      }
+      if (parentEmail) parentEmailConditions.push({ parentEmail: { equals: parentEmail.trim().toLowerCase(), mode: "insensitive" } });
+      if (parentPhone) parentPhoneConditions.push({ parentPhone: { equals: parentPhone.trim(), mode: "insensitive" } });
+      if (phone) parentPhoneConditions.push({ parentPhone: { equals: phone.trim(), mode: "insensitive" } });
 
-      const parentStudent = await basePrisma.student.findFirst({
-        where: parentQuery,
-        include: { school: true, tier: true },
-      });
+      const allParentConditions = [...parentEmailConditions, ...parentPhoneConditions];
+      if (allParentConditions.length > 0) {
+        const parentStudent = await basePrisma.student.findFirst({
+          where: { schoolId: tenant.id, OR: allParentConditions },
+          include: { school: true, tier: true },
+        });
 
-      if (parentStudent) {
-        const studentCustom = (parentStudent.dynamicFields as any) || {};
-        let isParentValid = false;
-        if (studentCustom.parentPassword) {
-          isParentValid = await bcrypt.compare(password, studentCustom.parentPassword).catch(() => false);
-          if (!isParentValid && (studentCustom.parentPassword === password || password === "Password123" || password === "Welcome123")) {
+        if (parentStudent) {
+          const studentCustom = (parentStudent.dynamicFields as any) || {};
+          let isParentValid = false;
+          if (studentCustom.parentPassword) {
+            isParentValid = await bcrypt.compare(password, studentCustom.parentPassword).catch(() => false);
+            if (!isParentValid && (studentCustom.parentPassword === password || password === "Password123" || password === "Welcome123")) {
+              isParentValid = true;
+            }
+          } else if (studentCustom.password) {
+            isParentValid = await bcrypt.compare(password, studentCustom.password).catch(() => false);
+            if (!isParentValid && (studentCustom.password === password || password === "Password123" || password === "Welcome123")) {
+              isParentValid = true;
+            }
+          } else if (password === "Password123" || password === "Welcome123" || isDev) {
             isParentValid = true;
           }
-        } else if (studentCustom.password) {
-          isParentValid = await bcrypt.compare(password, studentCustom.password).catch(() => false);
-          if (!isParentValid && (studentCustom.password === password || password === "Password123" || password === "Welcome123")) {
-            isParentValid = true;
-          }
-        } else if (password === "Password123" || password === "Welcome123" || isDev) {
-          isParentValid = true;
-        }
 
-        if (isParentValid) {
-          resolvedRole = "PARENT";
-          authenticatedUserId = parentStudent.id;
-          authenticatedEmail = parentStudent.parentEmail || parentStudent.email || `${parentStudent.admissionNumber || parentStudent.id}@parent.portal`;
-          if (parentStudent.tier?.name) {
-            assignedTier = parentStudent.tier.name;
+          if (isParentValid) {
+            resolvedRole = "PARENT";
+            authenticatedUserId = parentStudent.id;
+            authenticatedEmail = parentStudent.parentEmail || parentStudent.email || `${parentStudent.admissionNumber || parentStudent.id}@parent.portal`;
+            if (parentStudent.tier?.name) {
+              assignedTier = parentStudent.tier.name;
+            }
           }
         }
       }
     }
 
-    // D. Check Staff Member (TEACHER / BURSAR / PRINCIPAL)
     if (!resolvedRole) {
       const staffMember = await basePrisma.staff.findFirst({
         where: {
@@ -696,8 +672,6 @@ export async function POST(req: Request) {
       }
     }
 
-
-    // 5. IF CREDENTIALS FAILED -> RECORD FAILURE & CHECK LOCKOUT
     if (!resolvedRole) {
       const failureResult = recordCredentialFailure(clientIp, accountKey);
       await logAuditEvent({
@@ -729,14 +703,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. ON SUCCESS -> RESET FAILURE TRACKER & ISSUE CROSS-DOMAIN UNIFIED TOKENS
     recordCredentialSuccess(clientIp, accountKey);
 
     const permissions = getDefaultPermissionsForRole(resolvedRole as UserRole);
     const distinctSessionToken = crypto.randomUUID();
     const effectiveSlug = tenant.slug || tenant.subdomain;
 
-    // Issue Unified Cross-Domain Access Token JWT containing tenantId, userRole, and assignedTier
     const accessToken = await signAccessToken({
       userId: authenticatedUserId,
       schoolId: tenant.id,
@@ -753,7 +725,6 @@ export async function POST(req: Request) {
       mustChangePassword,
     });
 
-    // Long-lived Refresh Token (7-day) stored as SHA-256 hash in database
     const { rawRefreshToken } = await issueRefreshToken({
       userId: authenticatedUserId,
       schoolId: tenant.id,
@@ -761,7 +732,6 @@ export async function POST(req: Request) {
       userAgent,
     });
 
-    // Server-Controlled Database Session with tenantId, userRole, and assignedTier
     const sessionResult = await createDatabaseSession({
       userId: authenticatedUserId,
       email: authenticatedEmail,
@@ -780,18 +750,16 @@ export async function POST(req: Request) {
       sessionToken: distinctSessionToken,
     });
 
-    // Dynamic routing target:
-    // Attaches tier parameter so PWA immediately mounts the exact tier template view
     const tierQueryParam = assignedTier ? `?tier=${encodeURIComponent(assignedTier)}` : "";
     const redirectTarget = mustChangePassword
       ? `/change-password`
       : resolvedRole === "STUDENT" || resolvedRole === "PARENT"
-      ? `/${effectiveSlug}/portal/student${tierQueryParam}`
-      : resolvedRole === "TEACHER" || resolvedRole === "STAFF"
-      ? `/${effectiveSlug}/portal/staff`
-      : resolvedRole === "BURSAR"
-      ? `/bursar`
-      : `/${effectiveSlug}/dashboard`;
+        ? `/${effectiveSlug}/portal/student${tierQueryParam}`
+        : resolvedRole === "TEACHER" || resolvedRole === "STAFF"
+          ? `/${effectiveSlug}/portal/staff`
+          : resolvedRole === "BURSAR"
+            ? `/bursar`
+            : `/${effectiveSlug}/dashboard`;
 
     await logAuditEvent({
       actorId: authenticatedUserId,
@@ -827,13 +795,8 @@ export async function POST(req: Request) {
       maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
     });
 
-    // 1. HttpOnly, Secure, SameSite=Strict cookie wrapper for Refresh Token (7 days)
     response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());
-
-    // 2. Short-lived Access Token cookie (15 mins)
     response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, getAccessTokenCookieOptions());
-
-    // 3. Database session cookie for backward-compatible panels
     response.cookies.set(SESSION_COOKIE_NAME, sessionResult.cookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
 
     return response;
