@@ -92,10 +92,20 @@ export async function issueRefreshToken(params: {
   const rawRefreshToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(rawRefreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000);
+
+  let validSchoolId: string | null = null;
+  if (params.schoolId && params.schoolId !== "global-saas") {
+    const exists = await basePrisma.school.findUnique({
+      where: { id: params.schoolId },
+      select: { id: true },
+    }).catch(() => null);
+    if (exists) validSchoolId = params.schoolId;
+  }
+
   await basePrisma.refreshToken.create({
     data: {
       userId: params.userId,
-      schoolId: params.schoolId === "global-saas" ? null : params.schoolId,
+      schoolId: validSchoolId,
       tokenHash,
       expiresAt,
       isRevoked: false,
@@ -166,6 +176,7 @@ export async function rotateRefreshToken(params: {
   const newRawRefreshToken = crypto.randomBytes(32).toString("hex");
   const newHash = hashToken(newRawRefreshToken);
   const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000);
+
   await basePrisma.refreshToken.update({
     where: { id: existingToken.id },
     data: {
@@ -173,10 +184,20 @@ export async function rotateRefreshToken(params: {
       replacedByTokenHash: newHash,
     },
   });
+
+  let validSchoolIdOnRotate: string | null = null;
+  if (existingToken.schoolId && existingToken.schoolId !== "global-saas") {
+    const exists = await basePrisma.school.findUnique({
+      where: { id: existingToken.schoolId },
+      select: { id: true },
+    }).catch(() => null);
+    if (exists) validSchoolIdOnRotate = existingToken.schoolId;
+  }
+
   await basePrisma.refreshToken.create({
     data: {
       userId: existingToken.userId,
-      schoolId: existingToken.schoolId === "global-saas" ? null : existingToken.schoolId,
+      schoolId: validSchoolIdOnRotate,
       tokenHash: newHash,
       expiresAt: newExpiresAt,
       isRevoked: false,
