@@ -1,0 +1,9 @@
+feat: add student portal Timetable and Schedule module
+
+- New TimetableModule with Day View and Week View toggle
+- Three tier presets: Primary, Secondary, Higher Education
+- Live Now period detection with animated highlight
+- Up Next panel and subject summary sidebar
+- CalendarDays nav item in sidebar and mobile bottom nav
+- TIMETABLE tab added to StudentPortalTab type
+- Build verified: exit code 0
