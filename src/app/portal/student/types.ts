@@ -181,4 +181,4 @@ export interface StudentPortalWorkspaceData {
   isSuspended?: boolean;
 }
 
-export type StudentPortalTab = "OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE" | "TRANSACTIONS" | "REPORTS" | "TIMETABLE" | "SECURITY";
+export type StudentPortalTab = "OVERVIEW" | "PROFILE" | "COMMUNICATIONS" | "FINANCE" | "TRANSACTIONS" | "REPORTS" | "TIMETABLE" | "ATTENDANCE" | "SECURITY";

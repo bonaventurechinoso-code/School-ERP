@@ -14,6 +14,7 @@ import { FeesFinanceModule } from "./FeesFinanceModule";
 import { TransactionHistoryModule } from "./TransactionHistoryModule";
 import { StudentReportCardPortalModule } from "./StudentReportCardPortalModule";
 import { TimetableModule } from "./TimetableModule";
+import { AttendanceModule } from "./AttendanceModule";
 import { NavigationSidebar } from "./NavigationSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -594,6 +595,17 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
           {activeTab === "TIMETABLE" && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <TimetableModule
+                tierConfig={currentTierConfig}
+                studentClass={student.currentClass}
+                studentName={student.firstName}
+              />
+            </div>
+          )}
+
+          {/* TAB 8: ATTENDANCE RECORD MODULE */}
+          {activeTab === "ATTENDANCE" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <AttendanceModule
                 tierConfig={currentTierConfig}
                 studentClass={student.currentClass}
                 studentName={student.firstName}

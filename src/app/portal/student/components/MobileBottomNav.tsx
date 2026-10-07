@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { LayoutDashboard, User, Megaphone, CreditCard, FileSpreadsheet, CalendarDays } from "lucide-react";
+import { LayoutDashboard, User, CreditCard, FileSpreadsheet, CalendarDays, ClipboardList } from "lucide-react";
 import { TierPresentationConfig } from "../types";
 
 interface MobileBottomNavProps {
@@ -12,11 +12,11 @@ interface MobileBottomNavProps {
 
 export function MobileBottomNav({ activeTab, setActiveTab, tierConfig }: MobileBottomNavProps) {
   const navItems = [
-    { id: "OVERVIEW", label: "Overview", icon: LayoutDashboard },
-    { id: "REPORTS", label: "Results", icon: FileSpreadsheet },
-    { id: "TIMETABLE", label: "Timetable", icon: CalendarDays },
-    { id: "PROFILE", label: "Profile", icon: User },
-    { id: "FINANCE", label: "Billing", icon: CreditCard },
+    { id: "OVERVIEW",    label: "Overview",    icon: LayoutDashboard },
+    { id: "ATTENDANCE",  label: "Attendance",  icon: ClipboardList },
+    { id: "TIMETABLE",  label: "Timetable",   icon: CalendarDays },
+    { id: "PROFILE",    label: "Profile",     icon: User },
+    { id: "FINANCE",    label: "Billing",     icon: CreditCard },
   ];
 
   return (

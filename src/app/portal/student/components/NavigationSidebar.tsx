@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   KeyRound,
   CalendarDays,
+  ClipboardList,
 } from "lucide-react";
 import { TierPresentationConfig, StudentProfileData } from "../types";
 
@@ -43,14 +44,15 @@ export function NavigationSidebar({
   onSelectTier
 }: NavigationSidebarProps) {
   const navItems = [
-    { id: "OVERVIEW", label: "Dashboard Overview", icon: LayoutDashboard },
-    { id: "REPORTS", label: "Report Card & Results", icon: FileSpreadsheet },
-    { id: "TIMETABLE", label: "Timetable & Schedule", icon: CalendarDays },
-    { id: "PROFILE", label: "Student Bio & Profile", icon: User },
-    { id: "COMMUNICATIONS", label: "Live Communications", icon: Megaphone },
-    { id: "FINANCE", label: tierConfig.billingTitle, icon: CreditCard },
-    { id: "TRANSACTIONS", label: "Transaction History", icon: Receipt },
-    { id: "SECURITY", label: "Security & Password", icon: KeyRound },
+    { id: "OVERVIEW",        label: "Dashboard Overview",    icon: LayoutDashboard },
+    { id: "REPORTS",         label: "Report Card & Results",  icon: FileSpreadsheet },
+    { id: "TIMETABLE",       label: "Timetable & Schedule",   icon: CalendarDays },
+    { id: "ATTENDANCE",      label: "Attendance Record",      icon: ClipboardList },
+    { id: "PROFILE",         label: "Student Bio & Profile",  icon: User },
+    { id: "COMMUNICATIONS",  label: "Live Communications",    icon: Megaphone },
+    { id: "FINANCE",         label: tierConfig.billingTitle,  icon: CreditCard },
+    { id: "TRANSACTIONS",    label: "Transaction History",    icon: Receipt },
+    { id: "SECURITY",        label: "Security & Password",    icon: KeyRound },
   ];
 
   const sidebarContent = (

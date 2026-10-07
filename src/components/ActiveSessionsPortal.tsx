@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Laptop, Smartphone, Globe, Shield, Trash2, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import styles from "./ActiveSessionsPortal.module.css";
 
 interface DeviceSession {
   id: string;
@@ -94,7 +95,7 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
         <button
           onClick={fetchSessions}
           disabled={loading}
-          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors" aria-busy={loading}
           title="Refresh active sessions"
           aria-label="Refresh active sessions"
         >
@@ -103,14 +104,14 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
       </div>
 
       {errorMsg && (
-        <div className="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center gap-2.5 text-red-700 dark:text-red-400 text-xs">
+        <div role="alert" aria-live="assertive" className="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center gap-2.5 text-red-700 dark:text-red-400 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {successMsg && (
-        <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400 text-xs">
+        <div role="alert" aria-live="assertive" className="mb-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400 text-xs">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
@@ -129,7 +130,7 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
           {sessions.map((sess) => (
             <div
               key={sess.id}
-              className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+              className={`${styles.sessionCard} p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors hover:shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 sess.isCurrent
                   ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-900/50"
                   : "bg-slate-50/60 dark:bg-zinc-950/60 border-slate-200/80 dark:border-zinc-800"
