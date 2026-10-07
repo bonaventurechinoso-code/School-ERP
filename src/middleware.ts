@@ -181,14 +181,24 @@ export async function middleware(req: NextRequest) {
     path === '/admin' ||
     path.startsWith('/admin/') ||
     path === '/super-admin' ||
-    path.startsWith('/super-admin/');
+    path.startsWith('/super-admin/') ||
+    path === '/dashboard/super-admin' ||
+    path.startsWith('/dashboard/super-admin');
 
   if (isGlobalAdminPath) {
     // Tenant middleware must reject if trying to access /admin. Super Admin must not have tenant_id.
     if (hasTenantScope || isTenantAdmin || !isSuperAdmin) {
       const loginUrl = new URL('/login', req.url);
-      loginUrl.searchParams.set('error', 'Unauthorized: Tenant users cannot access the Super Admin control plane.');
-      return NextResponse.redirect(loginUrl);
+      loginUrl.search = ''; // Strip all address bar query parameters to guarantee clean URL
+      const res = NextResponse.redirect(loginUrl);
+      // Pass clean HTTP 403 Forbidden system state via transient cookie
+      res.cookies.set('auth_guard_status', '403_SUPER_ADMIN_FORBIDDEN', {
+        path: '/',
+        maxAge: 15,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
+      return res;
     }
 
     // Force mandatory password change on Super Admin if flagged

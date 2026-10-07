@@ -53,7 +53,7 @@ export default async function AdminLayout({
 
   // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES
   if (userRole === "STUDENT") {
-    redirect("/portal/student?denied=true");
+    redirect("/portal/student");
   }
 
   return (

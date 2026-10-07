@@ -10,146 +10,149 @@ import {
   Mail,
   Eye,
   EyeOff,
-  Building2,
   Loader2,
-  GraduationCap,
+  AlertCircle,
+  X,
+  Building2,
+  CheckCircle2,
 } from "lucide-react";
-import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
+import { persistStoredSession, AUTH_UPDATE_EVENT, getStoredSession } from "@/lib/session-context";
 import { customFetch, beginTokenWait, setAuthToken } from "@/lib/api-client";
-
-type RoleTab = "admin" | "teacher" | "student" | "parent";
-
-interface RoleTabConfig {
-  id: RoleTab;
-  label: string;
-  placeholder: string;
-  fieldLabel: string;
+interface TenantBrandingConfig {
+  id?: string;
+  name: string;
+  subdomain?: string;
+  slug?: string | null;
+  logo?: string | null;
 }
 
-const ROLE_CONFIGS: RoleTabConfig[] = [
-  {
-    id: "admin",
-    label: "School Admin",
-    placeholder: "admin@school.com",
-    fieldLabel: "Email Address",
-  },
-  {
-    id: "teacher",
-    label: "Teacher",
-    placeholder: "Staff ID or Email",
-    fieldLabel: "Staff ID or Email",
-  },
-  {
-    id: "student",
-    label: "Student",
-    placeholder: "Admission No (e.g. GWD/NUR/2026/002)",
-    fieldLabel: "Admission Number",
-  },
-  {
-    id: "parent",
-    label: "Parent",
-    placeholder: "Parent Phone or Email",
-    fieldLabel: "Parent Phone or Email",
-  },
-];
-
-function formatTenantDisplayName(subdomain: string | null): string {
-  if (!subdomain) return "SchoolERP";
-  return subdomain
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function EducationalIllustration() {
-  return (
-    <div className="w-full max-w-[280px] mx-auto opacity-80 select-none">
-      <svg
-        viewBox="0 0 320 200"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-auto text-zinc-300 dark:text-zinc-700 stroke-current"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {/* Subtle decorative ground plane */}
-        <line x1="20" y1="175" x2="300" y2="175" strokeDasharray="3 3" />
-        
-        {/* Central School Building Structure */}
-        <rect x="90" y="70" width="140" height="105" rx="4" className="fill-zinc-100/60 dark:fill-zinc-800/40" />
-        {/* Roof Gable */}
-        <polygon points="160,35 75,70 245,70" className="fill-zinc-200/50 dark:fill-zinc-800/60" />
-        {/* Central Bell / Cupola Tower */}
-        <rect x="145" y="15" width="30" height="20" rx="2" className="fill-zinc-200/50 dark:fill-zinc-800/60" />
-        <polygon points="160,2 140,15 180,15" className="fill-zinc-300/60 dark:fill-zinc-700/60" />
-        <circle cx="160" cy="25" r="4" className="fill-zinc-400 dark:fill-zinc-600" />
-        
-        {/* School Columns & Door */}
-        <rect x="146" y="130" width="28" height="45" rx="2" className="fill-zinc-200 dark:fill-zinc-800" />
-        <path d="M146 130 Q160 118 174 130" />
-        
-        {/* Windows */}
-        <rect x="108" y="90" width="22" height="26" rx="2" className="fill-zinc-50 dark:fill-zinc-900" />
-        <line x1="119" y1="90" x2="119" y2="116" />
-        <line x1="108" y1="103" x2="130" y2="103" />
-
-        <rect x="190" y="90" width="22" height="26" rx="2" className="fill-zinc-50 dark:fill-zinc-900" />
-        <line x1="201" y1="90" x2="201" y2="116" />
-        <line x1="190" y1="103" x2="212" y2="103" />
-
-        <rect x="108" y="135" width="22" height="26" rx="2" className="fill-zinc-50 dark:fill-zinc-900" />
-        <rect x="190" y="135" width="22" height="26" rx="2" className="fill-zinc-50 dark:fill-zinc-900" />
-
-        {/* Graduation Cap Motif on Left */}
-        <g transform="translate(35, 105)">
-          <path d="M5 25 L35 12 L65 25 L35 38 Z" className="fill-zinc-200/80 dark:fill-zinc-800/80" />
-          <path d="M20 33 V44 C20 50 50 50 50 44 V33" />
-          <path d="M60 27 V45" />
-          <circle cx="60" cy="46" r="2" className="fill-zinc-400 dark:fill-zinc-500" />
-        </g>
-
-        {/* Open Book Motif on Right */}
-        <g transform="translate(225, 115)">
-          <path d="M5 40 Q25 35 45 42 Q65 35 85 40 V15 Q65 10 45 17 Q25 10 5 15 Z" className="fill-zinc-200/80 dark:fill-zinc-800/80" />
-          <line x1="45" y1="17" x2="45" y2="42" />
-          <line x1="15" y1="23" x2="35" y2="25" />
-          <line x1="15" y1="30" x2="35" y2="32" />
-          <line x1="55" y1="25" x2="75" y2="23" />
-          <line x1="55" y1="32" x2="75" y2="30" />
-        </g>
-      </svg>
-    </div>
-  );
-}
-
-function UniversalLoginPageContent() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "";
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
 
-  // State Management
-  const [activeRoleTab, setActiveRoleTab] = useState<RoleTab>("admin");
-  const [identifier, setIdentifier] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [resolvedTenant, setResolvedTenant] = useState<string | null>(null);
-  const [schoolCodeInput, setSchoolCodeInput] = useState<string>("");
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>(
-    urlError === "CredentialsSignin"
-      ? "Invalid credentials. Please verify your details."
-      : urlMessage || (urlError ? `Authentication error: ${urlError}` : "")
-  );
+  // Form input states
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Client-Side Tenancy Resolution
+  // Multi-tenant branding states
+  const [resolvedSubdomain, setResolvedSubdomain] = useState<string | null>(null);
+  const [tenantBranding, setTenantBranding] = useState<TenantBrandingConfig | null>(null);
+
+  // Floating Toast Notification state (completely decoupled from form container layout)
+  const [toastNotification, setToastNotification] = useState<{
+    id: number;
+    type: "error" | "info" | "success";
+    message: string;
+  } | null>(null);
+
+  // Trigger floating toast with 4-second auto-dismiss
+  const showToast = (message: string, type: "error" | "info" | "success" = "error") => {
+    const id = Date.now();
+    setToastNotification({ id, type, message });
+  };
+
+  useEffect(() => {
+    if (!toastNotification) return;
+    const timer = setTimeout(() => {
+      setToastNotification((current) => (current?.id === toastNotification.id ? null : current));
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [toastNotification]);
+
+  // 1. Sanitize the URL Address Bar and Handle Clean System States / HTTP Status Codes
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Rule 1: Check query parameters first (?school=..., ?schoolDomain=..., ?mockTenant=...)
+    // A. Check transient HTTP status / system state passed via cookie
+    let systemStatus = "";
+    const cookieJar = document.cookie.split(";").map((c) => c.trim());
+    const guardStatusCookie = cookieJar.find((c) => c.startsWith("auth_guard_status="));
+    if (guardStatusCookie) {
+      systemStatus = decodeURIComponent(guardStatusCookie.split("=")[1]);
+      // Immediately expire cookie so notification is one-shot
+      document.cookie = "auth_guard_status=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+    }
+
+    // B. Sanitize the active address bar: Clear out any plaintext error or leaked query strings
+    const currentParams = new URLSearchParams(window.location.search);
+    const leakedError = currentParams.get("error");
+    const isSuperAdminAccessBlocked =
+      systemStatus === "403_SUPER_ADMIN_FORBIDDEN" ||
+      systemStatus === "403" ||
+      (leakedError && leakedError.toLowerCase().includes("super admin"));
+
+    if (window.location.search) {
+      // Clear out the address path parameters immediately, keeping URL cleanly at: /login
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // C. Premium Client-Side Error Handling
+    if (isSuperAdminAccessBlocked) {
+      showToast(
+        "Access Denied: You do not have permission to view the Super Admin control plane. Redirecting to your workspace...",
+        "error"
+      );
+
+      // D. Automatic Redirection Safety:
+      // If an active user session token is detected, immediately trigger a controlled push redirect
+      const activeSession = getStoredSession();
+      if (activeSession) {
+        const rawRole = (activeSession.role || activeSession.userRole || "").toUpperCase();
+        const staffRole = (activeSession.staffRole || "").toUpperCase();
+        const tenantDomain = activeSession.schoolDomain || "";
+
+        let safeRoute = "/dashboard/admin";
+        if (rawRole === "SUPER_ADMIN") {
+          safeRoute = "/dashboard/super-admin";
+        } else if (
+          rawRole === "SCHOOL_ADMIN" ||
+          rawRole === "TENANT_ADMIN" ||
+          rawRole === "ADMIN" ||
+          rawRole === "PRINCIPAL" ||
+          rawRole === "VICE_PRINCIPAL" ||
+          rawRole === "HEADMASTER"
+        ) {
+          safeRoute = tenantDomain ? `/${tenantDomain}/dashboard` : "/dashboard/admin";
+        } else if (
+          rawRole === "TEACHER" ||
+          rawRole === "STAFF" ||
+          rawRole === "BURSAR" ||
+          rawRole === "ACCOUNTANT" ||
+          staffRole.includes("TEACHER") ||
+          staffRole.includes("STAFF")
+        ) {
+          safeRoute = "/dashboard/teacher";
+        } else if (rawRole === "STUDENT") {
+          safeRoute = tenantDomain ? `/${tenantDomain}/portal/student` : "/dashboard/student";
+        } else if (rawRole === "PARENT") {
+          safeRoute = "/dashboard/parent";
+        }
+
+        const timer = setTimeout(() => {
+          router.push(safeRoute);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    } else if (urlError === "CredentialsSignin") {
+      showToast("Invalid credentials. Please verify your email and password.", "error");
+    } else if (urlMessage) {
+      showToast(urlMessage, "info");
+    } else if (urlError && !urlError.toLowerCase().includes("super admin")) {
+      showToast("Authentication could not be completed. Please verify your credentials.", "error");
+    }
+  }, [router, urlError, urlMessage]);
+
+  // Client-Side Multi-Tenancy Subdomain Evaluation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // 1. Query parameters (?school=..., ?subdomain=..., ?tenant=..., ?mockTenant=...)
     const params = new URLSearchParams(window.location.search);
     const querySchool =
       params.get("school") ||
@@ -159,14 +162,16 @@ function UniversalLoginPageContent() {
 
     if (querySchool && querySchool.trim()) {
       const clean = querySchool.trim().toLowerCase();
-      setResolvedTenant(clean);
-      try {
-        window.localStorage.setItem("schoolerp_tenant", clean);
-      } catch {}
-      return;
+      if (!["demo", "localhost", "root", "default"].includes(clean)) {
+        setResolvedSubdomain(clean);
+        try {
+          window.localStorage.setItem("schoolerp_tenant", clean);
+        } catch {}
+        return;
+      }
     }
 
-    // Rule 2: Parse hostname for tenant subdomain
+    // 2. Parse Hostname
     const hostname = window.location.hostname.toLowerCase().replace(/^www\./, "");
     const configuredRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonaveeict.com.ng").toLowerCase().replace(/^www\./, "").trim();
     const renderHostingDomain = "school-erp-1-mfc3.onrender.com";
@@ -174,10 +179,11 @@ function UniversalLoginPageContent() {
     // Localhost subdomain: e.g. greenwood.localhost
     if (hostname.endsWith(".localhost")) {
       const localParts = hostname.split(".");
-      if (localParts.length >= 2 && localParts[0] !== "localhost") {
-        setResolvedTenant(localParts[0]);
+      if (localParts.length >= 2 && localParts[0] !== "localhost" && localParts[0] !== "demo") {
+        const sub = localParts[0];
+        setResolvedSubdomain(sub);
         try {
-          window.localStorage.setItem("schoolerp_tenant", localParts[0]);
+          window.localStorage.setItem("schoolerp_tenant", sub);
         } catch {}
         return;
       }
@@ -186,8 +192,8 @@ function UniversalLoginPageContent() {
     // Production domain subdomain: e.g. greenwood.bonaveeict.com.ng
     if (configuredRoot && hostname.endsWith(`.${configuredRoot}`)) {
       const sub = hostname.slice(0, -(configuredRoot.length + 1));
-      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
-        setResolvedTenant(sub);
+      if (sub && !["www", "app", "mail", "api", "admin", "demo"].includes(sub)) {
+        setResolvedSubdomain(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
         } catch {}
@@ -198,8 +204,8 @@ function UniversalLoginPageContent() {
     // Render subdomain: e.g. greenwood.school-erp-1-mfc3.onrender.com
     if (hostname.endsWith(`.${renderHostingDomain}`)) {
       const sub = hostname.slice(0, -(renderHostingDomain.length + 1));
-      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
-        setResolvedTenant(sub);
+      if (sub && !["www", "app", "mail", "api", "admin", "demo"].includes(sub)) {
+        setResolvedSubdomain(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
         } catch {}
@@ -207,65 +213,81 @@ function UniversalLoginPageContent() {
       }
     }
 
-    // Rule 3: For PWP/PWA containers running at root or standalone mode, hydrate last active tenant from storage
+    // 3. Path-based subdomain routing: e.g. /greenwood/login
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    if (
+      pathParts.length > 0 &&
+      !["login", "admin", "dashboard", "api", "_next", "portal", "demo"].includes(pathParts[0].toLowerCase())
+    ) {
+      setResolvedSubdomain(pathParts[0].toLowerCase());
+      try {
+        window.localStorage.setItem("schoolerp_tenant", pathParts[0].toLowerCase());
+      } catch {}
+      return;
+    }
+
+    // 4. Stored tenant fallback (strictly exclude demo / placeholder)
     try {
       const storedTenant =
         window.localStorage.getItem("schoolerp_tenant") ||
-        window.localStorage.getItem("schoolDomain") ||
-        window.localStorage.getItem("schoolerp_school_domain");
-      if (storedTenant && storedTenant.trim() && storedTenant !== "demo") {
-        setResolvedTenant(storedTenant.trim().toLowerCase());
-        return;
+        window.localStorage.getItem("schoolDomain");
+      if (
+        storedTenant &&
+        !["undefined", "null", "root", "default", "platform", "localhost", "demo"].includes(storedTenant.toLowerCase())
+      ) {
+        setResolvedSubdomain(storedTenant.toLowerCase());
+      } else if (storedTenant && ["demo", "localhost", "root", "default", "null", "undefined"].includes(storedTenant.toLowerCase())) {
+        window.localStorage.removeItem("schoolerp_tenant");
+        window.localStorage.removeItem("schoolDomain");
       }
     } catch {}
+  }, []);
 
-    // Fallback: Root domain with no query parameters
-    setResolvedTenant(null);
-  }, [searchParams]);
+  // Sync database tenant branding when subdomain resolves
+  useEffect(() => {
+    let isMounted = true;
+    if (!resolvedSubdomain || ["demo", "localhost", "root", "default"].includes(resolvedSubdomain.toLowerCase())) {
+      setTenantBranding(null);
+      return;
+    }
 
-  const currentRole = ROLE_CONFIGS.find((r) => r.id === activeRoleTab) || ROLE_CONFIGS[0];
-  const dynamicSchoolPrefix = (resolvedTenant || schoolCodeInput.trim()).slice(0, 3).toUpperCase();
-  const effectivePlaceholder =
-    activeRoleTab === "student"
-      ? dynamicSchoolPrefix
-        ? `Admission No (e.g. ${dynamicSchoolPrefix}/SEC/2026/001 or ${dynamicSchoolPrefix}/NUR/2026/002)`
-        : "Admission No (e.g. GWD/NUR/2026/002 or SCH/2026/001)"
-      : currentRole.placeholder;
+    fetch(`/api/schools/${encodeURIComponent(resolvedSubdomain)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data?.school) {
+          setTenantBranding({
+            id: data.school.id,
+            name: data.school.name,
+            subdomain: data.school.subdomain,
+            logo: data.school.logo,
+          });
+        }
+      })
+      .catch(() => {});
 
-  const handleCredentialsLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedSubdomain]);
+
+  // Unified Form Submission & Dynamic SaaS Resolution Flow
+  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setErrorMsg("");
 
-    const trimmedSchoolCode = schoolCodeInput.trim().toLowerCase();
-    const targetDomain = (resolvedTenant || trimmedSchoolCode).trim().toLowerCase();
-    const isCentralLogin = !targetDomain;
+    const normalizedEmail = email.trim().toLowerCase();
+    const targetDomain = (resolvedSubdomain || "").trim().toLowerCase();
 
-    const trimmedIdentifier = identifier.trim();
-    const normalizedIdentifier = trimmedIdentifier.toLowerCase();
-
-    // Prepare synchronized client payload configurations identical to Chrome
     const loginPayload: Record<string, any> = {
-      email: normalizedIdentifier,
+      email: normalizedEmail,
       password,
       schoolDomain: targetDomain || undefined,
-      role: activeRoleTab.toUpperCase(),
     };
-
-    if (activeRoleTab === "student") {
-      loginPayload.admissionNumber = trimmedIdentifier;
-    } else if (activeRoleTab === "parent") {
-      loginPayload.parentPhone = trimmedIdentifier;
-      loginPayload.parentEmail = normalizedIdentifier;
-      loginPayload.phone = trimmedIdentifier;
-    } else if (activeRoleTab === "teacher") {
-      loginPayload.staffId = trimmedIdentifier;
-    }
 
     try {
       beginTokenWait();
 
-      // 1. Direct fetch to live multi-tenant authentication endpoint via customFetch (bound to production API URL)
+      // 1. Send credentials to live multi-tenant authentication endpoint
       let apiLoginData: any = null;
       try {
         const loginRes = await customFetch("/api/v1/auth/login", {
@@ -277,7 +299,7 @@ function UniversalLoginPageContent() {
           apiLoginData = await loginRes.json();
         }
       } catch (directErr) {
-        console.warn("[PWA Login] Direct API query attempted, falling back to NextAuth provider:", directErr);
+        console.warn("[Login] Direct endpoint attempt fell back to NextAuth provider:", directErr);
       }
 
       // 2. NextAuth signIn wrapper synchronization
@@ -288,22 +310,21 @@ function UniversalLoginPageContent() {
 
       if (res?.error && !apiLoginData?.success) {
         setAuthToken(null);
-        setErrorMsg("Invalid credentials. Please verify your details and password.");
+        showToast("Invalid credentials. Please verify your email and password.", "error");
         setIsSubmitting(false);
         return;
       }
 
+      // 3. Extract verified JWT session payload
       let sessionPayload: any = null;
-
-      // Extract session payload from live API response if available
       if (apiLoginData && apiLoginData.success) {
         const effectiveToken = apiLoginData.token || apiLoginData.accessToken || apiLoginData.sessionToken;
         sessionPayload = {
           userId: apiLoginData.userId,
-          email: normalizedIdentifier,
+          email: normalizedEmail,
           tenantId: apiLoginData.schoolId || apiLoginData.tenantId,
           schoolDomain: apiLoginData.schoolDomain || targetDomain,
-          tenantName: apiLoginData.tenantName || formatTenantDisplayName(apiLoginData.schoolDomain || targetDomain),
+          tenantName: apiLoginData.tenantName || tenantBranding?.name || "Institution",
           role: apiLoginData.role,
           userRole: apiLoginData.userRole || apiLoginData.role,
           staffRole: apiLoginData.staffRole || apiLoginData.role,
@@ -320,8 +341,7 @@ function UniversalLoginPageContent() {
       if (!sessionPayload) {
         try {
           const v1SessionRes = await customFetch("/api/v1/auth/session");
-          const v1ContentType = v1SessionRes.headers.get("content-type") || "";
-          if (v1SessionRes.ok && v1ContentType.includes("application/json")) {
+          if (v1SessionRes.ok) {
             const v1Data = await v1SessionRes.json();
             if (v1Data.authenticated && v1Data.session) {
               sessionPayload = v1Data.session;
@@ -333,31 +353,31 @@ function UniversalLoginPageContent() {
       if (!sessionPayload) {
         try {
           const sessionRes = await customFetch("/api/auth/session");
-          const contentType = sessionRes.headers.get("content-type") || "";
-          if (sessionRes.ok && contentType.includes("application/json")) {
+          if (sessionRes.ok) {
             const sessionData = await sessionRes.json();
-            const user = sessionData?.user;
-            if (user) {
+            if (sessionData?.user) {
+              const u = sessionData.user;
               sessionPayload = {
-                userId: user.id || user.userId,
-                email: user.email,
-                tenantId: user.tenantId,
-                schoolDomain: user.schoolDomain,
-                tenantName: user.tenantName,
-                role: user.role,
-                userRole: (user as any).userRole || user.role,
-                staffRole: user.staffRole,
-                assignedTier: (user as any).assignedTier || null,
-                activeTiers: user.activeTiers || [],
-                permissions: user.permissions || [],
-                sessionToken: user.sessionToken,
-                token: user.sessionToken,
+                userId: u.id || u.userId,
+                email: u.email,
+                tenantId: u.tenantId,
+                schoolDomain: u.schoolDomain,
+                tenantName: u.tenantName,
+                role: u.role,
+                userRole: u.userRole || u.role,
+                staffRole: u.staffRole,
+                assignedTier: u.assignedTier || null,
+                activeTiers: u.activeTiers || [],
+                permissions: u.permissions || [],
+                sessionToken: u.sessionToken,
+                token: u.sessionToken,
               };
             }
           }
         } catch {}
       }
 
+      // Hydrate client storage & trigger session update
       if (sessionPayload) {
         const tokenToSet = sessionPayload.token || sessionPayload.sessionToken;
         if (tokenToSet) {
@@ -365,7 +385,6 @@ function UniversalLoginPageContent() {
         }
         persistStoredSession(sessionPayload);
 
-        // Synchronize persistent tenant and tier context in local storage for PWA container
         if (typeof window !== "undefined") {
           const finalDomain = sessionPayload.schoolDomain || targetDomain;
           if (finalDomain) {
@@ -381,304 +400,312 @@ function UniversalLoginPageContent() {
           if (sessionPayload.userRole) {
             window.localStorage.setItem("schoolerp_user_role", sessionPayload.userRole);
           }
-          window.localStorage.setItem("schoolerp_active_role", activeRoleTab);
         }
-
         window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
       }
 
       router.refresh();
 
-      const user = sessionPayload;
-
-      if (user?.mustChangePassword) {
+      // Check forced initial password reset
+      if (sessionPayload?.mustChangePassword) {
         router.push("/change-password");
         return;
       }
 
-      // 1. Central Admin Routing Logic:
-      if (user?.role === "SUPER_ADMIN" || user?.userRole === "SUPER_ADMIN" || user?.isSuperAdmin || (isCentralLogin && !user?.schoolDomain)) {
-        const adminTarget = callbackUrl && !callbackUrl.includes("/login") ? callbackUrl : "/admin";
-        router.push(adminTarget);
+      // Explicit role & global SaaS context resolution
+      const rawRole = (sessionPayload?.role || sessionPayload?.userRole || "").toUpperCase();
+      const staffRole = (sessionPayload?.staffRole || "").toUpperCase();
+      const isDev = process.env.NODE_ENV !== "production";
+      const isSuperAdminUser =
+        rawRole === "SUPER_ADMIN" ||
+        Boolean(sessionPayload?.isSuperAdmin) ||
+        normalizedEmail === "bonaventure.chinoso@gmail.com" ||
+        normalizedEmail === "admin@bonaveeict.com.ng" ||
+        (isDev && normalizedEmail === "superadmin@platform.com");
+
+      // Respect explicit callback URL if specified and not a login loop
+      if (callbackUrl && !callbackUrl.includes("/login")) {
+        router.push(callbackUrl);
         return;
       }
 
-      // 2. Tenant Workspace Routing Logic:
-      const tenantSlug = targetDomain || user?.schoolDomain || trimmedSchoolCode || "york";
-      const canonicalRole = (user?.role || activeRoleTab || "").toUpperCase();
-      const staffRoleStr = (user?.staffRole || "").toUpperCase();
-      const isBursarRole =
-        canonicalRole === "BURSAR" ||
-        canonicalRole === "ACCOUNTANT" ||
-        staffRoleStr.includes("BURSAR") ||
-        staffRoleStr.includes("ACCOUNTANT") ||
-        staffRoleStr.includes("CASHIER") ||
-        staffRoleStr.includes("FINANCE");
-
-      const assignedTierParam = user?.assignedTier ? `?tier=${encodeURIComponent(user.assignedTier)}` : "";
-
-      if (canonicalRole === "STUDENT" || activeRoleTab === "student" || activeRoleTab === "parent") {
-        router.push(`/${tenantSlug}/portal/student${assignedTierParam}`);
-      } else if (canonicalRole === "STAFF" || canonicalRole === "TEACHER") {
-        router.push(`/${tenantSlug}/portal/staff${assignedTierParam}`);
-      } else if (isBursarRole) {
-        router.push("/bursar");
+      // Programmatic routing based on global SaaS context:
+      // - Global SaaS Layer Super Admins -> /dashboard/super-admin
+      // - Tenant Admins -> /dashboard/admin
+      // - School Staff/Teachers -> /dashboard/teacher
+      // - Students -> /dashboard/student
+      // - Parents -> /dashboard/parent
+      if (isSuperAdminUser || (!sessionPayload?.schoolDomain && !targetDomain && !rawRole)) {
+        router.push("/dashboard/super-admin");
+      } else if (
+        rawRole === "SCHOOL_ADMIN" ||
+        rawRole === "TENANT_ADMIN" ||
+        rawRole === "ADMIN" ||
+        rawRole === "PRINCIPAL" ||
+        rawRole === "VICE_PRINCIPAL" ||
+        rawRole === "HEADMASTER"
+      ) {
+        router.push("/dashboard/admin");
+      } else if (
+        rawRole === "TEACHER" ||
+        rawRole === "STAFF" ||
+        rawRole === "BURSAR" ||
+        rawRole === "ACCOUNTANT" ||
+        staffRole.includes("TEACHER") ||
+        staffRole.includes("STAFF")
+      ) {
+        router.push("/dashboard/teacher");
+      } else if (rawRole === "STUDENT") {
+        router.push("/dashboard/student");
+      } else if (rawRole === "PARENT") {
+        router.push("/dashboard/parent");
       } else {
-        router.push(`/${tenantSlug}/dashboard`);
+        router.push("/dashboard/admin");
       }
-
     } catch (err: any) {
-      setErrorMsg(err.message || "An unexpected error occurred. Please try again.");
+      showToast(err.message || "An unexpected error occurred during authentication.", "error");
       setIsSubmitting(false);
     }
   };
 
-  const platformOrSchoolName = formatTenantDisplayName(resolvedTenant);
+  const rawTenantName = tenantBranding?.name || (resolvedSubdomain ? resolvedSubdomain.charAt(0).toUpperCase() + resolvedSubdomain.slice(1) : "");
+  const visualTenantName =
+    !rawTenantName ||
+    rawTenantName.toLowerCase() === "demo" ||
+    rawTenantName.toLowerCase() === "localhost" ||
+    rawTenantName.toLowerCase() === "root" ||
+    rawTenantName.toLowerCase() === "default"
+      ? ""
+      : rawTenantName;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col lg:flex-row text-zinc-900 dark:text-zinc-100">
+    <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-600 selection:text-white">
       {/* ========================================================================= */}
-      {/* 2. LEFT SIDEBAR (40% Width) - BRANDING & VISUALS                          */}
+      {/* FLOATING ERROR / STATUS TOAST NOTIFICATION                                */}
+      {/* Decoupled from form markup so container flow never shifts                 */}
       {/* ========================================================================= */}
-      <div className="hidden lg:flex lg:w-[40%] flex-col justify-between p-10 xl:p-14 bg-zinc-100/70 dark:bg-zinc-900/40 border-r border-zinc-200 dark:border-zinc-800">
-        {/* Top: School / Platform Logo container */}
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center p-2 shadow-sm">
-            <Image
-              src="/img/business-logo.png"
-              alt="SchoolERP Logo"
-              width={28}
-              height={28}
-              className="h-full w-full object-contain"
-            />
+      {toastNotification && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-6 right-6 z-50 max-w-sm sm:max-w-md w-full animate-in fade-in slide-in-from-top-4 duration-300"
+        >
+          <div
+            className={`p-4 rounded-2xl shadow-xl border backdrop-blur-xl flex items-start gap-3 transition-all duration-200 ${
+              toastNotification.type === "error"
+                ? "bg-white/95 border-red-200 text-red-700 shadow-red-900/5"
+                : toastNotification.type === "success"
+                ? "bg-white/95 border-emerald-200 text-emerald-700 shadow-emerald-900/5"
+                : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-900/5"
+            }`}
+          >
+            {toastNotification.type === "error" ? (
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            ) : toastNotification.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+            ) : (
+              <Building2 className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 text-xs sm:text-sm font-medium leading-relaxed">
+              {toastNotification.message}
+            </div>
+            <button
+              type="button"
+              onClick={() => setToastNotification(null)}
+              className="text-slate-400 hover:text-slate-600 transition-colors duration-150 p-1 rounded-lg focus:outline-none"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <span className="font-semibold text-sm tracking-tight text-zinc-900 dark:text-zinc-100">
-            {platformOrSchoolName}
-          </span>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. LEFT PANEL (Light Architectural Theme - md:flex md:w-[60%])             */}
+      {/* High-end architectural tone, light geometric matrix, zero hardcoded stats  */}
+      {/* ========================================================================= */}
+      <div className="hidden md:flex md:w-[60%] min-h-screen relative overflow-hidden flex-col justify-between p-10 lg:p-14 xl:p-16 bg-[#F1F5F9] border-r border-slate-200/80 text-slate-900 select-none">
+        
+        {/* Minimalist Architectural Structural Grid Blueprint Pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000003_1px,transparent_1px),linear-gradient(to_bottom,#00000003_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
+        {/* Ambient subtle luminous glow accents for depth */}
+        <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 bg-slate-400/10 rounded-full blur-3xl" />
+
+        {/* Top-Left Master Brand Placement: Luxury Dark Navy Logo Capsule Container Badge */}
+        <div className="relative z-10">
+          <div className="bg-[#0B132B] border border-slate-800 px-4 py-2 rounded-xl text-white flex items-center shadow-lg w-fit">
+            {/* Crisp Vector SVG Icon Asset with proper bounding grid proportions */}
+            <svg
+              className="w-5 h-5 mr-2 text-indigo-400 fill-current shrink-0"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M12 3L1 9L12 15L21 10.09V17H23V9M5 13.18V17.18L12 21L19 17.18V13.18L12 17L5 13.18Z" />
+            </svg>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm tracking-tight text-white">
+                SchoolERP
+              </span>
+              <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">
+                ENTERPRISE CLOUD
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Middle: Platform/School Name & Subtitle */}
-        <div className="space-y-2 py-12">
-          <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {platformOrSchoolName}
-          </h1>
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            School Management System
-          </p>
-        </div>
-
-        {/* Bottom: Clean, Minimal Educational Illustration */}
-        <div className="pt-6">
-          <EducationalIllustration />
-        </div>
+        {/* Clean, minimalist architectural workspace - Zero hardcoded stats or grid blocks */}
+        <div className="relative z-10" />
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. RIGHT SIDEBAR (60% Width) - AUTONOMOUS AUTHENTICATION FORM             */}
+      {/* 2. RIGHT PANEL (Pristine Solid White Card - w-full md:w-[40%])            */}
+      {/* Pristine white surface, border-slate-100, shadow-2xl, rounded-2xl         */}
       {/* ========================================================================= */}
-      <div className="w-full lg:w-[60%] flex items-center justify-center p-4 sm:p-8 lg:p-12">
-        <div className="w-full max-w-md sm:max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 sm:p-8 space-y-6">
+      <div className="w-full md:w-[40%] min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative">
+        <div className="w-full max-w-[420px] mx-auto bg-white border border-slate-100 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
           
-          {/* Mobile Header (Shown on mobile screens when Left Sidebar is hidden) */}
-          <div className="lg:hidden flex items-center gap-2.5 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
-            <div className="h-8 w-8 rounded-lg bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center p-1.5 shadow-sm">
-              <Image
-                src="/img/business-logo.png"
-                alt="SchoolERP Logo"
-                width={20}
-                height={20}
-                className="h-full w-full object-contain"
-              />
+          {/* Header & Dynamic Branding Extraction */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              {/* Platform Core Logo / Structural Brand Graphic Asset */}
+              <div className="h-10 w-10 rounded-xl bg-[#0B132B] border border-slate-800 flex items-center justify-center p-2 shadow-sm ring-1 ring-slate-800/40">
+                <Building2 className="w-5 h-5 text-white stroke-white" />
+              </div>
+
+              {/* Tenant Specific School Logo Injection (ONLY rendered if visualTenantName is verified and non-empty) */}
+              {visualTenantName ? (
+                tenantBranding?.logo ? (
+                  <>
+                    <div className="h-6 w-px bg-slate-200" />
+                    <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1.5 overflow-hidden shadow-xs">
+                      <Image
+                        src={tenantBranding.logo}
+                        alt={`${visualTenantName} Logo`}
+                        width={30}
+                        height={30}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="h-6 w-px bg-slate-200" />
+                    <div className="h-10 px-3 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-700">
+                      <Building2 className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+                      <span className="truncate max-w-[140px]">{visualTenantName}</span>
+                    </div>
+                  </>
+                )
+              ) : null}
             </div>
+
             <div>
-              <span className="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 block">
-                {platformOrSchoolName}
-              </span>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
-                School Management System
-              </span>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                {visualTenantName ? `Sign in to access ${visualTenantName} workspace` : "Welcome back"}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                {visualTenantName
+                  ? "Sign in to your isolated school cluster node."
+                  : "Sign in to access your dashboard"}
+              </p>
             </div>
           </div>
 
-          {/* Form Header */}
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Sign In
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {resolvedTenant
-                ? `Enter your credentials for ${platformOrSchoolName}`
-                : "Select your role and enter your institutional credentials"}
-            </p>
-          </div>
-
-          {/* Error Alert Banner */}
-          {errorMsg && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 text-xs font-medium leading-relaxed">
-              {errorMsg}
-            </div>
-          )}
-
-          {/* 3.C Role Selector Tabs (Responsive grid, no overlap) */}
-          <div className="w-full max-w-full grid grid-cols-2 md:grid-cols-4 gap-2 p-1.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-zinc-500 dark:text-zinc-400 select-none">
-            {ROLE_CONFIGS.map((tab) => {
-              const isActive = activeRoleTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveRoleTab(tab.id);
-                    setErrorMsg("");
-                  }}
-                  className={`w-full text-xs sm:text-sm px-2 py-2.5 truncate whitespace-nowrap rounded-lg transition-all text-center flex items-center justify-center font-medium ${
-                    isActive
-                      ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 shadow-xs font-semibold"
-                      : "hover:text-zinc-900 dark:hover:text-zinc-100"
-                  }`}
-                >
-                  {tab.id === "admin" ? (
-                    <span className="truncate">
-                      <span className="hidden sm:inline">School </span>Admin
-                    </span>
-                  ) : (
-                    <span className="truncate">{tab.label}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 3.D Core Form Controls */}
-          <form onSubmit={handleCredentialsLogin} className="space-y-4">
+          {/* Core Tabless Unified Form */}
+          <form onSubmit={handleSignIn} className="space-y-5" noValidate>
             
-            {/* 1. Identifier Input (Email / Staff ID / Admission No / Phone) */}
-            <div className="space-y-1.5">
+            {/* 1. Modern Floating Label Email Input (Pure White Backdrop, Crisp Slate Border) */}
+            <div className="relative group">
+              <input
+                id="floating-email"
+                type="email"
+                name="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder=" "
+                autoComplete="email"
+                disabled={isSubmitting}
+                className="peer block w-full rounded-xl border border-slate-200 bg-white px-4 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
+              />
               <label
-                htmlFor="login-identifier"
-                className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                htmlFor="floating-email"
+                className="pointer-events-none absolute left-4 top-2 text-[11px] font-semibold text-slate-500 transition-all duration-200 ease-in-out peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-sm peer-placeholder-shown:font-normal peer-placeholder-shown:text-slate-400 peer-focus:top-2 peer-focus:text-[11px] peer-focus:font-semibold peer-focus:text-indigo-600"
               >
-                {currentRole.fieldLabel}
+                Email Address
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
-                  {activeRoleTab === "student" ? (
-                    <GraduationCap className="h-4 w-4" />
-                  ) : (
-                    <Mail className="h-4 w-4" />
-                  )}
-                </div>
-                <input
-                  id="login-identifier"
-                  type="text"
-                  required
-                  autoComplete="username"
-                  value={identifier}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIdentifier(e.target.value)}
-                  placeholder={effectivePlaceholder}
-                  className="flex h-10 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 pr-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 transition-colors"
-                />
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors duration-200">
+                <Mail className="w-4 h-4" />
               </div>
             </div>
 
-            {/* 2. Password Input */}
-            <div className="space-y-1.5">
+            {/* 2. Modern Floating Label Password Input */}
+            <div className="relative group">
+              <input
+                id="floating-password"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder=" "
+                autoComplete="current-password"
+                disabled={isSubmitting}
+                className="peer block w-full rounded-xl border border-slate-200 bg-white pl-4 pr-11 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
+              />
               <label
-                htmlFor="login-password"
-                className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                htmlFor="floating-password"
+                className="pointer-events-none absolute left-4 top-2 text-[11px] font-semibold text-slate-500 transition-all duration-200 ease-in-out peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-sm peer-placeholder-shown:font-normal peer-placeholder-shown:text-slate-400 peer-focus:top-2 peer-focus:text-[11px] peer-focus:font-semibold peer-focus:text-indigo-600"
               >
                 Password
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
-                  <Lock className="h-4 w-4" />
-                </div>
-                <input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="flex h-10 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 pr-10 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors duration-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
-            {/* 3. Optional School Code Input (Shown only when NOT on a tenant subdomain/query param) */}
-            {!resolvedTenant && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="login-school-code"
-                    className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
-                  >
-                    School Code
-                  </label>
-                  <span className="text-[11px] text-zinc-400">Optional for Central Admins</span>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <input
-                    id="login-school-code"
-                    type="text"
-                    autoComplete="organization"
-                    value={schoolCodeInput}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setSchoolCodeInput(e.target.value.toLowerCase())
-                    }
-                    placeholder="e.g. demo"
-                    className="flex h-10 w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 pl-9 pr-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 transition-colors"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 4. Form Footer Row: Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between text-xs pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200">
+            {/* Remember Me & Forgot Password Row */}
+            <div className="flex items-center justify-between text-xs pt-0.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 hover:text-slate-900 transition-colors duration-150">
                 <input
                   type="checkbox"
                   checked={rememberMe}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-950 dark:focus:ring-zinc-300 bg-white dark:bg-zinc-950 transition"
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isSubmitting}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 bg-white transition duration-150 cursor-pointer"
                 />
-                <span>Remember me</span>
+                <span className="font-medium">Remember me</span>
               </label>
               <Link
                 href={
-                  resolvedTenant
-                    ? `/${resolvedTenant}/forgot-password`
-                    : schoolCodeInput.trim()
-                    ? `/${schoolCodeInput.trim().toLowerCase()}/forgot-password`
+                  resolvedSubdomain
+                    ? `/${resolvedSubdomain}/forgot-password`
                     : "/forgot-password"
                 }
-                className="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium transition-colors"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors duration-150"
               >
-                Forgot Password?
+                Forgot password?
               </Link>
             </div>
 
-            {/* 5. Action Button: shadcn styled Primary Button */}
+            {/* Sign In Action Button with Spinner */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full h-10 px-4 py-2 mt-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 text-zinc-50 dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:active:bg-zinc-300 dark:text-zinc-900 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 disabled:pointer-events-none disabled:opacity-50 cursor-pointer shadow-sm"
+              className="bg-[#0B132B] hover:bg-[#1C2541] active:bg-slate-900 text-white font-semibold transition-all duration-200 shadow-xl rounded-xl w-full py-3 mt-2 inline-flex items-center justify-center gap-2 focus:outline-none focus:ring-4 focus:ring-slate-900/10 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>Signing in...</span>
                 </>
               ) : (
@@ -687,25 +714,33 @@ function UniversalLoginPageContent() {
             </button>
           </form>
 
+          {/* Bottom Security Note */}
+          <div className="pt-4 border-t border-slate-200/80 text-center">
+            <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+              <Lock className="w-3 h-3 text-slate-400" />
+              <span>Protected by 256-bit institutional encryption layer</span>
+            </p>
+          </div>
+
         </div>
       </div>
     </div>
   );
 }
 
-export default function UniversalLoginPage() {
+export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center text-zinc-400 gap-3">
-          <Loader2 className="w-6 h-6 text-zinc-600 dark:text-zinc-400 animate-spin" />
-          <span className="text-xs font-medium tracking-wide text-zinc-500">
-            Initializing login...
+        <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center text-slate-400 gap-3">
+          <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+          <span className="text-xs font-medium tracking-wide text-slate-500">
+            Initializing secure gateway...
           </span>
         </div>
       }
     >
-      <UniversalLoginPageContent />
+      <LoginPageContent />
     </Suspense>
   );
 }
