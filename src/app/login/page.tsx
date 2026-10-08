@@ -534,23 +534,24 @@ function LoginPageContent() {
         <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 bg-slate-400/10 rounded-full blur-3xl" />
 
-        {/* Top-Left Master Brand Placement: Luxury Dark Navy Logo Capsule Container Badge */}
+        {/* Top-Left Master Brand Placement: Clean Architectural Brand Header */}
         <div className="relative z-10">
-          <div className="bg-[#0B132B] border border-slate-800 px-4 py-2 rounded-xl text-white flex items-center shadow-lg w-fit">
-            {/* Crisp Vector SVG Icon Asset with proper bounding grid proportions */}
-            <svg
-              className="w-5 h-5 mr-2 text-indigo-400 fill-current shrink-0"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M12 3L1 9L12 15L21 10.09V17H23V9M5 13.18V17.18L12 21L19 17.18V13.18L12 17L5 13.18Z" />
-            </svg>
+          <div className="flex items-center gap-3 w-fit">
+            {/* Small square box/badge containing corporate logo with matching curved border radius */}
+            <div className="h-10 w-10 rounded-xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center p-1.5 overflow-hidden">
+              <Image
+                src="/img/business-logo.png"
+                alt="SchoolERP Logo"
+                width={32}
+                height={32}
+                className="w-full h-full object-contain rounded-lg"
+              />
+            </div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-white">
+              <span className="font-extrabold text-lg md:text-xl tracking-tight text-slate-900">
                 SchoolERP
               </span>
-              <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200/60 border border-slate-300/40">
                 ENTERPRISE CLOUD
               </span>
             </div>
@@ -571,9 +572,15 @@ function LoginPageContent() {
           {/* Header & Dynamic Branding Extraction */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              {/* Platform Core Logo / Structural Brand Graphic Asset */}
-              <div className="h-10 w-10 rounded-xl bg-[#0B132B] border border-slate-800 flex items-center justify-center p-2 shadow-sm ring-1 ring-slate-800/40">
-                <Building2 className="w-5 h-5 text-white stroke-white" />
+              {/* Platform Core Logo - Clean High-Definition Display with Smooth Border Radius */}
+              <div className="h-11 w-11 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-center p-1 overflow-hidden">
+                <Image
+                  src="/img/business-logo.png"
+                  alt="SchoolERP Logo"
+                  width={44}
+                  height={44}
+                  className="w-full h-full object-contain rounded-xl"
+                />
               </div>
 
               {/* Tenant Specific School Logo Injection (ONLY rendered if visualTenantName is verified and non-empty) */}
