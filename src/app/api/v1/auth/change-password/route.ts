@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
-import { changeUserPassword } from "@/lib/security-service";
+import { changeUserPassword, completePasswordReset, verifyPasswordResetToken } from "@/lib/security-service";
+import { basePrisma } from "@/lib/tenant-prisma";
 import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
-  getSecureCookieOptions,
 } from "@/lib/session-manager";
 import {
   signAccessToken,
   issueRefreshToken,
-  getRefreshTokenCookieOptions,
-  getAccessTokenCookieOptions,
   REFRESH_TOKEN_COOKIE_NAME,
   ACCESS_TOKEN_COOKIE_NAME,
 } from "@/lib/dual-token";
@@ -22,11 +20,99 @@ const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { oldPassword, currentPassword, newPassword, confirmPassword } = body;
+    const {
+      oldPassword,
+      currentPassword,
+      newPassword,
+      confirmPassword,
+      resetToken,
+      token: bodyToken,
+      schoolDomain,
+    } = body;
+
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
     const userAgent = req.headers.get("user-agent") || "unknown";
 
-    // 1. Resolve session token from cookies or authorization header
+    // Extract active tenant context from request parameters or headers
+    const headerTenantSlug = req.headers.get("x-tenant-slug");
+    const targetDomain = (schoolDomain || headerTenantSlug || "").trim().toLowerCase();
+
+    // =========================================================================
+    // CASE A: PASSWORD RESET VIA RECOVERY TOKEN
+    // =========================================================================
+    const activeRecoveryToken = resetToken || (!oldPassword && !currentPassword ? bodyToken : undefined);
+    if (activeRecoveryToken) {
+      if (!newPassword || !confirmPassword) {
+        return NextResponse.json(
+          { error: "New password and confirmation password are required.", code: "FIELDS_REQUIRED" },
+          { status: 400 }
+        );
+      }
+
+      if (newPassword !== confirmPassword) {
+        return NextResponse.json(
+          { error: "New password and confirmation password do not match.", code: "PASSWORD_MISMATCH" },
+          { status: 400 }
+        );
+      }
+
+      // Verify the recovery token signature with tenant domain verification
+      const tokenVerification = await verifyPasswordResetToken(activeRecoveryToken, targetDomain || undefined);
+      if (!tokenVerification.valid || !tokenVerification.userId) {
+        return NextResponse.json(
+          { error: tokenVerification.error || "Invalid, expired, or tenant-mismatched recovery token.", code: "INVALID_TOKEN" },
+          { status: 400 }
+        );
+      }
+
+      // Cross-Tenant Prevention: Verify tenant lock for standard users
+      const tokenSchoolId = tokenVerification.schoolId;
+      const isSuperAdminToken =
+        tokenSchoolId === "global-saas" ||
+        Boolean(await basePrisma.superAdmin.findUnique({ where: { id: tokenVerification.userId } }).catch(() => null)) ||
+        Boolean(await basePrisma.platformAdmin.findUnique({ where: { id: tokenVerification.userId } }).catch(() => null));
+
+      if (targetDomain && tokenSchoolId && !isSuperAdminToken) {
+        const targetSchool = await basePrisma.school.findFirst({
+          where: {
+            OR: [
+              { subdomain: targetDomain },
+              { slug: targetDomain },
+            ],
+            isActive: true,
+          },
+          select: { id: true, subdomain: true, slug: true },
+        });
+
+        if (!targetSchool || targetSchool.id !== tokenSchoolId) {
+          return NextResponse.json(
+            {
+              error: "Cross-tenant security violation: This password recovery token belongs to a different school tenant.",
+              code: "CROSS_TENANT_VIOLATION",
+            },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Complete reset
+      const resetResult = await completePasswordReset(activeRecoveryToken, newPassword, clientIp);
+      if (!resetResult.success) {
+        return NextResponse.json(
+          { error: resetResult.error || "Failed to update password.", code: "RESET_FAILED" },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Your password has been successfully reset. You may now sign in with your updated credentials.",
+      });
+    }
+
+    // =========================================================================
+    // CASE B: AUTHENTICATED SESSION PASSWORD CHANGE
+    // =========================================================================
     let cookieToken: string | undefined = undefined;
     try {
       const cookieStore = await cookies();
@@ -37,7 +123,7 @@ export async function POST(req: Request) {
     } catch {}
 
     const authHeader = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-    const token = cookieToken || authHeader;
+    const token = cookieToken || authHeader || bodyToken;
 
     let userId = "";
     let schoolId = "global-saas";
@@ -50,7 +136,7 @@ export async function POST(req: Request) {
         payload = verified.payload;
         userId = (payload.userId || payload.sub || payload.id) as string;
         schoolId = (payload.schoolId || payload.tenantId || "global-saas") as string;
-        role = (payload.role as string) || "STAFF";
+        role = (payload.role || payload.userRole || "STAFF") as string;
       } catch {
         return NextResponse.json(
           { error: "Your session has expired. Please sign in again.", code: "SESSION_EXPIRED" },
@@ -58,7 +144,6 @@ export async function POST(req: Request) {
         );
       }
     } else if (body.userId || body.email) {
-      const { basePrisma } = await import("@/lib/tenant-prisma");
       if (body.userId) {
         const user = await basePrisma.user.findUnique({ where: { id: body.userId } });
         if (user) {
@@ -103,7 +188,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Execute authoritative password change
+    // =========================================================================
+    // THE SUPER ADMIN "GOLDEN KEY" & TENANT SCOPE CHECK
+    // =========================================================================
+    const isSuperAdmin =
+      role.toUpperCase() === "SUPER_ADMIN" ||
+      Boolean(payload?.isSuperAdmin) ||
+      Boolean(await basePrisma.superAdmin.findUnique({ where: { id: userId } }).catch(() => null));
+
+    // Standard Users: Enforce strict tenant isolation against target domain
+    if (targetDomain && !isSuperAdmin && schoolId && schoolId !== "global-saas") {
+      const targetSchool = await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: targetDomain },
+            { slug: targetDomain },
+          ],
+          isActive: true,
+        },
+        select: { id: true, subdomain: true, slug: true },
+      });
+
+      if (!targetSchool || targetSchool.id !== schoolId) {
+        return NextResponse.json(
+          {
+            error: "Cross-tenant security violation: You are not authorized to perform actions in this school domain.",
+            code: "CROSS_TENANT_VIOLATION",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Execute authoritative password change
     const result = await changeUserPassword({
       userId,
       schoolId: schoolId || "global-saas",
@@ -121,10 +238,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Issue updated session token, access token, and refresh token with mustChangePassword = false
+    // Issue updated session tokens with mustChangePassword = false
     const updatedPayload = {
       ...payload,
       mustChangePassword: false,
+      role: isSuperAdmin ? "SUPER_ADMIN" : role,
+      isSuperAdmin,
     };
     delete (updatedPayload as any).exp;
     delete (updatedPayload as any).nbf;
@@ -139,9 +258,9 @@ export async function POST(req: Request) {
     const newAccessToken = await signAccessToken({
       userId,
       schoolId: schoolId || "global-saas",
-      role,
-      email: payload.email || undefined,
-      isSuperAdmin: Boolean(payload.isSuperAdmin || role === "SUPER_ADMIN"),
+      role: isSuperAdmin ? "SUPER_ADMIN" : role,
+      email: payload?.email || undefined,
+      isSuperAdmin,
       mustChangePassword: false,
     });
 
@@ -154,31 +273,35 @@ export async function POST(req: Request) {
 
     const response = NextResponse.json({
       success: true,
-      message: "Password updated successfully. Other active sessions have been securely logged out.",
+      message: "Password updated successfully. Other active sessions have been securely terminated.",
       mustChangePassword: false,
       accessToken: newAccessToken,
-      role,
-      schoolDomain: payload.schoolDomain || undefined,
+      role: isSuperAdmin ? "SUPER_ADMIN" : role,
+      schoolDomain: payload?.schoolDomain || targetDomain || undefined,
     });
 
-    // Update all authentication cookies
-    response.cookies.set(
-      SESSION_COOKIE_NAME,
-      newSessionToken,
-      getSecureCookieOptions(SESSION_MAX_AGE_SECONDS)
-    );
+    // Enforce absolute secure transport flags (HttpOnly, Secure, SameSite=Lax)
+    const baseSecureCookieOptions = {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax" as const,
+      path: "/",
+    };
 
-    response.cookies.set(
-      ACCESS_TOKEN_COOKIE_NAME,
-      newAccessToken,
-      getAccessTokenCookieOptions()
-    );
+    response.cookies.set(SESSION_COOKIE_NAME, newSessionToken, {
+      ...baseSecureCookieOptions,
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
 
-    response.cookies.set(
-      REFRESH_TOKEN_COOKIE_NAME,
-      rawRefreshToken,
-      getRefreshTokenCookieOptions()
-    );
+    response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, newAccessToken, {
+      ...baseSecureCookieOptions,
+      maxAge: 15 * 60,
+    });
+
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, {
+      ...baseSecureCookieOptions,
+      maxAge: 7 * 24 * 60 * 60,
+    });
 
     return response;
   } catch (error: any) {

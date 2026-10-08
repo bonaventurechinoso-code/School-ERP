@@ -10,12 +10,20 @@ export default async function TenantForgotPasswordPage({
 }) {
   const { schoolDomain } = await paramsPromise;
 
+  if (!schoolDomain) {
+    return notFound();
+  }
+
+  const normalizedDomain = schoolDomain.toLowerCase().trim();
+
   const school = await basePrisma.school.findFirst({
     where: {
       OR: [
-        { subdomain: schoolDomain.toLowerCase().trim() },
-        { slug: schoolDomain.toLowerCase().trim() },
+        { subdomain: normalizedDomain },
+        { slug: normalizedDomain },
       ],
+      isActive: true,
+      deletedAt: null,
     },
   });
 
@@ -24,12 +32,14 @@ export default async function TenantForgotPasswordPage({
   }
 
   const brandColor = (school as any)?.branding?.primaryColor || "#3b82f6";
+  const schoolLogo = (school as any)?.logo || (school as any)?.branding?.logoUrl || undefined;
 
   return (
     <ForgotPasswordFormClient
       schoolName={school.name}
-      schoolDomain={school.subdomain}
+      schoolDomain={school.subdomain || school.slug || normalizedDomain}
       brandColor={brandColor}
+      schoolLogo={schoolLogo}
     />
   );
 }

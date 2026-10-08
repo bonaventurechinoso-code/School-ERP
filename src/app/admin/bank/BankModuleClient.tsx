@@ -55,17 +55,22 @@ export default function BankModuleClient({
   estimatedMrr,
   tenants,
   recentTransactions,
+  currentTenantId,
+  isSuperAdmin = true,
 }: {
   initialPlatformBank: PlatformBankConfigData;
   wallet: { balance: number; totalRevenue: number };
   estimatedMrr: number;
   tenants: BankModuleTenant[];
   recentTransactions: BankModuleTransaction[];
+  currentTenantId?: string;
+  isSuperAdmin?: boolean;
 }) {
   const [platformBank, setPlatformBank] = useState<PlatformBankConfigData>(initialPlatformBank);
   const [selectedBankCode, setSelectedBankCode] = useState(initialPlatformBank.bankCode || "035");
   const [accountNumber, setAccountNumber] = useState(initialPlatformBank.accountNumber || "0123456789");
   const [accountName, setAccountName] = useState(initialPlatformBank.accountName || "BonaVee ICT Corporate");
+  const [activeTenantWorkspaceFilter, setActiveTenantWorkspaceFilter] = useState<string>(currentTenantId || "ALL");
 
   // Searchable bank dropdown state
   const [bankSearch, setBankSearch] = useState("");
@@ -166,6 +171,13 @@ export default function BankModuleClient({
 
   const handleSaveBank = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard: Only Super Admins can alter platform corporate bank settlement parameters
+    if (!isSuperAdmin) {
+      showToast("error", "Security Guard: Only Global SaaS Super Administrators can configure platform corporate settlement parameters.");
+      return;
+    }
+
     if (!isValidNubanAccountNumber(accountNumber)) {
       showToast("error", "Account number must be exactly 10 digits.");
       return;
@@ -198,6 +210,21 @@ export default function BankModuleClient({
 
   const handleConfirmVerification = () => {
     if (!verifyModal.tenant) return;
+
+    // Cross-tenant prevention: enforce tenant isolation
+    const effectiveScope = currentTenantId || (activeTenantWorkspaceFilter !== "ALL" ? activeTenantWorkspaceFilter : null);
+    if (
+      effectiveScope &&
+      verifyModal.tenant.id !== effectiveScope &&
+      verifyModal.tenant.subdomain.toLowerCase() !== effectiveScope.toLowerCase()
+    ) {
+      showToast(
+        "error",
+        "Cross-tenant security violation: You cannot verify or execute subscription payments outside your isolated school workspace node."
+      );
+      return;
+    }
+
     startProcessingSub(async () => {
       const res = await verifyTenantManualSubscriptionAction({
         tenantId: verifyModal.tenant!.id,
@@ -237,8 +264,15 @@ export default function BankModuleClient({
     });
   };
 
-  // Filter Tenants
-  const filteredTenants = tenants.filter((t) => {
+  // Enforce Tenant Isolation: If currentTenantId is provided or filter is selected, strictly scope tenant rows
+  const effectiveScope = currentTenantId || (activeTenantWorkspaceFilter !== "ALL" ? activeTenantWorkspaceFilter : null);
+
+  const isolatedTenants = tenants.filter((t) => {
+    if (!effectiveScope) return true;
+    return t.id === effectiveScope || t.subdomain.toLowerCase() === effectiveScope.toLowerCase();
+  });
+
+  const filteredTenants = isolatedTenants.filter((t) => {
     const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -247,6 +281,17 @@ export default function BankModuleClient({
       t.subdomain.toLowerCase().includes(q) ||
       t.adminEmail.toLowerCase().includes(q);
     return matchesStatus && matchesSearch;
+  });
+
+  // Similarly isolate transaction ledger to the active tenant workspace node
+  const isolatedTransactions = recentTransactions.filter((tx) => {
+    if (!effectiveScope) return true;
+    const targetTenant = tenants.find((t) => t.id === effectiveScope || t.subdomain.toLowerCase() === effectiveScope.toLowerCase());
+    const tenantIdentifier = targetTenant?.subdomain?.toLowerCase() || effectiveScope.toLowerCase();
+    return (
+      (tx.tenantName && tx.tenantName.toLowerCase().includes(tenantIdentifier)) ||
+      tx.reference.toLowerCase().includes(tenantIdentifier)
+    );
   });
 
   return (
@@ -289,6 +334,27 @@ export default function BankModuleClient({
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Workspace Node Filter for Super Admins */}
+          {!currentTenantId && isSuperAdmin && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Workspace Node:
+              </span>
+              <select
+                value={activeTenantWorkspaceFilter}
+                onChange={(e) => setActiveTenantWorkspaceFilter(e.target.value)}
+                className="text-xs font-semibold py-1.5 px-3 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 focus:outline-none"
+              >
+                <option value="ALL">Global (All Tenants)</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.schoolName} ({t.subdomain})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={() => setDepositModal({ isOpen: true, amount: 50000, reference: "", narration: "" })}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition"
@@ -298,6 +364,36 @@ export default function BankModuleClient({
           </button>
         </div>
       </div>
+
+      {/* Strict Tenant Workspace Node Isolation Quarantine Banner */}
+      {effectiveScope && (
+        <div className="p-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/80 dark:bg-indigo-950/30 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider text-[11px]">
+                  Isolated School Workspace Node:
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {tenants.find((t) => t.id === effectiveScope || t.subdomain.toLowerCase() === effectiveScope.toLowerCase())?.schoolName || effectiveScope}
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300 mt-0.5">
+                All fee collections, subscriptions, and financial logs are strictly quarantined. Cross-tenant leakage is strictly blocked.
+              </p>
+            </div>
+          </div>
+          {!currentTenantId && (
+            <button
+              onClick={() => setActiveTenantWorkspaceFilter("ALL")}
+              className="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline shrink-0"
+            >
+              Reset to Global Fleet View
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Platform Info Banner */}
       <div className="p-4 sm:p-5 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-zinc-900 shadow-xs flex items-start gap-4">
@@ -674,14 +770,14 @@ export default function BankModuleClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-              {recentTransactions.length === 0 ? (
+              {isolatedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-xs">
-                    No transactions recorded yet.
+                    No transactions recorded for this workspace node yet.
                   </td>
                 </tr>
               ) : (
-                recentTransactions.map((tx) => (
+                isolatedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/40 transition">
                     <td className="px-4 py-3 font-mono font-semibold text-slate-900 dark:text-white">
                       {tx.reference}

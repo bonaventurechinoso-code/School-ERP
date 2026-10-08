@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { updateSchoolWithTiers } from "./actions";
-import { X, Building, Check, CheckSquare, Square, Layers, AlertCircle, Phone, Info, Database } from "lucide-react";
+import { X, Building, Check, CheckSquare, Square, Layers, AlertCircle, Phone, Info, Database, ShieldCheck, Lock } from "lucide-react";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 
 interface AcademicTierItem {
@@ -19,6 +19,7 @@ interface EditSchoolProps {
     academicTiers: AcademicTierItem[];
   };
   trigger?: React.ReactNode;
+  isSuperAdmin?: boolean;
 }
 
 interface TierOption {
@@ -95,13 +96,13 @@ function matchesTierOption(tierName: string, optionId: string): boolean {
   }
 }
 
-export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
+export default function EditSchoolModal({ school, trigger, isSuperAdmin = true }: EditSchoolProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [simulationNotice, setSimulationNotice] = useState<string | null>(null);
 
-  // Form State
+  // Form State (Front-Facing Metadata)
   const [schoolName, setSchoolName] = useState(school.name);
   const [contactPhone, setContactPhone] = useState(school.contactPhone || "");
   const [selectedTierIds, setSelectedTierIds] = useState<string[]>([]);
@@ -138,6 +139,10 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
   // Toggle selection for a given tier
   const handleToggleTier = (tierId: string) => {
     setErrorMessage(null);
+    if (!isSuperAdmin) {
+      setErrorMessage("Meta Configuration Shield: Only Global SaaS Super Administrators are authorized to alter academic tiers and database partition mappings.");
+      return;
+    }
     if (selectedTierIds.includes(tierId)) {
       if (selectedTierIds.length <= 1) {
         setErrorMessage("At least one Institution Type / Tier must remain selected for this tenant.");
@@ -150,11 +155,16 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
   };
 
   const handleSelectAll = () => {
+    if (!isSuperAdmin) {
+      setErrorMessage("Meta Configuration Shield: Only Global SaaS Super Administrators can alter academic tiers.");
+      return;
+    }
     setSelectedTierIds(AVAILABLE_TIER_OPTIONS.map(o => o.id));
     setErrorMessage(null);
   };
 
   const handleResetToOriginal = () => {
+    if (!isSuperAdmin) return;
     const matched = AVAILABLE_TIER_OPTIONS
       .filter(opt => (school.academicTiers || []).some(t => matchesTierOption(t.name, opt.id)))
       .map(opt => opt.id);
@@ -171,7 +181,7 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
       return;
     }
 
-    if (selectedTierIds.length === 0) {
+    if (isSuperAdmin && selectedTierIds.length === 0) {
       setErrorMessage("Please select at least one Institution Type / Tier.");
       return;
     }
@@ -180,19 +190,26 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
     setErrorMessage(null);
     setSimulationNotice(null);
 
-    // Build tier payload with proper display names and preserving IDs where possible
-    const tiersToSubmit = selectedTierIds.map(id => {
-      const option = AVAILABLE_TIER_OPTIONS.find(o => o.id === id);
-      const existing = (school.academicTiers || []).find(t => matchesTierOption(t.name, id));
-      return {
-        id: existing?.id,
-        name: option ? option.label : id,
-      };
-    });
+    // META CONFIGURATION SHIELD:
+    // Only Global SaaS Super Admins can alter critical infrastructure parameters (tiers and schema partitions).
+    // Local tenant admins are restricted to modifying basic front-facing metadata variables.
+    const tiersToSubmit = isSuperAdmin
+      ? selectedTierIds.map(id => {
+          const option = AVAILABLE_TIER_OPTIONS.find(o => o.id === id);
+          const existing = (school.academicTiers || []).find(t => matchesTierOption(t.name, id));
+          return {
+            id: existing?.id,
+            name: option ? option.label : id,
+          };
+        })
+      : (school.academicTiers || []).map(t => ({
+          id: t.id,
+          name: t.name,
+        }));
 
     const res = await updateSchoolWithTiers(school.id, {
-      name: schoolName,
-      contactPhone: contactPhone || null,
+      name: schoolName.trim(),
+      contactPhone: contactPhone ? contactPhone.trim() : null,
       tiers: tiersToSubmit,
     });
 
@@ -203,7 +220,6 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
     } else {
       if (res?.simulated) {
         setSimulationNotice(res.warning || "Saved in safe test-simulation mode.");
-        // Give the user a moment to see the safe fallback indicator before closing
         setTimeout(() => {
           setIsOpen(false);
         }, 1200);
@@ -273,6 +289,22 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
               </div>
             )}
 
+            {/* Meta Configuration Shield Banner */}
+            {!isSuperAdmin ? (
+              <div className="mx-6 mt-4 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong className="block font-bold">Meta Configuration Shield Active</strong>
+                  Critical infrastructure parameters (Academic Tiers &amp; Multi-Tier Database Partitioning) are restricted to Global SaaS Super Administrators. As a local tenant administrator, you are authorized to update basic front-facing metadata (School Name &amp; Contact Phone).
+                </div>
+              </div>
+            ) : (
+              <div className="mx-6 mt-4 p-2.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center gap-2 text-xs text-indigo-900 dark:text-indigo-200">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-indigo-600" />
+                <span className="font-semibold">Global SaaS Super Admin Clearance: Full Infrastructure &amp; Tier Configuration Unlocked</span>
+              </div>
+            )}
+
             {/* Error message banner */}
             {errorMessage && (
               <div className="mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
@@ -284,7 +316,7 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
             {/* Scrollable Form Body */}
             <form onSubmit={handleSave} className="p-6 space-y-6 overflow-y-auto flex-1">
               
-              {/* Tenant Profile Fields */}
+              {/* Tenant Profile Fields (Front-Facing Metadata) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">
@@ -338,37 +370,47 @@ export default function EditSchoolModal({ school, trigger }: EditSchoolProps) {
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-indigo-500" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-wider">
-                        Institution Type / Tier Type Options ({selectedTierIds.length} Selected)
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <span>Institution Type / Tier Type Options ({selectedTierIds.length} Selected)</span>
+                        {!isSuperAdmin && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-900/30 px-2 py-0.5 rounded-md border border-amber-300 dark:border-amber-800">
+                            <Lock className="w-3 h-3" />
+                            Shielded
+                          </span>
+                        )}
                       </h4>
                       <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                        Check or uncheck the educational tiers offered by this school.
+                        {isSuperAdmin
+                          ? "Check or uncheck the educational tiers offered by this school."
+                          : "Tier infrastructure is shielded. Only Global Super Admins can reconfigure database tiers."}
                       </p>
                     </div>
                   </div>
 
-                  {/* Quick toggle actions */}
-                  <div className="flex items-center gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={handleSelectAll}
-                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium text-[11px] cursor-pointer"
-                    >
-                      Select All
-                    </button>
-                    <span className="text-slate-300 dark:text-zinc-700">•</span>
-                    <button
-                      type="button"
-                      onClick={handleResetToOriginal}
-                      className="text-slate-500 dark:text-zinc-400 hover:underline text-[11px] cursor-pointer"
-                    >
-                      Reset
-                    </button>
-                  </div>
+                  {/* Quick toggle actions (Super Admin Only) */}
+                  {isSuperAdmin ? (
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={handleSelectAll}
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium text-[11px] cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300 dark:text-zinc-700">•</span>
+                      <button
+                        type="button"
+                        onClick={handleResetToOriginal}
+                        className="text-slate-500 dark:text-zinc-400 hover:underline text-[11px] cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Grid of Checkbox Cards */}
-                <div className="space-y-2.5">
+                <div className={`space-y-2.5 ${!isSuperAdmin ? "opacity-60 cursor-not-allowed pointer-events-none select-none" : ""}`}>
                   {AVAILABLE_TIER_OPTIONS.map((option) => {
                     const isChecked = selectedTierIds.includes(option.id);
                     return (

@@ -3,20 +3,21 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, Building2, KeyRound } from "lucide-react";
-
+import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, KeyRound, Building2 } from "lucide-react";
 import { customFetch } from "@/lib/api-client";
 
 interface ForgotPasswordFormClientProps {
   schoolName: string;
   schoolDomain: string;
   brandColor?: string;
+  schoolLogo?: string;
 }
 
 export default function ForgotPasswordFormClient({
   schoolName,
   schoolDomain,
   brandColor = "#3b82f6",
+  schoolLogo,
 }: ForgotPasswordFormClientProps) {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +31,7 @@ export default function ForgotPasswordFormClient({
 
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
-      setErrorMsg("Please provide your institutional email address.");
+      setErrorMsg("Please provide your registered institutional email address.");
       return;
     }
 
@@ -66,112 +67,148 @@ export default function ForgotPasswordFormClient({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-3 sm:p-4 selection:bg-blue-900">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 animate-in fade-in zoom-in-95 duration-500">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-3">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-indigo-100">
+      {/* Background Architectural Glows */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-slate-300/20 rounded-full blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Brand Header */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="h-10 w-10 rounded-xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center p-1.5 overflow-hidden">
             <Image
               src="/img/business-logo.png"
-              alt="School ERP"
-              width={28}
-              height={28}
-              className="w-7 h-7 rounded-lg object-contain"
+              alt="SchoolERP Logo"
+              width={32}
+              height={32}
+              className="w-full h-full object-contain rounded-lg"
             />
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              School ERP Platform
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-lg tracking-tight text-slate-900">
+              SchoolERP
+            </span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200/60 border border-slate-300/40">
+              ENTERPRISE CLOUD
             </span>
           </div>
-          <div
-            className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm"
-            style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
-          >
-            <KeyRound className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Forgot Password</h1>
-          <p className="text-slate-400 text-sm mt-2 font-medium">
-            Account recovery for {schoolName}
-          </p>
         </div>
 
-        {errorMsg && (
-          <div className="mb-6 p-4 bg-red-950/50 border border-red-900 rounded-xl text-red-400 text-sm text-center font-medium flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {isSubmitted ? (
-          <div className="space-y-6 text-center animate-in fade-in duration-300">
-            <div className="p-6 bg-slate-950 border border-emerald-900/60 rounded-2xl space-y-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-950/80 text-emerald-400 mx-auto flex items-center justify-center border border-emerald-800">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <h2 className="text-base font-bold text-white">Recovery Email Dispatched</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                If an account associated with <span className="text-white font-medium">{submittedEmail}</span> is registered with {schoolName}, you will receive a password reset link within a few moments.
-              </p>
-              <p className="text-[11px] text-slate-500">
-                The recovery link is strictly valid for 15 minutes. Be sure to check your spam/junk folder.
+        {/* Main Card */}
+        <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 sm:p-8 md:p-10 animate-in fade-in zoom-in-95 duration-300">
+          {/* Header Info */}
+          <div className="text-center mb-6">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200/80 flex items-center justify-center mb-4 text-slate-800 shadow-xs">
+              <KeyRound className="w-7 h-7 text-indigo-900" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Forgot Password
+            </h1>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-600">
+                {schoolName} <span className="font-mono text-slate-400">({schoolDomain})</span>
               </p>
             </div>
-
-            <Link
-              href={`/${schoolDomain}/login`}
-              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm text-white transition-all shadow-md"
-              style={{ backgroundColor: brandColor }}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Return to School Login</span>
-            </Link>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Enter your registered institutional email address. We will verify your account and transmit a secure, time-limited password recovery link.
-            </p>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-300 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-500" />
+          {/* User Error Toast / Banner */}
+          {errorMsg && (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200/90 rounded-2xl text-rose-800 text-xs font-medium flex items-start gap-3 animate-in fade-in duration-200 shadow-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1 leading-relaxed">
+                <span className="font-bold block text-rose-900">Recovery Error</span>
+                {errorMsg}
+              </div>
+            </div>
+          )}
+
+          {isSubmitted ? (
+            <div className="space-y-6 text-center animate-in fade-in duration-300">
+              <div className="p-6 bg-slate-50 border border-emerald-200 rounded-2xl space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center border border-emerald-300">
+                  <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="staff@school.edu or student@school.edu"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:border-transparent transition-all shadow-inner text-sm"
-                  style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
-                />
+                <h2 className="text-base font-bold text-slate-900">Recovery Instructions Sent</h2>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  If an account associated with <strong className="text-slate-900 font-semibold">{submittedEmail}</strong> is enrolled at <strong className="text-slate-900">{schoolName}</strong>, a secure password recovery link has been dispatched.
+                </p>
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                  The recovery link is valid for a maximum of 1 hour. Please check your inbox and spam folder.
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 py-3.5 text-white rounded-xl font-bold text-sm transition-all shadow-lg hover:shadow-xl disabled:opacity-70"
-              style={{ backgroundColor: brandColor }}
-            >
-              {isSubmitting ? "Verifying & Sending..." : "Send Reset Link"}
-              {!isSubmitting && <ArrowRight className="w-4 h-4" />}
-            </button>
-
-            <div className="text-center pt-2">
               <Link
                 href={`/${schoolDomain}/login`}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-[#0B132B] hover:bg-[#152244] transition-all shadow-md"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Return to Login</span>
+                <ArrowLeft className="w-4 h-4" />
+                <span>Return to School Login</span>
               </Link>
             </div>
-          </form>
-        )}
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Enter your registered institutional email address. We will verify your tenant credentials and transmit a secure, single-use recovery link.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Institutional Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. staff@institution.edu or student@institution.edu"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600 transition-all text-sm shadow-2xs font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Clean Dark Navy Primary Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 text-white rounded-xl font-bold text-sm bg-[#0B132B] hover:bg-[#152244] active:scale-[0.99] transition-all shadow-md hover:shadow-lg disabled:opacity-60 cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Verifying Tenant & Dispatching...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Send Recovery Link</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2 border-t border-slate-100">
+                <Link
+                  href={`/${schoolDomain}/login`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Return to School Login</span>
+                </Link>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Footer Subtext */}
+        <p className="text-center text-[11px] text-slate-500 mt-6 font-medium">
+          Protected by SchoolERP Zero-Trust Tenant Isolation Architecture
+        </p>
       </div>
     </div>
   );

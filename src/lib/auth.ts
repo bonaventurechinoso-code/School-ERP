@@ -121,43 +121,98 @@ import { authOptions } from "./nextauth-config";
 
 export { requireServerAuth, authOptions };
 
-export async function getSession(tokenOverride?: string | null): Promise<SessionPayload | null> {
+export function isSuperAdminUser(userOrRole: any): boolean {
+  if (!userOrRole) return false;
+  if (typeof userOrRole === "string") {
+    return userOrRole.trim().toUpperCase() === "SUPER_ADMIN";
+  }
+  const role = (userOrRole.role || userOrRole.userRole || "").toString().trim().toUpperCase();
+  return role === "SUPER_ADMIN" || Boolean(userOrRole.isSuperAdmin);
+}
+
+/**
+ * Validates cross-tenant boundaries.
+ * Super Admin Golden Key: user.role === 'SUPER_ADMIN' immediately passes all cross-tenant checks.
+ * Standard users must strictly belong to the target tenant domain or tenant ID.
+ */
+export function validateTenantSessionMatch(
+  session: SessionPayload | null,
+  targetDomainOrSlug?: string | null
+): { allowed: boolean; isSuperAdmin: boolean; reason?: string } {
+  if (!session) {
+    return { allowed: false, isSuperAdmin: false, reason: "No active session." };
+  }
+
+  // 1. THE SUPER ADMIN "GOLDEN KEY" PROTECTION CLAUSE
+  if (isSuperAdminUser(session)) {
+    return { allowed: true, isSuperAdmin: true };
+  }
+
+  // If no target tenant domain constraint was passed, allow standard session
+  if (!targetDomainOrSlug) {
+    return { allowed: true, isSuperAdmin: false };
+  }
+
+  const target = targetDomainOrSlug.trim().toLowerCase();
+  const sessionDomain = (session.schoolDomain || "").trim().toLowerCase();
+  const sessionTenantId = (session.tenantId || "").trim();
+
+  // Standard user must match target tenant domain or tenant ID exactly
+  if (sessionDomain === target || sessionTenantId === targetDomainOrSlug.trim()) {
+    return { allowed: true, isSuperAdmin: false };
+  }
+
+  return {
+    allowed: false,
+    isSuperAdmin: false,
+    reason: `Cross-tenant violation: User belongs to institution '${sessionDomain || sessionTenantId}', access to '${target}' is forbidden.`,
+  };
+}
+
+export async function getSession(
+  tokenOverride?: string | null,
+  targetTenantDomain?: string | null
+): Promise<SessionPayload | null> {
+  let resolvedSession: SessionPayload | null = null;
+
   // 1. Authoritative database-backed session validation (Secure Production Mode)
   const dbSession = await validateDatabaseSession(tokenOverride);
   if (dbSession) {
-    return dbSession;
+    resolvedSession = dbSession;
   }
 
   // 2. Flexible Local Dev Mode Mocking (via NEXT_PUBLIC_DEV_MOCK_ROLE)
-  const isDev = process.env.NODE_ENV === "development";
-  const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
-  if (isDev && devMockRoleSetting && !tokenOverride) {
-    const mock = getDevMockRoleConfig(devMockRoleSetting);
-    if (mock) {
-      return {
-        userId: "dev-mock-user-id",
-        email: `mock-${mock.staffRole.toLowerCase().replace(/[^a-z0-9]/g, "")}@school.edu`,
-        tenantId: "mock-dev-tenant",
-        schoolDomain: "greenwood",
-        tenantName: "Greenwood Academy",
-        role: mock.role,
-        staffRole: mock.staffRole,
-        activeTiers: ["Primary School", "Secondary School"],
-        permissions: getDefaultPermissionsForRole(mock.role as any),
-        sessionToken: "mock-dev-session-token",
-        sessionId: "mock-dev-session-token",
-      };
+  if (!resolvedSession) {
+    const isDev = process.env.NODE_ENV === "development";
+    const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
+    if (isDev && devMockRoleSetting && !tokenOverride) {
+      const mock = getDevMockRoleConfig(devMockRoleSetting);
+      if (mock) {
+        resolvedSession = {
+          userId: "dev-mock-user-id",
+          email: `mock-${mock.staffRole.toLowerCase().replace(/[^a-z0-9]/g, "")}@school.edu`,
+          tenantId: "mock-dev-tenant",
+          schoolDomain: "greenwood",
+          tenantName: "Greenwood Academy",
+          role: mock.role,
+          staffRole: mock.staffRole,
+          activeTiers: ["Primary School", "Secondary School"],
+          permissions: getDefaultPermissionsForRole(mock.role as any),
+          sessionToken: "mock-dev-session-token",
+          sessionId: "mock-dev-session-token",
+        };
+      }
     }
   }
 
   // 3. NextAuth.js active session resolution (Credentials & Google OAuth)
-  if (!tokenOverride) {
+  if (!resolvedSession && !tokenOverride) {
     try {
       const nextAuthSession = await getServerSession(authOptions);
       if (nextAuthSession?.user) {
         const u = nextAuthSession.user as any;
         const sToken = u.sessionToken || u.jti || u.id || u.userId;
-        return {
+        resolvedSession = {
           userId: u.userId || u.id,
           email: u.email || undefined,
           tenantId: u.tenantId || "global-saas",
@@ -178,61 +233,92 @@ export async function getSession(tokenOverride?: string | null): Promise<Session
   }
 
   // 4. Fallback stateless token verification (for dev tests or transient tokens)
-  let rawToken = tokenOverride;
-  if (!rawToken) {
-    try {
-      const cookieStore = await cookies();
-      rawToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
-    } catch {}
+  if (!resolvedSession) {
+    let rawToken = tokenOverride;
+    if (!rawToken) {
+      try {
+        const cookieStore = await cookies();
+        rawToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
+      } catch {}
+    }
+
+    if (!rawToken) {
+      try {
+        const headerList = await headers();
+        const authHeader = headerList.get("authorization");
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          rawToken = authHeader.substring(7);
+        }
+        if (!rawToken) {
+          rawToken = headerList.get("x-session-token");
+        }
+      } catch {}
+    }
+
+    if (rawToken) {
+      try {
+        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+        const secret = new TextEncoder().encode(jwtSecret);
+        const { payload } = await jose.jwtVerify(rawToken, secret);
+        const sessionToken =
+          (payload.sessionToken as string) ||
+          (payload.sessionId as string) ||
+          (payload.jti as string) ||
+          (payload.token as string) ||
+          (payload.id as string) ||
+          rawToken;
+
+        const anyPayload = payload as any;
+        resolvedSession = {
+          ...anyPayload,
+          sessionToken,
+          sessionId: sessionToken,
+          userId: (anyPayload.userId as string) || (anyPayload.id as string) || "stateless-user",
+          role: (anyPayload.role as UserRole) || (anyPayload.userRole as UserRole) || "STAFF",
+          userRole: (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF",
+          assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
+          tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || "global-saas",
+          schoolDomain: (anyPayload.schoolDomain as string) || "admin",
+          activeTiers: (anyPayload.activeTiers as string[]) || [],
+          permissions: (anyPayload.permissions as string[]) || [],
+        } as SessionPayload;
+      } catch (error) {
+        console.error("Failed to decode session token:", error);
+        return null;
+      }
+    }
   }
 
-  if (!rawToken) {
+  if (!resolvedSession) {
+    return null;
+  }
+
+  // =========================================================================
+  // THE SUPER ADMIN "GOLDEN KEY" PROTECTION CLAUSE (CRITICAL)
+  // =========================================================================
+  // If user.role === 'SUPER_ADMIN', grant immediate full validation clearance.
+  // Super Admin bypasses [schoolDomain] routing match constraints completely.
+  if (isSuperAdminUser(resolvedSession)) {
+    return resolvedSession;
+  }
+
+  // Cross-reference against target tenant domain (either passed explicitly or present in headers)
+  let activeTenantDomain = targetTenantDomain;
+  if (!activeTenantDomain) {
     try {
       const headerList = await headers();
-      const authHeader = headerList.get("authorization");
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        rawToken = authHeader.substring(7);
-      }
-      if (!rawToken) {
-        rawToken = headerList.get("x-session-token");
-      }
+      activeTenantDomain = headerList.get("x-tenant-slug") || headerList.get("x-tenant-id");
     } catch {}
   }
 
-  if (!rawToken) {
-    return null;
+  if (activeTenantDomain) {
+    const matchCheck = validateTenantSessionMatch(resolvedSession, activeTenantDomain);
+    if (!matchCheck.allowed) {
+      console.warn(`[AUTH_GUARD_REJECT] ${matchCheck.reason}`);
+      return null; // Instant session rejection on cross-tenant mismatch
+    }
   }
 
-  try {
-    const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-    const secret = new TextEncoder().encode(jwtSecret);
-    const { payload } = await jose.jwtVerify(rawToken, secret);
-    const sessionToken =
-      (payload.sessionToken as string) ||
-      (payload.sessionId as string) ||
-      (payload.jti as string) ||
-      (payload.token as string) ||
-      (payload.id as string) ||
-      rawToken;
-
-    const anyPayload = payload as any;
-    return {
-      ...anyPayload,
-      sessionToken,
-      sessionId: sessionToken,
-      userId: (anyPayload.userId as string) || (anyPayload.id as string) || "stateless-user",
-      role: (anyPayload.role as UserRole) || (anyPayload.userRole as UserRole) || "STAFF",
-      userRole: (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF",
-      assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
-      tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || "global-saas",
-      schoolDomain: (anyPayload.schoolDomain as string) || "admin",
-      activeTiers: (anyPayload.activeTiers as string[]) || [],
-      permissions: (anyPayload.permissions as string[]) || [],
-    } as SessionPayload;
-
-  } catch (error) {
-    console.error("Failed to decode session token:", error);
-    return null;
-  }
+  return resolvedSession;
 }
 
