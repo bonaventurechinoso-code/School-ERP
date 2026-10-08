@@ -34,6 +34,7 @@ function LoginPageContent() {
   const urlMessage = searchParams.get("message");
 
   // Form input states
+  const [schoolCode, setSchoolCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -270,18 +271,27 @@ function LoginPageContent() {
     };
   }, [resolvedSubdomain]);
 
+  // Synchronize schoolCode with resolved subdomain if not manually set
+  useEffect(() => {
+    if (resolvedSubdomain && !schoolCode) {
+      setSchoolCode(resolvedSubdomain);
+    }
+  }, [resolvedSubdomain, schoolCode]);
+
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     const normalizedEmail = email.trim().toLowerCase();
-    const targetDomain = (resolvedSubdomain || "").trim().toLowerCase();
+    const effectiveSchoolCode = (schoolCode.trim() || resolvedSubdomain || "").trim().toLowerCase();
+    const targetDomain = effectiveSchoolCode;
 
     const loginPayload: Record<string, any> = {
       email: normalizedEmail,
       password,
-      schoolDomain: targetDomain || undefined,
+      schoolCode: effectiveSchoolCode || undefined,
+      schoolDomain: effectiveSchoolCode || undefined,
     };
 
     try {
@@ -625,7 +635,31 @@ function LoginPageContent() {
           {/* Core Tabless Unified Form */}
           <form onSubmit={handleSignIn} className="space-y-5" noValidate>
             
-            {/* 1. Modern Floating Label Email Input (Pure White Backdrop, Crisp Slate Border) */}
+            {/* 1. Modern Floating Label School Code Input */}
+            <div className="relative group">
+              <input
+                id="floating-school-code"
+                type="text"
+                name="schoolCode"
+                value={schoolCode}
+                onChange={(e) => setSchoolCode(e.target.value)}
+                placeholder=" "
+                autoComplete="organization"
+                disabled={isSubmitting}
+                className="peer block w-full rounded-xl border border-slate-200 bg-white px-4 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
+              />
+              <label
+                htmlFor="floating-school-code"
+                className="pointer-events-none absolute left-4 top-2 text-[11px] font-semibold text-slate-500 transition-all duration-200 ease-in-out peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-sm peer-placeholder-shown:font-normal peer-placeholder-shown:text-slate-400 peer-focus:top-2 peer-focus:text-[11px] peer-focus:font-semibold peer-focus:text-indigo-600"
+              >
+                School Code
+              </label>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors duration-200">
+                <Building2 className="w-4 h-4" />
+              </div>
+            </div>
+
+            {/* 2. Modern Floating Label Email Input (Pure White Backdrop, Crisp Slate Border) */}
             <div className="relative group">
               <input
                 id="floating-email"

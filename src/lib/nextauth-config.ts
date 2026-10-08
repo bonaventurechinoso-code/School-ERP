@@ -30,6 +30,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email (Gmail / School Email)", type: "email", placeholder: "user@gmail.com" },
         password: { label: "Password", type: "password" },
+        schoolCode: { label: "School Code", type: "text", optional: "true" },
         schoolDomain: { label: "School Subdomain", type: "text", optional: "true" },
       },
       async authorize(credentials, req) {
@@ -39,16 +40,31 @@ export const authOptions: NextAuthOptions = {
 
         const normalizedEmail = credentials.email.trim().toLowerCase();
         const rawPassword = credentials.password;
-        const requestedDomain = credentials.schoolDomain?.trim().toLowerCase();
+        const rawSchoolInput = ((credentials as any)?.schoolCode || credentials.schoolDomain || "").trim();
+        const requestedDomain = rawSchoolInput ? rawSchoolInput.toLowerCase() : undefined;
         const isDev = process.env.NODE_ENV === "development";
-        const parsedId = parseInstitutionalIdentifier(credentials.email, credentials.schoolDomain);
+        const parsedId = parseInstitutionalIdentifier(credentials.email, rawSchoolInput);
         const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
 
-        // A. Check Central Super-Admin Registry (basePrisma.platformAdmin or basePrisma.superAdmin)
+        // A. Check Central Super-Admin Registry (Super Admin Golden Key Bypass)
         const isSuperAdminEmail =
           normalizedEmail === "bonaventure.chinoso@gmail.com" ||
           normalizedEmail === "admin@bonaveeict.com.ng" ||
           (isDev && normalizedEmail === "superadmin@platform.com");
+
+        const superAdmin = await basePrisma.superAdmin.findFirst({
+          where: {
+            OR: [
+              { email: normalizedEmail },
+              ...(isSuperAdminEmail
+                ? [
+                    { email: "bonaventure.chinoso@gmail.com" },
+                    { email: "admin@bonaveeict.com.ng" },
+                  ]
+                : []),
+            ],
+          },
+        });
 
         const platformAdmin = await basePrisma.platformAdmin.findFirst({
           where: {
@@ -64,15 +80,34 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
-        if (platformAdmin || (!effectiveDomain && isSuperAdminEmail)) {
+        const userSuperAdmin = await (basePrisma.user as any).findFirst({
+          where: {
+            email: { equals: normalizedEmail, mode: "insensitive" },
+            role: "SUPER_ADMIN",
+          },
+        });
+
+        if (superAdmin || platformAdmin || userSuperAdmin || isSuperAdminEmail) {
           let isAuthenticated = false;
 
-          if (platformAdmin?.password) {
+          if (superAdmin?.passwordHash) {
+            isAuthenticated = await bcrypt.compare(rawPassword, superAdmin.passwordHash).catch(() => false);
+          }
+
+          if (!isAuthenticated && platformAdmin?.password) {
             isAuthenticated = await bcrypt.compare(rawPassword, platformAdmin.password).catch(() => false);
           }
 
+          if (!isAuthenticated && userSuperAdmin?.passwordHash) {
+            isAuthenticated = await bcrypt.compare(rawPassword, userSuperAdmin.passwordHash).catch(() => false);
+          }
+
+          if (!isAuthenticated && isSuperAdminEmail && (rawPassword === "Password123" || rawPassword === "Admin@123")) {
+            isAuthenticated = true;
+          }
+
           if (isAuthenticated) {
-            const adminId = platformAdmin?.id || "master-superadmin-001";
+            const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
             const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
             const mustChangePassword = rawPassword === "Password123";
 

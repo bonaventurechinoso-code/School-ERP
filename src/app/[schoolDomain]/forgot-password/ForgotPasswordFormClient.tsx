@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, KeyRound, Building2 } from "lucide-react";
+import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, KeyRound, Building2, X } from "lucide-react";
 import { customFetch } from "@/lib/api-client";
 
 interface ForgotPasswordFormClientProps {
@@ -24,6 +24,14 @@ export default function ForgotPasswordFormClient({
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+
+  useEffect(() => {
+    if (!errorMsg) return;
+    const timer = setTimeout(() => {
+      setErrorMsg("");
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +75,31 @@ export default function ForgotPasswordFormClient({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-indigo-100">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-indigo-100 relative">
+      {/* Floating Error Toast Notification (0px Layout Shift) */}
+      {errorMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-6 right-6 z-50 max-w-sm sm:max-w-md w-full animate-in fade-in slide-in-from-top-4 duration-300"
+        >
+          <div className="p-4 rounded-2xl shadow-xl border bg-white/95 border-red-200 text-red-700 shadow-red-900/5 backdrop-blur-xl flex items-start gap-3 transition-all duration-200">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs sm:text-sm font-medium leading-relaxed">
+              {errorMsg}
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMsg("")}
+              className="text-slate-400 hover:text-slate-600 transition-colors duration-150 p-1 rounded-lg focus:outline-none"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Background Architectural Glows */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
@@ -113,17 +145,6 @@ export default function ForgotPasswordFormClient({
               </p>
             </div>
           </div>
-
-          {/* User Error Toast / Banner */}
-          {errorMsg && (
-            <div className="mb-6 p-4 bg-rose-50 border border-rose-200/90 rounded-2xl text-rose-800 text-xs font-medium flex items-start gap-3 animate-in fade-in duration-200 shadow-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-              <div className="flex-1 leading-relaxed">
-                <span className="font-bold block text-rose-900">Recovery Error</span>
-                {errorMsg}
-              </div>
-            </div>
-          )}
 
           {isSubmitted ? (
             <div className="space-y-6 text-center animate-in fade-in duration-300">
