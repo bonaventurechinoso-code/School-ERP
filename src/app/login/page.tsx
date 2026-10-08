@@ -416,12 +416,6 @@ function LoginPageContent() {
 
       router.refresh();
 
-      // Check forced initial password reset
-      if (sessionPayload?.mustChangePassword) {
-        router.push("/change-password");
-        return;
-      }
-
       // Explicit role & global SaaS context resolution
       const rawRole = (sessionPayload?.role || sessionPayload?.userRole || "").toUpperCase();
       const staffRole = (sessionPayload?.staffRole || "").toUpperCase();
@@ -432,6 +426,18 @@ function LoginPageContent() {
         normalizedEmail === "bonaventure.chinoso@gmail.com" ||
         normalizedEmail === "admin@bonaveeict.com.ng" ||
         (isDev && normalizedEmail === "superadmin@platform.com");
+
+      // Super Admin Golden Key: Always forward directly to /dashboard/super-admin
+      if (isSuperAdminUser) {
+        router.push("/dashboard/super-admin");
+        return;
+      }
+
+      // Check forced initial password reset for standard accounts
+      if (sessionPayload?.mustChangePassword) {
+        router.push("/change-password");
+        return;
+      }
 
       // Respect explicit callback URL if specified and not a login loop
       if (callbackUrl && !callbackUrl.includes("/login")) {

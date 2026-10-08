@@ -109,7 +109,7 @@ export const authOptions: NextAuthOptions = {
           if (isAuthenticated) {
             const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
             const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
-            const mustChangePassword = rawPassword === "Password123";
+            const mustChangePassword = false;
 
             return {
               id: adminId,

@@ -156,8 +156,7 @@ export async function POST(req: Request) {
         const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
         const distinctSessionToken = crypto.randomUUID();
-        const isDefaultPassword = password === "Password123";
-        const mustChangePassword = isDefaultPassword;
+        const mustChangePassword = false;
 
         const accessToken = await signAccessToken({
           userId: adminId,
@@ -169,7 +168,7 @@ export async function POST(req: Request) {
           activeTiers: ["Central Platform"],
           email: normalizedEmail,
           isSuperAdmin: true,
-          mustChangePassword: mustChangePassword,
+          mustChangePassword: false,
         });
 
         const { rawRefreshToken } = await issueRefreshToken({
@@ -201,10 +200,10 @@ export async function POST(req: Request) {
           target: "SUPER_ADMIN_CONSOLE",
           schoolId: "global-saas",
           ip: clientIp,
-          metadata: { email: normalizedEmail, isSuperAdmin: true, mustChangePassword },
+          metadata: { email: normalizedEmail, isSuperAdmin: true, mustChangePassword: false },
         });
 
-        const redirectUrl = mustChangePassword ? "/change-password" : "/dashboard/super-admin";
+        const redirectUrl = "/dashboard/super-admin";
 
         const response = NextResponse.json({
           success: true,
@@ -215,7 +214,7 @@ export async function POST(req: Request) {
           userRole: "SUPER_ADMIN",
           assignedTier: "Central Platform",
           isSuperAdmin: true,
-          mustChangePassword: mustChangePassword,
+          mustChangePassword: false,
           schoolDomain: "admin",
           redirectUrl: redirectUrl,
           permissions,
