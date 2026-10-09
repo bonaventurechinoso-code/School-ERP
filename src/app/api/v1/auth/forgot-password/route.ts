@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         where: { isActive: true },
       }) || await basePrisma.school.findFirst();
 
-      const anchorSchoolId = anchorSchool?.id || "global-saas";
+      const anchorSchoolId = anchorSchool?.id || "";
 
       // Secure, short-lived token (1 hour max expiration)
       const resetToken = await createPasswordResetToken({

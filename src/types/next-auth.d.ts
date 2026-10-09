@@ -12,8 +12,8 @@ declare module "next-auth" {
       image?: string | null;
       role: UserRole | string;
       staffRole?: string | null;
-      tenantId: string;
-      schoolDomain: string;
+      tenantId?: string | null;
+      schoolDomain?: string | null;
       tenantName?: string | null;
       activeTiers?: string[];
       assignedTier?: string | null;
@@ -29,8 +29,8 @@ declare module "next-auth" {
     role?: UserRole | string;
     userRole?: string;
     staffRole?: string | null;
-    tenantId?: string;
-    schoolDomain?: string;
+    tenantId?: string | null;
+    schoolDomain?: string | null;
     tenantName?: string | null;
     assignedTier?: string | null;
     activeTiers?: string[];
@@ -45,8 +45,8 @@ declare module "next-auth/jwt" {
     role?: UserRole | string;
     userRole?: string;
     staffRole?: string | null;
-    tenantId?: string;
-    schoolDomain?: string;
+    tenantId?: string | null;
+    schoolDomain?: string | null;
     tenantName?: string | null;
     assignedTier?: string | null;
     activeTiers?: string[];

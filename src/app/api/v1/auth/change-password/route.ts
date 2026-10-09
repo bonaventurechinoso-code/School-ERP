@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       // Cross-Tenant Prevention: Verify tenant lock for standard users
       const tokenSchoolId = tokenVerification.schoolId;
       const isSuperAdminToken =
-        tokenSchoolId === "global-saas" ||
+        !tokenSchoolId ||
         Boolean(await basePrisma.superAdmin.findUnique({ where: { id: tokenVerification.userId } }).catch(() => null)) ||
         Boolean(await basePrisma.platformAdmin.findUnique({ where: { id: tokenVerification.userId } }).catch(() => null));
 
@@ -126,7 +126,7 @@ export async function POST(req: Request) {
     const token = cookieToken || authHeader || bodyToken;
 
     let userId = "";
-    let schoolId = "global-saas";
+    let schoolId: string | null = null;
     let role = "STAFF";
     let payload: any = null;
 
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
         const verified = await jwtVerify(token, SECRET_KEY);
         payload = verified.payload;
         userId = (payload.userId || payload.sub || payload.id) as string;
-        schoolId = (payload.schoolId || payload.tenantId || "global-saas") as string;
+        schoolId = (payload.schoolId || payload.tenantId || null) as string | null;
         role = (payload.role || payload.userRole || "STAFF") as string;
       } catch {
         return NextResponse.json(
@@ -143,41 +143,31 @@ export async function POST(req: Request) {
           { status: 401 }
         );
       }
-    } else if (body.userId || body.email) {
-      if (body.userId) {
-        const user = await basePrisma.user.findUnique({ where: { id: body.userId } });
-        if (user) {
-          userId = user.id;
-          schoolId = user.schoolId;
-          role = user.role;
-        } else {
-          const staff = await basePrisma.staff.findUnique({
-            where: { id: body.userId },
-            include: { user: true },
-          });
-          if (staff) {
-            userId = staff.id;
-            schoolId = staff.schoolId;
-            role = staff.user?.role || "TEACHER";
-          }
+    } else if (body.userId) {
+      const user = await basePrisma.user.findUnique({ where: { id: body.userId } });
+      if (user) {
+        userId = user.id;
+        schoolId = user.schoolId ?? null;
+        role = user.role;
+        if (user.role !== 'SUPER_ADMIN' && !schoolId) { throw new Error('schoolId required for non-super-admin'); }
+      } else {
+        const staff = await basePrisma.staff.findUnique({
+          where: { id: body.userId },
+          include: { user: true },
+        });
+        if (staff) {
+          userId = staff.id;
+          schoolId = staff.schoolId;
+          role = staff.user?.role || "TEACHER";
         }
-      } else if (body.email) {
-        const user = await basePrisma.user.findFirst({ where: { email: body.email.trim().toLowerCase() } });
-        if (user) {
-          userId = user.id;
-          schoolId = user.schoolId;
-          role = user.role;
-        } else {
-          const staff = await basePrisma.staff.findFirst({
-            where: { email: body.email.trim().toLowerCase() },
-            include: { user: true },
-          });
-          if (staff) {
-            userId = staff.id;
-            schoolId = staff.schoolId;
-            role = staff.user?.role || "TEACHER";
-          }
-        }
+      }
+    } else if (body.email) {
+      const user = await basePrisma.user.findFirst({ where: { email: body.email.trim().toLowerCase() } });
+      if (user) {
+        userId = user.id;
+        schoolId = user.schoolId ?? null;
+        role = user.role;
+        if (user.role !== 'SUPER_ADMIN' && !schoolId) { throw new Error('schoolId required for non-super-admin'); }
       }
     }
 
@@ -191,13 +181,9 @@ export async function POST(req: Request) {
     // =========================================================================
     // THE SUPER ADMIN "GOLDEN KEY" & TENANT SCOPE CHECK
     // =========================================================================
-    const isSuperAdmin =
-      role.toUpperCase() === "SUPER_ADMIN" ||
-      Boolean(payload?.isSuperAdmin) ||
-      Boolean(await basePrisma.superAdmin.findUnique({ where: { id: userId } }).catch(() => null));
-
+    const isSuperAdmin = Boolean(await basePrisma.superAdmin.findUnique({ where: { id: userId } }).catch(() => null));
     // Standard Users: Enforce strict tenant isolation against target domain
-    if (targetDomain && !isSuperAdmin && schoolId && schoolId !== "global-saas") {
+    if (targetDomain && !isSuperAdmin && schoolId) {
       const targetSchool = await basePrisma.school.findFirst({
         where: {
           OR: [
@@ -223,7 +209,7 @@ export async function POST(req: Request) {
     // Execute authoritative password change
     const result = await changeUserPassword({
       userId,
-      schoolId: schoolId || "global-saas",
+      schoolId: schoolId,
       role,
       oldPassword: oldPassword || currentPassword,
       newPassword,
@@ -257,7 +243,7 @@ export async function POST(req: Request) {
 
     const newAccessToken = await signAccessToken({
       userId,
-      schoolId: schoolId || "global-saas",
+      schoolId: schoolId || "",
       role: isSuperAdmin ? "SUPER_ADMIN" : role,
       email: payload?.email || undefined,
       isSuperAdmin,
@@ -266,7 +252,7 @@ export async function POST(req: Request) {
 
     const { rawRefreshToken } = await issueRefreshToken({
       userId,
-      schoolId: schoolId || "global-saas",
+      schoolId: schoolId ?? null,
       ipAddress: clientIp,
       userAgent,
     });

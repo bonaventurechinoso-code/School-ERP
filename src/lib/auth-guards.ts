@@ -15,7 +15,7 @@ export enum Role {
 
 export interface AuthContext {
   userId: string;
-  schoolId: string;
+  schoolId?: string | null;
   role: Role | string;
   email?: string;
   isSuperAdmin: boolean;
@@ -57,7 +57,7 @@ export async function requireAuth(req?: Request): Promise<AuthContext> {
     if (headerUserId && (isSuperAdminHeader || headerRole === Role.SUPER_ADMIN || (headerRole || "").toUpperCase() === "SUPER_ADMIN")) {
       return {
         userId: headerUserId,
-        schoolId: headerSchoolId || "global-saas",
+        schoolId: headerSchoolId || null,
         role: Role.SUPER_ADMIN,
         isSuperAdmin: true,
       };
@@ -89,7 +89,7 @@ export async function requireAuth(req?: Request): Promise<AuthContext> {
 
     return {
       userId: claims.userId,
-      schoolId: claims.schoolId || (isSuper ? "global-saas" : claims.schoolId),
+      schoolId: claims.schoolId || null,
       role: isSuper ? Role.SUPER_ADMIN : claims.role,
       email: claims.email,
       isSuperAdmin: isSuper,
@@ -106,7 +106,7 @@ export async function requireAuth(req?: Request): Promise<AuthContext> {
 
     return {
       userId: dbSession.userId,
-      schoolId: dbSession.tenantId || "global-saas",
+      schoolId: dbSession.tenantId || null,
       role: isSuper ? Role.SUPER_ADMIN : dbSession.role,
       email: dbSession.email,
       isSuperAdmin: isSuper,

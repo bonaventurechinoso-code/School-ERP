@@ -160,8 +160,7 @@ export async function POST(req: Request) {
 
         const accessToken = await signAccessToken({
           userId: adminId,
-          schoolId: "global-saas",
-          tenantId: "global-saas",
+          schoolId: "",
           role: "SUPER_ADMIN",
           userRole: "SUPER_ADMIN",
           assignedTier: "Central Platform",
@@ -173,7 +172,7 @@ export async function POST(req: Request) {
 
         const { rawRefreshToken } = await issueRefreshToken({
           userId: adminId,
-          schoolId: "global-saas",
+          schoolId: null,
           ipAddress: clientIp,
           userAgent,
         });
@@ -181,7 +180,7 @@ export async function POST(req: Request) {
         const sessionResult = await createDatabaseSession({
           userId: adminId,
           email: normalizedEmail,
-          tenantId: "global-saas",
+          tenantId: null,
           schoolDomain: "admin",
           tenantName: "Global Platform Administration",
           role: "SUPER_ADMIN",
@@ -198,7 +197,7 @@ export async function POST(req: Request) {
           actorId: adminId,
           action: "LOGIN_SUCCESS",
           target: "SUPER_ADMIN_CONSOLE",
-          schoolId: "global-saas",
+          schoolId: null,
           ip: clientIp,
           metadata: { email: normalizedEmail, isSuperAdmin: true, mustChangePassword: false },
         });
@@ -208,8 +207,8 @@ export async function POST(req: Request) {
         const response = NextResponse.json({
           success: true,
           userId: adminId,
-          tenantId: "global-saas",
-          schoolId: "global-saas",
+          tenantId: null,
+          schoolId: null,
           role: "SUPER_ADMIN",
           userRole: "SUPER_ADMIN",
           assignedTier: "Central Platform",
@@ -235,7 +234,7 @@ export async function POST(req: Request) {
           actorId: "ANONYMOUS",
           action: failureResult.isLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILURE",
           target: normalizedEmail,
-          schoolId: "global-saas",
+          schoolId: null,
           ip: clientIp,
           metadata: { isSuperAdminAttempt: true, attemptsLeft: failureResult.remainingAccountAttempts },
         });

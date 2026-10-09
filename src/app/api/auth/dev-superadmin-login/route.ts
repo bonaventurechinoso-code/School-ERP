@@ -14,7 +14,7 @@ async function generateDevSuperAdminSession(): Promise<string> {
   const sessionResult = await createDatabaseSession({
     userId: MASTER_DEV_USER_ID,
     email: MASTER_DEV_EMAIL,
-    tenantId: "global-saas",
+    tenantId: null,
     schoolDomain: "admin",
     tenantName: "Global Platform Administration",
     role: "SUPER_ADMIN",

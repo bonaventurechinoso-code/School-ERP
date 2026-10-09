@@ -138,7 +138,7 @@ export async function isMustChangePassword(userId: string): Promise<boolean> {
 /**
  * Sets or updates the mustChangePassword flag for a user across models.
  */
-export async function setUserMustChangePassword(userId: string, schoolId: string, mustChange: boolean): Promise<void> {
+export async function setUserMustChangePassword(userId: string, schoolId?: string | null, mustChange: boolean = false): Promise<void> {
   try {
     // Update User model (authoritative single auth table)
     await basePrisma.user.updateMany({
@@ -153,13 +153,15 @@ export async function setUserMustChangePassword(userId: string, schoolId: string
     });
 
     // Update legacy table
-    await ensureSecurityTables();
-    await basePrisma.$executeRawUnsafe(`
-      INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
-      VALUES ($1, $2, $3, $3, NOW())
-      ON CONFLICT (user_id) 
-      DO UPDATE SET must_change_password = $3, is_temporary_password = $3;
-    `, userId, schoolId, mustChange);
+    if (schoolId) {
+      await ensureSecurityTables();
+      await basePrisma.$executeRawUnsafe(`
+        INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+        VALUES ($1, $2, $3, $3, NOW())
+        ON CONFLICT (user_id) 
+        DO UPDATE SET must_change_password = $3, is_temporary_password = $3;
+      `, userId, schoolId, mustChange);
+    }
   } catch (err) {
     console.error("[SECURITY_SERVICE] Error setting user must_change_password:", err);
   }
@@ -168,7 +170,7 @@ export async function setUserMustChangePassword(userId: string, schoolId: string
 /**
  * Records that a user has successfully changed their password, clearing mustChangePassword.
  */
-export async function recordPasswordChange(userId: string, schoolId: string): Promise<void> {
+export async function recordPasswordChange(userId: string, schoolId?: string | null): Promise<void> {
   await setUserMustChangePassword(userId, schoolId, false);
 }
 
@@ -297,7 +299,7 @@ export async function verifyPasswordResetToken(rawToken: string, schoolDomain?: 
 
     // Verify schoolDomain match if provided (bypass for superadmin accounts)
     const isSuperAdminAccount =
-      tokenRecord.schoolId === "global-saas" ||
+      !tokenRecord.schoolId ||
       ["superadmin", "platform", "admin", "central"].includes((schoolDomain || "").toLowerCase().trim()) ||
       Boolean(await basePrisma.superAdmin.findUnique({ where: { id: tokenRecord.userId } }).catch(() => null)) ||
       Boolean(await basePrisma.platformAdmin.findUnique({ where: { id: tokenRecord.userId } }).catch(() => null));
@@ -509,7 +511,7 @@ export async function completePasswordReset(
  */
 export async function changeUserPassword(params: {
   userId: string;
-  schoolId: string;
+  schoolId?: string | null;
   role: string;
   currentPassword?: string;
   oldPassword?: string;
@@ -557,7 +559,7 @@ export async function changeUserPassword(params: {
 
   // Fallback for Super Admin
   let platAdmin: any = null;
-  if (!verified && (canonicalRole === "SUPER_ADMIN" || schoolId === "global-saas")) {
+  if (!verified && (canonicalRole === "SUPER_ADMIN" || !schoolId)) {
     platAdmin = await basePrisma.platformAdmin.findFirst({
       where: {
         OR: [
@@ -620,7 +622,7 @@ export async function changeUserPassword(params: {
     });
   }
 
-  if (canonicalRole === "SUPER_ADMIN" || platAdmin || schoolId === "global-saas") {
+  if (canonicalRole === "SUPER_ADMIN" || platAdmin || !schoolId) {
     const adminIdToUpdate = platAdmin?.id || userId;
     await basePrisma.platformAdmin.updateMany({
       where: {

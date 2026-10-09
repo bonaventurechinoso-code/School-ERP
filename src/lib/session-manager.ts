@@ -103,7 +103,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
     token: sessionToken || crypto.randomUUID(),
     userId: params.userId,
     email: params.email || undefined,
-    tenantId: params.tenantId || "global-saas",
+    tenantId: params.tenantId || null,
     schoolDomain: params.schoolDomain || "admin",
     tenantName: params.tenantName || undefined,
     role: effectiveRole,
@@ -261,7 +261,7 @@ export async function validateDatabaseSession(
     return {
       userId: dbSession.userId,
       email: dbSession.email || (anyPayload.email as string),
-      tenantId: dbSession.tenantId || (anyPayload.tenantId as string) || "global-saas",
+      tenantId: dbSession.tenantId || (anyPayload.tenantId as string) || null,
       schoolDomain: dbSession.schoolDomain || (anyPayload.schoolDomain as string) || "admin",
       tenantName: (anyPayload.tenantName as string) || undefined,
       role: dbSession.role as UserRole | string,

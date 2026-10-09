@@ -15,7 +15,7 @@ export type UserRole = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "STUDENT" | 
 export interface SessionPayload {
   userId: string;
   email?: string;
-  tenantId: string;
+  tenantId?: string | null;
   role: Role | UserRole | string;
   staffRole?: string;
   schoolDomain: string;
@@ -215,7 +215,7 @@ export async function getSession(
         resolvedSession = {
           userId: u.userId || u.id,
           email: u.email || undefined,
-          tenantId: u.tenantId || "global-saas",
+          tenantId: u.tenantId || null,
           schoolDomain: u.schoolDomain || "admin",
           tenantName: u.tenantName || undefined,
           role: (u.role as UserRole) || "STAFF",
@@ -277,7 +277,7 @@ export async function getSession(
           role: (anyPayload.role as UserRole) || (anyPayload.userRole as UserRole) || "STAFF",
           userRole: (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF",
           assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
-          tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || "global-saas",
+          tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || null,
           schoolDomain: (anyPayload.schoolDomain as string) || "admin",
           activeTiers: (anyPayload.activeTiers as string[]) || [],
           permissions: (anyPayload.permissions as string[]) || [],

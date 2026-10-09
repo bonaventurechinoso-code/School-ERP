@@ -94,7 +94,7 @@ export async function issueRefreshToken(params: {
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000);
 
   let validSchoolId: string | null = null;
-  if (params.schoolId && params.schoolId !== "global-saas") {
+  if (params.schoolId) {
     const exists = await basePrisma.school.findUnique({
       where: { id: params.schoolId },
       select: { id: true },
@@ -186,7 +186,7 @@ export async function rotateRefreshToken(params: {
   });
 
   let validSchoolIdOnRotate: string | null = null;
-  if (existingToken.schoolId && existingToken.schoolId !== "global-saas") {
+  if (existingToken.schoolId) {
     const exists = await basePrisma.school.findUnique({
       where: { id: existingToken.schoolId },
       select: { id: true },
@@ -207,7 +207,7 @@ export async function rotateRefreshToken(params: {
   });
   const claims: AccessTokenClaims = {
     userId: existingToken.userId,
-    schoolId: existingToken.schoolId || "global-saas",
+    schoolId: existingToken.schoolId || "",
     role: userRole,
     email: userEmail,
     isSuperAdmin,

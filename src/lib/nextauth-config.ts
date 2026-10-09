@@ -118,7 +118,7 @@ export const authOptions: NextAuthOptions = {
               name: "Super Administrator",
               role: "SUPER_ADMIN",
               staffRole: "Platform Super-Admin",
-              tenantId: "global-saas",
+              tenantId: null,
               schoolDomain: "admin",
               tenantName: "Global Platform Administration",
               activeTiers: ["Central Platform"],
@@ -252,9 +252,9 @@ export const authOptions: NextAuthOptions = {
               userRole: user.role,
               staffRole: user.role,
               assignedTier,
-              tenantId: user.schoolId,
-              schoolDomain: user.school.subdomain,
-              tenantName: user.school.name,
+              tenantId: user.schoolId ?? null,
+              schoolDomain: user.school?.subdomain ?? null,
+              tenantName: user.school?.name ?? null,
               activeTiers,
               permissions,
               mustChangePassword,
@@ -644,7 +644,7 @@ export const authOptions: NextAuthOptions = {
           user.userId = platformAdmin.id;
           user.role = "SUPER_ADMIN";
           user.staffRole = "Platform Super-Admin";
-          user.tenantId = "global-saas";
+          user.tenantId = null;
           user.schoolDomain = "admin";
           user.tenantName = "Global Platform Administration";
           user.activeTiers = ["Central Platform"];
@@ -727,7 +727,7 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role || "STAFF";
         token.userRole = (user as any).userRole || (user as any).role || "STAFF";
         token.staffRole = (user as any).staffRole || undefined;
-        token.tenantId = (user as any).tenantId || "global-saas";
+        token.tenantId = (user as any).tenantId ?? null;
         token.schoolDomain = (user as any).schoolDomain || "admin";
         token.tenantName = (user as any).tenantName || undefined;
         token.assignedTier = (user as any).assignedTier || null;

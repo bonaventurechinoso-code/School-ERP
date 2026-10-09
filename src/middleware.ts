@@ -140,7 +140,7 @@ export async function middleware(req: NextRequest) {
         (process.env.NODE_ENV !== 'production' && userEmail === 'superadmin@platform.com');
 
       const rawTenantId = (verifiedSessionPayload.tenantId || verifiedSessionPayload.schoolId) as string | undefined;
-      const hasTenantScope = Boolean(rawTenantId && rawTenantId !== 'global-saas');
+      const hasTenantScope = Boolean(rawTenantId);
 
       // Problem 4: Super Admin: Route /admin only. Cannot be part of any tenant. Reject if tenant_id is present.
       if ((userRole === 'SUPER_ADMIN' || verifiedSessionPayload.isSuperAdmin === true || isMasterAdminEmail) && !hasTenantScope) {
@@ -152,7 +152,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const rawTenantId = (verifiedSessionPayload?.tenantId || verifiedSessionPayload?.schoolId) as string | undefined;
-  const hasTenantScope = Boolean(rawTenantId && rawTenantId !== 'global-saas');
+  const hasTenantScope = Boolean(rawTenantId);
   const userRole = ((verifiedSessionPayload?.role as string) || (verifiedSessionPayload?.userRole as string) || '').trim().toUpperCase();
   const isTenantAdmin = Boolean(
     (userRole === 'SCHOOL_ADMIN' || userRole === 'TENANT_ADMIN' || userRole === 'ADMIN') &&
