@@ -163,7 +163,7 @@ function LoginPageContent() {
 
     if (querySchool && querySchool.trim()) {
       const clean = querySchool.trim().toLowerCase();
-      if (!["demo", "localhost", "root", "default"].includes(clean)) {
+      if (!["demo", "localhost", "root", "default", "admin"].includes(clean)) {
         setResolvedSubdomain(clean);
         try {
           window.localStorage.setItem("schoolerp_tenant", clean);
@@ -234,10 +234,10 @@ function LoginPageContent() {
         window.localStorage.getItem("schoolDomain");
       if (
         storedTenant &&
-        !["undefined", "null", "root", "default", "platform", "localhost", "demo"].includes(storedTenant.toLowerCase())
+        !["undefined", "null", "root", "default", "platform", "localhost", "demo", "admin"].includes(storedTenant.toLowerCase())
       ) {
         setResolvedSubdomain(storedTenant.toLowerCase());
-      } else if (storedTenant && ["demo", "localhost", "root", "default", "null", "undefined"].includes(storedTenant.toLowerCase())) {
+      } else if (storedTenant && ["demo", "localhost", "root", "default", "null", "undefined", "admin"].includes(storedTenant.toLowerCase())) {
         window.localStorage.removeItem("schoolerp_tenant");
         window.localStorage.removeItem("schoolDomain");
       }
@@ -247,7 +247,7 @@ function LoginPageContent() {
   // Sync database tenant branding when subdomain resolves
   useEffect(() => {
     let isMounted = true;
-    if (!resolvedSubdomain || ["demo", "localhost", "root", "default"].includes(resolvedSubdomain.toLowerCase())) {
+    if (!resolvedSubdomain || ["demo", "localhost", "root", "default", "admin"].includes(resolvedSubdomain.toLowerCase())) {
       setTenantBranding(null);
       return;
     }
@@ -273,7 +273,7 @@ function LoginPageContent() {
 
   // Synchronize schoolCode with resolved subdomain if not manually set
   useEffect(() => {
-    if (resolvedSubdomain && !schoolCode) {
+    if (resolvedSubdomain && !["admin", "demo", "localhost", "root", "default"].includes(resolvedSubdomain.toLowerCase()) && !schoolCode) {
       setSchoolCode(resolvedSubdomain);
     }
   }, [resolvedSubdomain, schoolCode]);
@@ -487,6 +487,7 @@ function LoginPageContent() {
   const rawTenantName = tenantBranding?.name || (resolvedSubdomain ? resolvedSubdomain.charAt(0).toUpperCase() + resolvedSubdomain.slice(1) : "");
   const visualTenantName =
     !rawTenantName ||
+    rawTenantName.toLowerCase() === "admin" ||
     rawTenantName.toLowerCase() === "demo" ||
     rawTenantName.toLowerCase() === "localhost" ||
     rawTenantName.toLowerCase() === "root" ||
@@ -599,8 +600,8 @@ function LoginPageContent() {
                 />
               </div>
 
-              {/* Tenant Specific School Logo Injection (ONLY rendered if visualTenantName is verified and non-empty) */}
-              {visualTenantName ? (
+              {/* Tenant Specific School Logo Injection (ONLY rendered if visualTenantName is verified, dynamic, and non-empty) */}
+              {visualTenantName && visualTenantName.toLowerCase() !== "admin" ? (
                 tenantBranding?.logo ? (
                   <>
                     <div className="h-6 w-px bg-slate-200" />
@@ -628,13 +629,8 @@ function LoginPageContent() {
 
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                {visualTenantName ? `Sign in to access ${visualTenantName} workspace` : "Welcome back"}
+                Sign in to access your workspace
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                {visualTenantName
-                  ? "Sign in to your isolated school cluster node."
-                  : "Sign in to access your dashboard"}
-              </p>
             </div>
           </div>
 
