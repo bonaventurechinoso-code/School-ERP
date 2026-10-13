@@ -270,10 +270,23 @@ export default function LandingPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [selectedTier, setSelectedTier] = useState("standard");
+  const [tierSearch, setTierSearch] = useState("");
+  const [showTierDropdown, setShowTierDropdown] = useState(false);
+
+  const tiers = [
+    { id: "basic", name: "Basic", desc: "Up to 500 Students", students: 500 },
+    { id: "standard", name: "Standard", desc: "Up to 1500 Students - Most Popular", students: 1500 },
+    { id: "premium", name: "Premium", desc: "Unlimited Students", students: 999 },
+  ];
 
   const handleTrialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTrialError(null);
+    if (!selectedTier) {
+      setTrialError("Please select a tier.");
+      return;
+    }
     if (trialForm.password !== trialForm.confirmPassword) {
       setTrialError("Passwords do not match. Please re-enter.");
       return;
@@ -287,7 +300,7 @@ export default function LandingPage() {
       const response = await fetch("/api/trials/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(trialForm),
+        body: JSON.stringify({ ...trialForm, tier: selectedTier }),
       });
 
       const data = await response.json();
@@ -713,6 +726,65 @@ export default function LandingPage() {
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Tier Selector */}
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Select Institution Tier / Plan <span className="text-rose-500">*</span>
+                </label>
+                <div
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer flex items-center justify-between select-none"
+                  onClick={() => { setShowTierDropdown((v) => !v); setTierSearch(""); }}
+                  role="combobox"
+                  aria-expanded={showTierDropdown}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowTierDropdown((v) => !v); setTierSearch(""); } }}
+                >
+                  <span className={selectedTier ? "" : "text-slate-400 dark:text-slate-500"}>
+                    {selectedTier ? tiers.find((t) => t.id === selectedTier)?.name + " — " + tiers.find((t) => t.id === selectedTier)?.desc : "Search and select tier..."}
+                  </span>
+                  <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showTierDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </div>
+                {showTierDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                    <div className="p-2 border-b border-slate-100 dark:border-slate-800">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Search and select tier..."
+                        value={tierSearch}
+                        onChange={(e) => setTierSearch(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <ul role="listbox">
+                      {tiers
+                        .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.desc.toLowerCase().includes(tierSearch.toLowerCase()))
+                        .map((tier) => (
+                          <li
+                            key={tier.id}
+                            role="option"
+                            aria-selected={selectedTier === tier.id}
+                            onClick={() => { setSelectedTier(tier.id); setShowTierDropdown(false); setTierSearch(""); }}
+                            className={`flex items-center justify-between px-4 py-3 cursor-pointer text-sm transition-colors ${
+                              selectedTier === tier.id
+                                ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            <div>
+                              <p className="font-semibold">{tier.name}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tier.desc}</p>
+                            </div>
+                            {selectedTier === tier.id && (
+                              <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                            )}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               <div>
