@@ -95,7 +95,7 @@ export default function SuperAdminMasterDashboard() {
   const suspendedSchools = schools.filter((s) => s.subscriptionStatus === "Suspended").length;
   const totalStudents = schools.reduce((acc, curr) => acc + curr.studentsCount, 0);
   const totalMRR = schools
-    .filter((s) => s.subscriptionStatus === "Active")
+    .filter((s) => s.subscriptionStatus === "Active" && !s.isDemo)
     .reduce((acc, curr) => acc + curr.monthlyRevenue, 0);
   const pendingProofsCount = proofs.filter((p) => p.status === "Pending").length;
 

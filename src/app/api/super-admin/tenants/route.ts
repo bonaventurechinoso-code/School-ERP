@@ -89,6 +89,62 @@ export async function GET(req: NextRequest) {
       combinedMap.set(s.subdomain.toLowerCase(), s);
     }
 
+    // 5. Query and augment with Tenant table records (including isDemo, isTrial, trialEndsAt)
+    try {
+      const dbTenants = await basePrisma.tenant.findMany({
+        select: {
+          id: true,
+          schoolName: true,
+          subdomain: true,
+          adminEmail: true,
+          contactPhone: true,
+          status: true,
+          subscriptionStatus: true,
+          isDemo: true,
+          isTrial: true,
+          trialEndsAt: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      for (const t of dbTenants) {
+        const sub = t.subdomain.toLowerCase();
+        const existing = combinedMap.get(sub);
+        if (existing) {
+          existing.isDemo = Boolean(t.isDemo);
+          existing.isTrial = Boolean(t.isTrial);
+          if (t.trialEndsAt) existing.trialEndsAt = new Date(t.trialEndsAt).toISOString();
+          if (t.subscriptionStatus) existing.subscriptionStatus = t.subscriptionStatus as any;
+        } else {
+          combinedMap.set(sub, {
+            id: t.id,
+            name: t.schoolName,
+            code: t.subdomain ? t.subdomain.toUpperCase().slice(0, 6) : "SCH",
+            subdomain: t.subdomain,
+            tier: t.isDemo || t.isTrial ? "Free" : "Basic",
+            studentsCount: t.isDemo ? 120 : 0,
+            planStatus: t.isTrial ? "Trial" : t.status === "ACTIVE" ? "Active" : "Suspended",
+            subscriptionStatus: (t.subscriptionStatus || (t.isTrial ? "Free Trial" : "Active")) as any,
+            monthlyRevenue: 0,
+            contactEmail: t.adminEmail,
+            contactPhone: t.contactPhone || "+234 800 000 0000",
+            joinedDate: new Date(t.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }),
+            adminName: t.isDemo ? "Demo Administrator" : "Administrator",
+            isDemo: Boolean(t.isDemo),
+            isTrial: Boolean(t.isTrial),
+            trialEndsAt: t.trialEndsAt ? new Date(t.trialEndsAt).toISOString() : undefined,
+          });
+        }
+      }
+    } catch (tErr) {
+      console.warn("[SuperAdmin:Tenants GET] Tenant DB query warning:", tErr);
+    }
+
     // Sort to place real trials and active institutions in prominent view
     let result = Array.from(combinedMap.values()).sort((a, b) => {
       if (a.isTrial && !b.isTrial) return -1;

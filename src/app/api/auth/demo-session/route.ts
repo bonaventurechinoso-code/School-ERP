@@ -62,6 +62,47 @@ async function getOrProvisionDemoTenant() {
     });
   }
 
+  // Idempotently verify / seed single fixed Demo Tenant in Tenant table
+  try {
+    const existingDemoTenant = await basePrisma.tenant.findFirst({
+      where: {
+        OR: [
+          { isDemo: true },
+          { subdomain: DEMO_SUBDOMAIN },
+        ],
+      },
+    });
+
+    if (!existingDemoTenant) {
+      await basePrisma.tenant.create({
+        data: {
+          schoolName: DEMO_SCHOOL_NAME,
+          subdomain: DEMO_SUBDOMAIN,
+          adminEmail: DEMO_ADMIN_EMAIL,
+          contactPhone: "+234 800 000 0000",
+          institutionTypes: ["PRIMARY", "SECONDARY"],
+          status: "ACTIVE",
+          subscriptionStatus: "ACTIVE",
+          isDemo: true,
+          isTrial: false,
+          trialEndsAt: null,
+        },
+      });
+    } else if (!existingDemoTenant.isDemo || existingDemoTenant.isTrial) {
+      await basePrisma.tenant.update({
+        where: { id: existingDemoTenant.id },
+        data: {
+          isDemo: true,
+          isTrial: false,
+          subscriptionStatus: "ACTIVE",
+          trialEndsAt: null,
+        },
+      });
+    }
+  } catch (tenantSyncErr) {
+    console.warn("[DEMO_SESSION] Demo tenant table sync check:", tenantSyncErr);
+  }
+
   // Ensure tiers
   let tiers = demoSchool.academicTiers;
   if (!tiers || tiers.length === 0) {

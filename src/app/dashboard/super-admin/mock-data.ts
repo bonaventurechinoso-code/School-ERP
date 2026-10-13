@@ -1,5 +1,5 @@
 export type PlanTier = "Free" | "Basic" | "Premium" | "Enterprise";
-export type SubscriptionStatus = "Active" | "Pending Verification" | "Suspended" | "Expired" | "Free Trial";
+export type SubscriptionStatus = "Active" | "Pending Verification" | "Suspended" | "Expired" | "Free Trial" | "TRIALING";
 
 export interface SchoolTenant {
   id: string;

@@ -154,7 +154,7 @@ export async function POST(req: Request) {
             contactPhone: phone || "+234 800 000 0000",
             institutionTypes: ["PRIMARY", "SECONDARY"],
             status: "ACTIVE",
-            subscriptionStatus: "Free Trial",
+            subscriptionStatus: "TRIALING",
             isDemo: false,
             isTrial: true,
             trialEndsAt: fourteenDaysOut,
