@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users, Loader2, Menu, X } from "lucide-react";
+import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users, Loader2, Menu, X, Eye, EyeOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SessionProvider, useSession } from "@/lib/session-context";
@@ -266,12 +266,23 @@ export default function LandingPage() {
     email: "",
     phone: "",
     password: "",
+    confirmPassword: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleTrialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsTrialSubmitting(true);
     setTrialError(null);
+    if (trialForm.password !== trialForm.confirmPassword) {
+      setTrialError("Passwords do not match. Please re-enter.");
+      return;
+    }
+    if (trialForm.password.length < 8) {
+      setTrialError("Password must be at least 8 characters.");
+      return;
+    }
+    setIsTrialSubmitting(true);
     try {
       const response = await fetch("/api/trials/create", {
         method: "POST",
@@ -708,14 +719,50 @@ export default function LandingPage() {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Admin Account Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Minimum 8 characters"
-                  value={trialForm.password}
-                  onChange={(e) => setTrialForm({ ...trialForm, password: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Minimum 8 characters"
+                    value={trialForm.password}
+                    onChange={(e) => setTrialForm({ ...trialForm, password: e.target.value })}
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    required
+                    placeholder="Re-enter your password"
+                    value={trialForm.confirmPassword}
+                    onChange={(e) => setTrialForm({ ...trialForm, confirmPassword: e.target.value })}
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               {trialError && (
