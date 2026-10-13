@@ -738,6 +738,7 @@ export default function LandingPage() {
                   onClick={() => { setShowTierDropdown((v) => !v); setTierSearch(""); }}
                   role="combobox"
                   aria-expanded={showTierDropdown}
+                  aria-controls="tier-listbox"
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowTierDropdown((v) => !v); setTierSearch(""); } }}
                 >
@@ -758,7 +759,7 @@ export default function LandingPage() {
                         className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                       />
                     </div>
-                    <ul role="listbox">
+                    <ul id="tier-listbox" role="listbox">
                       {tiers
                         .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.desc.toLowerCase().includes(tierSearch.toLowerCase()))
                         .map((tier) => (
