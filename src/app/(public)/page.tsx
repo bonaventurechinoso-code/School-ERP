@@ -257,6 +257,43 @@ function MarketingNavbar() {
 export default function LandingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [loadingGateway, setLoadingGateway] = useState<"trial" | "demo" | null>(null);
+  const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
+  const [isTrialSubmitting, setIsTrialSubmitting] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+  const [trialForm, setTrialForm] = useState({
+    schoolName: "",
+    adminName: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
+
+  const handleTrialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTrialSubmitting(true);
+    setTrialError(null);
+    try {
+      const response = await fetch("/api/trials/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(trialForm),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || "Failed to create free trial.");
+      }
+
+      if (data?.redirectUrl) {
+        window.location.assign(data.redirectUrl);
+        return;
+      }
+      window.location.assign(`/onboarding?tenant=${data.tenant?.subdomain || "trial"}`);
+    } catch (err: any) {
+      setTrialError(err?.message || "An unexpected error occurred. Please try again.");
+      setIsTrialSubmitting(false);
+    }
+  };
 
   const handleGatewayNavigation = async (type: "trial" | "demo", endpoint: string) => {
     // Prevent duplicate firing if a request is already in-flight
@@ -330,21 +367,11 @@ export default function LandingPage() {
             <button
               type="button"
               id="start-free-trial-btn"
-              disabled={loadingGateway !== null}
-              onClick={() => handleGatewayNavigation("trial", "/api/trial/create-sandbox")}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+              onClick={() => setIsTrialModalOpen(true)}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 cursor-pointer"
             >
-              {loadingGateway === "trial" ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin text-white" />
-                  <span>Start Free Trial</span>
-                </>
-              ) : (
-                <>
-                  <span>Start Free Trial</span>
-                  <ArrowRight className="h-5 w-5" />
-                </>
-              )}
+              <span>Start Free Trial</span>
+              <ArrowRight className="h-5 w-5" />
             </button>
             <button
               type="button"
@@ -596,6 +623,126 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      {/* Free Trial Modal */}
+      {isTrialModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsTrialModalOpen(false)}
+              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 mb-2">
+                14-Day Free Trial
+              </span>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                Start Your Institution Cloud
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Zero setup charge. Creates a dedicated, isolated tenant database.
+              </p>
+            </div>
+
+            <form onSubmit={handleTrialSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  School / Institution Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Grace Hills Academy"
+                  value={trialForm.schoolName}
+                  onChange={(e) => setTrialForm({ ...trialForm, schoolName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Administrator Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dr. Sarah Ade"
+                  value={trialForm.adminName}
+                  onChange={(e) => setTrialForm({ ...trialForm, adminName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Work Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@school.edu.ng"
+                    value={trialForm.email}
+                    onChange={(e) => setTrialForm({ ...trialForm, email: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Contact Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+234 800 123 4567"
+                    value={trialForm.phone}
+                    onChange={(e) => setTrialForm({ ...trialForm, phone: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Admin Account Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Minimum 8 characters"
+                  value={trialForm.password}
+                  onChange={(e) => setTrialForm({ ...trialForm, password: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {trialError && (
+                <p className="text-xs text-rose-500 font-semibold">{trialError}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isTrialSubmitting}
+                className="w-full mt-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-75 text-white font-bold py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isTrialSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Provisioning Trial...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create 14-Day Free Trial</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

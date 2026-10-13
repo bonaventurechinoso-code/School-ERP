@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { createDatabaseSession } from "@/lib/session-manager";
+import { logAuditEvent } from "@/lib/audit-logger";
+import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 
 const DEMO_SUBDOMAIN = "demo";
 const DEMO_SCHOOL_NAME = "Demo School";
@@ -9,63 +11,23 @@ const DEMO_ADMIN_EMAIL = "demo.admin@schoolerp.local";
 
 export const dynamic = "force-dynamic";
 
-interface CachedDemoTenant {
-  demoSchool: any;
-  staffId: string;
-  staffEmail: string;
-  tierNames: string[];
-  cachedAt: number;
-}
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __cachedDemoTenant: CachedDemoTenant | undefined;
-}
-
-const CACHE_TTL_MS = 60 * 1000;
-
 /**
- * Idempotently retrieves or provisions the isolated demo school tenant.
- * Ensures Demo School exists with baseline tiers, staff, and configurations
- * strictly isolated from the global platform administration layer.
+ * Idempotently retrieves or seeds the single fixed demo tenant.
+ * Guaranteed to NEVER create multiple tenants on click.
  */
 async function getOrProvisionDemoTenant() {
-  const cached = (globalThis as any).__cachedDemoTenant as CachedDemoTenant | undefined;
-  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    return {
-      demoSchool: cached.demoSchool,
-      staffId: cached.staffId,
-      staffEmail: cached.staffEmail,
-      tierNames: cached.tierNames,
-    };
-  }
-
-  // Fast-path indexed query by subdomain
-  let demoSchool = await basePrisma.school.findUnique({
-    where: { subdomain: DEMO_SUBDOMAIN },
+  let demoSchool = await basePrisma.school.findFirst({
+    where: {
+      OR: [
+        { subdomain: DEMO_SUBDOMAIN },
+        { slug: DEMO_SUBDOMAIN },
+      ],
+    },
     include: {
-      academicTiers: {
-        orderBy: { level: "asc" },
-      },
-      staff: {
-        include: { user: true }
-      },
+      academicTiers: { orderBy: { level: "asc" } },
+      staff: { include: { user: true } },
     },
   });
-
-  if (!demoSchool) {
-    demoSchool = await basePrisma.school.findFirst({
-      where: { name: { contains: "Demo", mode: "insensitive" } },
-      include: {
-        academicTiers: {
-          orderBy: { level: "asc" },
-        },
-        staff: {
-          include: { user: true }
-        },
-      },
-    });
-  }
 
   if (!demoSchool) {
     demoSchool = await basePrisma.school.create({
@@ -73,10 +35,14 @@ async function getOrProvisionDemoTenant() {
         name: DEMO_SCHOOL_NAME,
         subdomain: DEMO_SUBDOMAIN,
         slug: DEMO_SUBDOMAIN,
+        status: "ACTIVE",
+        subscriptionStatus: "ACTIVE",
         isActive: true,
         isBanned: false,
+        trialStartDate: null,
+        trialEndDate: null,
         isPublicPortalEnabled: true,
-        welcomeGreeting: "Welcome to the Demo School Environment! Explore institutional workflows safely in complete isolation.",
+        welcomeGreeting: "Welcome to Demo School! Explore administrative workflows freely in demo mode.",
         academicTiers: {
           create: [
             { name: "Daycare / Nursery", level: 1 },
@@ -86,23 +52,17 @@ async function getOrProvisionDemoTenant() {
           ],
         },
         departments: {
-          create: [
-            { name: "Academic Administration" },
-          ],
+          create: [{ name: "Academic Administration" }],
         },
       },
       include: {
-        academicTiers: {
-          orderBy: { level: "asc" },
-        },
-        staff: {
-          include: { user: true }
-        },
+        academicTiers: { orderBy: { level: "asc" } },
+        staff: { include: { user: true } },
       },
     });
   }
 
-  // Ensure academic tiers are present
+  // Ensure tiers
   let tiers = demoSchool.academicTiers;
   if (!tiers || tiers.length === 0) {
     await basePrisma.academicTier.createMany({
@@ -110,7 +70,6 @@ async function getOrProvisionDemoTenant() {
         { schoolId: demoSchool.id, name: "Daycare / Nursery", level: 1 },
         { schoolId: demoSchool.id, name: "Primary School", level: 2 },
         { schoolId: demoSchool.id, name: "Secondary School", level: 3 },
-        { schoolId: demoSchool.id, name: "Higher Institution / University", level: 4 },
       ],
     });
     tiers = await basePrisma.academicTier.findMany({
@@ -120,26 +79,86 @@ async function getOrProvisionDemoTenant() {
   }
 
   const tierNames = tiers.map((t) => t.name);
-  const adminStaff = demoSchool.staff?.find((s: any) => s.user?.role === "SCHOOL_ADMIN" || s.user?.role === "SUPER_ADMIN") || demoSchool.staff?.[0];
 
-  const result = {
+  // Ensure admin user & staff
+  let adminStaff = demoSchool.staff?.find(
+    (s: any) => s.user?.role === "SCHOOL_ADMIN" || s.user?.role === "SUPER_ADMIN"
+  ) || demoSchool.staff?.[0];
+
+  if (!adminStaff) {
+    const adminUser = await basePrisma.user.upsert({
+      where: {
+        schoolId_email: {
+          schoolId: demoSchool.id,
+          email: DEMO_ADMIN_EMAIL,
+        },
+      },
+      update: { role: "SCHOOL_ADMIN", status: "ACTIVE" },
+      create: {
+        schoolId: demoSchool.id,
+        email: DEMO_ADMIN_EMAIL,
+        role: "SCHOOL_ADMIN",
+        passwordHash: "",
+        mustChangePassword: false,
+        status: "ACTIVE",
+      },
+    });
+
+    const dept = await basePrisma.department.findFirst({
+      where: { schoolId: demoSchool.id },
+    });
+
+    adminStaff = await basePrisma.staff.upsert({
+      where: {
+        schoolId_email: {
+          schoolId: demoSchool.id,
+          email: DEMO_ADMIN_EMAIL,
+        },
+      },
+      update: { userId: adminUser.id, status: "ACTIVE" },
+      create: {
+        schoolId: demoSchool.id,
+        userId: adminUser.id,
+        firstName: "Demo",
+        lastName: "Administrator",
+        email: DEMO_ADMIN_EMAIL,
+        status: "ACTIVE",
+        departmentId: dept?.id,
+      },
+      include: { user: true },
+    });
+  }
+
+  // Update fixed demo school entry in in-memory store (DO NOT create new id)
+  registerTenantInStore({
+    id: demoSchool.id,
+    name: demoSchool.name,
+    code: "DEMO001",
+    subdomain: DEMO_SUBDOMAIN,
+    tier: "Free",
+    studentsCount: 120,
+    planStatus: "Active",
+    subscriptionStatus: "Active",
+    monthlyRevenue: 0,
+    contactEmail: DEMO_ADMIN_EMAIL,
+    contactPhone: "+234 800 000 0000",
+    joinedDate: "Oct 13, 2026",
+    adminName: "Demo Administrator",
+    isDemo: true,
+    isTrial: false,
+    trialEndsAt: undefined,
+  });
+
+  return {
     demoSchool,
-    staffId: adminStaff?.id || "demo-tenant-admin-id",
-    staffEmail: adminStaff?.email || DEMO_ADMIN_EMAIL,
+    staffId: adminStaff.id,
+    staffEmail: adminStaff.email || DEMO_ADMIN_EMAIL,
     tierNames,
   };
-
-  (globalThis as any).__cachedDemoTenant = {
-    ...result,
-    cachedAt: Date.now(),
-  };
-
-  return result;
 }
 
 /**
- * Generates an authenticated session JWT scoped strictly to the Demo School tenant.
- * Uses role 'TENANT_ADMIN' to restrict master platform access while granting full demo tenant access.
+ * Creates authenticated session for Demo School.
  */
 async function generateDemoSessionToken(
   staffId: string,
@@ -165,12 +184,24 @@ async function generateDemoSessionToken(
 }
 
 /**
- * GET handler: Directly navigated when public users click "Explore Demo Environment".
- * Generates a mock TENANT_ADMIN session tied strictly to Demo School and redirects to /demo/dashboard.
+ * GET handler: Public users clicking "Explore Demo Environment".
+ * Routes to /demo/admin with X-Demo-Mode: DEMO MODE header.
  */
 export async function GET(req: Request) {
   try {
     const { demoSchool, staffId, staffEmail, tierNames } = await getOrProvisionDemoTenant();
+
+    await logAuditEvent({
+      action: "DEMO_SESSION",
+      actorId: staffId || "DEMO_USER",
+      schoolId: demoSchool.id,
+      target: demoSchool.name,
+      metadata: {
+        event: "DEMO_SESSION",
+        subdomain: DEMO_SUBDOMAIN,
+        visitedAt: new Date().toISOString(),
+      },
+    });
 
     const sessionToken = await generateDemoSessionToken(
       staffId,
@@ -181,19 +212,18 @@ export async function GET(req: Request) {
       tierNames
     );
 
-    // Direct user into the isolated Demo School dashboard context
-    const redirectPath = `/${demoSchool.subdomain}/dashboard`;
-    const redirectUrl = new URL(redirectPath, req.url);
-
+    // Redirect to /demo/admin
+    const redirectUrl = new URL(`/demo/admin`, req.url);
     const response = NextResponse.redirect(redirectUrl);
 
-    // Attach secure demo session and active tier cookies
+    response.headers.set("X-Demo-Mode", "DEMO MODE");
+
     response.cookies.set("session", sessionToken, {
       path: "/",
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: 60 * 60 * 24,
     });
 
     response.cookies.set("activeTier", tierNames[0] || "Primary School", {
@@ -205,7 +235,7 @@ export async function GET(req: Request) {
 
     return response;
   } catch (error: any) {
-    console.error("[DEMO_SESSION_INITIALIZATION_ERROR]:", error);
+    console.error("[DEMO_SESSION_ERROR]:", error);
     return NextResponse.json(
       { error: "Failed to initialize demo environment session.", details: error?.message },
       { status: 500 }
@@ -214,11 +244,23 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST handler: Programmatic initialization support for asynchronous client workflows.
+ * POST handler: Client fetch from landing page.
  */
 export async function POST(req: Request) {
   try {
     const { demoSchool, staffId, staffEmail, tierNames } = await getOrProvisionDemoTenant();
+
+    await logAuditEvent({
+      action: "DEMO_SESSION",
+      actorId: staffId || "DEMO_USER",
+      schoolId: demoSchool.id,
+      target: demoSchool.name,
+      metadata: {
+        event: "DEMO_SESSION",
+        subdomain: DEMO_SUBDOMAIN,
+        visitedAt: new Date().toISOString(),
+      },
+    });
 
     const sessionToken = await generateDemoSessionToken(
       staffId,
@@ -229,19 +271,20 @@ export async function POST(req: Request) {
       tierNames
     );
 
-    const redirectPath = `/${demoSchool.subdomain}/dashboard`;
-
     const response = NextResponse.json({
       success: true,
-      message: "Demo environment session initialized successfully.",
+      message: "Demo session initialized.",
       tenant: {
         id: demoSchool.id,
         name: demoSchool.name,
-        subdomain: demoSchool.subdomain,
+        subdomain: DEMO_SUBDOMAIN,
+        isDemo: true,
       },
       role: "TENANT_ADMIN",
-      redirectUrl: redirectPath,
+      redirectUrl: "/demo/admin",
     });
+
+    response.headers.set("X-Demo-Mode", "DEMO MODE");
 
     response.cookies.set("session", sessionToken, {
       path: "/",
@@ -260,7 +303,7 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error: any) {
-    console.error("[DEMO_SESSION_INITIALIZATION_ERROR]:", error);
+    console.error("[DEMO_SESSION_ERROR]:", error);
     return NextResponse.json(
       { error: "Failed to initialize demo environment session.", details: error?.message },
       { status: 500 }

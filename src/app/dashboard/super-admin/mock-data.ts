@@ -1,6 +1,5 @@
-// --- TYPES ---
 export type PlanTier = "Free" | "Basic" | "Premium" | "Enterprise";
-export type SubscriptionStatus = "Active" | "Pending Verification" | "Suspended" | "Expired";
+export type SubscriptionStatus = "Active" | "Pending Verification" | "Suspended" | "Expired" | "Free Trial";
 
 export interface SchoolTenant {
   id: string;
@@ -21,6 +20,9 @@ export interface SchoolTenant {
   address?: string;
   lga?: string;
   state?: string;
+  isDemo?: boolean;
+  isTrial?: boolean;
+  trialEndsAt?: string;
 }
 
 export interface BankTransferProof {
@@ -216,6 +218,25 @@ export const INITIAL_SCHOOLS: SchoolTenant[] = [
     address: "10 Bompai Extension, Nassarawa",
     lga: "Kano Municipal",
     state: "Kano State",
+  },
+  {
+    id: "sch-demo",
+    name: "Demo School",
+    code: "DEMO001",
+    subdomain: "demo",
+    tier: "Free",
+    studentsCount: 120,
+    planStatus: "Active",
+    subscriptionStatus: "Active",
+    monthlyRevenue: 0,
+    contactEmail: "demo.admin@schoolerp.local",
+    contactPhone: "+234 800 000 0000",
+    joinedDate: "Oct 13, 2026",
+    adminName: "Demo Administrator",
+    address: "10 Innovation Way, Victoria Island",
+    lga: "Eti-Osa",
+    state: "Lagos State",
+    isDemo: true,
   },
 ];
 
@@ -420,3 +441,40 @@ export function findSchool(idOrCode: string): SchoolTenant | undefined {
 export function formatNaira(amount: number): string {
   return "₦" + amount.toLocaleString("en-NG");
 }
+
+// Global in-memory tenant store across API handlers
+declare global {
+  // eslint-disable-next-line no-var
+  var __registeredTenantsStore: SchoolTenant[] | undefined;
+}
+
+export function getSchoolsStore(): SchoolTenant[] {
+  if (typeof globalThis !== "undefined") {
+    if (!globalThis.__registeredTenantsStore) {
+      globalThis.__registeredTenantsStore = [...INITIAL_SCHOOLS];
+    }
+    return globalThis.__registeredTenantsStore;
+  }
+  return INITIAL_SCHOOLS;
+}
+
+export function registerTenantInStore(tenant: SchoolTenant): SchoolTenant {
+  const store = getSchoolsStore();
+  const existingIdx = store.findIndex((s) => s.id === tenant.id || s.subdomain === tenant.subdomain);
+  if (existingIdx >= 0) {
+    store[existingIdx] = { ...store[existingIdx], ...tenant };
+    return store[existingIdx];
+  } else {
+    store.unshift(tenant);
+    return tenant;
+  }
+}
+
+export function getTrialDaysLeft(trialEndsAt?: string): string {
+  if (!trialEndsAt) return "14d left";
+  const diffMs = new Date(trialEndsAt).getTime() - Date.now();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "Expired";
+  return `${days}d left`;
+}
+

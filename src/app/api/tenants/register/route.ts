@@ -15,6 +15,7 @@ import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/
 import { logAuditEvent } from "@/lib/audit-logger";
 import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "@/lib/admin-notifications";
+import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -258,6 +259,23 @@ export async function POST(request: Request) {
         console.error("[SUPER_ADMIN_NOTIF_EXCEPTION]:", notifErr);
       }
 
+      registerTenantInStore({
+        id: primarySchool.id,
+        name: schoolName,
+        code: combinedSubdomain.toUpperCase().slice(0, 7),
+        subdomain: combinedSubdomain,
+        tier: "Free",
+        studentsCount: 0,
+        planStatus: "Trial",
+        subscriptionStatus: "Free Trial",
+        monthlyRevenue: 0,
+        contactEmail: adminEmail,
+        contactPhone: contactPhone || "+234 800 000 0000",
+        joinedDate: "Today",
+        adminName: "Tenant Administrator",
+        trialEndsAt: fourteenDaysOut.toISOString(),
+      });
+
       const distinctSessionToken = crypto.randomUUID();
       const sessionResult = await createDatabaseSession({
         userId: primaryStaff.id,
@@ -471,6 +489,23 @@ export async function POST(request: Request) {
     } catch (notifErr) {
       console.error("[SUPER_ADMIN_NOTIF_EXCEPTION]:", notifErr);
     }
+
+    registerTenantInStore({
+      id: newSchool.school.id,
+      name: schoolName,
+      code: formattedSubdomain.toUpperCase().slice(0, 7),
+      subdomain: formattedSubdomain,
+      tier: "Free",
+      studentsCount: 0,
+      planStatus: "Trial",
+      subscriptionStatus: "Free Trial",
+      monthlyRevenue: 0,
+      contactEmail: adminEmail,
+      contactPhone: contactPhone || "+234 800 000 0000",
+      joinedDate: "Today",
+      adminName: "Admin User",
+      trialEndsAt: fourteenDaysOut.toISOString(),
+    });
 
     // Synchronize SSL generation with onboarding pipeline:
     // Trigger reverse proxy TLS binding and await initial handshake confirmation

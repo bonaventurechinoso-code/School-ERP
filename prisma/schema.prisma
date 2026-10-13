@@ -1054,6 +1054,10 @@ model Tenant {
   planId                 String?
   plan                   Plan?          @relation(fields: [planId], references: [id])
   status                 String         @default("PENDING") // PENDING, ACTIVE, SUSPENDED
+  subscriptionStatus     String?        @default("Active")
+  isDemo                 Boolean        @default(false)
+  isTrial                Boolean        @default(false)
+  trialEndsAt            DateTime?
   kycStatus              String         @default("pending")
   kycDocs                Json?
   settlementBankName     String?
@@ -1070,6 +1074,8 @@ model Tenant {
   @@index([status])
   @@index([createdAt(sort: Desc)])
   @@index([planId])
+  @@index([isDemo])
+  @@index([isTrial])
 }
 
 model Wallet {

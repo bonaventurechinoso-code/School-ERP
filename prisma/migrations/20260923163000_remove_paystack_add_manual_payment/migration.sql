@@ -38,7 +38,7 @@ DROP INDEX IF EXISTS "Subscription_tenantId_status_idx";
 ALTER TABLE "Invoice" DROP COLUMN IF EXISTS "paystackReference";
 
 -- AlterTable
-ALTER TABLE "PlatformEarnings" DROP COLUMN IF EXISTS "subaccountCode",
+ALTER TABLE IF EXISTS "PlatformEarnings" DROP COLUMN IF EXISTS "subaccountCode",
 ALTER COLUMN "platformFee" SET DEFAULT 0,
 ALTER COLUMN "source" SET DEFAULT 'manual';
 
@@ -79,7 +79,8 @@ DROP COLUMN IF EXISTS "paystackSubaccountCode";
 
 -- AlterTable
 ALTER TABLE "WalletTransaction" DROP COLUMN IF EXISTS "paystackReference",
-ALTER COLUMN "source" SET DEFAULT 'manual_transfer';
+ADD COLUMN IF NOT EXISTS "source" TEXT DEFAULT 'manual_transfer',
+ADD COLUMN IF NOT EXISTS "settlementStatus" TEXT DEFAULT 'settled';
 
 -- DropTable
 DROP TABLE IF EXISTS "bonavee_staff_metadata";

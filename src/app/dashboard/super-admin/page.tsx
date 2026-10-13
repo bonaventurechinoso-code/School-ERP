@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -30,6 +30,7 @@ import {
   BankTransferProof,
   PlanTier,
   SubscriptionStatus,
+  getTrialDaysLeft,
 } from "./mock-data";
 
 export default function SuperAdminMasterDashboard() {
@@ -40,6 +41,29 @@ export default function SuperAdminMasterDashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+
+  // Real-time synchronization with DB and in-memory store
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRealTimeSchools() {
+      try {
+        const res = await fetch("/api/super-admin/tenants");
+        if (res.ok) {
+          const json = await res.json();
+          const list = json?.data?.schools || json?.data?.tenants;
+          if (Array.isArray(list) && list.length > 0 && isMounted) {
+            setSchools(list);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync super admin tenants, using default store:", err);
+      }
+    }
+    loadRealTimeSchools();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -104,10 +128,10 @@ export default function SuperAdminMasterDashboard() {
       prev.map((s) =>
         s.id === schoolToSuspend.id
           ? {
-              ...s,
-              subscriptionStatus: newStatus,
-              planStatus: isCurrentlySuspended ? "Active" : "Suspended",
-            }
+            ...s,
+            subscriptionStatus: newStatus,
+            planStatus: isCurrentlySuspended ? "Active" : "Suspended",
+          }
           : s
       )
     );
@@ -140,12 +164,12 @@ export default function SuperAdminMasterDashboard() {
       prev.map((s) =>
         s.id === proof.schoolId || s.code === proof.schoolCode
           ? {
-              ...s,
-              subscriptionStatus: "Active",
-              planStatus: "Active",
-              tier: proof.planRequested,
-              lastPaymentDate: "Today (Verified)",
-            }
+            ...s,
+            subscriptionStatus: "Active",
+            planStatus: "Active",
+            tier: proof.planRequested,
+            lastPaymentDate: "Today (Verified)",
+          }
           : s
       )
     );
@@ -184,10 +208,10 @@ export default function SuperAdminMasterDashboard() {
         newSchoolTier === "Enterprise"
           ? 350000
           : newSchoolTier === "Premium"
-          ? 150000
-          : newSchoolTier === "Basic"
-          ? 75000
-          : 0,
+            ? 150000
+            : newSchoolTier === "Basic"
+              ? 75000
+              : 0,
       contactEmail: newSchoolEmail || "admin@school.ng",
       contactPhone: "+234 800 000 0000",
       joinedDate: "Just now",
@@ -345,11 +369,10 @@ export default function SuperAdminMasterDashboard() {
               Bank Transfers
             </span>
             <span
-              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                pendingProofsCount > 0
+              className={`text-xs font-bold px-2 py-0.5 rounded-full ${pendingProofsCount > 0
                   ? "bg-amber-100 text-amber-800 animate-pulse"
                   : "bg-slate-100 text-slate-700"
-              }`}
+                }`}
             >
               {pendingProofsCount > 0 ? "Action Required" : "Cleared"}
             </span>
@@ -476,9 +499,8 @@ export default function SuperAdminMasterDashboard() {
                   return (
                     <tr
                       key={school.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isSuspended ? "bg-rose-50/30" : ""
-                      }`}
+                      className={`hover:bg-slate-50/80 transition-colors ${isSuspended ? "bg-rose-50/30" : ""
+                        }`}
                     >
                       {/* School Name + Logo + Code */}
                       <td className="py-4 px-6">
@@ -518,19 +540,28 @@ export default function SuperAdminMasterDashboard() {
 
                       {/* Tier Badge */}
                       <td className="py-4 px-4">
-                        <span
-                          className={`inline-block text-xs font-bold px-2.5 py-1 rounded-md border ${
-                            school.tier === "Enterprise"
-                              ? "bg-purple-50 text-purple-700 border-purple-200"
-                              : school.tier === "Premium"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : school.tier === "Basic"
-                              ? "bg-slate-100 text-slate-700 border-slate-200"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          }`}
-                        >
-                          {school.tier}
-                        </span>
+                        {school.isDemo ? (
+                          <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-md border bg-sky-50 text-sky-700 border-sky-300">
+                            Demo
+                          </span>
+                        ) : school.planStatus === "Trial" || school.subscriptionStatus === "Free Trial" || school.tier === "Free" ? (
+                          <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-md border bg-amber-50 text-amber-800 border-amber-300">
+                            Free Trial
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-block text-xs font-bold px-2.5 py-1 rounded-md border ${school.tier === "Enterprise"
+                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                : school.tier === "Premium"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : school.tier === "Basic"
+                                    ? "bg-slate-100 text-slate-700 border-slate-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              }`}
+                          >
+                            {school.tier}
+                          </span>
+                        )}
                       </td>
 
                       {/* Students Count */}
@@ -540,30 +571,40 @@ export default function SuperAdminMasterDashboard() {
 
                       {/* Subscription Status Badge */}
                       <td className="py-4 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                            school.subscriptionStatus === "Active"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : school.subscriptionStatus === "Pending Verification"
-                              ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
-                              : school.subscriptionStatus === "Suspended"
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : "bg-slate-100 text-slate-600 border-slate-200"
-                          }`}
-                        >
+                        {school.isDemo ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border bg-sky-50 text-sky-700 border-sky-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                            DEMO
+                          </span>
+                        ) : school.isTrial || school.planStatus === "Trial" || school.subscriptionStatus === "Free Trial" ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border bg-amber-50 text-amber-800 border-amber-300 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            FREE TRIAL • {getTrialDaysLeft(school.trialEndsAt)}
+                          </span>
+                        ) : (
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              school.subscriptionStatus === "Active"
-                                ? "bg-emerald-500"
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${school.subscriptionStatus === "Active"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                 : school.subscriptionStatus === "Pending Verification"
-                                ? "bg-amber-500"
-                                : school.subscriptionStatus === "Suspended"
-                                ? "bg-rose-500"
-                                : "bg-slate-400"
-                            }`}
-                          ></span>
-                          {school.subscriptionStatus}
-                        </span>
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
+                                  : school.subscriptionStatus === "Suspended"
+                                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                                    : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${school.subscriptionStatus === "Active"
+                                  ? "bg-emerald-500"
+                                  : school.subscriptionStatus === "Pending Verification"
+                                    ? "bg-amber-500"
+                                    : school.subscriptionStatus === "Suspended"
+                                      ? "bg-rose-500"
+                                      : "bg-slate-400"
+                                }`}
+                            ></span>
+                            {school.subscriptionStatus}
+                          </span>
+                        )}
                       </td>
 
                       {/* Monthly Revenue */}
@@ -620,11 +661,10 @@ export default function SuperAdminMasterDashboard() {
                             type="button"
                             title={isSuspended ? "Reactivate School" : "Suspend School Access"}
                             onClick={() => setSchoolToSuspend(school)}
-                            className={`p-1.5 rounded-lg border transition-colors ${
-                              isSuspended
+                            className={`p-1.5 rounded-lg border transition-colors ${isSuspended
                                 ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                 : "border-slate-200 hover:bg-amber-50 text-slate-600 hover:text-amber-700"
-                            }`}
+                              }`}
                           >
                             <Power className="w-4 h-4" />
                           </button>
@@ -687,35 +727,49 @@ export default function SuperAdminMasterDashboard() {
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
-                        school.tier === "Enterprise"
-                          ? "bg-purple-50 text-purple-700 border-purple-200"
-                          : school.tier === "Premium"
-                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                          : school.tier === "Basic"
-                          ? "bg-slate-100 text-slate-700 border-slate-200"
-                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      }`}
-                    >
-                      {school.tier}
-                    </span>
+                    {school.isDemo ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 bg-sky-50 text-sky-700 border-sky-300">
+                        Demo
+                      </span>
+                    ) : school.planStatus === "Trial" || school.subscriptionStatus === "Free Trial" || school.tier === "Free" ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 bg-amber-50 text-amber-800 border-amber-300">
+                        Free Trial
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${school.tier === "Enterprise"
+                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            : school.tier === "Premium"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : school.tier === "Basic"
+                                ? "bg-slate-100 text-slate-700 border-slate-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          }`}
+                      >
+                        {school.tier}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between text-xs py-1 px-3 bg-slate-50 rounded-xl">
                     <span className="text-slate-500">
                       Status:{" "}
-                      <span
-                        className={`font-semibold ${
-                          isSuspended
-                            ? "text-rose-600"
-                            : isPending
-                            ? "text-amber-600 font-bold"
-                            : "text-emerald-600"
-                        }`}
-                      >
-                        {school.subscriptionStatus}
-                      </span>
+                      {school.isDemo ? (
+                        <span className="font-bold text-sky-700">DEMO</span>
+                      ) : school.isTrial || school.planStatus === "Trial" || school.subscriptionStatus === "Free Trial" ? (
+                        <span className="font-bold text-amber-700">FREE TRIAL • {getTrialDaysLeft(school.trialEndsAt)}</span>
+                      ) : (
+                        <span
+                          className={`font-semibold ${isSuspended
+                              ? "text-rose-600"
+                              : isPending
+                                ? "text-amber-600 font-bold"
+                                : "text-emerald-600"
+                            }`}
+                        >
+                          {school.subscriptionStatus}
+                        </span>
+                      )}
                     </span>
                     <span className="font-mono font-bold text-slate-900">
                       ₦{school.monthlyRevenue.toLocaleString()}/mo
@@ -734,11 +788,10 @@ export default function SuperAdminMasterDashboard() {
                     <button
                       type="button"
                       onClick={() => setSchoolToSuspend(school)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        isSuspended
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${isSuspended
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           : "bg-amber-50 text-amber-700 border border-amber-200"
-                      }`}
+                        }`}
                     >
                       {isSuspended ? "Reactivate" : "Suspend"}
                     </button>
@@ -837,11 +890,10 @@ export default function SuperAdminMasterDashboard() {
               <button
                 type="button"
                 onClick={handleToggleSuspend}
-                className={`px-5 py-2 rounded-xl text-xs font-bold text-white transition-colors ${
-                  schoolToSuspend.subscriptionStatus === "Suspended"
+                className={`px-5 py-2 rounded-xl text-xs font-bold text-white transition-colors ${schoolToSuspend.subscriptionStatus === "Suspended"
                     ? "bg-emerald-600 hover:bg-emerald-700"
                     : "bg-amber-600 hover:bg-amber-700"
-                }`}
+                  }`}
               >
                 {schoolToSuspend.subscriptionStatus === "Suspended"
                   ? "Confirm Reactivation"
