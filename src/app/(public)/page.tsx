@@ -273,6 +273,7 @@ export default function LandingPage() {
   const [selectedTier, setSelectedTier] = useState("standard");
   const [tierSearch, setTierSearch] = useState("");
   const [showTierDropdown, setShowTierDropdown] = useState(false);
+  const [step, setStep] = useState(1);
 
   const tiers = [
     { id: "basic", name: "Basic", desc: "Up to 500 Students", students: 500 },
@@ -653,7 +654,7 @@ export default function LandingPage() {
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => setIsTrialModalOpen(false)}
+              onClick={() => { setIsTrialModalOpen(false); setStep(1); }}
               className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:bg-slate-800"
             >
               <X className="w-5 h-5" />
@@ -672,193 +673,245 @@ export default function LandingPage() {
             </div>
 
             <form onSubmit={handleTrialSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  School / Institution Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Grace Hills Academy"
-                  value={trialForm.schoolName}
-                  onChange={(e) => setTrialForm({ ...trialForm, schoolName: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+
+              {/* Step Indicator */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`flex-1 h-2 rounded-full transition-colors duration-300 ${step >= 1 ? "bg-blue-600" : "bg-slate-200 dark:bg-slate-700"}`} />
+                <div className={`flex-1 h-2 rounded-full transition-colors duration-300 ${step >= 2 ? "bg-blue-600" : "bg-slate-200 dark:bg-slate-700"}`} />
+              </div>
+              <div className="flex justify-between text-xs mb-4">
+                <span className={step === 1 ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400 dark:text-slate-500"}>1. Institution Details</span>
+                <span className={step === 2 ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-400 dark:text-slate-500"}>2. Security</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Administrator Full Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Dr. Sarah Ade"
-                  value={trialForm.adminName}
-                  onChange={(e) => setTrialForm({ ...trialForm, adminName: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
+              {/* ── PHASE 1 ── */}
+              {step === 1 && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      School / Institution Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Grace Hills Academy"
+                      value={trialForm.schoolName}
+                      onChange={(e) => setTrialForm({ ...trialForm, schoolName: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Work Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="admin@school.edu.ng"
-                    value={trialForm.email}
-                    onChange={(e) => setTrialForm({ ...trialForm, email: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Contact Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="+234 800 123 4567"
-                    value={trialForm.phone}
-                    onChange={(e) => setTrialForm({ ...trialForm, phone: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Administrator Full Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Dr. Sarah Ade"
+                      value={trialForm.adminName}
+                      onChange={(e) => setTrialForm({ ...trialForm, adminName: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
 
-              {/* Tier Selector */}
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Select Institution Tier / Plan <span className="text-rose-500">*</span>
-                </label>
-                <div
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer flex items-center justify-between select-none"
-                  onClick={() => { setShowTierDropdown((v) => !v); setTierSearch(""); }}
-                  role="combobox"
-                  aria-expanded={showTierDropdown}
-                  aria-controls="tier-listbox"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowTierDropdown((v) => !v); setTierSearch(""); } }}
-                >
-                  <span className={selectedTier ? "" : "text-slate-400 dark:text-slate-500"}>
-                    {selectedTier ? tiers.find((t) => t.id === selectedTier)?.name + " — " + tiers.find((t) => t.id === selectedTier)?.desc : "Search and select tier..."}
-                  </span>
-                  <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showTierDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </div>
-                {showTierDropdown && (
-                  <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
-                    <div className="p-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Work Email Address
+                      </label>
                       <input
-                        type="text"
-                        autoFocus
-                        placeholder="Search and select tier..."
-                        value={tierSearch}
-                        onChange={(e) => setTierSearch(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        type="email"
+                        placeholder="admin@school.edu.ng"
+                        value={trialForm.email}
+                        onChange={(e) => setTrialForm({ ...trialForm, email: e.target.value })}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                       />
                     </div>
-                    <ul id="tier-listbox" role="listbox">
-                      {tiers
-                        .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.desc.toLowerCase().includes(tierSearch.toLowerCase()))
-                        .map((tier) => (
-                          <li
-                            key={tier.id}
-                            role="option"
-                            aria-selected={selectedTier === tier.id}
-                            onClick={() => { setSelectedTier(tier.id); setShowTierDropdown(false); setTierSearch(""); }}
-                            className={`flex items-center justify-between px-4 py-3 cursor-pointer text-sm transition-colors ${
-                              selectedTier === tier.id
-                                ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                                : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            <div>
-                              <p className="font-semibold">{tier.name}</p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tier.desc}</p>
-                            </div>
-                            {selectedTier === tier.id && (
-                              <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                            )}
-                          </li>
-                        ))}
-                    </ul>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Contact Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="+234 800 123 4567"
+                        value={trialForm.phone}
+                        onChange={(e) => setTrialForm({ ...trialForm, phone: e.target.value })}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Admin Account Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    placeholder="Minimum 8 characters"
-                    value={trialForm.password}
-                    onChange={(e) => setTrialForm({ ...trialForm, password: e.target.value })}
-                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+                  {/* Tier Selector */}
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Select Institution Tier / Plan <span className="text-rose-500">*</span>
+                    </label>
+                    <div
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer flex items-center justify-between select-none"
+                      onClick={() => { setShowTierDropdown((v) => !v); setTierSearch(""); }}
+                      role="combobox"
+                      aria-expanded={showTierDropdown}
+                      aria-controls="tier-listbox"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowTierDropdown((v) => !v); setTierSearch(""); } }}
+                    >
+                      <span className={selectedTier ? "" : "text-slate-400 dark:text-slate-500"}>
+                        {selectedTier ? tiers.find((t) => t.id === selectedTier)?.name + " — " + tiers.find((t) => t.id === selectedTier)?.desc : "Search and select tier..."}
+                      </span>
+                      <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showTierDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </div>
+                    {showTierDropdown && (
+                      <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                        <div className="p-2 border-b border-slate-100 dark:border-slate-800">
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search and select tier..."
+                            value={tierSearch}
+                            onChange={(e) => setTierSearch(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                        </div>
+                        <ul id="tier-listbox" role="listbox">
+                          {tiers
+                            .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.desc.toLowerCase().includes(tierSearch.toLowerCase()))
+                            .map((tier) => (
+                              <li
+                                key={tier.id}
+                                role="option"
+                                aria-selected={selectedTier === tier.id}
+                                onClick={() => { setSelectedTier(tier.id); setShowTierDropdown(false); setTierSearch(""); }}
+                                className={`flex items-center justify-between px-4 py-3 cursor-pointer text-sm transition-colors ${
+                                  selectedTier === tier.id
+                                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                    : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                <div>
+                                  <p className="font-semibold">{tier.name}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tier.desc}</p>
+                                </div>
+                                {selectedTier === tier.id && (
+                                  <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                )}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => {
+                      if (!trialForm.schoolName || !trialForm.adminName || !trialForm.email || !trialForm.phone || !selectedTier) {
+                        alert("Fill all fields in this step before continuing.");
+                        return;
+                      }
+                      setStep(2);
+                    }}
+                    className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <span>Continue to Security</span>
+                    <ArrowRight className="w-4 h-4" />
                   </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    required
-                    placeholder="Re-enter your password"
-                    value={trialForm.confirmPassword}
-                    onChange={(e) => setTrialForm({ ...trialForm, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((v) => !v)}
-                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                    tabIndex={-1}
-                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {trialError && (
-                <p className="text-xs text-rose-500 font-semibold">{trialError}</p>
+                </>
               )}
 
-              <button
-                type="submit"
-                disabled={isTrialSubmitting}
-                className="w-full mt-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-75 text-white font-bold py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isTrialSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Provisioning Trial...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create 14-Day Free Trial</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
+              {/* ── PHASE 2 ── */}
+              {step === 2 && (
+                <>
+                  {/* Summary box */}
+                  <div className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
+                    <span><span className="font-semibold text-slate-800 dark:text-slate-100">School:</span> {trialForm.schoolName || <span className="italic text-slate-400">—</span>}</span>
+                    <span><span className="font-semibold text-slate-800 dark:text-slate-100">Tier:</span> {tiers.find((t) => t.id === selectedTier)?.name || selectedTier}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Admin Account Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        placeholder="Minimum 8 characters"
+                        value={trialForm.password}
+                        onChange={(e) => setTrialForm({ ...trialForm, password: e.target.value })}
+                        className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        tabIndex={-1}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        required
+                        placeholder="Re-enter your password"
+                        value={trialForm.confirmPassword}
+                        onChange={(e) => setTrialForm({ ...trialForm, confirmPassword: e.target.value })}
+                        className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        tabIndex={-1}
+                        aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {trialForm.confirmPassword && trialForm.password !== trialForm.confirmPassword && (
+                      <p className="text-xs text-rose-500 font-semibold mt-1">Passwords do not match.</p>
+                    )}
+                  </div>
+
+                  {trialError && (
+                    <p className="text-xs text-rose-500 font-semibold">{trialError}</p>
+                  )}
+
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="flex-1 py-3.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isTrialSubmitting || (trialForm.confirmPassword.length > 0 && trialForm.password !== trialForm.confirmPassword)}
+                      className="flex-[2] bg-blue-600 hover:bg-blue-500 disabled:opacity-75 text-white font-bold py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {isTrialSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Provisioning Trial...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Create 14-Day Free Trial</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+
             </form>
           </div>
         </div>
