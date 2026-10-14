@@ -270,22 +270,42 @@ export default function LandingPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedTier, setSelectedTier] = useState("standard");
+  const [selectedTiers, setSelectedTiers] = useState<string[]>(["primary"]);
   const [tierSearch, setTierSearch] = useState("");
   const [showTierDropdown, setShowTierDropdown] = useState(false);
   const [step, setStep] = useState(1);
 
-  const tiers = [
-    { id: "basic", name: "Basic", desc: "Up to 500 Students", students: 500 },
-    { id: "standard", name: "Standard", desc: "Up to 1500 Students - Most Popular", students: 1500 },
-    { id: "premium", name: "Premium", desc: "Unlimited Students", students: 999 },
+  const institutionTiers = [
+    { id: "creche", name: "Creche / Daycare", group: "Early Childhood" },
+    { id: "kindergarten", name: "Kindergarten", group: "Early Childhood" },
+    { id: "nursery", name: "Nursery School", group: "Early Childhood" },
+    { id: "primary", name: "Primary School", group: "Basic Education" },
+    { id: "jss", name: "Junior Secondary School (JSS)", group: "Basic Education" },
+    { id: "sss", name: "Senior Secondary School (SSS)", group: "Post-Basic" },
+    { id: "combined", name: "Combined Nursery/Primary/Secondary", group: "Basic Education" },
+    { id: "technical", name: "Technical College", group: "TVET" },
+    { id: "vocational", name: "Vocational / Skills Acquisition Centre", group: "TVET" },
+    { id: "vei", name: "Vocational Enterprise Institution (VEI)", group: "TVET" },
+    { id: "iei", name: "Innovation Enterprise Institution (IEI)", group: "TVET" },
+    { id: "islamiyya", name: "Islamiyya / Quranic / Almajiri", group: "Alternative" },
+    { id: "adult", name: "Adult / Nomadic Education", group: "Alternative" },
+    { id: "special", name: "Special Needs / Inclusive School", group: "Alternative" },
+    { id: "coe", name: "College of Education", group: "Tertiary" },
+    { id: "monotechnic", name: "Monotechnic", group: "Tertiary" },
+    { id: "polytechnic", name: "Polytechnic", group: "Tertiary" },
+    { id: "college_health", name: "College of Health / Nursing / Midwifery", group: "Tertiary" },
+    { id: "college_agric", name: "College of Agriculture", group: "Tertiary" },
+    { id: "university", name: "University", group: "Tertiary" },
+    { id: "open_university", name: "Open University / Distance Learning", group: "Tertiary" },
+    { id: "seminary", name: "Seminary / Bible College / Theology", group: "Religious" },
+    { id: "professional", name: "Professional Institute / Academy", group: "Professional" },
   ];
 
   const handleTrialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTrialError(null);
-    if (!selectedTier) {
-      setTrialError("Please select a tier.");
+    if (selectedTiers.length === 0) {
+      setTrialError("Please select at least one institution type.");
       return;
     }
     if (trialForm.password !== trialForm.confirmPassword) {
@@ -301,7 +321,12 @@ export default function LandingPage() {
       const response = await fetch("/api/trials/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...trialForm, tier: selectedTier }),
+        body: JSON.stringify({
+          ...trialForm,
+          tier: selectedTiers[0],
+          institutionTypes: selectedTiers,
+          institutionTypeLabels: selectedTiers.map((id) => institutionTiers.find((x) => x.id === id)?.name),
+        }),
       });
 
       const data = await response.json();
@@ -740,10 +765,11 @@ export default function LandingPage() {
                     </div>
                   </div>
 
-                  {/* Tier Selector */}
+                  {/* Institution Type Multi-Select */}
                   <div className="relative">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Select Institution Tier / Plan <span className="text-rose-500">*</span>
+                      Select Institution Types <span className="text-rose-500">*</span>
+                      <span className="font-normal text-slate-400 dark:text-slate-500 ml-1">(You can select multiple)</span>
                     </label>
                     <div
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer flex items-center justify-between select-none"
@@ -754,48 +780,83 @@ export default function LandingPage() {
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowTierDropdown((v) => !v); setTierSearch(""); } }}
                     >
-                      <span className={selectedTier ? "" : "text-slate-400 dark:text-slate-500"}>
-                        {selectedTier ? tiers.find((t) => t.id === selectedTier)?.name + " — " + tiers.find((t) => t.id === selectedTier)?.desc : "Search and select tier..."}
+                      <span className={selectedTiers.length > 0 ? "" : "text-slate-400 dark:text-slate-500"}>
+                        {selectedTiers.length > 0
+                          ? `${selectedTiers.length} type${selectedTiers.length > 1 ? "s" : ""} selected`
+                          : "Search and select... e.g Primary, Polytechnic"}
                       </span>
                       <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showTierDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </div>
+
                     {showTierDropdown && (
                       <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
                         <div className="p-2 border-b border-slate-100 dark:border-slate-800">
                           <input
                             type="text"
                             autoFocus
-                            placeholder="Search and select tier..."
+                            placeholder="Search and select... e.g Primary, Polytechnic"
                             value={tierSearch}
                             onChange={(e) => setTierSearch(e.target.value)}
                             className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                           />
                         </div>
-                        <ul id="tier-listbox" role="listbox">
-                          {tiers
-                            .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.desc.toLowerCase().includes(tierSearch.toLowerCase()))
-                            .map((tier) => (
-                              <li
-                                key={tier.id}
-                                role="option"
-                                aria-selected={selectedTier === tier.id}
-                                onClick={() => { setSelectedTier(tier.id); setShowTierDropdown(false); setTierSearch(""); }}
-                                className={`flex items-center justify-between px-4 py-3 cursor-pointer text-sm transition-colors ${
-                                  selectedTier === tier.id
-                                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                                    : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                }`}
-                              >
-                                <div>
-                                  <p className="font-semibold">{tier.name}</p>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tier.desc}</p>
-                                </div>
-                                {selectedTier === tier.id && (
-                                  <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                )}
-                              </li>
-                            ))}
+                        <ul id="tier-listbox" role="listbox" className="max-h-52 overflow-y-auto">
+                          {institutionTiers
+                            .filter((t) => t.name.toLowerCase().includes(tierSearch.toLowerCase()) || t.group.toLowerCase().includes(tierSearch.toLowerCase()))
+                            .map((tier) => {
+                              const isSelected = selectedTiers.includes(tier.id);
+                              return (
+                                <li
+                                  key={tier.id}
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => {
+                                    setSelectedTiers((prev) =>
+                                      isSelected ? prev.filter((x) => x !== tier.id) : [...prev, tier.id]
+                                    );
+                                  }}
+                                  className={`flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm transition-colors ${
+                                    isSelected
+                                      ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                      : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                  }`}
+                                >
+                                  <div>
+                                    <p className="font-semibold">{tier.name}</p>
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{tier.group}</p>
+                                  </div>
+                                  {isSelected && (
+                                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                  )}
+                                </li>
+                              );
+                            })}
                         </ul>
+                      </div>
+                    )}
+
+                    {/* Selected chips */}
+                    {selectedTiers.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {selectedTiers.map((id) => {
+                          const t = institutionTiers.find((x) => x.id === id);
+                          return (
+                            <span
+                              key={id}
+                              className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-full text-xs flex items-center gap-1 font-medium"
+                            >
+                              {t?.name}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTiers((prev) => prev.filter((x) => x !== id))}
+                                className="text-blue-400 hover:text-blue-700 dark:hover:text-blue-100 transition-colors leading-none"
+                                aria-label={`Remove ${t?.name}`}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -803,8 +864,12 @@ export default function LandingPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!trialForm.schoolName || !trialForm.adminName || !trialForm.email || !trialForm.phone || !selectedTier) {
+                      if (!trialForm.schoolName || !trialForm.adminName || !trialForm.email || !trialForm.phone) {
                         alert("Fill all fields in this step before continuing.");
+                        return;
+                      }
+                      if (selectedTiers.length === 0) {
+                        alert("Select at least one institution type before continuing.");
                         return;
                       }
                       setStep(2);
@@ -821,9 +886,15 @@ export default function LandingPage() {
               {step === 2 && (
                 <>
                   {/* Summary box */}
-                  <div className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
-                    <span><span className="font-semibold text-slate-800 dark:text-slate-100">School:</span> {trialForm.schoolName || <span className="italic text-slate-400">—</span>}</span>
-                    <span><span className="font-semibold text-slate-800 dark:text-slate-100">Tier:</span> {tiers.find((t) => t.id === selectedTier)?.name || selectedTier}</span>
+                  <div className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                    <div><span className="font-semibold text-slate-800 dark:text-slate-100">School:</span> {trialForm.schoolName || <span className="italic text-slate-400">—</span>}</div>
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">Types:</span>
+                      {selectedTiers.map((id) => {
+                        const t = institutionTiers.find((x) => x.id === id);
+                        return <span key={id} className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full text-[10px] font-medium">{t?.name}</span>;
+                      })}
+                    </div>
                   </div>
 
                   <div>
