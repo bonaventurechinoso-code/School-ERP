@@ -1,0 +1,1 @@
+SECURITY LOCKED - src/security and src/middleware.ts are LOCKED. Never edit unless user says UNLOCK SECURITY. Correct is if(!session) redirect. Wrong is if(session) redirect.
