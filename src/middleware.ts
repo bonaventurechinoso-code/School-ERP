@@ -5,6 +5,9 @@ import { checkRouteAuthorization, getDevMockRoleConfig } from '@/lib/permissions
 
 export const config = {
   matcher: [
+    "/super-admin/:path*",
+    "/dashboard/:path*",
+    "/admin/:path*",
     /*
      * Match all request paths except for the ones starting with:
      * - api (API routes)
@@ -82,6 +85,14 @@ export function extractTenantSubdomain(host: string, searchParams?: URLSearchPar
 }
 
 export async function middleware(req: NextRequest) {
+  const urlPath = req.nextUrl.pathname;
+  if (urlPath.startsWith("/super-admin") || urlPath.startsWith("/dashboard") || urlPath.startsWith("/admin")) {
+    const session = req.cookies.get("session") || req.cookies.get("auth_token") || req.cookies.get("next-auth.session-token");
+    if (!session) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+  }
+
   const url = req.nextUrl;
   const path = url.pathname;
 
