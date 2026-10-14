@@ -221,27 +221,8 @@ function LoginPageContent() {
       !["login", "admin", "dashboard", "api", "_next", "portal", "demo"].includes(pathParts[0].toLowerCase())
     ) {
       setResolvedSubdomain(pathParts[0].toLowerCase());
-      try {
-        window.localStorage.setItem("schoolerp_tenant", pathParts[0].toLowerCase());
-      } catch {}
       return;
     }
-
-    // 4. Stored tenant fallback (strictly exclude demo / placeholder)
-    try {
-      const storedTenant =
-        window.localStorage.getItem("schoolerp_tenant") ||
-        window.localStorage.getItem("schoolDomain");
-      if (
-        storedTenant &&
-        !["undefined", "null", "root", "default", "platform", "localhost", "demo", "admin"].includes(storedTenant.toLowerCase())
-      ) {
-        setResolvedSubdomain(storedTenant.toLowerCase());
-      } else if (storedTenant && ["demo", "localhost", "root", "default", "null", "undefined", "admin"].includes(storedTenant.toLowerCase())) {
-        window.localStorage.removeItem("schoolerp_tenant");
-        window.localStorage.removeItem("schoolDomain");
-      }
-    } catch {}
   }, []);
 
   // Sync database tenant branding when subdomain resolves
@@ -271,13 +252,6 @@ function LoginPageContent() {
     };
   }, [resolvedSubdomain]);
 
-  // Synchronize schoolCode with resolved subdomain if not manually set
-  useEffect(() => {
-    if (resolvedSubdomain && !["admin", "demo", "localhost", "root", "default"].includes(resolvedSubdomain.toLowerCase()) && !schoolCode) {
-      setSchoolCode(resolvedSubdomain);
-    }
-  }, [resolvedSubdomain, schoolCode]);
-
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -286,6 +260,12 @@ function LoginPageContent() {
     const normalizedEmail = email.trim().toLowerCase();
     const effectiveSchoolCode = (schoolCode.trim() || resolvedSubdomain || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
+
+    if (!effectiveSchoolCode && normalizedEmail !== "bonaveeict@mail.com" && normalizedEmail !== "bonaventure.chinoso@gmail.com") {
+      showToast("Please enter your School Code.", "error");
+      setIsSubmitting(false);
+      return;
+    }
 
     const loginPayload: Record<string, any> = {
       email: normalizedEmail,
@@ -587,77 +567,48 @@ function LoginPageContent() {
         <div className="w-full max-w-[420px] mx-auto bg-white border border-slate-100 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
           
           {/* Header & Dynamic Branding Extraction */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              {/* Platform Core Logo - Clean High-Definition Display with Smooth Border Radius */}
-              <div className="h-11 w-11 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-center p-1 overflow-hidden">
-                <Image
-                  src="/img/business-logo.png"
-                  alt="SchoolERP Logo"
-                  width={44}
-                  height={44}
-                  className="w-full h-full object-contain rounded-xl"
-                />
-              </div>
-
-              {/* Tenant Specific School Logo Injection (ONLY rendered if visualTenantName is verified, dynamic, and non-empty) */}
-              {visualTenantName && visualTenantName.toLowerCase() !== "admin" ? (
-                tenantBranding?.logo ? (
-                  <>
-                    <div className="h-6 w-px bg-slate-200" />
-                    <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1.5 overflow-hidden shadow-xs">
-                      <Image
-                        src={tenantBranding.logo}
-                        alt={`${visualTenantName} Logo`}
-                        width={30}
-                        height={30}
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="h-6 w-px bg-slate-200" />
-                    <div className="h-10 px-3 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-700">
-                      <Building2 className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
-                      <span className="truncate max-w-[140px]">{visualTenantName}</span>
-                    </div>
-                  </>
-                )
-              ) : null}
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Sign in to access your workspace
-              </h1>
-            </div>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Sign in to access your workspace
+            </h1>
+            {visualTenantName && visualTenantName.toLowerCase() !== "admin" ? (
+              <p className="text-xs font-medium text-slate-500">
+                {visualTenantName}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Enter your credentials to continue to your workspace
+              </p>
+            )}
           </div>
 
           {/* Core Tabless Unified Form */}
           <form onSubmit={handleSignIn} className="space-y-5" noValidate>
             
-            {/* 1. Modern Floating Label School Code Input */}
-            <div className="relative group">
-              <input
-                id="floating-school-code"
-                type="text"
-                name="schoolCode"
-                value={schoolCode}
-                onChange={(e) => setSchoolCode(e.target.value)}
-                placeholder=" "
-                autoComplete="organization"
-                disabled={isSubmitting}
-                className="peer block w-full rounded-xl border border-slate-200 bg-white px-4 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
-              />
+            {/* 1. School Code Input */}
+            <div className="space-y-1.5">
               <label
-                htmlFor="floating-school-code"
-                className="pointer-events-none absolute left-4 top-2 text-[11px] font-semibold text-slate-500 transition-all duration-200 ease-in-out peer-placeholder-shown:top-3.5 peer-placeholder-shown:text-sm peer-placeholder-shown:font-normal peer-placeholder-shown:text-slate-400 peer-focus:top-2 peer-focus:text-[11px] peer-focus:font-semibold peer-focus:text-indigo-600"
+                htmlFor="school-code"
+                className="block text-xs font-semibold text-slate-700"
               >
-                School Code
+                School Code <span className="text-rose-500">*</span>
               </label>
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors duration-200">
-                <Building2 className="w-4 h-4" />
+              <div className="relative">
+                <input
+                  id="school-code"
+                  type="text"
+                  name="schoolCode"
+                  required
+                  value={schoolCode}
+                  onChange={(e) => setSchoolCode(e.target.value)}
+                  placeholder="e.g. greenspring"
+                  autoComplete="organization"
+                  disabled={isSubmitting}
+                  className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10"
+                />
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <Building2 className="w-4 h-4" />
+                </div>
               </div>
             </div>
 
