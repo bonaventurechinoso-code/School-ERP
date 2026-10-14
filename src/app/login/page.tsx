@@ -142,12 +142,15 @@ function LoginPageContent() {
       }
     } else if (urlError === "CredentialsSignin") {
       showToast("Invalid credentials. Please verify your email and password.", "error");
+    } else if (urlError === "tenant_not_found") {
+      const badSchool = searchParams.get("school") || "that school code";
+      showToast(`No school found for "${badSchool}". Please check your School Code and try again.`, "error");
     } else if (urlMessage) {
       showToast(urlMessage, "info");
     } else if (urlError && !urlError.toLowerCase().includes("super admin")) {
       showToast("Authentication could not be completed. Please verify your credentials.", "error");
     }
-  }, [router, urlError, urlMessage]);
+  }, [router, urlError, urlMessage, searchParams]);
 
   // Client-Side Multi-Tenancy Subdomain Evaluation
   useEffect(() => {
@@ -425,38 +428,21 @@ function LoginPageContent() {
         return;
       }
 
-      // Programmatic routing based on global SaaS context:
-      // - Global SaaS Layer Super Admins -> /dashboard/super-admin
-      // - Tenant Admins -> /dashboard/admin
-      // - School Staff/Teachers -> /dashboard/teacher
-      // - Students -> /dashboard/student
-      // - Parents -> /dashboard/parent
-      if (isSuperAdminUser || (!sessionPayload?.schoolDomain && !targetDomain && !rawRole)) {
-        router.push("/dashboard/super-admin");
-      } else if (
+      // Path-based multi-tenant routing using school code from input field
+      const code = effectiveSchoolCode.trim().toLowerCase();
+
+      if (
+        rawRole === "ADMIN" ||
         rawRole === "SCHOOL_ADMIN" ||
         rawRole === "TENANT_ADMIN" ||
-        rawRole === "ADMIN" ||
+        rawRole === "SUPER_ADMIN" ||
         rawRole === "PRINCIPAL" ||
         rawRole === "VICE_PRINCIPAL" ||
         rawRole === "HEADMASTER"
       ) {
-        router.push("/dashboard/admin");
-      } else if (
-        rawRole === "TEACHER" ||
-        rawRole === "STAFF" ||
-        rawRole === "BURSAR" ||
-        rawRole === "ACCOUNTANT" ||
-        staffRole.includes("TEACHER") ||
-        staffRole.includes("STAFF")
-      ) {
-        router.push("/dashboard/teacher");
-      } else if (rawRole === "STUDENT") {
-        router.push("/dashboard/student");
-      } else if (rawRole === "PARENT") {
-        router.push("/dashboard/parent");
+        router.push(code ? `/${code}/dashboard/admin` : "/dashboard/admin");
       } else {
-        router.push("/dashboard/admin");
+        router.push(code ? `/${code}/dashboard` : "/dashboard");
       }
     } catch (err: any) {
       showToast(err.message || "An unexpected error occurred during authentication.", "error");

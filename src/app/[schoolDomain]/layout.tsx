@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
@@ -70,14 +71,8 @@ export default async function TenantLayout({
   }
 
   if (!school) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">Tenant Not Found</h2>
-          <p>No school registered under domain: {schoolDomain}</p>
-        </div>
-      </div>
-    );
+    // School domain not recognised — redirect cleanly to login with a surfaceable error
+    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
   }
 
   const cookieStore = await cookies();
