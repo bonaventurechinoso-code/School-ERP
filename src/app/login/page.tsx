@@ -108,31 +108,11 @@ function LoginPageContent() {
         const staffRole = (activeSession.staffRole || "").toUpperCase();
         const tenantDomain = activeSession.schoolDomain || "";
 
-        let safeRoute = "/dashboard/admin";
+        let safeRoute = "/login";
         if (rawRole === "SUPER_ADMIN") {
           safeRoute = "/dashboard/super-admin";
-        } else if (
-          rawRole === "SCHOOL_ADMIN" ||
-          rawRole === "TENANT_ADMIN" ||
-          rawRole === "ADMIN" ||
-          rawRole === "PRINCIPAL" ||
-          rawRole === "VICE_PRINCIPAL" ||
-          rawRole === "HEADMASTER"
-        ) {
-          safeRoute = tenantDomain ? `/${tenantDomain}/dashboard` : "/dashboard/admin";
-        } else if (
-          rawRole === "TEACHER" ||
-          rawRole === "STAFF" ||
-          rawRole === "BURSAR" ||
-          rawRole === "ACCOUNTANT" ||
-          staffRole.includes("TEACHER") ||
-          staffRole.includes("STAFF")
-        ) {
-          safeRoute = "/dashboard/teacher";
-        } else if (rawRole === "STUDENT") {
-          safeRoute = tenantDomain ? `/${tenantDomain}/portal/student` : "/dashboard/student";
-        } else if (rawRole === "PARENT") {
-          safeRoute = "/dashboard/parent";
+        } else if (tenantDomain) {
+          safeRoute = `/${tenantDomain}/dashboard`;
         }
 
         const timer = setTimeout(() => {
@@ -428,22 +408,14 @@ function LoginPageContent() {
         return;
       }
 
-      // Path-based multi-tenant routing using school code from input field
-      const code = effectiveSchoolCode.trim().toLowerCase();
-
-      if (
-        rawRole === "ADMIN" ||
-        rawRole === "SCHOOL_ADMIN" ||
-        rawRole === "TENANT_ADMIN" ||
-        rawRole === "SUPER_ADMIN" ||
-        rawRole === "PRINCIPAL" ||
-        rawRole === "VICE_PRINCIPAL" ||
-        rawRole === "HEADMASTER"
-      ) {
-        router.push(code ? `/${code}/dashboard/admin` : "/dashboard/admin");
-      } else {
-        router.push(code ? `/${code}/dashboard` : "/dashboard");
+      // Single destination: /{code}/dashboard — dashboard page handles role internally
+      const targetCode = (effectiveSchoolCode || resolvedSubdomain || "").trim().toLowerCase().replace(/^\//, "");
+      if (!targetCode) {
+        showToast("School Code is required to continue.", "error");
+        setIsSubmitting(false);
+        return;
       }
+      router.push(`/${targetCode}/dashboard`);
     } catch (err: any) {
       showToast(err.message || "An unexpected error occurred during authentication.", "error");
       setIsSubmitting(false);
