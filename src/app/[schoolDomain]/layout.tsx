@@ -6,6 +6,10 @@ import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
 import { getSession } from "@/lib/auth";
 import { getCachedSchool, getCachedPlatformBank } from "@/lib/cache";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function TenantLayout({
   children,
   params,
@@ -54,7 +58,7 @@ export default async function TenantLayout({
     // Parallelize Redis cache metadata pre-fetch, user session authentication, and platform corporate bank details
     [school, session, platformBank] = await Promise.all([
       getCachedSchool(schoolDomain),
-      getSession(),
+      getSession(undefined, schoolDomain),
       getCachedPlatformBank(),
     ]);
   } catch (error) {

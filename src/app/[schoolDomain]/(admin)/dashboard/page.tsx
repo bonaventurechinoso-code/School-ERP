@@ -1,5 +1,6 @@
 import React, { Suspense } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getCachedSchool } from "@/lib/cache";
 import { getSession } from "@/lib/auth";
 import { isFinanceRole } from "@/lib/permissions";
@@ -12,6 +13,9 @@ import {
 } from "./DashboardCards";
 import DashboardClientHeader from "./DashboardClientHeader";
 import { getClassroomsForTenant } from "./actions";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function TenantDashboard({
   params: paramsPromise,
@@ -30,21 +34,18 @@ export default async function TenantDashboard({
   const schoolDomain = params.schoolDomain;
   const activeTier = searchParams.tier || cookieStore.get("activeTier")?.value || undefined;
 
-  // Pre-fetch school metadata from Redis memory stream and user session in parallel
+  // Strict Request-Scoped Server Auth Verification (bound to target tenant)
   const [school, session] = await Promise.all([
     getCachedSchool(schoolDomain),
-    getSession(),
+    getSession(undefined, schoolDomain),
   ]);
 
   if (!school) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">Institution Not Found</h2>
-          <p>No active institutional tenant registered under domain: {schoolDomain}</p>
-        </div>
-      </div>
-    );
+    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
+  }
+
+  if (!session) {
+    redirect(`/login?school=${encodeURIComponent(schoolDomain)}`);
   }
 
   // Pre-fetch classrooms for application modal (backed by Redis cache)

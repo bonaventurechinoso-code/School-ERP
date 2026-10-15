@@ -1,10 +1,12 @@
 import { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { jwtVerify } from "jose";
 import { getCachedSchool } from "@/lib/cache";
-import { isAdminExecutive, getDevMockRoleConfig } from "@/lib/permissions";
+import { getSession } from "@/lib/auth";
 import ClientLayout from "../ClientLayout";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminLayout({
   children,
@@ -22,38 +24,27 @@ export default async function AdminLayout({
   // High-performance Redis cache pre-fetch (<1ms from memory)
   const school = await getCachedSchool(params.schoolDomain);
 
-  if (!school) return null;
+  if (!school) {
+    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(params.schoolDomain)}`);
+  }
+
+  // Strict Request-Scoped Server Auth Verification (bound to target tenant)
+  const session = await getSession(undefined, params.schoolDomain);
+  if (!session) {
+    redirect(`/login?school=${encodeURIComponent(params.schoolDomain)}`);
+  }
 
   const currentTier = cookieStore.get("activeTier")?.value || null;
-  const sessionToken = cookieStore.get("session")?.value;
-
-  let userRole = "";
-  let staffRole = "";
-  if (sessionToken) {
-    try {
-      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-      const secret = new TextEncoder().encode(jwtSecret);
-      const { payload } = await jwtVerify(sessionToken, secret);
-      userRole = ((payload.role as string) || "").toUpperCase();
-      staffRole = (payload.staffRole as string) || "";
-    } catch (err) {
-      console.error("[AdminLayout] Invalid session token:", err);
-    }
-  }
-
-  const isDev = process.env.NODE_ENV === "development";
-  const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
-  if (!userRole && isDev && devMockRoleSetting) {
-    const mock = getDevMockRoleConfig(devMockRoleSetting);
-    if (mock) {
-      userRole = mock.role.toUpperCase();
-      staffRole = mock.staffRole;
-    }
-  }
+  const userRole = (session.role || session.userRole || "").toUpperCase();
 
   // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES
   if (userRole === "STUDENT") {
-    redirect("/portal/student");
+    redirect(`/${params.schoolDomain}/portal/student`);
+  }
+
+  // 2. ENFORCE MANDATORY INITIAL PASSWORD CHANGE
+  if (session.mustChangePassword) {
+    redirect("/change-password");
   }
 
   return (

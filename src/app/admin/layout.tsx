@@ -8,6 +8,9 @@ import SuperAdminUnauthorizedGuard from "@/components/SuperAdminUnauthorizedGuar
 import SuperAdminSidebar from "./SuperAdminSidebar";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("session")?.value;

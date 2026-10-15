@@ -1,15 +1,20 @@
 import { SECURITY_CONFIG } from "./config";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
 export async function requireAuth() {
-  const cookieStore = await cookies();
-  const hasSession = SECURITY_CONFIG.SESSION_COOKIES.some((name) => cookieStore.get(name));
-  if (!hasSession) {
+  const session = await getSession();
+  if (!session) {
     redirect(SECURITY_CONFIG.LOGIN_ROUTE);
   }
+  return session;
 }
 
 export async function requireSuperAdmin() {
-  await requireAuth();
+  const session = await requireAuth();
+  const role = (session.role || session.userRole || "").toUpperCase();
+  if (role !== "SUPER_ADMIN" && !session.isSuperAdmin) {
+    redirect("/access-denied");
+  }
+  return session;
 }
