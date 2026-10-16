@@ -47,111 +47,99 @@ export const authOptions: NextAuthOptions = {
         const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
 
         // A. Check Central Super-Admin Registry (Super Admin Golden Key Bypass)
+        // SECURITY: Only attempt Super Admin auth when NO school code is provided.
+        // If effectiveDomain is set (e.g. schoolCode="egede"), skip this block entirely
+        // — Super Admin credentials must NEVER authenticate into a tenant context.
         const isSuperAdminEmail =
           normalizedEmail === "bonaventure.chinoso@gmail.com" ||
           normalizedEmail === "admin@bonaveeict.com.ng" ||
           (isDev && normalizedEmail === "superadmin@platform.com");
 
-        const superAdmin = await basePrisma.superAdmin.findFirst({
-          where: {
-            OR: [
-              { email: normalizedEmail },
-              ...(isSuperAdminEmail
-                ? [
-                    { email: "bonaventure.chinoso@gmail.com" },
-                    { email: "admin@bonaveeict.com.ng" },
-                  ]
-                : []),
-            ],
-          },
-        });
+        if (!effectiveDomain) {
+          const superAdmin = await basePrisma.superAdmin.findFirst({
+            where: {
+              OR: [
+                { email: normalizedEmail },
+                ...(isSuperAdminEmail
+                  ? [
+                      { email: "bonaventure.chinoso@gmail.com" },
+                      { email: "admin@bonaveeict.com.ng" },
+                    ]
+                  : []),
+              ],
+            },
+          });
 
-        const platformAdmin = await basePrisma.platformAdmin.findFirst({
-          where: {
-            OR: [
-              { email: normalizedEmail },
-              ...(isSuperAdminEmail
-                ? [
-                    { email: "bonaventure.chinoso@gmail.com" },
-                    { email: "admin@bonaveeict.com.ng" },
-                  ]
-                : []),
-            ],
-          },
-        });
+          const platformAdmin = await basePrisma.platformAdmin.findFirst({
+            where: {
+              OR: [
+                { email: normalizedEmail },
+                ...(isSuperAdminEmail
+                  ? [
+                      { email: "bonaventure.chinoso@gmail.com" },
+                      { email: "admin@bonaveeict.com.ng" },
+                    ]
+                  : []),
+              ],
+            },
+          });
 
-        const userSuperAdmin = await (basePrisma.user as any).findFirst({
-          where: {
-            email: { equals: normalizedEmail, mode: "insensitive" },
-            role: "SUPER_ADMIN",
-          },
-        });
-
-        if (superAdmin || platformAdmin || userSuperAdmin || isSuperAdminEmail) {
-          let isAuthenticated = false;
-
-          if (superAdmin?.passwordHash) {
-            isAuthenticated = await bcrypt.compare(rawPassword, superAdmin.passwordHash).catch(() => false);
-          }
-
-          if (!isAuthenticated && platformAdmin?.password) {
-            isAuthenticated = await bcrypt.compare(rawPassword, platformAdmin.password).catch(() => false);
-          }
-
-          if (!isAuthenticated && userSuperAdmin?.passwordHash) {
-            isAuthenticated = await bcrypt.compare(rawPassword, userSuperAdmin.passwordHash).catch(() => false);
-          }
-
-          if (!isAuthenticated && isSuperAdminEmail && (rawPassword === "Password123" || rawPassword === "Password1234" || rawPassword === "Admin@123")) {
-            isAuthenticated = true;
-          }
-
-          if (isAuthenticated) {
-            const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
-            const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
-            const mustChangePassword = false;
-
-            return {
-              id: adminId,
-              userId: adminId,
-              email: normalizedEmail,
-              name: "Super Administrator",
+          const userSuperAdmin = await (basePrisma.user as any).findFirst({
+            where: {
+              email: { equals: normalizedEmail, mode: "insensitive" },
               role: "SUPER_ADMIN",
-              staffRole: "Platform Super-Admin",
-              tenantId: null,
-              schoolDomain: "admin",
-              tenantName: "Global Platform Administration",
-              activeTiers: ["Central Platform"],
-              permissions,
-              mustChangePassword,
-            };
+              schoolId: null,
+            },
+          });
+
+          if (superAdmin || platformAdmin || userSuperAdmin || isSuperAdminEmail) {
+            let isAuthenticated = false;
+
+            if (superAdmin?.passwordHash) {
+              isAuthenticated = await bcrypt.compare(rawPassword, superAdmin.passwordHash).catch(() => false);
+            }
+
+            if (!isAuthenticated && platformAdmin?.password) {
+              isAuthenticated = await bcrypt.compare(rawPassword, platformAdmin.password).catch(() => false);
+            }
+
+            if (!isAuthenticated && userSuperAdmin?.passwordHash) {
+              isAuthenticated = await bcrypt.compare(rawPassword, userSuperAdmin.passwordHash).catch(() => false);
+            }
+
+            if (!isAuthenticated && isSuperAdminEmail && (rawPassword === "Password123" || rawPassword === "Password1234" || rawPassword === "Admin@123")) {
+              isAuthenticated = true;
+            }
+
+            if (isAuthenticated) {
+              const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
+              const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
+              const mustChangePassword = false;
+
+              return {
+                id: adminId,
+                userId: adminId,
+                email: normalizedEmail,
+                name: "Super Administrator",
+                role: "SUPER_ADMIN",
+                staffRole: "Platform Super-Admin",
+                tenantId: null,
+                schoolDomain: "admin",
+                tenantName: "Global Platform Administration",
+                activeTiers: ["Central Platform"],
+                permissions,
+                mustChangePassword,
+              };
+            }
           }
         }
 
         // B. Check Unified User Registry (Authoritative single auth table: Principal, Teacher, Bursar, Student, School Admin)
 
-        // Multi-school check when tenant domain is not specified
+        // Tenant-scoped login: without a school code, only the Super Admin (above)
+        // may authenticate. Never auto-discover a tenant from the email alone.
         if (!effectiveDomain) {
-          const matchingSchools = await basePrisma.user.findMany({
-            where: {
-              email: { equals: normalizedEmail, mode: "insensitive" },
-              school: {
-                isActive: true,
-                deletedAt: null,
-                NOT: {
-                  OR: [
-                    { subdomain: { equals: "riverside", mode: "insensitive" } },
-                    { slug: { equals: "riverside", mode: "insensitive" } },
-                    { name: { contains: "riverside", mode: "insensitive" } },
-                  ],
-                },
-              },
-            },
-            select: { schoolId: true },
-          });
-          if (matchingSchools.length > 1) {
-            throw new Error("Please login via your school domain e.g. greenwood.bonaveeict.com.ng");
-          }
+          return null;
         }
 
         let targetTenant: any = null;
@@ -182,6 +170,11 @@ export const authOptions: NextAuthOptions = {
               academicTiers: { orderBy: { level: "asc" } },
             },
           });
+        }
+
+        // School code supplied but no matching active tenant: fail, never fall back.
+        if (!targetTenant) {
+          return null;
         }
 
         const searchVariants = getAdmissionNumberSearchVariants(credentials.email);

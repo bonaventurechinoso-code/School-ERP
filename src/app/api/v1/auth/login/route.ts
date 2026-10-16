@@ -53,7 +53,10 @@ export async function POST(req: Request) {
     const explicitSchool = (schoolCode || schoolDomain || "").trim();
     const parsedInst = parseInstitutionalIdentifier(rawIdentifier, explicitSchool);
     const searchVariants = getAdmissionNumberSearchVariants(rawIdentifier);
-    const accountKey = `${(parsedInst.schoolToken || "global").toLowerCase().trim()}:${normalizedEmail}`;
+    // Tenant context for this request: explicit school code, or the school token
+    // embedded in an institutional identifier (e.g. admission number).
+    const targetSchoolCode = (explicitSchool || parsedInst.schoolToken || "").trim().toLowerCase();
+    const accountKey = `${targetSchoolCode || "global"}:${normalizedEmail}`;
 
     const ipCheck = checkIpRateLimit(clientIp);
     if (!ipCheck.allowed) {
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
         actorId: "ANONYMOUS",
         action: "RATE_LIMIT_BLOCKED",
         target: normalizedEmail,
-        schoolId: parsedInst.schoolToken || null,
+        schoolId: targetSchoolCode || null,
         ip: clientIp,
         metadata: { retryAfterSeconds: ipCheck.retryAfterSeconds },
       });
@@ -87,6 +90,13 @@ export async function POST(req: Request) {
       );
     }
 
+    // =========================================================================
+    // TENANT-SCOPED LOGIN
+    // - No school code  -> platform login: Super Admin only (schoolId IS NULL).
+    // - School code set -> tenant login: user must exist in THAT tenant.
+    //   Super Admin credentials are never evaluated in a tenant context.
+    // =========================================================================
+    if (!targetSchoolCode) {
     const isSuperAdminEmail =
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
@@ -123,6 +133,7 @@ export async function POST(req: Request) {
       where: {
         email: { equals: normalizedEmail, mode: "insensitive" },
         role: "SUPER_ADMIN",
+        schoolId: null,
       },
     });
 
@@ -257,173 +268,56 @@ export async function POST(req: Request) {
       }
     }
 
-    let tenant: any = null;
-
-    if (!parsedInst.schoolToken) {
-      const matchingSchools = await basePrisma.user.findMany({
-        where: {
-          email: { equals: normalizedEmail, mode: "insensitive" },
-          school: {
-            isActive: true,
-            deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
-          },
-        },
-        select: { schoolId: true, school: { select: { subdomain: true, name: true } } },
-      });
-
-      if (matchingSchools.length > 1) {
-        return NextResponse.json(
-          {
-            error: "Please login via your school domain e.g. greenwood.bonaveeict.com.ng",
-            code: "TENANT_DOMAIN_REQUIRED",
-          },
-          { status: 400 }
-        );
-      }
+    // Platform login without a school code is reserved for the Super Admin.
+    // Never auto-discover a tenant from the email alone.
+    recordCredentialFailure(clientIp, accountKey);
+    return NextResponse.json(
+      { error: "Invalid credentials.", code: "INVALID_CREDENTIALS" },
+      { status: 401 }
+    );
     }
 
-    if (parsedInst.schoolToken) {
-      tenant = await basePrisma.school.findFirst({
-        where: {
+    // Resolve the tenant strictly from the school code supplied on this request.
+    // No fallback to other tenants, global users, or the Super Admin.
+    const tenant: any = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: targetSchoolCode, mode: "insensitive" } },
+          { slug: { equals: targetSchoolCode, mode: "insensitive" } },
+          { id: targetSchoolCode },
+        ],
+        deletedAt: null,
+        NOT: {
           OR: [
-            { subdomain: { equals: parsedInst.schoolToken, mode: "insensitive" } },
-            { slug: { equals: parsedInst.schoolToken, mode: "insensitive" } },
-            { id: parsedInst.schoolToken },
+            { subdomain: { equals: "riverside", mode: "insensitive" } },
+            { slug: { equals: "riverside", mode: "insensitive" } },
+            { name: { contains: "riverside", mode: "insensitive" } },
           ],
-          isActive: true,
-          deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
         },
-        include: {
-          academicTiers: { orderBy: { level: "asc" } },
-          tierDatabases: true,
-        },
-      });
-    }
+      },
+      include: {
+        academicTiers: { orderBy: { level: "asc" } },
+        tierDatabases: true,
+      },
+    });
 
     if (!tenant) {
-      const userWhere: any = {
-        school: {
-          isActive: true,
-          deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
-        },
-        OR: [
-          { email: { equals: normalizedEmail, mode: "insensitive" } },
-          ...searchVariants.map((v) => ({ student: { is: { admissionNumber: { equals: v, mode: "insensitive" } } } })),
-        ],
-      };
-      const userSchool = await basePrisma.user.findFirst({
-        where: userWhere,
-        include: {
-          school: {
-            include: {
-              academicTiers: { orderBy: { level: "asc" } },
-              tierDatabases: true,
-            },
-          },
-        },
-      });
-
-      if (userSchool?.school) {
-        tenant = userSchool.school;
-      }
-    }
-
-    if (!tenant) {
-      const studentSchoolWhere: any = {
-        OR: [
-          { email: { equals: normalizedEmail, mode: "insensitive" } },
-          { parentEmail: { equals: normalizedEmail, mode: "insensitive" } },
-          ...searchVariants.map((v) => ({ admissionNumber: { equals: v, mode: "insensitive" } })),
-          ...(parentEmail ? [{ parentEmail: { equals: parentEmail.trim().toLowerCase(), mode: "insensitive" } }] : []),
-          ...(parentPhone ? [{ parentPhone: { equals: parentPhone.trim(), mode: "insensitive" } }] : []),
-          ...(phone ? [{ parentPhone: { equals: phone.trim(), mode: "insensitive" } }] : []),
-        ],
-        school: {
-          isActive: true,
-          deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
-        },
-      };
-      const studentSchool = await basePrisma.student.findFirst({
-        where: studentSchoolWhere,
-        include: {
-          school: {
-            include: {
-              academicTiers: { orderBy: { level: "asc" } },
-              tierDatabases: true,
-            },
-          },
-          tier: true,
-        },
-      });
-
-      if (studentSchool?.school) {
-        tenant = studentSchool.school;
-      }
-    }
-
-    if (!tenant) {
-      const staffSchool = await basePrisma.staff.findFirst({
-        where: {
-          email: { equals: normalizedEmail, mode: "insensitive" },
-          school: {
-            isActive: true,
-            deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
-          },
-        },
-        include: {
-          school: {
-            include: {
-              academicTiers: { orderBy: { level: "asc" } },
-              tierDatabases: true,
-            },
-          },
-        },
-      });
-
-      if (staffSchool?.school) {
-        tenant = staffSchool.school;
-      }
-    }
-
-    if (!tenant || !tenant.isActive || tenant.deletedAt) {
+      recordCredentialFailure(clientIp, accountKey);
       return NextResponse.json(
-        { error: "Could not identify an active institution matching your credentials. Please enter your School Code or Admission Number." },
-        { status: 400 }
+        { error: "Invalid credentials.", code: "INVALID_CREDENTIALS" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant must be active before any credential check.
+    const tenantStatus = String(tenant.status || "").toUpperCase();
+    if (!tenant.isActive || tenantStatus === "SUSPENDED" || tenantStatus === "INACTIVE") {
+      return NextResponse.json(
+        {
+          error: "This institution is currently inactive or suspended. Please contact platform administration.",
+          code: "TENANT_INACTIVE",
+        },
+        { status: 403 }
       );
     }
 
@@ -754,17 +648,11 @@ export async function POST(req: Request) {
       sessionToken: distinctSessionToken,
     });
 
+    // Tenant logins always land in their own school workspace; the dashboard
+    // resolves role-specific views internally. Never route to the Super Admin console.
     const redirectTarget = mustChangePassword
       ? `/change-password`
-      : resolvedRole === "SUPER_ADMIN"
-        ? `/dashboard/super-admin`
-        : resolvedRole === "STUDENT"
-          ? `/dashboard/student`
-          : resolvedRole === "PARENT"
-            ? `/dashboard/parent`
-            : resolvedRole === "TEACHER" || resolvedRole === "STAFF" || resolvedRole === "BURSAR"
-              ? `/dashboard/teacher`
-              : `/dashboard/admin`;
+      : `/${tenant.subdomain}/dashboard`;
 
     await logAuditEvent({
       actorId: authenticatedUserId,

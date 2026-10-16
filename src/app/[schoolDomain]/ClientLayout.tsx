@@ -11,6 +11,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
 import { checkRouteAuthorization } from "@/lib/permissions";
 import Sidebar, { SidebarTier } from "@/components/Sidebar";
+import LogoutButton from "@/components/LogoutButton";
 
 export type { SidebarTier as ClientLayoutTier };
 
@@ -103,6 +104,7 @@ export default function ClientLayout({
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <SubscriptionBell />
             <ThemeToggle />
+            <LogoutButton />
           </div>
         </header>
 

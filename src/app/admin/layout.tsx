@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import SuperAdminUnauthorizedGuard from "@/components/SuperAdminUnauthorizedGuard";
 import SuperAdminSidebar from "./SuperAdminSidebar";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
+import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -67,6 +68,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <div className="bg-slate-100 dark:bg-zinc-800 rounded-full border border-slate-200 dark:border-zinc-700">
               <ThemeToggle />
             </div>
+            <LogoutButton />
           </div>
         </header>
 

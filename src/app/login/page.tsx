@@ -18,6 +18,19 @@ import {
 } from "lucide-react";
 import { persistStoredSession, AUTH_UPDATE_EVENT, getStoredSession } from "@/lib/session-context";
 import { customFetch, beginTokenWait, setAuthToken } from "@/lib/api-client";
+
+function clearStoredSession() {
+  persistStoredSession(null);
+  setAuthToken(null);
+  if (typeof window !== "undefined") {
+    try { localStorage.removeItem("schoolerp_tenant"); } catch {}
+    try { localStorage.removeItem("schoolDomain"); } catch {}
+    try { localStorage.removeItem("tenantId"); } catch {}
+    try { localStorage.removeItem("schoolerp_assigned_tier"); } catch {}
+    try { localStorage.removeItem("schoolerp_user_role"); } catch {}
+  }
+}
+
 interface TenantBrandingConfig {
   id?: string;
   name: string;
@@ -100,26 +113,10 @@ function LoginPageContent() {
         "error"
       );
 
-      // D. Automatic Redirection Safety:
-      // If an active user session token is detected, immediately trigger a controlled push redirect
-      const activeSession = getStoredSession();
-      if (activeSession) {
-        const rawRole = (activeSession.role || activeSession.userRole || "").toUpperCase();
-        const staffRole = (activeSession.staffRole || "").toUpperCase();
-        const tenantDomain = activeSession.schoolDomain || "";
-
-        let safeRoute = "/login";
-        if (rawRole === "SUPER_ADMIN") {
-          safeRoute = "/dashboard/super-admin";
-        } else if (tenantDomain) {
-          safeRoute = `/${tenantDomain}/dashboard`;
-        }
-
-        const timer = setTimeout(() => {
-          router.push(safeRoute);
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
+      // D. Do NOT auto-redirect based on unverified localStorage session alone.
+      // Session verification & isolation is handled safely by verifyAndIsolate().
+      clearStoredSession();
+      setAuthToken(null);
     } else if (urlError === "CredentialsSignin") {
       showToast("Invalid credentials. Please verify your email and password.", "error");
     } else if (urlError === "tenant_not_found") {
@@ -208,6 +205,85 @@ function LoginPageContent() {
     }
   }, []);
 
+  // FIX 4: Session Isolation — verify existing token on page load,
+  // clear stale/mismatched sessions, never auto-redirect from localStorage alone.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const verifyAndIsolate = async () => {
+      // Clear any stored session that belongs to a DIFFERENT school than the
+      // school code currently on screen (prevents cross-tenant leakage).
+      const stored = getStoredSession();
+      const storedDomain = (stored?.schoolDomain || "").trim().toLowerCase();
+      const pageDomain = (resolvedSubdomain || "").trim().toLowerCase();
+
+      if (stored) {
+        const storedRole = (stored.role || stored.userRole || "").toUpperCase();
+        const storedIsSuperAdmin = storedRole === "SUPER_ADMIN" || storedDomain === "admin";
+        // A Super Admin session must never carry over onto a school login page,
+        // a session from one school must never carry over onto another school,
+        // and a tenant session must never carry over onto the root platform login.
+        const isMismatch =
+          (Boolean(pageDomain) && (storedIsSuperAdmin || storedDomain !== pageDomain)) ||
+          (!pageDomain && Boolean(storedDomain) && storedDomain !== "admin");
+
+        if (isMismatch) {
+          clearStoredSession();
+          setAuthToken(null);
+          try { localStorage.removeItem("schoolerp_tenant"); } catch {}
+          try { localStorage.removeItem("schoolDomain"); } catch {}
+          try { localStorage.removeItem("tenantId"); } catch {}
+          return;
+        }
+      }
+
+      // Verify token with the server (request-scoped, not from localStorage alone)
+      try {
+        const sessionRes = await fetch("/api/v1/auth/session", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (!sessionRes.ok) {
+          clearStoredSession();
+          setAuthToken(null);
+          return;
+        }
+        const sessionData = await sessionRes.json();
+        if (!sessionData?.authenticated || !sessionData?.session) {
+          clearStoredSession();
+          setAuthToken(null);
+          return;
+        }
+
+        const srv = sessionData.session;
+        const srvDomain = (srv.schoolDomain || "").trim().toLowerCase();
+        const srvRole = (srv.role || srv.userRole || "").toUpperCase();
+        const isSuperAdminSrv = srvRole === "SUPER_ADMIN" || Boolean(srv.isSuperAdmin);
+
+        // Server-side tenant boundary check:
+        // Stale tenant session on root login, or mismatched tenant on school login -> wipe immediately
+        const srvMismatch =
+          (pageDomain && (srvDomain !== pageDomain || isSuperAdminSrv)) ||
+          (!pageDomain && srvDomain && !isSuperAdminSrv);
+
+        if (srvMismatch) {
+          clearStoredSession();
+          setAuthToken(null);
+          try { localStorage.removeItem("schoolerp_tenant"); } catch {}
+          try { localStorage.removeItem("schoolDomain"); } catch {}
+          try { localStorage.removeItem("tenantId"); } catch {}
+          return;
+        }
+      } catch {
+        // Server check failed — show login form normally
+      }
+    };
+
+    verifyAndIsolate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedSubdomain]);
+
   // Sync database tenant branding when subdomain resolves
   useEffect(() => {
     let isMounted = true;
@@ -256,6 +332,18 @@ function LoginPageContent() {
       schoolCode: effectiveSchoolCode || undefined,
       schoolDomain: effectiveSchoolCode || undefined,
     };
+
+    // Session isolation: drop any stored session that belongs to a different
+    // tenant (or the platform) than the school code being submitted.
+    const existingSession = getStoredSession();
+    if (existingSession) {
+      const existingDomain = (existingSession.schoolDomain || "").trim().toLowerCase();
+      const existingTarget = existingDomain === "admin" ? "" : existingDomain;
+      if (existingTarget !== effectiveSchoolCode) {
+        clearStoredSession();
+        setAuthToken(null);
+      }
+    }
 
     try {
       beginTokenWait();
@@ -382,13 +470,11 @@ function LoginPageContent() {
       // Explicit role & global SaaS context resolution
       const rawRole = (sessionPayload?.role || sessionPayload?.userRole || "").toUpperCase();
       const staffRole = (sessionPayload?.staffRole || "").toUpperCase();
-      const isDev = process.env.NODE_ENV !== "production";
+      // Super Admin is determined solely by the server-verified role, and only
+      // for platform logins (no school code). Never inferred from the typed email.
       const isSuperAdminUser =
-        rawRole === "SUPER_ADMIN" ||
-        Boolean(sessionPayload?.isSuperAdmin) ||
-        normalizedEmail === "bonaventure.chinoso@gmail.com" ||
-        normalizedEmail === "admin@bonaveeict.com.ng" ||
-        (isDev && normalizedEmail === "superadmin@platform.com");
+        !effectiveSchoolCode &&
+        (rawRole === "SUPER_ADMIN" || Boolean(sessionPayload?.isSuperAdmin));
 
       // Super Admin Golden Key: Always forward directly to /dashboard/super-admin
       if (isSuperAdminUser) {
@@ -541,7 +627,7 @@ function LoginPageContent() {
           </div>
 
           {/* Core Tabless Unified Form */}
-          <form onSubmit={handleSignIn} className="space-y-5" noValidate>
+          <form onSubmit={handleSignIn} className="space-y-5" noValidate autoComplete="off">
             
             {/* 1. School Code Input */}
             <div className="space-y-1.5">
@@ -580,7 +666,7 @@ function LoginPageContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder=" "
-                autoComplete="email"
+                autoComplete="username"
                 disabled={isSubmitting}
                 className="peer block w-full rounded-xl border border-slate-200 bg-white px-4 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
               />

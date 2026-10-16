@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { INITIAL_PROOFS, INITIAL_SCHOOLS } from "./mock-data";
+import LogoutButton from "@/components/LogoutButton";
 
 export default function SuperAdminLayout({
   children,
@@ -318,6 +319,9 @@ export default function SuperAdminLayout({
             <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow">
               SA
             </div>
+
+            {/* Logout Action */}
+            <LogoutButton />
           </div>
         </header>
 
