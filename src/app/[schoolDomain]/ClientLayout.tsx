@@ -104,7 +104,7 @@ export default function ClientLayout({
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <SubscriptionBell />
             <ThemeToggle />
-            <LogoutButton />
+            <LogoutButton schoolName={schoolName} />
           </div>
         </header>
 

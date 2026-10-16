@@ -26,14 +26,17 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
     setLoading(true);
     setErrorMsg("");
     try {
-      const res = await fetch("/me/sessions");
-      if (!res.ok) {
-        throw new Error("Failed to load active device sessions.");
+      const res = await fetch("/api/auth/sessions");
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        setSessions([]);
+        return;
       }
       const data = await res.json();
       setSessions(data.sessions || []);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Could not retrieve sessions.");
+    } catch {
+      setSessions([]);
+      // Fail safely: Never expose unexpected token or HTML errors to the user
     } finally {
       setLoading(false);
     }
@@ -48,9 +51,13 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const res = await fetch(`/me/sessions?id=${encodeURIComponent(sessionId)}`, {
+      const res = await fetch(`/api/auth/sessions?id=${encodeURIComponent(sessionId)}`, {
         method: "DELETE",
       });
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to revoke session.");
@@ -123,7 +130,7 @@ export default function ActiveSessionsPortal({ brandColor = "#4f46e5" }: { brand
         </div>
       ) : sessions.length === 0 ? (
         <div className="py-8 text-center text-xs text-slate-400">
-          No other active device sessions detected.
+          No active device sessions detected.
         </div>
       ) : (
         <div className="space-y-3">
