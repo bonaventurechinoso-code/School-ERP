@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { verifyAccessToken, hashToken, REFRESH_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_NAME } from "@/lib/dual-token";
-import { validateDatabaseSession, SESSION_COOKIE_NAME } from "@/lib/session-manager";
+import { validateDatabaseSession, SESSION_COOKIE_NAME, cleanupInactiveSessions } from "@/lib/session-manager";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -71,53 +71,48 @@ export async function GET(req: Request) {
     }
 
     const now = new Date();
-    const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // 2B. Inactivity prune: Delete sessions where lastActiveAt or updatedAt is older than 8 hours
-    await basePrisma.session.deleteMany({
-      where: {
-        userId: currentUserId,
-        OR: [
-          { lastActiveAt: { lt: eightHoursAgo } },
-          { updatedAt: { lt: eightHoursAgo } },
-        ],
-      },
-    }).catch(() => {});
-
-    await basePrisma.refreshToken.deleteMany({
-      where: {
-        userId: currentUserId,
-        OR: [
-          { updatedAt: { lt: eightHoursAgo } },
-          { createdAt: { lt: eightHoursAgo } },
-        ],
-      },
-    }).catch(() => {});
+    // Auto-Expire Inactive Sessions: Delete any session with lastActive > 30 days ago on session list fetch
+    await cleanupInactiveSessions(currentUserId);
 
     const currentSessionToken =
       cookieStore.get(SESSION_COOKIE_NAME)?.value ||
       cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
 
-    // Fetch active database sessions (strictly within last 8 hours)
+    let currentSessionTokenId = currentSessionToken || rawToken;
+    if (currentSessionTokenId) {
+      try {
+        const claims = await verifyAccessToken(currentSessionTokenId).catch(() => null);
+        if (claims) {
+          currentSessionTokenId =
+            (claims as any).sessionToken ||
+            (claims as any).sessionId ||
+            (claims as any).jti ||
+            (claims as any).id ||
+            currentSessionTokenId;
+        }
+      } catch {}
+    }
+
+    // Fetch active database sessions (strictly active within last 30 days, not revoked, not expired)
     const activeDbSessions = await basePrisma.session.findMany({
       where: {
         userId: currentUserId,
         isRevoked: false,
         expiresAt: { gt: now },
-        lastActiveAt: { gte: eightHoursAgo },
-        updatedAt: { gte: eightHoursAgo },
+        lastActiveAt: { gte: thirtyDaysAgo },
       },
       orderBy: { lastActiveAt: "desc" },
     }).catch(() => []);
 
-    // Fetch active refresh tokens (strictly within last 8 hours)
+    // Fetch active refresh tokens (strictly active within last 30 days, not revoked, not expired)
     const activeRefreshTokens = await basePrisma.refreshToken.findMany({
       where: {
         userId: currentUserId,
         isRevoked: false,
         expiresAt: { gt: now },
-        updatedAt: { gte: eightHoursAgo },
-        createdAt: { gte: eightHoursAgo },
+        createdAt: { gte: thirtyDaysAgo },
       },
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
@@ -131,8 +126,11 @@ export async function GET(req: Request) {
       createdAt: s.createdAt.toISOString(),
       expiresAt: s.expiresAt.toISOString(),
       isCurrent: Boolean(
+        s.sessionToken === currentSessionTokenId ||
+        s.id === currentSessionTokenId ||
         (currentSessionToken && (s.sessionToken === currentSessionToken || s.id === currentSessionToken)) ||
-        s.id === rawToken
+        s.id === rawToken ||
+        s.sessionToken === rawToken
       ),
     }));
 

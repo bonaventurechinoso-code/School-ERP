@@ -76,6 +76,9 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
   const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE_MS);
   const effectiveRole = params.userRole || params.role;
 
+  // Auto-Expire Inactive Sessions: Automatically delete any session with lastActive > 30 days ago on every login
+  cleanupInactiveSessions(params.userId).catch(() => {});
+
   // 1. Create authoritative database record
   await basePrisma.session.create({
     data: {
@@ -339,6 +342,42 @@ export async function revokeAllUserSessions(userId: string): Promise<number> {
     data: { isRevoked: true },
   });
   return result.count;
+}
+
+/**
+ * Auto-Expire Inactive Sessions:
+ * Automatically delete any session with lastActive > 30 days ago.
+ * Safe, asynchronous, non-blocking cleanup.
+ * Does NOT delete active sessions < 30 days.
+ */
+export async function cleanupInactiveSessions(userId?: string): Promise<void> {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const sessionWhere: any = {
+      lastActiveAt: { lt: thirtyDaysAgo },
+    };
+    const refreshWhere: any = {
+      OR: [
+        { updatedAt: { lt: thirtyDaysAgo } },
+        { createdAt: { lt: thirtyDaysAgo } },
+      ],
+    };
+
+    if (userId) {
+      sessionWhere.userId = userId;
+      refreshWhere.userId = userId;
+    }
+
+    await basePrisma.session.deleteMany({
+      where: sessionWhere,
+    }).catch(() => {});
+
+    await basePrisma.refreshToken.deleteMany({
+      where: refreshWhere,
+    }).catch(() => {});
+  } catch {
+    // Fail safely
+  }
 }
 
 /**

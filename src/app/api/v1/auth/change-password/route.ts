@@ -6,13 +6,16 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
+  SESSION_MAX_AGE_MS,
 } from "@/lib/session-manager";
 import {
   signAccessToken,
   issueRefreshToken,
+  hashToken,
   REFRESH_TOKEN_COOKIE_NAME,
   ACCESS_TOKEN_COOKIE_NAME,
 } from "@/lib/dual-token";
+import crypto from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
 const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
@@ -103,6 +106,15 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
+
+      // Auto-Revoke on Password Reset: Delete all sessions and refresh tokens for this user across all devices
+      await basePrisma.session.deleteMany({
+        where: { userId: tokenVerification.userId },
+      }).catch(() => {});
+
+      await basePrisma.refreshToken.deleteMany({
+        where: { userId: tokenVerification.userId },
+      }).catch(() => {});
 
       return NextResponse.json({
         success: true,
@@ -206,6 +218,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // Capture current session identifier before change
+    const currentSessionTokenId =
+      (payload?.sessionToken as string) ||
+      (payload?.sessionId as string) ||
+      (payload?.jti as string) ||
+      (payload?.id as string);
+
+    // Identify current database session row to preserve
+    let currentDbSession = await basePrisma.session.findFirst({
+      where: {
+        userId,
+        isRevoked: false,
+        OR: [
+          ...(currentSessionTokenId ? [{ sessionToken: currentSessionTokenId }, { id: currentSessionTokenId }] : []),
+          ...(cookieToken ? [{ sessionToken: cookieToken }, { id: cookieToken }] : []),
+        ],
+      },
+    }).catch(() => null);
+
     // Execute authoritative password change
     const result = await changeUserPassword({
       userId,
@@ -224,9 +255,78 @@ export async function POST(req: Request) {
       );
     }
 
+    const now = new Date();
+    const newExpiresAt = new Date(now.getTime() + SESSION_MAX_AGE_MS);
+    const sessionTokenToPreserve =
+      currentDbSession?.sessionToken || currentSessionTokenId || crypto.randomUUID();
+
+    if (currentDbSession) {
+      // 1. Keep current session alive and active (ensure NOT revoked)
+      await basePrisma.session.update({
+        where: { id: currentDbSession.id },
+        data: {
+          isRevoked: false,
+          lastActiveAt: now,
+          expiresAt: newExpiresAt,
+        },
+      }).catch(() => {});
+
+      // 2. Automatically delete ALL OTHER sessions for that user EXCEPT the current session
+      await basePrisma.session.deleteMany({
+        where: {
+          userId,
+          id: { not: currentDbSession.id },
+        },
+      }).catch(() => {});
+    } else {
+      // Create session for current device if not found
+      const createdSession = await basePrisma.session.create({
+        data: {
+          sessionToken: sessionTokenToPreserve,
+          userId,
+          email: payload?.email || null,
+          tenantId: schoolId || payload?.tenantId || null,
+          schoolDomain: payload?.schoolDomain || targetDomain || null,
+          role: isSuperAdmin ? "SUPER_ADMIN" : role,
+          staffRole: payload?.staffRole || null,
+          expiresAt: newExpiresAt,
+          lastActiveAt: now,
+          isRevoked: false,
+          ipAddress: clientIp,
+          userAgent,
+        },
+      }).catch(() => null);
+
+      await basePrisma.session.deleteMany({
+        where: {
+          userId,
+          ...(createdSession ? { id: { not: createdSession.id } } : { sessionToken: { not: sessionTokenToPreserve } }),
+        },
+      }).catch(() => {});
+    }
+
+    const { rawRefreshToken } = await issueRefreshToken({
+      userId,
+      schoolId: schoolId ?? null,
+      ipAddress: clientIp,
+      userAgent,
+    });
+
+    // Automatically delete ALL OTHER refresh tokens for this user EXCEPT the newly issued one
+    const newRefreshTokenHash = hashToken(rawRefreshToken);
+    await basePrisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        tokenHash: { not: newRefreshTokenHash },
+      },
+    }).catch(() => {});
+
     // Issue updated session tokens with mustChangePassword = false
     const updatedPayload = {
       ...payload,
+      sessionToken: sessionTokenToPreserve,
+      sessionId: sessionTokenToPreserve,
+      jti: sessionTokenToPreserve,
       mustChangePassword: false,
       role: isSuperAdmin ? "SUPER_ADMIN" : role,
       isSuperAdmin,
@@ -248,13 +348,6 @@ export async function POST(req: Request) {
       email: payload?.email || undefined,
       isSuperAdmin,
       mustChangePassword: false,
-    });
-
-    const { rawRefreshToken } = await issueRefreshToken({
-      userId,
-      schoolId: schoolId ?? null,
-      ipAddress: clientIp,
-      userAgent,
     });
 
     const response = NextResponse.json({
