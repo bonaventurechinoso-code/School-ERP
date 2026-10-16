@@ -243,11 +243,10 @@ export async function middleware(req: NextRequest) {
       );
     }
 
-    // Page endpoints redirect to /login with strict no-cache headers
-    const loginUrl = new URL("/login", req.url);
-    if (requestedTenant) {
-      loginUrl.searchParams.set("school", requestedTenant);
-    }
+    // Page endpoints redirect to /[tenant]/login or /login with strict no-cache headers
+    const loginUrl = requestedTenant
+      ? new URL(`/${requestedTenant}/login`, req.url)
+      : new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
 
     const redirectResponse = NextResponse.redirect(loginUrl);

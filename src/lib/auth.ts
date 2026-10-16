@@ -40,6 +40,9 @@ export function normalizeRole(rawRole: string): Role | string {
     upper === "TENANT_OWNER" ||
     upper === "ADMIN_EXECUTIVE" ||
     upper === "ADMIN" ||
+    upper === "PRINCIPAL" ||
+    upper === "HEADMASTER" ||
+    upper === "VICE_PRINCIPAL" ||
     upper.includes("ADMIN")
   ) {
     return Role.SCHOOL_ADMIN;

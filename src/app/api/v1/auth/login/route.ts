@@ -10,7 +10,7 @@ import {
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { normalizeRole, getDefaultPermissionsForRole, UserRole } from "@/lib/auth";
+import { normalizeRole, getDefaultPermissionsForRole, UserRole, Role } from "@/lib/auth";
 import { createDatabaseSession, SESSION_MAX_AGE_SECONDS, SESSION_COOKIE_NAME, getSecureCookieOptions } from "@/lib/session-manager";
 import { isMustChangePassword } from "@/lib/security-service";
 import { checkIpRateLimit, checkAccountLockout, recordCredentialFailure, recordCredentialSuccess } from "@/lib/rate-limiter";
@@ -213,7 +213,7 @@ export async function POST(req: Request) {
           metadata: { email: normalizedEmail, isSuperAdmin: true, mustChangePassword: false },
         });
 
-        const redirectUrl = "/dashboard/super-admin";
+        const redirectUrl = "/admin";
 
         const response = NextResponse.json({
           success: true,
@@ -371,7 +371,8 @@ export async function POST(req: Request) {
         resolvedStaffRole = localUser.role;
         authenticatedUserId = localUser.id;
         authenticatedEmail = localUser.email;
-        mustChangePassword = Boolean(localUser.mustChangePassword) || password === "Password123";
+        const isDemoTenant = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo";
+        mustChangePassword = !isDemoTenant && (Boolean(localUser.mustChangePassword) || password === "Password123");
         if (localUser.student?.tier?.name) {
           assignedTier = localUser.student.tier.name;
         } else if (localUser.staff?.department?.tier?.name) {
@@ -445,7 +446,8 @@ export async function POST(req: Request) {
           authenticatedUserId = student.id;
           authenticatedEmail = student.email || `${student.admissionNumber || student.id}@student.portal`;
           const userForced = await isMustChangePassword(student.id);
-          mustChangePassword = isTemporary || student.mustChangePassword || userForced;
+          const isDemoTenant = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo";
+          mustChangePassword = !isDemoTenant && (isTemporary || student.mustChangePassword || userForced);
           if (student.tier?.name) {
             assignedTier = student.tier.name;
           }
@@ -648,11 +650,23 @@ export async function POST(req: Request) {
       sessionToken: distinctSessionToken,
     });
 
-    // Tenant logins always land in their own school workspace; the dashboard
-    // resolves role-specific views internally. Never route to the Super Admin console.
-    const redirectTarget = mustChangePassword
-      ? `/change-password`
-      : `/${tenant.subdomain}/dashboard`;
+    let redirectTarget = `/change-password`;
+    if (!mustChangePassword) {
+      const normRole = normalizeRole(resolvedRole);
+      if (normRole === "SUPER_ADMIN" || normRole === Role.SUPER_ADMIN) {
+        redirectTarget = "/admin";
+      } else if (normRole === "SCHOOL_ADMIN" || normRole === Role.SCHOOL_ADMIN) {
+        redirectTarget = `/${tenant.subdomain}/dashboard`;
+      } else if (normRole === "TEACHER" || normRole === Role.TEACHER) {
+        redirectTarget = `/${tenant.subdomain}/staff`;
+      } else if (normRole === "STUDENT" || normRole === Role.STUDENT) {
+        redirectTarget = `/${tenant.subdomain}/student`;
+      } else if (normRole === "PARENT" || normRole === Role.PARENT) {
+        redirectTarget = `/${tenant.subdomain}/parent`;
+      } else {
+        redirectTarget = `/${tenant.subdomain}/dashboard`;
+      }
+    }
 
     await logAuditEvent({
       actorId: authenticatedUserId,

@@ -253,8 +253,8 @@ export async function GET(req: Request) {
       tierNames
     );
 
-    // Redirect to /demo/admin
-    const redirectUrl = new URL(`/demo/admin`, req.url);
+    // Redirect to /demo
+    const redirectUrl = new URL(`/demo`, req.url);
     const response = NextResponse.redirect(redirectUrl);
 
     response.headers.set("X-Demo-Mode", "DEMO MODE");
@@ -322,7 +322,7 @@ export async function POST(req: Request) {
         isDemo: true,
       },
       role: "TENANT_ADMIN",
-      redirectUrl: "/demo/admin",
+      redirectUrl: "/demo",
     });
 
     response.headers.set("X-Demo-Mode", "DEMO MODE");

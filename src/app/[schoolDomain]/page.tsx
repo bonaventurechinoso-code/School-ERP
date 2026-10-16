@@ -2,6 +2,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
 import { 
   Building2, 
@@ -81,6 +82,7 @@ export default async function PublicGuestPortalPage({
   params: Promise<{ schoolDomain: string }> | { schoolDomain: string };
 }) {
   const { schoolDomain } = await Promise.resolve(paramsPromise);
+  const session = await getSession(undefined, schoolDomain).catch(() => null);
   let school = null;
   try {
     school = await basePrisma.school.findUnique({
@@ -175,6 +177,7 @@ export default async function PublicGuestPortalPage({
     ? school.welcomeGreeting 
     : heroTitle;
   
+  const isDemo = school.subdomain.toLowerCase() === "demo";
   const contactEmail = school.staff.length > 0 ? school.staff[0].email : "admissions@school.local";
   const contactPhone = school.contactPhone || "+234 (0) 800 000 0000";
   
@@ -199,14 +202,15 @@ export default async function PublicGuestPortalPage({
               <Phone className="w-3 h-3 text-indigo-400" />
               <span>Helpline: <strong className="text-white font-mono">{contactPhone}</strong></span>
             </a>
-            <span className="text-slate-700 hidden sm:inline">|</span>
-            <a 
-              href={`mailto:${contactEmail}`} 
-              className="inline-flex items-center gap-1.5 hover:text-white transition font-medium hidden sm:inline-flex"
-            >
-              <Mail className="w-3 h-3 text-indigo-400" />
-              <span>{contactEmail}</span>
-            </a>
+            {session?.email && (
+              <>
+                <span className="text-slate-700 hidden sm:inline">|</span>
+                <span className="inline-flex items-center gap-1.5 text-indigo-200 font-medium hidden sm:inline-flex">
+                  <Mail className="w-3 h-3 text-indigo-400" />
+                  <span>{session.email}</span>
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -226,20 +230,26 @@ export default async function PublicGuestPortalPage({
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <Link 
-              href={`/${school.subdomain}/portal/student`}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-semibold transition-all text-xs sm:text-sm border border-indigo-200 shadow-xs"
-            >
-              <GraduationCap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
-              <span>Student<span className="hidden sm:inline"> Workspace</span></span>
-            </Link>
-            <Link 
-              href={`/${school.subdomain}/login`}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm border border-slate-800"
-            >
-              <span>Staff<span className="hidden sm:inline"> Login</span></span>
-              <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-            </Link>
+            {session ? (
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-xs text-slate-600 hidden md:inline font-medium">{session.email}</span>
+                <Link 
+                  href={`/${school.subdomain}/dashboard`}
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm"
+                >
+                  <span>Enter Workspace</span>
+                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                </Link>
+              </div>
+            ) : (
+              <Link 
+                href={`/${school.subdomain}/login`}
+                className="inline-flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm border border-slate-800"
+              >
+                <span>Sign In</span>
+                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -292,18 +302,11 @@ export default async function PublicGuestPortalPage({
             <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
               <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
               <Link 
-                href={`/${school.subdomain}/portal/student`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 transition backdrop-blur-xs font-semibold"
-              >
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>Student Workspace</span>
-              </Link>
-              <span className="text-slate-600 hidden sm:inline">•</span>
-              <Link 
                 href={`/${school.subdomain}/login`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/20 transition backdrop-blur-xs font-semibold"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition shadow-sm font-semibold"
               >
-                <span>Staff & Teacher Sign In</span>
+                <span>Enter Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <span className="text-slate-600 hidden sm:inline">•</span>
               <Link 
@@ -404,19 +407,11 @@ export default async function PublicGuestPortalPage({
             </p>
             <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
               <Link
-                href={`/${school.subdomain}/portal/student`}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
-              >
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>Student Workspace</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-              <Link
                 href={`/${school.subdomain}/login`}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
               >
-                <span>Staff Portal</span>
-                <ArrowRight className="w-3 h-3" />
+                <span>Enter Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -441,20 +436,22 @@ export default async function PublicGuestPortalPage({
                   </a>
                 </div>
               </li>
-              <li className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Us</p>
-                  <a 
-                    href={`mailto:${contactEmail}`} 
-                    className="text-white font-medium hover:text-indigo-400 transition-colors text-sm"
-                  >
-                    {contactEmail}
-                  </a>
-                </div>
-              </li>
+              {(session?.email || (!isDemo && contactEmail)) && (
+                <li className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Us</p>
+                    <a 
+                      href={`mailto:${session?.email || contactEmail}`} 
+                      className="text-white font-medium hover:text-indigo-400 transition-colors text-sm"
+                    >
+                      {session?.email || contactEmail}
+                    </a>
+                  </div>
+                </li>
+              )}
             </ul>
           </div>
           

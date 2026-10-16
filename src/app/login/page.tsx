@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   Lock,
@@ -42,6 +42,8 @@ interface TenantBrandingConfig {
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useParams();
+  const routeSchool = (params?.schoolDomain as string) || "";
   const callbackUrl = searchParams.get("callbackUrl") || "";
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
@@ -57,6 +59,13 @@ function LoginPageContent() {
   // Multi-tenant branding states
   const [resolvedSubdomain, setResolvedSubdomain] = useState<string | null>(null);
   const [tenantBranding, setTenantBranding] = useState<TenantBrandingConfig | null>(null);
+
+  // Sync schoolCode whenever resolvedSubdomain updates
+  useEffect(() => {
+    if (resolvedSubdomain) {
+      setSchoolCode(resolvedSubdomain);
+    }
+  }, [resolvedSubdomain]);
 
   // Floating Toast Notification state (completely decoupled from form container layout)
   const [toastNotification, setToastNotification] = useState<{
@@ -133,6 +142,17 @@ function LoginPageContent() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // 0. Explicit route parameter from /[schoolDomain]/login
+    if (routeSchool && !["login", "admin", "dashboard", "api", "_next", "portal"].includes(routeSchool.toLowerCase())) {
+      const slug = routeSchool.toLowerCase().trim();
+      setResolvedSubdomain(slug);
+      setSchoolCode(slug);
+      try {
+        window.localStorage.setItem("schoolerp_tenant", slug);
+      } catch { }
+      return;
+    }
+
     // 1. Query parameters (?school=..., ?subdomain=..., ?tenant=..., ?mockTenant=...)
     const params = new URLSearchParams(window.location.search);
     const querySchool =
@@ -143,8 +163,9 @@ function LoginPageContent() {
 
     if (querySchool && querySchool.trim()) {
       const clean = querySchool.trim().toLowerCase();
-      if (!["demo", "localhost", "root", "default", "admin"].includes(clean)) {
+      if (!["localhost", "root", "default", "admin"].includes(clean)) {
         setResolvedSubdomain(clean);
+        setSchoolCode(clean);
         try {
           window.localStorage.setItem("schoolerp_tenant", clean);
         } catch { }
@@ -160,9 +181,10 @@ function LoginPageContent() {
     // Localhost subdomain: e.g. greenwood.localhost
     if (hostname.endsWith(".localhost")) {
       const localParts = hostname.split(".");
-      if (localParts.length >= 2 && localParts[0] !== "localhost" && localParts[0] !== "demo") {
+      if (localParts.length >= 2 && localParts[0] !== "localhost") {
         const sub = localParts[0];
         setResolvedSubdomain(sub);
+        setSchoolCode(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
         } catch { }
@@ -173,8 +195,9 @@ function LoginPageContent() {
     // Production domain subdomain: e.g. greenwood.bonaveeict.com.ng
     if (configuredRoot && hostname.endsWith(`.${configuredRoot}`)) {
       const sub = hostname.slice(0, -(configuredRoot.length + 1));
-      if (sub && !["www", "app", "mail", "api", "admin", "demo"].includes(sub)) {
+      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
         setResolvedSubdomain(sub);
+        setSchoolCode(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
         } catch { }
@@ -185,8 +208,9 @@ function LoginPageContent() {
     // Render subdomain: e.g. greenwood.school-erp-1-mfc3.onrender.com
     if (hostname.endsWith(`.${renderHostingDomain}`)) {
       const sub = hostname.slice(0, -(renderHostingDomain.length + 1));
-      if (sub && !["www", "app", "mail", "api", "admin", "demo"].includes(sub)) {
+      if (sub && !["www", "app", "mail", "api", "admin"].includes(sub)) {
         setResolvedSubdomain(sub);
+        setSchoolCode(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
         } catch { }
@@ -194,16 +218,21 @@ function LoginPageContent() {
       }
     }
 
-    // 3. Path-based subdomain routing: e.g. /greenwood/login
+    // 3. Path-based subdomain routing: e.g. /greenwood/login or /demo/login
     const pathParts = window.location.pathname.split("/").filter(Boolean);
     if (
       pathParts.length > 0 &&
-      !["login", "admin", "dashboard", "api", "_next", "portal", "demo"].includes(pathParts[0].toLowerCase())
+      !["login", "admin", "dashboard", "api", "_next", "portal"].includes(pathParts[0].toLowerCase())
     ) {
-      setResolvedSubdomain(pathParts[0].toLowerCase());
+      const slug = pathParts[0].toLowerCase();
+      setResolvedSubdomain(slug);
+      setSchoolCode(slug);
+      try {
+        window.localStorage.setItem("schoolerp_tenant", slug);
+      } catch { }
       return;
     }
-  }, []);
+  }, [routeSchool]);
 
   // FIX 4: Session Isolation — verify existing token on page load,
   // clear stale/mismatched sessions, never auto-redirect from localStorage alone.
@@ -470,9 +499,9 @@ function LoginPageContent() {
         !effectiveSchoolCode &&
         (rawRole === "SUPER_ADMIN" || Boolean(sessionPayload?.isSuperAdmin));
 
-      // Super Admin Golden Key: Always forward directly to /dashboard/super-admin
-      if (isSuperAdminUser) {
-        router.push("/dashboard/super-admin");
+      // Super Admin Golden Key: Always forward directly to /admin
+      if (isSuperAdminUser || rawRole === "SUPER_ADMIN") {
+        router.push("/admin");
         return;
       }
 
@@ -488,14 +517,44 @@ function LoginPageContent() {
         return;
       }
 
-      // Single destination: /{code}/dashboard — dashboard page handles role internally
-      const targetCode = (effectiveSchoolCode || resolvedSubdomain || "").trim().toLowerCase().replace(/^\//, "");
+      // RBAC role redirect mapping:
+      // super_admin -> /admin
+      // school_admin -> /[tenant]/dashboard
+      // teacher -> /[tenant]/staff
+      // student -> /[tenant]/student
+      // parent -> /[tenant]/parent
+      const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
       if (!targetCode) {
         showToast("School Code is required to continue.", "error");
         setIsSubmitting(false);
         return;
       }
-      router.push(`/${targetCode}/dashboard`);
+
+      const effectiveRole = (rawRole || staffRole || "").toUpperCase();
+      if (
+        effectiveRole === "SCHOOL_ADMIN" ||
+        effectiveRole === "TENANT_ADMIN" ||
+        effectiveRole === "ADMIN" ||
+        effectiveRole === "PRINCIPAL" ||
+        effectiveRole === "HEADMASTER" ||
+        effectiveRole === "BURSAR" ||
+        effectiveRole.includes("ADMIN")
+      ) {
+        router.push(`/${targetCode}/dashboard`);
+      } else if (
+        effectiveRole === "TEACHER" ||
+        effectiveRole === "STAFF" ||
+        staffRole.includes("TEACHER") ||
+        staffRole.includes("STAFF")
+      ) {
+        router.push(`/${targetCode}/staff`);
+      } else if (effectiveRole === "STUDENT") {
+        router.push(`/${targetCode}/student`);
+      } else if (effectiveRole === "PARENT") {
+        router.push(`/${targetCode}/parent`);
+      } else {
+        router.push(`/${targetCode}/dashboard`);
+      }
     } catch (err: any) {
       showToast(err.message || "An unexpected error occurred during authentication.", "error");
       setIsSubmitting(false);
@@ -506,11 +565,10 @@ function LoginPageContent() {
   const visualTenantName =
     !rawTenantName ||
       rawTenantName.toLowerCase() === "admin" ||
-      rawTenantName.toLowerCase() === "demo" ||
       rawTenantName.toLowerCase() === "localhost" ||
       rawTenantName.toLowerCase() === "root" ||
       rawTenantName.toLowerCase() === "default"
-      ? ""
+      ? (resolvedSubdomain?.toLowerCase() === "demo" ? "Demo School" : "")
       : rawTenantName;
 
   return (
@@ -636,14 +694,27 @@ function LoginPageContent() {
                   type="text"
                   name="schoolCode"
                   value={schoolCode}
-                  onChange={(e) => setSchoolCode(e.target.value)}
+                  onChange={(e) => {
+                    if (!resolvedSubdomain) {
+                      setSchoolCode(e.target.value);
+                    }
+                  }}
+                  readOnly={Boolean(resolvedSubdomain)}
                   placeholder="e.g. greenspring"
                   autoComplete="off"
                   disabled={isSubmitting}
-                  className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10"
+                  className={`block w-full rounded-xl border border-slate-200 px-4 py-3 text-sm placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10 ${
+                    resolvedSubdomain
+                      ? "bg-slate-100/90 text-slate-700 font-medium cursor-not-allowed select-none"
+                      : "bg-white text-slate-900"
+                  }`}
                 />
                 <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                  <Building2 className="w-4 h-4" />
+                  {resolvedSubdomain ? (
+                    <Lock className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <Building2 className="w-4 h-4" />
+                  )}
                 </div>
               </div>
             </div>

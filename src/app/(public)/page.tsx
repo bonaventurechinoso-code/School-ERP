@@ -423,24 +423,13 @@ export default function LandingPage() {
               <span>Start Free Trial</span>
               <ArrowRight className="h-5 w-5" />
             </button>
-            <button
-              type="button"
+            <Link
+              href="/demo"
               id="explore-demo-btn"
-              disabled={loadingGateway !== null}
-              onClick={() => handleGatewayNavigation("demo", "/api/auth/demo-session")}
-              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2"
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2"
             >
-              {loadingGateway === "demo" ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin text-white" />
-                  <span>Explore Demo Environment</span>
-                </>
-              ) : (
-                <>
-                  <span>Explore Demo Environment</span>
-                </>
-              )}
-            </button>
+              <span>Explore Demo Environment</span>
+            </Link>
           </div>
         </div>
       </section>
