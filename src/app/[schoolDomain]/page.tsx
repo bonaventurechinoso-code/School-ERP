@@ -172,12 +172,16 @@ export default async function PublicGuestPortalPage({
 
   const { heroTitle, aboutUs } = generateTierMockData(preciseTier, school.name);
   
-  // Use custom welcome greeting if provided and different from default
-  const finalHeroTitle = (school.welcomeGreeting && school.welcomeGreeting !== "Welcome to our institution!") 
-    ? school.welcomeGreeting 
-    : heroTitle;
-  
   const isDemo = school.subdomain.toLowerCase() === "demo";
+  const demoDescription = "A premium institution dedicated to global research, academic innovation, and professional competency.";
+  const finalAboutUs = isDemo ? demoDescription : aboutUs;
+
+  // Use custom welcome greeting if provided and different from default
+  const finalHeroTitle = isDemo
+    ? "Welcome to Demo School"
+    : ((school.welcomeGreeting && school.welcomeGreeting !== "Welcome to our institution!") 
+      ? school.welcomeGreeting 
+      : heroTitle);
   const contactEmail = school.staff.length > 0 ? school.staff[0].email : "admissions@school.local";
   const contactPhone = school.contactPhone || "+234 (0) 800 000 0000";
   
@@ -270,16 +274,18 @@ export default async function PublicGuestPortalPage({
           </div>
 
           <div className="max-w-7xl mx-auto px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
-              <span>Official Institutional Portal</span>
-            </div>
+            {!isDemo && (
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+                <span>Official Institutional Portal</span>
+              </div>
+            )}
 
             <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight text-white drop-shadow-lg max-w-4xl">
               {finalHeroTitle}
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-slate-200 mb-10 max-w-3xl leading-relaxed mx-auto drop-shadow-md">
-              {aboutUs}
+              {finalAboutUs}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto">
               <Link 
@@ -299,23 +305,25 @@ export default async function PublicGuestPortalPage({
             </div>
 
             {/* Direct Gateway Badges */}
-            <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
-              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
-              <Link 
-                href={`/${school.subdomain}/login`}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition shadow-sm font-semibold"
-              >
-                <span>Enter Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-              <span className="text-slate-600 hidden sm:inline">•</span>
-              <Link 
-                href={`/${school.subdomain}/apply`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition backdrop-blur-xs font-semibold"
-              >
-                <span>New Applicant Enrollment</span>
-              </Link>
-            </div>
+            {!isDemo && (
+              <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
+                <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
+                <Link 
+                  href={`/${school.subdomain}/login`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition shadow-sm font-semibold"
+                >
+                  <span>Enter Workspace</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <span className="text-slate-600 hidden sm:inline">•</span>
+                <Link 
+                  href={`/${school.subdomain}/apply`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition backdrop-blur-xs font-semibold"
+                >
+                  <span>New Applicant Enrollment</span>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -403,17 +411,21 @@ export default async function PublicGuestPortalPage({
               <h2 className="text-xl font-bold text-white">{school.name}</h2>
             </div>
             <p className="text-sm text-slate-400 max-w-sm mb-6 leading-relaxed">
-              Unified institutional portal servicing student academic workspaces, staff operations, and online admissions enrollment.
+              {isDemo 
+                ? demoDescription
+                : "Unified institutional portal servicing student academic workspaces, staff operations, and online admissions enrollment."}
             </p>
-            <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
-              <Link
-                href={`/${school.subdomain}/login`}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
-              >
-                <span>Enter Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+            {!isDemo && (
+              <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
+                <Link
+                  href={`/${school.subdomain}/login`}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
+                >
+                  <span>Enter Workspace</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="bg-white/5 p-8 rounded-2xl border border-white/10 backdrop-blur-sm">
