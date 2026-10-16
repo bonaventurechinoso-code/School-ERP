@@ -71,26 +71,53 @@ export async function GET(req: Request) {
     }
 
     const now = new Date();
+    const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000);
+
+    // 2B. Inactivity prune: Delete sessions where lastActiveAt or updatedAt is older than 8 hours
+    await basePrisma.session.deleteMany({
+      where: {
+        userId: currentUserId,
+        OR: [
+          { lastActiveAt: { lt: eightHoursAgo } },
+          { updatedAt: { lt: eightHoursAgo } },
+        ],
+      },
+    }).catch(() => {});
+
+    await basePrisma.refreshToken.deleteMany({
+      where: {
+        userId: currentUserId,
+        OR: [
+          { updatedAt: { lt: eightHoursAgo } },
+          { createdAt: { lt: eightHoursAgo } },
+        ],
+      },
+    }).catch(() => {});
+
     const currentSessionToken =
       cookieStore.get(SESSION_COOKIE_NAME)?.value ||
       cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value;
 
-    // Fetch active database sessions
+    // Fetch active database sessions (strictly within last 8 hours)
     const activeDbSessions = await basePrisma.session.findMany({
       where: {
         userId: currentUserId,
         isRevoked: false,
         expiresAt: { gt: now },
+        lastActiveAt: { gte: eightHoursAgo },
+        updatedAt: { gte: eightHoursAgo },
       },
       orderBy: { lastActiveAt: "desc" },
     }).catch(() => []);
 
-    // Fetch active refresh tokens
+    // Fetch active refresh tokens (strictly within last 8 hours)
     const activeRefreshTokens = await basePrisma.refreshToken.findMany({
       where: {
         userId: currentUserId,
         isRevoked: false,
         expiresAt: { gt: now },
+        updatedAt: { gte: eightHoursAgo },
+        createdAt: { gte: eightHoursAgo },
       },
       orderBy: { createdAt: "desc" },
     }).catch(() => []);

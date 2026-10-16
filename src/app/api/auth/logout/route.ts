@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { revokeDatabaseSession } from "@/lib/session-manager";
+import { revokeDatabaseSession, SESSION_COOKIE_NAME } from "@/lib/session-manager";
 import { REFRESH_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_NAME, hashToken } from "@/lib/dual-token";
 import { basePrisma } from "@/lib/tenant-prisma";
+import * as jose from "jose";
+
+const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 
 const EXPIRED_COOKIE_OPTIONS = {
   path: "/",
@@ -14,28 +18,57 @@ export async function POST(req: Request) {
   try {
     const cookieStore = await cookies();
 
-    // Attempt to revoke the database session before clearing cookies
+    // Delete the current session token from existing session table using the token from cookie
     const sessionCookieValue =
+      cookieStore.get(SESSION_COOKIE_NAME)?.value ||
       cookieStore.get("session")?.value ||
+      cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ||
+      cookieStore.get("auth_token")?.value ||
       cookieStore.get("next-auth.session-token")?.value ||
       cookieStore.get("__Secure-next-auth.session-token")?.value;
 
     if (sessionCookieValue) {
+      let sessionTokenId = sessionCookieValue;
+      try {
+        const { payload } = await jose.jwtVerify(sessionCookieValue, SECRET_KEY);
+        sessionTokenId =
+          (payload.sessionToken as string) ||
+          (payload.sessionId as string) ||
+          (payload.jti as string) ||
+          (payload.token as string) ||
+          (payload.id as string) ||
+          sessionCookieValue;
+      } catch {}
+
+      await basePrisma.session.deleteMany({
+        where: {
+          OR: [
+            { sessionToken: sessionCookieValue },
+            { id: sessionCookieValue },
+            { sessionToken: sessionTokenId },
+            { id: sessionTokenId },
+          ],
+        },
+      }).catch(() => {});
+
       await revokeDatabaseSession(sessionCookieValue).catch(() => {});
     }
 
-    // Invalidate the stored refresh token so it can never mint new access tokens
+    // Delete the current session token from existing refreshToken table using the token from cookie
     const rawRefreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value;
     if (rawRefreshToken) {
-      await basePrisma.refreshToken
-        .updateMany({
-          where: { tokenHash: hashToken(rawRefreshToken), isRevoked: false },
-          data: { isRevoked: true },
-        })
-        .catch(() => {});
+      const hashed = hashToken(rawRefreshToken);
+      await basePrisma.refreshToken.deleteMany({
+        where: {
+          OR: [
+            { tokenHash: hashed },
+            { id: rawRefreshToken },
+          ],
+        },
+      }).catch(() => {});
     }
 
-    // Clear all auth-related cookies (both dev + secure production variants)
+    // Clear all auth-related cookies with httpOnly and maxAge 0
     const cookiesToDelete = [
       "session",
       "auth_token",
@@ -51,12 +84,8 @@ export async function POST(req: Request) {
       cookieStore.delete(name);
     }
 
-    const response = NextResponse.json(
-      { success: true, message: "Logged out successfully" },
-      { status: 200 }
-    );
+    const response = NextResponse.json({ success: true });
 
-    // Belt-and-suspenders: also set them to expired via response headers
     for (const name of cookiesToDelete) {
       response.cookies.set(name, "", {
         ...EXPIRED_COOKIE_OPTIONS,
@@ -66,16 +95,15 @@ export async function POST(req: Request) {
       });
     }
 
-    // Prevent bfcache from restoring the page after logout
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");
 
     return response;
-  } catch (error) {
-    // Even on error, return success so the client proceeds to /login
-    const response = NextResponse.json({ success: true }, { status: 200 });
+  } catch {
+    const response = NextResponse.json({ success: true });
     response.headers.set("Cache-Control", "no-store");
     return response;
   }
 }
+

@@ -23,11 +23,11 @@ function clearStoredSession() {
   persistStoredSession(null);
   setAuthToken(null);
   if (typeof window !== "undefined") {
-    try { localStorage.removeItem("schoolerp_tenant"); } catch {}
-    try { localStorage.removeItem("schoolDomain"); } catch {}
-    try { localStorage.removeItem("tenantId"); } catch {}
-    try { localStorage.removeItem("schoolerp_assigned_tier"); } catch {}
-    try { localStorage.removeItem("schoolerp_user_role"); } catch {}
+    try { localStorage.removeItem("schoolerp_tenant"); } catch { }
+    try { localStorage.removeItem("schoolDomain"); } catch { }
+    try { localStorage.removeItem("tenantId"); } catch { }
+    try { localStorage.removeItem("schoolerp_assigned_tier"); } catch { }
+    try { localStorage.removeItem("schoolerp_user_role"); } catch { }
   }
 }
 
@@ -147,7 +147,7 @@ function LoginPageContent() {
         setResolvedSubdomain(clean);
         try {
           window.localStorage.setItem("schoolerp_tenant", clean);
-        } catch {}
+        } catch { }
         return;
       }
     }
@@ -165,7 +165,7 @@ function LoginPageContent() {
         setResolvedSubdomain(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
-        } catch {}
+        } catch { }
         return;
       }
     }
@@ -177,7 +177,7 @@ function LoginPageContent() {
         setResolvedSubdomain(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
-        } catch {}
+        } catch { }
         return;
       }
     }
@@ -189,7 +189,7 @@ function LoginPageContent() {
         setResolvedSubdomain(sub);
         try {
           window.localStorage.setItem("schoolerp_tenant", sub);
-        } catch {}
+        } catch { }
         return;
       }
     }
@@ -230,9 +230,9 @@ function LoginPageContent() {
         if (isMismatch) {
           clearStoredSession();
           setAuthToken(null);
-          try { localStorage.removeItem("schoolerp_tenant"); } catch {}
-          try { localStorage.removeItem("schoolDomain"); } catch {}
-          try { localStorage.removeItem("tenantId"); } catch {}
+          try { localStorage.removeItem("schoolerp_tenant"); } catch { }
+          try { localStorage.removeItem("schoolDomain"); } catch { }
+          try { localStorage.removeItem("tenantId"); } catch { }
           return;
         }
       }
@@ -270,9 +270,9 @@ function LoginPageContent() {
         if (srvMismatch) {
           clearStoredSession();
           setAuthToken(null);
-          try { localStorage.removeItem("schoolerp_tenant"); } catch {}
-          try { localStorage.removeItem("schoolDomain"); } catch {}
-          try { localStorage.removeItem("tenantId"); } catch {}
+          try { localStorage.removeItem("schoolerp_tenant"); } catch { }
+          try { localStorage.removeItem("schoolDomain"); } catch { }
+          try { localStorage.removeItem("tenantId"); } catch { }
           return;
         }
       } catch {
@@ -304,7 +304,7 @@ function LoginPageContent() {
           });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       isMounted = false;
@@ -319,12 +319,6 @@ function LoginPageContent() {
     const normalizedEmail = email.trim().toLowerCase();
     const effectiveSchoolCode = (schoolCode.trim() || resolvedSubdomain || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
-
-    if (!effectiveSchoolCode && normalizedEmail !== "bonaveeict@mail.com" && normalizedEmail !== "bonaventure.chinoso@gmail.com") {
-      showToast("Please enter your School Code.", "error");
-      setIsSubmitting(false);
-      return;
-    }
 
     const loginPayload: Record<string, any> = {
       email: normalizedEmail,
@@ -408,7 +402,7 @@ function LoginPageContent() {
               sessionPayload = v1Data.session;
             }
           }
-        } catch {}
+        } catch { }
       }
 
       if (!sessionPayload) {
@@ -435,7 +429,7 @@ function LoginPageContent() {
               };
             }
           }
-        } catch {}
+        } catch { }
       }
 
       // Hydrate client storage & trigger session update
@@ -511,11 +505,11 @@ function LoginPageContent() {
   const rawTenantName = tenantBranding?.name || (resolvedSubdomain ? resolvedSubdomain.charAt(0).toUpperCase() + resolvedSubdomain.slice(1) : "");
   const visualTenantName =
     !rawTenantName ||
-    rawTenantName.toLowerCase() === "admin" ||
-    rawTenantName.toLowerCase() === "demo" ||
-    rawTenantName.toLowerCase() === "localhost" ||
-    rawTenantName.toLowerCase() === "root" ||
-    rawTenantName.toLowerCase() === "default"
+      rawTenantName.toLowerCase() === "admin" ||
+      rawTenantName.toLowerCase() === "demo" ||
+      rawTenantName.toLowerCase() === "localhost" ||
+      rawTenantName.toLowerCase() === "root" ||
+      rawTenantName.toLowerCase() === "default"
       ? ""
       : rawTenantName;
 
@@ -532,13 +526,12 @@ function LoginPageContent() {
           className="fixed top-6 right-6 z-50 max-w-sm sm:max-w-md w-full animate-in fade-in slide-in-from-top-4 duration-300"
         >
           <div
-            className={`p-4 rounded-2xl shadow-xl border backdrop-blur-xl flex items-start gap-3 transition-all duration-200 ${
-              toastNotification.type === "error"
+            className={`p-4 rounded-2xl shadow-xl border backdrop-blur-xl flex items-start gap-3 transition-all duration-200 ${toastNotification.type === "error"
                 ? "bg-white/95 border-red-200 text-red-700 shadow-red-900/5"
                 : toastNotification.type === "success"
-                ? "bg-white/95 border-emerald-200 text-emerald-700 shadow-emerald-900/5"
-                : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-900/5"
-            }`}
+                  ? "bg-white/95 border-emerald-200 text-emerald-700 shadow-emerald-900/5"
+                  : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-900/5"
+              }`}
           >
             {toastNotification.type === "error" ? (
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -567,7 +560,7 @@ function LoginPageContent() {
       {/* High-end architectural tone, light geometric matrix, zero hardcoded stats  */}
       {/* ========================================================================= */}
       <div className="hidden md:flex md:w-[60%] min-h-screen relative overflow-hidden flex-col justify-between p-10 lg:p-14 xl:p-16 bg-[#F1F5F9] border-r border-slate-200/80 text-slate-900 select-none">
-        
+
         {/* Minimalist Architectural Structural Grid Blueprint Pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000003_1px,transparent_1px),linear-gradient(to_bottom,#00000003_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
 
@@ -609,7 +602,7 @@ function LoginPageContent() {
       {/* ========================================================================= */}
       <div className="w-full md:w-[40%] min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative">
         <div className="w-full max-w-[420px] mx-auto bg-white border border-slate-100 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
-          
+
           {/* Header & Dynamic Branding Extraction */}
           <div className="space-y-1.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -642,11 +635,10 @@ function LoginPageContent() {
                   id="school-code"
                   type="text"
                   name="schoolCode"
-                  required
                   value={schoolCode}
                   onChange={(e) => setSchoolCode(e.target.value)}
                   placeholder="e.g. greenspring"
-                  autoComplete="organization"
+                  autoComplete="off"
                   disabled={isSubmitting}
                   className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10"
                 />
@@ -665,7 +657,7 @@ function LoginPageContent() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder=" "
+                placeholder="Enter email"
                 autoComplete="username"
                 disabled={isSubmitting}
                 className="peer block w-full rounded-xl border border-slate-200 bg-white px-4 pt-5 pb-2 text-sm text-slate-900 placeholder-transparent focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
