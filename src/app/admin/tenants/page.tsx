@@ -16,13 +16,6 @@ export default async function TenantsPage() {
       where: {
         isActive: true,
         deletedAt: null,
-        NOT: {
-          OR: [
-            { subdomain: { equals: "riverside", mode: "insensitive" } },
-            { slug: { equals: "riverside", mode: "insensitive" } },
-            { name: { contains: "riverside", mode: "insensitive" } },
-          ],
-        },
       },
       include: {
         academicTiers: true,

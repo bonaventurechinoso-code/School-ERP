@@ -36,9 +36,11 @@ const VALID_TIERS = [
   'COMBINED_NURSERY_PRIMARY_SECONDARY'
 ];
 
+import { createTenantWithAdmin } from "@/lib/tenant-service";
+
 export async function createSchool(formData: FormData) {
   const name = formData.get("name") as string;
-  let subdomain = formData.get("subdomain") as string;
+  const subdomain = formData.get("subdomain") as string;
   const adminEmail = formData.get("adminEmail") as string;
   const contactPhone = formData.get("contactPhone") as string;
   const password = formData.get("password") as string;
@@ -46,263 +48,28 @@ export async function createSchool(formData: FormData) {
   const tiers = formData.getAll("tiers") as string[];
 
   if (!name || !subdomain || !adminEmail || tiers.length === 0) {
-    console.error("Missing required fields or academic tiers.");
-    return;
+    throw new Error("Missing required fields or academic tiers.");
   }
 
-  await ensureSecurityTables();
-
-  let passwordToSave = "Password123";
-  let isCustom = false;
-  if (password && typeof password === "string" && password.trim().length > 0) {
-    if (confirmPassword && password !== confirmPassword) {
-      console.error("Passwords do not match.");
-      return;
-    }
-    const validation = validatePasswordStrength(password.trim());
-    if (!validation.valid) {
-      console.error("Password does not meet complexity requirements:", validation.error);
-      return;
-    }
-    passwordToSave = password.trim();
-    isCustom = true;
+  if (password && confirmPassword && password !== confirmPassword) {
+    throw new Error("Passwords do not match.");
   }
 
-  const hashedPassword = await hashPassword(passwordToSave);
-
-  const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
-  if (invalidTiers.length > 0) {
-    console.error(`Invalid academic tier subtypes provided: ${invalidTiers.join(', ')}`);
-    return;
-  }
-
-  subdomain = subdomain.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-
-  if (!subdomain) {
-    console.error("Subdomain cannot be empty or invalid.");
-    return;
-  }
+  const result = await createTenantWithAdmin({
+    slug: subdomain,
+    name,
+    adminEmail,
+    adminPassword: password || "Password123",
+    contactPhone,
+    tiers,
+  });
 
   try {
-    if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
-      const subdomains = [
-          { suffix: '-nursery', tier: 'DAYCARE', name: `${name} Nursery` },
-          { suffix: '-primary', tier: 'PRIMARY', name: `${name} Primary` },
-          { suffix: '-secondary', tier: 'SECONDARY', name: `${name} Secondary` }
-      ];
-      await basePrisma.$transaction(async (tx) => {
-        for (const sub of subdomains) {
-          const tenantSubdomain = subdomain + sub.suffix;
-          const school = await tx.school.create({
-            data: {
-              name: sub.name,
-              subdomain: tenantSubdomain,
-              slug: tenantSubdomain,
-              isActive: true,
-              academicTiers: {
-                create: { name: sub.tier, level: 1 }
-              }
-            }
-          });
-          
-          const dept = await tx.department.create({
-            data: { name: "Administration", schoolId: school.id }
-          });
-          
-          const user = await tx.user.upsert({
-            where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
-            update: {
-              passwordHash: hashedPassword,
-              role: "SCHOOL_ADMIN",
-              mustChangePassword: !isCustom,
-            },
-            create: {
-              schoolId: school.id,
-              email: adminEmail,
-              passwordHash: hashedPassword,
-              role: "SCHOOL_ADMIN",
-              mustChangePassword: !isCustom,
-            },
-          });
-
-          const staff = await tx.staff.create({
-            data: {
-              schoolId: school.id,
-              userId: user.id,
-              firstName: "Admin",
-              lastName: "User",
-              email: adminEmail,
-              departmentId: dept.id,
-              status: "ACTIVE",
-            }
-          });
-
-          await tx.$executeRawUnsafe(`
-            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (user_id)
-            DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-          `, user.id, school.id, !isCustom);
-        }
-      });
-
-      // Dispatch registration email to tenant admin
-      try {
-        const emailResult = await sendSchoolRegistrationSuccessEmail({
-          schoolName: name,
-          subdomain,
-          adminEmail,
-          adminPassword: password,
-          contactPhone: contactPhone || null,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
-          schoolId: undefined,
-        });
-        if (!emailResult.success) {
-          console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Delivery failure:", emailResult.error);
-        }
-      } catch (err) {
-        console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Exception:", err);
-      }
-
-      // Record tenant registered notification & trigger Super Admin email
-      try {
-        await recordTenantCreated({
-          schoolName: name,
-          subdomain,
-          adminEmail,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
-        });
-      } catch (err) {
-        console.error("[NOTIF_ERROR]", err);
-      }
-
-      try {
-        await sendSuperAdminTenantRegistrationEmail({
-          schoolName: name,
-          subdomain,
-          adminEmail,
-          contactPhone: contactPhone || null,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
-        });
-      } catch (err) {
-        console.error("[SUPER_ADMIN_EMAIL_ERROR]", err);
-      }
-    } else {
-        let createdSchoolId: string | undefined;
-        await basePrisma.$transaction(async (tx) => {
-           const school = await tx.school.create({
-             data: {
-               name,
-               subdomain,
-               slug: subdomain,
-               isActive: true,
-               academicTiers: {
-                 create: tiers.map((tierName, idx) => ({ name: tierName, level: idx + 1 }))
-               }
-             }
-           });
-           createdSchoolId = school.id;
-
-           const dept = await tx.department.create({
-             data: { name: "Administration", schoolId: school.id }
-           });
-           
-           const user = await tx.user.upsert({
-             where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
-             update: {
-               passwordHash: hashedPassword,
-               role: "SCHOOL_ADMIN",
-               mustChangePassword: !isCustom,
-             },
-             create: {
-               schoolId: school.id,
-               email: adminEmail,
-               passwordHash: hashedPassword,
-               role: "SCHOOL_ADMIN",
-               mustChangePassword: !isCustom,
-             },
-           });
-
-           const staff = await tx.staff.create({
-             data: {
-               schoolId: school.id,
-               userId: user.id,
-               firstName: "Admin",
-               lastName: "User",
-               email: adminEmail,
-               departmentId: dept.id,
-               status: "ACTIVE",
-             }
-           });
-
-           await tx.$executeRawUnsafe(`
-             INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-             VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (user_id)
-             DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-           `, user.id, school.id, !isCustom);
-        });
-
-        // Trigger automated multi-database provisioning for selected tiers
-        if (createdSchoolId) {
-          provisionTierDatabases({
-            schoolId: createdSchoolId,
-            schoolName: name,
-            subdomain,
-            tiers,
-            adminEmail,
-          }).catch((err) => console.warn("[PROVISIONING_DEFERRED]", err?.message));
-
-          // Dispatch registration email to tenant admin
-          try {
-            const emailResult = await sendSchoolRegistrationSuccessEmail({
-              schoolName: name,
-              subdomain,
-              adminEmail,
-              adminPassword: password,
-              contactPhone: contactPhone || null,
-              tiers,
-              schoolId: createdSchoolId,
-            });
-            if (!emailResult.success) {
-              console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Delivery failure:", emailResult.error);
-            }
-          } catch (err) {
-            console.error("[EMAIL_SYNC_ERROR] [TENANT_WELCOME_EMAIL] Exception:", err);
-          }
-
-          // Record tenant registered notification & trigger Super Admin email
-          try {
-            await recordTenantCreated({
-              schoolId: createdSchoolId,
-              schoolName: name,
-              subdomain,
-              adminEmail,
-              tiers,
-            });
-          } catch (err) {
-            console.error("[NOTIF_ERROR]", err);
-          }
-
-          try {
-            await sendSuperAdminTenantRegistrationEmail({
-              schoolName: name,
-              subdomain,
-              adminEmail,
-              contactPhone: contactPhone || null,
-              tiers,
-              schoolId: createdSchoolId,
-            });
-          } catch (err) {
-            console.error("[SUPER_ADMIN_EMAIL_ERROR]", err);
-          }
-        }
-    }
-
     revalidatePath("/admin");
-  } catch (error: any) {
-    console.error("Database Error:", error.message);
-  }
+    revalidatePath("/admin/tenants");
+  } catch {}
+
+  return { success: true, school: result.school };
 }
 
 export async function toggleSchoolStatus(schoolId: string, currentStatus: boolean) {

@@ -7,6 +7,7 @@ import {
   formatTierBadgeCode,
   resolveTierCode
 } from "@/lib/tenant-tier-utils";
+import { resolveTenant } from "@/lib/tenant-service";
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -277,31 +278,11 @@ export async function POST(req: Request) {
     );
     }
 
-    // Resolve the tenant strictly from the school code supplied on this request.
-    // No fallback to other tenants, global users, or the Super Admin.
-    const tenant: any = await basePrisma.school.findFirst({
-      where: {
-        OR: [
-          { subdomain: { equals: targetSchoolCode, mode: "insensitive" } },
-          { slug: { equals: targetSchoolCode, mode: "insensitive" } },
-          { id: targetSchoolCode },
-        ],
-        deletedAt: null,
-        NOT: {
-          OR: [
-            { subdomain: { equals: "riverside", mode: "insensitive" } },
-            { slug: { equals: "riverside", mode: "insensitive" } },
-            { name: { contains: "riverside", mode: "insensitive" } },
-          ],
-        },
-      },
-      include: {
-        academicTiers: { orderBy: { level: "asc" } },
-        tierDatabases: true,
-      },
-    });
+    // Resolve the tenant strictly using the unified resolveTenant function.
+    const tenant: any = await resolveTenant(targetSchoolCode);
 
     if (!tenant) {
+      console.warn(`[AUTH_LOGIN_DEBUG] [TENANT_NOT_FOUND] Target school code "${targetSchoolCode}" did not match any tenant.`);
       recordCredentialFailure(clientIp, accountKey);
       return NextResponse.json(
         { error: "Invalid credentials.", code: "INVALID_CREDENTIALS" },
@@ -573,6 +554,11 @@ export async function POST(req: Request) {
     }
 
     if (!resolvedRole) {
+      if (!localUser) {
+        console.warn(`[AUTH_LOGIN_DEBUG] [USER_NOT_FOUND] User with email/identifier "${normalizedEmail}" not found in tenant "${tenant.subdomain}" (${tenant.id}).`);
+      } else {
+        console.warn(`[AUTH_LOGIN_DEBUG] [PASSWORD_MISMATCH] Password mismatch for user "${normalizedEmail}" in tenant "${tenant.subdomain}" (${tenant.id}).`);
+      }
       const failureResult = recordCredentialFailure(clientIp, accountKey);
       await logAuditEvent({
         actorId: "ANONYMOUS",

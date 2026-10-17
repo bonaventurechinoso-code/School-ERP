@@ -26,13 +26,6 @@ export default async function AdminDashboardPage() {
         where: {
           isActive: true,
           deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
         },
       }),
       basePrisma.student.count({
@@ -46,13 +39,6 @@ export default async function AdminDashboardPage() {
         where: {
           isActive: true,
           deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
         },
         take: 5,
         orderBy: { createdAt: "desc" },

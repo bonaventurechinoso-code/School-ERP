@@ -156,13 +156,6 @@ export const authOptions: NextAuthOptions = {
             ],
             isActive: true,
             deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
           };
           targetTenant = await basePrisma.school.findFirst({
             where: schoolWhere,
@@ -187,13 +180,6 @@ export const authOptions: NextAuthOptions = {
           school: {
             isActive: true,
             deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
           },
         };
         if (targetTenant) {

@@ -69,12 +69,6 @@ export async function GET(req: NextRequest) {
     let tenants = await prisma.tenant.findMany({
       where: {
         status: "ACTIVE",
-        NOT: {
-          OR: [
-            { subdomain: { equals: "riverside", mode: "insensitive" } },
-            { schoolName: { contains: "riverside", mode: "insensitive" } },
-          ],
-        },
       },
       orderBy: { createdAt: "desc" },
       select: tenantSelect,
@@ -86,13 +80,6 @@ export async function GET(req: NextRequest) {
         where: {
           isActive: true,
           deletedAt: null,
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { slug: { equals: "riverside", mode: "insensitive" } },
-              { name: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
         },
       });
       for (const s of schools) {
@@ -116,12 +103,6 @@ export async function GET(req: NextRequest) {
       tenants = await prisma.tenant.findMany({
         where: {
           status: "ACTIVE",
-          NOT: {
-            OR: [
-              { subdomain: { equals: "riverside", mode: "insensitive" } },
-              { schoolName: { contains: "riverside", mode: "insensitive" } },
-            ],
-          },
         },
         orderBy: { createdAt: "desc" },
         select: tenantSelect,

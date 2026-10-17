@@ -4,6 +4,7 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { createPasswordResetToken, hashToken } from "@/lib/security-service";
 import { sendPasswordResetEmail } from "@/lib/mail";
 import { BASE_TENANT_DOMAIN } from "@/lib/session-manager";
+import { resolveTenant } from "@/lib/tenant-service";
 
 export async function POST(req: Request) {
   try {
@@ -105,22 +106,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Locate the school exclusively for this domain
-    const school = await basePrisma.school.findFirst({
-      where: {
-        OR: [
-          { subdomain: domainInput },
-          { slug: domainInput },
-          { subdomain: { equals: domainInput, mode: "insensitive" } },
-          { slug: { equals: domainInput, mode: "insensitive" } },
-        ],
-        isActive: true,
-        deletedAt: null,
-      },
-    });
+    // Locate the school exclusively for this domain using unified resolveTenant
+    const school = await resolveTenant(domainInput);
 
     if (!school) {
-      console.warn(`[FORGOT_PASSWORD_BLOCKED] No active institution found for domain '${domainInput}'. Cross-tenant fallbacks are strictly prohibited.`);
+      console.warn(`[AUTH_FORGOT_PASSWORD_DEBUG] [TENANT_NOT_FOUND] No active institution found for domain '${domainInput}'. Cross-tenant fallbacks are strictly prohibited.`);
       return NextResponse.json(
         { error: "No active school institution matches this domain context.", code: "TENANT_NOT_FOUND" },
         { status: 404 }
@@ -144,7 +134,7 @@ export async function POST(req: Request) {
       where: {
         schoolId: institutionId,
         email: { equals: normalizedEmail, mode: "insensitive" },
-        role: { in: ["SCHOOL_ADMIN", "ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR", "DIRECTOR"] as any },
+        role: { in: ["SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HEADMASTER", "BURSAR"] },
       },
     });
 
@@ -248,7 +238,7 @@ export async function POST(req: Request) {
 
     // Security practice: Return generic positive message if user not found in this specific tenant
     if (!foundUser) {
-      console.info(`[FORGOT_PASSWORD] Email '${normalizedEmail}' not registered in tenant '${institutionId}' (${school.name}). Returning generic success.`);
+      console.warn(`[AUTH_FORGOT_PASSWORD_DEBUG] [USER_NOT_FOUND] Email '${normalizedEmail}' not registered in tenant '${institutionId}' (${school.name}). Returning generic success.`);
       return NextResponse.json({
         success: true,
         message: "If an account associated with this institutional email exists, password recovery instructions have been dispatched.",

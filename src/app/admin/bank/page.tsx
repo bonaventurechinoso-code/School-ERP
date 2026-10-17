@@ -42,12 +42,6 @@ export default async function BankModulePage() {
   const rawTenants = await prisma.tenant.findMany({
     where: {
       status: "ACTIVE",
-      NOT: {
-        OR: [
-          { subdomain: { equals: "riverside", mode: "insensitive" } },
-          { schoolName: { contains: "riverside", mode: "insensitive" } },
-        ],
-      },
     },
     orderBy: { createdAt: "desc" },
     include: {

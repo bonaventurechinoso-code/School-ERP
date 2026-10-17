@@ -20,12 +20,6 @@ export default async function SupportPage() {
   const tenants = await prisma.tenant.findMany({
     where: {
       status: "ACTIVE",
-      NOT: {
-        OR: [
-          { subdomain: { equals: "riverside", mode: "insensitive" } },
-          { schoolName: { contains: "riverside", mode: "insensitive" } },
-        ],
-      },
     },
     take: 10,
     orderBy: { createdAt: "desc" },

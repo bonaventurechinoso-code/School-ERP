@@ -287,13 +287,6 @@ export async function getPlatformNotifications(limit = 20): Promise<{
           where: {
             isActive: true,
             deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
           },
           take: 5,
           orderBy: { createdAt: "desc" },
@@ -492,13 +485,6 @@ export async function getRecentActivityTimeline(limit = 10): Promise<RecentActiv
           where: {
             isActive: true,
             deletedAt: null,
-            NOT: {
-              OR: [
-                { subdomain: { equals: "riverside", mode: "insensitive" } },
-                { slug: { equals: "riverside", mode: "insensitive" } },
-                { name: { contains: "riverside", mode: "insensitive" } },
-              ],
-            },
           },
           take: limit,
           orderBy: { createdAt: "desc" },

@@ -16,6 +16,7 @@ import { logAuditEvent } from "@/lib/audit-logger";
 import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "@/lib/admin-notifications";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
+import { createTenantWithAdmin } from "@/lib/tenant-service";
 
 const VALID_TIERS = [
   'Creche / Daycare',
@@ -345,166 +346,14 @@ export async function POST(request: Request) {
       return response;
     }
 
-    // Standard Tenant Provisioning Transaction
-    const newSchool = await basePrisma.$transaction(async (tx) => {
-      // 1. Create School record with instant ACTIVE status
-      const school = await tx.school.create({
-        data: {
-          name: schoolName,
-          subdomain: formattedSubdomain,
-          slug: formattedSubdomain,
-          status: "ACTIVE",
-          contactPhone: contactPhone || null,
-          isActive: true,
-          isBanned: false,
-          trialStartDate: now,
-          trialEndDate: fourteenDaysOut,
-          collectionMode: "MANUAL_BANK_TRANSFER",
-        },
-      });
-
-      // 2. Persist exact standardized academic tiers matching UI checkboxes
-      for (let i = 0; i < tiers.length; i++) {
-        await tx.academicTier.create({
-          data: {
-            schoolId: school.id,
-            name: tiers[i],
-            level: i + 1,
-          },
-        });
-      }
-
-      // 3. Automatically seed initial active 14-day manual trial subscription (amount: 0.0)
-      await tx.subscription.create({
-        data: {
-          schoolId: school.id,
-          plan: "14_DAY_TRIAL",
-          amount: 0.0,
-          status: "ACTIVE",
-          paymentMethod: "MANUAL",
-          verifiedByAdmin: true,
-          expiresAt: fourteenDaysOut,
-        },
-      });
-
-      // 4. Seed initial school payment ledger record (amount: 0.0)
-      await tx.schoolPayment.create({
-        data: {
-          schoolId: school.id,
-          amount: 0.0,
-          type: "SUBSCRIPTION",
-          status: "VERIFIED",
-        },
-      });
-
-      // 5. Create default department
-      const dept = await tx.department.create({
-        data: {
-          schoolId: school.id,
-          name: "Administration",
-        }
-      });
-
-      const user = await tx.user.upsert({
-        where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
-        update: {
-          passwordHash: adminPasswordHash,
-          role: "SCHOOL_ADMIN",
-          mustChangePassword: false,
-          status: "ACTIVE",
-        },
-        create: {
-          schoolId: school.id,
-          email: adminEmail,
-          passwordHash: adminPasswordHash,
-          role: "SCHOOL_ADMIN",
-          mustChangePassword: false,
-          status: "ACTIVE",
-        },
-      });
-
-      const staff = await tx.staff.create({
-        data: {
-          schoolId: school.id,
-          userId: user.id,
-          firstName: "Admin",
-          lastName: "User",
-          email: adminEmail,
-          departmentId: dept.id,
-          status: "ACTIVE",
-          activeAt: now,
-        }
-      });
-
-      await tx.$executeRawUnsafe(`
-        INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (user_id)
-        DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-      `, staff.id, school.id, false);
-
-      // 7. Provision isolated database boundary
-      await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
-
-      return { school, staff };
-    });
-
-    // Dispatch Registration Success Email to the School Admin
-    try {
-      console.log(`[REGISTER_EMAIL] Triggering registration success email for: ${adminEmail}...`);
-      const emailResult = await sendSchoolRegistrationSuccessEmail({
-        schoolName,
-        subdomain: formattedSubdomain,
-        adminEmail,
-        adminPassword: adminPassword || password,
-        contactPhone: contactPhone || null,
-        tiers,
-        schoolId: newSchool.school.id,
-      });
-      console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
-      if (!emailResult?.success) {
-        console.error(`[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Delivery failure:`, emailResult?.error);
-      }
-    } catch (emailErr) {
-      console.error("[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Exception:", emailErr);
-    }
-
-    // Trigger Super-Admin notification record and email alert
-    try {
-      await recordTenantCreated({
-        schoolId: newSchool.school.id,
-        schoolName,
-        subdomain: formattedSubdomain,
-        adminEmail,
-        tiers,
-      });
-      await sendSuperAdminTenantRegistrationEmail({
-        schoolName,
-        subdomain: formattedSubdomain,
-        adminEmail,
-        contactPhone: contactPhone || null,
-        tiers,
-        schoolId: newSchool.school.id,
-      });
-    } catch (notifErr) {
-      console.error("[SUPER_ADMIN_NOTIF_EXCEPTION]:", notifErr);
-    }
-
-    registerTenantInStore({
-      id: newSchool.school.id,
+    // Standard Tenant Provisioning Transaction via Unified createTenantWithAdmin
+    const newSchool = await createTenantWithAdmin({
+      slug: formattedSubdomain,
       name: schoolName,
-      code: formattedSubdomain.toUpperCase().slice(0, 7),
-      subdomain: formattedSubdomain,
-      tier: "Free",
-      studentsCount: 0,
-      planStatus: "Trial",
-      subscriptionStatus: "Free Trial",
-      monthlyRevenue: 0,
-      contactEmail: adminEmail,
-      contactPhone: contactPhone || "+234 800 000 0000",
-      joinedDate: "Today",
-      adminName: "Admin User",
-      trialEndsAt: fourteenDaysOut.toISOString(),
+      adminEmail,
+      adminPassword: adminPasswordToSave,
+      contactPhone: contactPhone || null,
+      tiers,
     });
 
     // Synchronize SSL generation with onboarding pipeline:

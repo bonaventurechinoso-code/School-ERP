@@ -5,6 +5,7 @@ import util from "util";
 import bcrypt from "bcryptjs";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 import { logAuditEvent } from "@/lib/audit-logger";
+import { createTenantWithAdmin } from "@/lib/tenant-service";
 
 const execAsync = util.promisify(exec);
 
@@ -91,79 +92,13 @@ export async function POST(request: Request) {
 
     const adminPasswordHash = await hashPassword(adminPasswordToSave);
 
-    // Provision the new tenant inside a transaction
-    const newSchool = await basePrisma.$transaction(async (tx) => {
-      // Phase A: Create baseline Tenant management record
-      // 1. Create School
-      const school = await tx.school.create({
-        data: {
-          name: schoolName,
-          subdomain: formattedSubdomain,
-          slug: formattedSubdomain,
-          isActive: true,
-        },
-      });
-
-      // 2. Persist exact standardized backend enum keys as subtypes
-      const tierPromises = tiers.map((tierName: string, index: number) => {
-        return tx.academicTier.create({
-          data: {
-            schoolId: school.id,
-            name: tierName,
-            level: index + 1,
-          },
-        });
-      });
-      await Promise.all(tierPromises);
-
-      // 3. Create a default admin account
-      const user = await tx.user.upsert({
-        where: { schoolId_email: { schoolId: school.id, email: adminEmail } },
-        update: {
-          passwordHash: adminPasswordHash,
-          role: "SCHOOL_ADMIN",
-          mustChangePassword: !isUserProvidedPassword,
-        },
-        create: {
-          schoolId: school.id,
-          email: adminEmail,
-          passwordHash: adminPasswordHash,
-          role: "SCHOOL_ADMIN",
-          mustChangePassword: !isUserProvidedPassword,
-        },
-      });
-
-      const staff = await tx.staff.create({
-        data: {
-          schoolId: school.id,
-          userId: user.id,
-          firstName: "Admin",
-          lastName: "User",
-          email: adminEmail,
-          status: "ACTIVE",
-          activeAt: new Date(),
-        }
-      });
-
-      await tx.$executeRawUnsafe(`
-        INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (user_id)
-        DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-      `, user.id, school.id, !isUserProvidedPassword);
-
-      // 4. Create a default department
-      await tx.department.create({
-        data: {
-          schoolId: school.id,
-          name: "Administration",
-        }
-      });
-
-      // Phase B: Provision an isolated boundary
-      await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${formattedSubdomain}";`);
-
-      return school;
+    // Provision the new tenant using unified createTenantWithAdmin
+    const { school } = await createTenantWithAdmin({
+      slug: formattedSubdomain,
+      name: schoolName,
+      adminEmail,
+      adminPassword: adminPasswordToSave,
+      tiers,
     });
 
     // Schema Migration Handshake: Programmatically duplicate baseline structures
@@ -179,7 +114,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Tenant successfully provisioned.",
-      tenant: newSchool,
+      tenant: school,
       redirectUrl: `/${formattedSubdomain}/dashboard`
     });
 
