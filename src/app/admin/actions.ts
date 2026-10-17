@@ -62,6 +62,9 @@ export async function createSchool(formData: FormData) {
     adminPassword: password || "Password123",
     contactPhone,
     tiers,
+    isSelfRegistration: false,
+    mustChangePassword: true,
+    isTemporaryPassword: true,
   });
 
   try {

@@ -2763,3 +2763,75 @@ export async function sendParentAttendanceAlertEmail(payload: {
     logCategory: "ATTENDANCE_ALERT",
   });
 }
+
+export interface PasswordRecommendationEmailPayload {
+  schoolName: string;
+  subdomain: string;
+  adminEmail: string;
+  schoolId?: string;
+}
+
+export async function sendPasswordRecommendationEmail(payload: PasswordRecommendationEmailPayload) {
+  try {
+    const { schoolName, subdomain, adminEmail, schoolId } = payload;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const securitySettingsUrl = `${baseUrl}/${encodeURIComponent(subdomain)}/settings/security`;
+    const brandColor = "#4f46e5";
+    const subject = "Consider strengthening your password (Optional) - You can change it anytime in Settings > Security.";
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>Password Security Recommendation - ${schoolName}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; }
+          .header { background: ${brandColor}; padding: 32px; text-align: center; color: #ffffff; }
+          .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+          .content { padding: 32px; line-height: 1.6; }
+          .tip-card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 20px 0; color: #166534; font-size: 14px; }
+          .action-area { text-align: center; margin: 28px 0; }
+          .btn { display: inline-block; background-color: ${brandColor}; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+          .footer { padding: 20px; text-align: center; color: #94a3b8; font-size: 12px; background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Security Recommendation (Optional)</h1>
+            <p>${schoolName} Workspace</p>
+          </div>
+          <div class="content">
+            <p>Hello Administrator,</p>
+            <p>Your institutional account for <strong>${schoolName}</strong> was registered successfully and is ready for use.</p>
+            <div class="tip-card">
+              <strong>💡 Recommendation:</strong> To maximize protection for student records and administrative finances, we recommend choosing a complex password with higher character variety.
+            </div>
+            <p>This is completely <strong>optional</strong> and will not interrupt or block your daily access. You can update your credentials at any time in your workspace settings.</p>
+            <div class="action-area">
+              <a href="${securitySettingsUrl}" class="btn">Go to Settings &gt; Security</a>
+            </div>
+          </div>
+          <div class="footer">
+            School ERP &bull; Educational Management Platform
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await sendMail({
+      to: adminEmail,
+      subject,
+      html: emailHtml,
+      schoolId,
+      recipientType: "ADMIN",
+      logCategory: "PASSWORD_RECOMMENDATION",
+    });
+  } catch (err) {
+    console.warn("[PASSWORD_RECOMMENDATION_EMAIL] Error dispatching recommendation email:", err);
+    return { success: false, deliveryStatus: "FAILED_EXCEPTION", provider: "NONE", recipients: [payload.adminEmail] };
+  }
+}

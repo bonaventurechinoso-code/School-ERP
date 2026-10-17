@@ -120,7 +120,9 @@ export async function isMustChangePassword(userId: string): Promise<boolean> {
       },
       select: { mustChangePassword: true },
     });
-    if (user?.mustChangePassword) return true;
+    if (user) {
+      return Boolean(user.mustChangePassword);
+    }
 
     // 2. Legacy table fallback
     await ensureSecurityTables();

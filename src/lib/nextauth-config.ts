@@ -219,7 +219,7 @@ export const authOptions: NextAuthOptions = {
           if (isPasswordValid) {
             const permissions = getDefaultPermissionsForRole(user.role);
             const activeTiers = user.school.academicTiers.map((t) => t.name);
-            const mustChangePassword = Boolean(user.mustChangePassword) || rawPassword === "Password123";
+            const mustChangePassword = Boolean(user.mustChangePassword);
             const assignedTier = mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
 
             return {

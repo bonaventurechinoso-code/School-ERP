@@ -99,6 +99,9 @@ export async function POST(request: Request) {
       adminEmail,
       adminPassword: adminPasswordToSave,
       tiers,
+      isSelfRegistration: false,
+      mustChangePassword: true,
+      isTemporaryPassword: true,
     });
 
     // Schema Migration Handshake: Programmatically duplicate baseline structures

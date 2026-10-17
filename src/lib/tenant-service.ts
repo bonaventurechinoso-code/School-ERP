@@ -1,7 +1,7 @@
 import { basePrisma } from "./tenant-prisma";
 import { hashPassword } from "./security-service";
 import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "./admin-notifications";
-import { sendSchoolRegistrationSuccessEmail } from "./mail";
+import { sendSchoolRegistrationSuccessEmail, sendPasswordRecommendationEmail } from "./mail";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 import { logAuditEvent } from "./audit-logger";
 
@@ -12,12 +12,30 @@ export interface CreateTenantWithAdminParams {
   adminPassword: string;
   contactPhone?: string | null;
   tiers?: string[];
+  isSelfRegistration?: boolean;
+  mustChangePassword?: boolean;
+  isTemporaryPassword?: boolean;
 }
 
 export interface TenantWithAdminResult {
   school: any;
   user: any;
   staff: any;
+}
+
+/**
+ * Evaluates whether a password that meets minimum requirements is relatively weak
+ * (e.g. contains common dictionary/weak terms, low special character variety, or short length).
+ */
+export function isWeakPassword(password: string): boolean {
+  if (!password) return true;
+  const lower = password.toLowerCase();
+  const commonWeakPatterns = ["password", "1234", "123456", "12345678", "admin", "school", "welcome", "qwerty"];
+  const hasCommonPattern = commonWeakPatterns.some((p) => lower.includes(p));
+  const specialMatches = password.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/g) || [];
+  const hasLowVariety = specialMatches.length <= 1;
+  const isShort = password.length < 10;
+  return hasCommonPattern || isShort || hasLowVariety;
 }
 
 /**
@@ -122,6 +140,14 @@ export async function createTenantWithAdmin(
   // Normalize academic tiers
   const effectiveTiers = Array.isArray(tiers) && tiers.length > 0 ? tiers : ["Senior Secondary School"];
 
+  const isSelfReg = params.isSelfRegistration ?? true;
+  const mustChange = params.mustChangePassword !== undefined
+    ? params.mustChangePassword
+    : !isSelfReg;
+  const isTemp = params.isTemporaryPassword !== undefined
+    ? params.isTemporaryPassword
+    : !isSelfReg;
+
   // 4. Atomic Transaction: School + Tiers + Subscription + Department + User + Staff
   const transactionResult = await basePrisma.$transaction(async (tx) => {
     // A. School row: status ACTIVE, slug and subdomain strictly canonicalSlug
@@ -188,7 +214,7 @@ export async function createTenantWithAdmin(
       update: {
         passwordHash,
         role: "SCHOOL_ADMIN",
-        mustChangePassword: false,
+        mustChangePassword: mustChange,
         status: "ACTIVE",
       },
       create: {
@@ -196,7 +222,7 @@ export async function createTenantWithAdmin(
         email: normalizedEmail,
         passwordHash,
         role: "SCHOOL_ADMIN",
-        mustChangePassword: false,
+        mustChangePassword: mustChange,
         status: "ACTIVE",
       },
     });
@@ -215,16 +241,27 @@ export async function createTenantWithAdmin(
       },
     });
 
-    // H. Backward-compatible security table sync
+    // H. Backward-compatible security table sync (User & Staff)
     try {
       await tx.$executeRawUnsafe(
-        `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-         VALUES ($1, $2, $3, NOW())
+        `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
          ON CONFLICT (user_id)
-         DO UPDATE SET must_change_password = $3, password_updated_at = NOW();`,
+         DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
         user.id,
         school.id,
-        false
+        mustChange,
+        isTemp
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (user_id)
+         DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
+        staff.id,
+        school.id,
+        mustChange,
+        isTemp
       );
     } catch {}
 
@@ -297,7 +334,7 @@ export async function createTenantWithAdmin(
     console.error("[SUPER_ADMIN_NOTIFICATION_ERROR]:", notifErr);
   }
 
-  // Audit log
+  // Audit log for tenant registration
   try {
     await logAuditEvent({
       actorId: user.id,
@@ -311,6 +348,36 @@ export async function createTenantWithAdmin(
       },
     });
   } catch {}
+
+  // Soft warning / recommendation email for weak-but-valid passwords on self-registration
+  const isWeak = isWeakPassword(effectivePassword);
+  if (isSelfReg && isWeak) {
+    try {
+      await sendPasswordRecommendationEmail({
+        schoolName: trimmedName,
+        subdomain: canonicalSlug,
+        adminEmail: normalizedEmail,
+        schoolId: school.id,
+      });
+    } catch (recEmailErr) {
+      console.warn("[PASSWORD_RECOMMENDATION_EMAIL_WARNING]:", recEmailErr);
+    }
+
+    try {
+      await logAuditEvent({
+        actorId: user.id,
+        action: "PASSWORD_POLICY_UPDATED",
+        target: user.email,
+        schoolId: school.id,
+        metadata: {
+          note: "Soft recommendation: weak password detected during self-registration",
+          emailDispatched: true,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[PASSWORD_POLICY_AUDIT_WARNING]:", auditErr);
+    }
+  }
 
   return { school, user, staff };
 }

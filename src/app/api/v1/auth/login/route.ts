@@ -353,7 +353,7 @@ export async function POST(req: Request) {
         authenticatedUserId = localUser.id;
         authenticatedEmail = localUser.email;
         const isDemoTenant = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo";
-        mustChangePassword = !isDemoTenant && (Boolean(localUser.mustChangePassword) || password === "Password123");
+        mustChangePassword = !isDemoTenant && Boolean(localUser.mustChangePassword);
         if (localUser.student?.tier?.name) {
           assignedTier = localUser.student.tier.name;
         } else if (localUser.staff?.department?.tier?.name) {

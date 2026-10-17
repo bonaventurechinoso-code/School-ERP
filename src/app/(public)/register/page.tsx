@@ -119,6 +119,75 @@ export default function RegisterTenantPage() {
     { id: "COLLEGE_OF_EDUCATION", label: "College of Education", desc: "Teacher Training & NCE" },
   ];
 
+  // Enterprise Password Validation Rules
+  const pwd = formData.adminPassword;
+  const hasMinLength = pwd.length >= 8;
+  const hasUppercase = /[A-Z]/.test(pwd);
+  const hasNumber = /[0-9]/.test(pwd);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(pwd);
+  const meetsMinRules = hasMinLength && hasUppercase && hasNumber && hasSpecial;
+
+  // Strength evaluation for passwords meeting or progressing towards enterprise rules
+  const getStrengthTier = (val: string) => {
+    if (!val || val.length === 0) return null;
+    const rulesMet = [
+      val.length >= 8,
+      /[A-Z]/.test(val),
+      /[0-9]/.test(val),
+      /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(val)
+    ].filter(Boolean).length;
+
+    if (rulesMet < 4) {
+      return {
+        level: "Incomplete",
+        label: `${rulesMet}/4 Rules Met`,
+        score: rulesMet,
+        color: "bg-amber-400",
+        badge: "bg-slate-100 text-slate-600 border-slate-200",
+        canProceed: false,
+      };
+    }
+
+    // Meets all minimum enterprise rules: evaluate Weak vs Medium vs Strong
+    const lower = val.toLowerCase();
+    const isCommonWeak = /password|1234|admin|school|welcome|qwerty/.test(lower);
+    const specialCount = (val.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/g) || []).length;
+    const isShort = val.length < 10;
+
+    if (isCommonWeak || isShort || specialCount <= 1) {
+      return {
+        level: "Weak",
+        label: "Weak",
+        score: 1,
+        color: "bg-amber-500",
+        badge: "bg-amber-50 text-amber-700 border-amber-200",
+        canProceed: true,
+      };
+    }
+
+    if (val.length < 12 || specialCount < 2) {
+      return {
+        level: "Medium",
+        label: "Medium",
+        score: 2,
+        color: "bg-blue-500",
+        badge: "bg-blue-50 text-blue-700 border-blue-200",
+        canProceed: true,
+      };
+    }
+
+    return {
+      level: "Strong",
+      label: "Strong",
+      score: 3,
+      color: "bg-emerald-500",
+      badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      canProceed: true,
+    };
+  };
+
+  const strength = getStrengthTier(pwd);
+
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -127,8 +196,8 @@ export default function RegisterTenantPage() {
         setErrorMsg("Please fill in all required fields including password.");
         return;
       }
-      if (formData.adminPassword.length < 8) {
-        setErrorMsg("Admin password must be at least 8 characters long.");
+      if (!hasMinLength || !hasUppercase || !hasNumber || !hasSpecial) {
+        setErrorMsg("Admin password must be at least 8 characters long and contain at least 1 uppercase letter, 1 number, and 1 special character.");
         return;
       }
       if (formData.adminPassword !== formData.confirmPassword) {
@@ -229,8 +298,8 @@ export default function RegisterTenantPage() {
       return;
     }
 
-    if (!formData.adminPassword || formData.adminPassword.length < 8) {
-      setErrorMsg("Admin password must be at least 8 characters long.");
+    if (!formData.adminPassword || !hasMinLength || !hasUppercase || !hasNumber || !hasSpecial) {
+      setErrorMsg("Admin password must be at least 8 characters long and contain at least 1 uppercase letter, 1 number, and 1 special character.");
       return;
     }
 
@@ -543,19 +612,64 @@ export default function RegisterTenantPage() {
                     </div>
                   </div>
 
-                  {/* Real-time Validation Indicators */}
-                  <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
-                    <span className={`inline-flex items-center gap-1 transition-colors ${
-                      formData.adminPassword.length >= 8 ? "text-emerald-600 font-semibold" : "text-slate-400"
-                    }`}>
-                      {formData.adminPassword.length >= 8 ? "✓" : "•"} Min. 8 characters
-                    </span>
-                    {formData.confirmPassword.length > 0 && (
-                      <span className={`inline-flex items-center gap-1 font-semibold ${
-                        formData.adminPassword === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                  {/* Real-time Validation & Password Strength Meter */}
+                  <div className="space-y-3 pt-1">
+                    {/* Visual Strength Meter Bar */}
+                    {formData.adminPassword.length > 0 && (
+                      <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-700">Password Strength:</span>
+                          <span className={`px-2 py-0.5 rounded-md font-bold text-xs border ${strength?.badge || "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                            {strength ? strength.level : "Too Short"}
+                          </span>
+                        </div>
+                        {/* 3-Segment Progress Bar */}
+                        <div className="grid grid-cols-3 gap-1.5 h-1.5 w-full">
+                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 1 ? strength.color : "bg-slate-200"}`} />
+                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 2 ? strength.color : "bg-slate-200"}`} />
+                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 3 ? strength.color : "bg-slate-200"}`} />
+                        </div>
+                        {strength?.level === "Weak" && (
+                          <p className="text-[11px] text-amber-700 pt-0.5">
+                            Meets minimum requirements. You can register now, or strengthen it anytime.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Enterprise Password Rules Checklist */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        hasMinLength ? "text-emerald-600 font-semibold" : "text-slate-400"
                       }`}>
-                        {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                        {hasMinLength ? "✓" : "•"} Min. 8 characters
                       </span>
+                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        hasUppercase ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      }`}>
+                        {hasUppercase ? "✓" : "•"} 1 Uppercase (A-Z)
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        hasNumber ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      }`}>
+                        {hasNumber ? "✓" : "•"} 1 Digit (0-9)
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        hasSpecial ? "text-emerald-600 font-semibold" : "text-slate-400"
+                      }`}>
+                        {hasSpecial ? "✓" : "•"} 1 Symbol (!@#$)
+                      </span>
+                    </div>
+
+                    {/* Password Match Indicator */}
+                    {formData.confirmPassword.length > 0 && (
+                      <div className="text-xs">
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          formData.adminPassword === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                        }`}>
+                          {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                        </span>
+                      </div>
                     )}
                   </div>
 

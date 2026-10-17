@@ -378,4 +378,5 @@ export {
   sendAcademicResultPublishedNotification,
   sendParentFeeReminderEmail,
   sendParentAttendanceAlertEmail,
+  sendPasswordRecommendationEmail,
 } from "./email-service";

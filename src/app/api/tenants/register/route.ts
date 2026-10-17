@@ -60,14 +60,20 @@ export async function POST(request: Request) {
     let isUserProvidedPassword = false;
 
     if (effectiveAdminPassword && typeof effectiveAdminPassword === "string" && effectiveAdminPassword.trim().length > 0) {
-      if (effectiveAdminPassword.trim().length < 8) {
+      const pwdValidation = validatePasswordStrength(effectiveAdminPassword.trim());
+      if (!pwdValidation.valid) {
         return NextResponse.json(
-          { error: "Admin password must be at least 8 characters long.", code: "INVALID_PASSWORD" },
+          { error: pwdValidation.error || "Password must meet enterprise security requirements (min 8 chars, 1 uppercase, 1 numeric digit, 1 special character).", code: "INVALID_PASSWORD" },
           { status: 400 }
         );
       }
       adminPasswordToSave = effectiveAdminPassword.trim();
       isUserProvidedPassword = true;
+    } else {
+      return NextResponse.json(
+        { error: "Admin password is required.", code: "MISSING_PASSWORD" },
+        { status: 400 }
+      );
     }
 
     const adminPasswordHash = await hashPassword(adminPasswordToSave);
@@ -200,11 +206,17 @@ export async function POST(request: Request) {
           });
 
           await tx.$executeRawUnsafe(`
-            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, password_updated_at)
-            VALUES ($1, $2, $3, NOW())
+            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+            VALUES ($1, $2, $3, $4, NOW())
             ON CONFLICT (user_id)
-            DO UPDATE SET must_change_password = $3, password_updated_at = NOW();
-          `, staff.id, school.id, false);
+            DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();
+          `, user.id, school.id, false, false);
+          await tx.$executeRawUnsafe(`
+            INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();
+          `, staff.id, school.id, false, false);
 
           await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantSubdomain}";`);
           createdSchools.push({ school, staff });
@@ -354,6 +366,9 @@ export async function POST(request: Request) {
       adminPassword: adminPasswordToSave,
       contactPhone: contactPhone || null,
       tiers,
+      isSelfRegistration: true,
+      mustChangePassword: false,
+      isTemporaryPassword: false,
     });
 
     // Synchronize SSL generation with onboarding pipeline:
