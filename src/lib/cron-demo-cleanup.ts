@@ -429,7 +429,7 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
               email: f.email,
               role: (f.role === "ADMIN" ? "SCHOOL_ADMIN" : f.role) as any,
               passwordHash: "",
-              mustChangePassword: true,
+              mustChangePassword: false,
             },
           });
         }

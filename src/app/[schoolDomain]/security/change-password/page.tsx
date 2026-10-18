@@ -1,5 +1,5 @@
 import React from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import Image from "next/image";
@@ -17,6 +17,9 @@ export default async function ChangePasswordPage({
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isForced = searchParams.forced === "true" || searchParams.forced === "1";
+  if (isForced && schoolDomain.toLowerCase() === "demo") {
+    redirect("/demo/dashboard");
+  }
   const session = await getSession();
   const effectiveRole = searchParams.role || session?.role || session?.staffRole;
 

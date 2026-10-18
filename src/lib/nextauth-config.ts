@@ -219,7 +219,8 @@ export const authOptions: NextAuthOptions = {
           if (isPasswordValid) {
             const permissions = getDefaultPermissionsForRole(user.role);
             const activeTiers = user.school.academicTiers.map((t) => t.name);
-            const mustChangePassword = Boolean(user.mustChangePassword);
+            const isDemo = user.school?.subdomain?.toLowerCase() === "demo" || user.school?.slug?.toLowerCase() === "demo";
+            const mustChangePassword = !isDemo && Boolean(user.mustChangePassword);
             const assignedTier = mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
 
             return {
@@ -361,7 +362,8 @@ export const authOptions: NextAuthOptions = {
             const activeTiers = student.school.academicTiers?.map((t: any) => t.name) || [];
             const permissions = getDefaultPermissionsForRole("STUDENT");
             const userForced = await isMustChangePassword(student.id);
-            const mustChangePassword = isTemporary || Boolean(student.mustChangePassword) || userForced;
+            const isDemo = student.school?.subdomain?.toLowerCase() === "demo";
+            const mustChangePassword = !isDemo && (isTemporary || Boolean(student.mustChangePassword) || userForced);
             const assignedTier = student.tier?.name || mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
 
             return {

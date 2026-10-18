@@ -42,8 +42,9 @@ export default async function AdminLayout({
     redirect(`/${params.schoolDomain}/portal/student`);
   }
 
-  // 2. ENFORCE MANDATORY INITIAL PASSWORD CHANGE
-  if (session.mustChangePassword) {
+  // 2. ENFORCE MANDATORY INITIAL PASSWORD CHANGE (Bypassed conditionally for demo tenant)
+  const isDemoTenant = params.schoolDomain?.toLowerCase() === "demo";
+  if (!isDemoTenant && session.mustChangePassword) {
     redirect("/change-password");
   }
 

@@ -166,11 +166,13 @@ export async function rotateRefreshToken(params: {
           { student: { id: existingToken.userId } },
         ],
       },
+      include: { school: { select: { subdomain: true, slug: true } } },
     });
     if (user) {
       userRole = user.role;
       userEmail = user.email;
-      mustChangePassword = Boolean(user.mustChangePassword);
+      const isDemo = user.school?.subdomain?.toLowerCase() === "demo" || user.school?.slug?.toLowerCase() === "demo";
+      mustChangePassword = !isDemo && Boolean(user.mustChangePassword);
     }
   }
   const newRawRefreshToken = crypto.randomBytes(32).toString("hex");

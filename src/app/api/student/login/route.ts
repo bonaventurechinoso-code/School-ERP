@@ -208,7 +208,8 @@ export async function POST(req: Request) {
     const permissions = getDefaultPermissionsForRole("STUDENT");
     const distinctSessionToken = crypto.randomUUID();
     const userForced = authenticatedStudent ? await isMustChangePassword(authenticatedStudent.id) : false;
-    const mustChangePassword = isTemporaryPassword || Boolean(authUserRecord?.mustChangePassword || authenticatedStudent?.mustChangePassword) || userForced;
+    const isDemoTenant = school?.subdomain?.toLowerCase() === "demo";
+    const mustChangePassword = !isDemoTenant && (isTemporaryPassword || Boolean(authUserRecord?.mustChangePassword || authenticatedStudent?.mustChangePassword) || userForced);
 
     // Issue tokens
     const accessToken = await signAccessToken({

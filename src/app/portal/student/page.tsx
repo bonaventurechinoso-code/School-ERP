@@ -23,8 +23,9 @@ export default async function StudentPortalPage({
   const studentLoginId = searchParams.studentId || searchParams.loginId;
 
   const session = await getSession();
-  if (session?.mustChangePassword) {
-    const targetDomain = schoolDomain || session.schoolDomain || "york";
+  const targetDomain = schoolDomain || session?.schoolDomain || "york";
+  const isDemoTenant = targetDomain.toLowerCase() === "demo";
+  if (!isDemoTenant && session?.mustChangePassword) {
     redirect(`/${targetDomain}/security/change-password?forced=true`);
   }
 

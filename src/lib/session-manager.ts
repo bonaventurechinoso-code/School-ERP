@@ -243,20 +243,24 @@ export async function validateDatabaseSession(
       }).catch(() => {});
     }
 
-    // 7. Check authoritative User table for current mustChangePassword flag
-    let mustChangePassword = Boolean(payload.mustChangePassword);
-    const userRow = await basePrisma.user.findFirst({
-      where: {
-        OR: [
-          { id: dbSession.userId },
-          { staff: { id: dbSession.userId } },
-          { student: { id: dbSession.userId } },
-        ],
-      },
-      select: { mustChangePassword: true },
-    });
-    if (userRow) {
-      mustChangePassword = Boolean(userRow.mustChangePassword);
+    // 7. Check authoritative User table for current mustChangePassword flag (bypassed for demo tenant)
+    const isDemoTenantSession =
+      (dbSession.schoolDomain || (payload as any).schoolDomain || "").toLowerCase() === "demo";
+    let mustChangePassword = !isDemoTenantSession && Boolean(payload.mustChangePassword);
+    if (!isDemoTenantSession) {
+      const userRow = await basePrisma.user.findFirst({
+        where: {
+          OR: [
+            { id: dbSession.userId },
+            { staff: { id: dbSession.userId } },
+            { student: { id: dbSession.userId } },
+          ],
+        },
+        select: { mustChangePassword: true },
+      });
+      if (userRow) {
+        mustChangePassword = Boolean(userRow.mustChangePassword);
+      }
     }
 
     // 8. Return server-authoritative session state including sessionToken

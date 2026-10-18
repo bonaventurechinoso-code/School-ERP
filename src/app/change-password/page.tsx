@@ -1,4 +1,5 @@
 import React from "react";
+import { redirect } from "next/navigation";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import { getSession } from "@/lib/auth";
 import Image from "next/image";
@@ -8,6 +9,9 @@ import { basePrisma } from "@/lib/tenant-prisma";
 export default async function UniversalChangePasswordPage() {
   const session = await getSession();
   const schoolDomain = session?.schoolDomain || "york";
+  if (schoolDomain.toLowerCase() === "demo") {
+    redirect("/demo/dashboard");
+  }
   const effectiveRole = session?.role || session?.staffRole || "STAFF";
 
   // Look up school brand color if possible

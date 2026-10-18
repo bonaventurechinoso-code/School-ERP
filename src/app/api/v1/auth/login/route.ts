@@ -546,6 +546,8 @@ export async function POST(req: Request) {
           resolvedStaffRole = effectiveStaffRole;
           authenticatedUserId = staffMember.id;
           authenticatedEmail = staffMember.email;
+          const isDemoTenant = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo" || tenant.slug?.toLowerCase() === "demo";
+          mustChangePassword = !isDemoTenant && Boolean(staffMember.user?.mustChangePassword);
           if (staffMember.department?.tier?.name) {
             assignedTier = staffMember.department.tier.name;
           }
@@ -594,6 +596,10 @@ export async function POST(req: Request) {
     const permissions = getDefaultPermissionsForRole(resolvedRole as UserRole);
     const distinctSessionToken = crypto.randomUUID();
     const effectiveSlug = tenant.slug || tenant.subdomain;
+    const isTenantDemo = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo" || tenant.slug?.toLowerCase() === "demo";
+    if (isTenantDemo) {
+      mustChangePassword = false;
+    }
 
     const accessToken = await signAccessToken({
       userId: authenticatedUserId,

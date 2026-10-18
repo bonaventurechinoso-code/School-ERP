@@ -39,7 +39,8 @@ export default async function TenantStaffPortalPage({
     return notFound();
   }
 
-  if (session?.mustChangePassword) {
+  const isDemoTenant = schoolDomain?.toLowerCase() === "demo";
+  if (!isDemoTenant && session?.mustChangePassword) {
     const { redirect } = await import("next/navigation");
     redirect(`/${schoolDomain}/security/change-password?forced=true`);
   }

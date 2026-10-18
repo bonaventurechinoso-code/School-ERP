@@ -143,12 +143,13 @@ async function main() {
         roleEnum = "TEACHER";
       }
 
+      const isDemo = s.subdomain === "demo";
       const user = await prisma.user.upsert({
         where: { schoolId_email: { schoolId: school.id, email: staffMember.email } },
         update: {
           passwordHash: defaultPasswordHash,
           role: roleEnum as any,
-          mustChangePassword: true,
+          mustChangePassword: isDemo ? false : true,
         },
         create: {
           schoolId: school.id,
@@ -157,7 +158,7 @@ async function main() {
           email: staffMember.email,
           passwordHash: defaultPasswordHash,
           role: roleEnum as any,
-          mustChangePassword: true,
+          mustChangePassword: isDemo ? false : true,
         },
       });
 
