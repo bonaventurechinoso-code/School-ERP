@@ -68,7 +68,7 @@ export function getMailConfig() {
   }
 
   const fromName = (process.env.EMAIL_FROM_NAME || process.env.MAIL_FROM_NAME || "School ERP").trim();
-  const rawFrom = (process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_FROM || "").trim();
+  const rawFrom = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_FROM || "").trim();
 
   let fullFrom: string;
   let fromEmail: string;
@@ -150,8 +150,8 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
   }
 
   const config = getMailConfig();
-  const verifiedSystemFrom = `${config.fromName} <noreply@bonaveeict.com.ng>`;
-  const effectiveFrom = customFrom || verifiedSystemFrom;
+  const resendSandboxFrom = `${config.fromName} <onboarding@resend.dev>`;
+  const effectiveFrom = customFrom || config.fullFrom;
 
   console.log(`[EMAIL_DISPATCH] [${logCategory}] Initiating delivery to [${recipients.join(", ")}] | Subject: "${subject}" | From: "${effectiveFrom}"`);
 
@@ -191,17 +191,18 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
           subject,
         });
 
-        // If domain verification failed and custom from was used, retry with verified system domain
+        // If domain verification failed and custom from was used, retry with verified sandbox domain
         if (
-          error.message?.toLowerCase().includes("domain") ||
+          (error.message?.toLowerCase().includes("domain") ||
           error.message?.toLowerCase().includes("verify") ||
           error.message?.toLowerCase().includes("from") ||
-          error.name === "validation_error"
+          error.name === "validation_error") &&
+          effectiveFrom !== resendSandboxFrom
         ) {
-          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Sender domain unverified. Retrying with '${verifiedSystemFrom}'...`);
+          console.warn(`[EMAIL_DISPATCH] [${logCategory}] Sender domain unverified (${effectiveFrom}). Retrying with Resend sandbox '${resendSandboxFrom}'...`);
           try {
             const fallbackResult = await resendClient.emails.send({
-              from: verifiedSystemFrom,
+              from: resendSandboxFrom,
               to: recipients,
               subject,
               html,
@@ -216,9 +217,11 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
               deliveryError = undefined;
               console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend sandbox to [${recipients.join(", ")}] (id: ${fallbackResult.data.id})`);
             } else if (fallbackResult.error) {
+              deliveryError = `Resend API Error: ${fallbackResult.error.name || "Error"} - ${fallbackResult.error.message}`;
               console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend sandbox fallback also failed:`, fallbackResult.error);
             }
           } catch (fbEx: any) {
+            deliveryError = `Resend fallback exception: ${fbEx?.message || String(fbEx)}`;
             console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend sandbox fallback exception:`, fbEx);
           }
         }

@@ -94,7 +94,14 @@ export async function POST(req: Request) {
     });
 
     if (!result.success) {
-      const status = result.code === "INCORRECT_PASSWORD" ? 401 : result.code === "RATE_LIMIT_EXCEEDED" ? 429 : 400;
+      const status =
+        result.code === "INCORRECT_PASSWORD"
+          ? 401
+          : result.code === "RATE_LIMIT_EXCEEDED"
+          ? 429
+          : result.code === "DELIVERY_FAILED"
+          ? 502
+          : 400;
       return NextResponse.json(
         { error: result.message, code: result.code },
         { status }

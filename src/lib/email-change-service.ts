@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { basePrisma } from "./tenant-prisma";
-import { sendMail } from "./mail";
+import * as mailService from "./mail";
 import { logAuditEvent } from "./audit-logger";
 import { revokeAllUserSessions } from "./session-manager";
 
@@ -311,8 +311,9 @@ export async function requestEmailChange(params: {
   `.trim();
 
   // Send via centralized mail service (Resend in production)
+  let mailResult;
   try {
-    await sendMail({
+    mailResult = await mailService.sendMail({
       to: normalizedNewEmail,
       subject: `[Security Code] ${rawOtp} is your email change verification code`,
       html: emailHtml,
@@ -322,14 +323,42 @@ export async function requestEmailChange(params: {
     });
   } catch (mailErr: any) {
     console.error("[EMAIL_CHANGE] Failed to dispatch OTP email:", mailErr?.message || mailErr);
-    // If production delivery threw, report clear error
-    if (!isLocalDev) {
-      return {
-        success: false,
-        message: "Failed to dispatch verification email. Please check the email address or contact support.",
-        code: "DELIVERY_FAILED",
-      };
+    mailResult = {
+      success: false,
+      deliveryStatus: "FAILED_EXCEPTION",
+      error: mailErr?.message || "Email dispatch exception",
+      provider: "NONE" as const,
+      recipients: [normalizedNewEmail],
+    };
+  }
+
+  // Critical: Surface provider failure and prevent advancing to Step 2
+  if (!mailResult || !mailResult.success) {
+    const errorDetail = mailResult?.error || mailResult?.deliveryStatus || "Email provider dispatch failed";
+    console.error(`[EMAIL_CHANGE] ❌ Failed to dispatch verification email to ${normalizedNewEmail}:`, errorDetail);
+
+    // Rollback DB record and in-memory pending record
+    pendingChangesMap.delete(userId);
+    try {
+      await basePrisma.$executeRawUnsafe(
+        `DELETE FROM email_change_requests WHERE user_id = $1`,
+        userId
+      );
+    } catch {}
+
+    // Rollback rate limit timestamp so infrastructure failure does not consume user's rate limit
+    const currentTimestamps = rateLimitMap.get(userId) || [];
+    const idx = currentTimestamps.lastIndexOf(now);
+    if (idx !== -1) {
+      currentTimestamps.splice(idx, 1);
+      rateLimitMap.set(userId, currentTimestamps);
     }
+
+    return {
+      success: false,
+      message: `Failed to deliver verification code to ${normalizedNewEmail}: ${errorDetail}. Please check the email address or contact support.`,
+      code: "DELIVERY_FAILED",
+    };
   }
 
   await logAuditEvent({
@@ -636,7 +665,7 @@ export async function confirmEmailChange(params: {
 
   try {
     await Promise.allSettled([
-      sendMail({
+      mailService.sendMail({
         to: currentEmail,
         subject: "[Security Alert] Your account email address was changed",
         html: confirmationOldHtml,
@@ -644,7 +673,7 @@ export async function confirmEmailChange(params: {
         recipientType: "STAFF",
         logCategory: "EMAIL_CHANGE_CONFIRM_OLD",
       }),
-      sendMail({
+      mailService.sendMail({
         to: newEmail,
         subject: "[Confirmation] Your account email address has been updated",
         html: confirmationNewHtml,

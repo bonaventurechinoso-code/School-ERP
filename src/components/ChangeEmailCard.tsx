@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Mail,
   Lock,
@@ -42,11 +42,22 @@ export default function ChangeEmailCard({
 
   // Step 2 fields
   const [otp, setOtp] = useState("");
+  const [isResending, setIsResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Status
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // 60-second cooldown timer for resending code
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
 
   const resetForm = () => {
     setIsOpen(false);
@@ -56,6 +67,8 @@ export default function ChangeEmailCard({
     setOtp("");
     setErrorMsg("");
     setSuccessMsg("");
+    setIsResending(false);
+    setResendCooldown(0);
   };
 
   const handleRequestOtp = async (e: React.FormEvent) => {
@@ -94,11 +107,48 @@ export default function ChangeEmailCard({
       }
 
       setSuccessMsg(data.message || `Verification code sent to ${trimmedNew}`);
+      setResendCooldown(60);
       setStep("CONFIRM");
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || isResending || isLoading) return;
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    const trimmedNew = newEmail.trim().toLowerCase();
+    if (!trimmedNew || !currentPassword) {
+      setErrorMsg("Missing new email address or authorization password. Please step back to re-enter.");
+      return;
+    }
+
+    setIsResending(true);
+    try {
+      const res = await fetch("/api/v1/auth/change-email/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newEmail: trimmedNew,
+          currentPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to resend verification code.");
+      }
+
+      setResendCooldown(60);
+      setSuccessMsg(data.message || `A fresh verification code was dispatched to ${trimmedNew}`);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to resend verification code.");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -352,18 +402,37 @@ export default function ChangeEmailCard({
                 </p>
               </div>
 
-              <div className="pt-2 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep("REQUEST");
-                    setOtp("");
-                    setErrorMsg("");
-                  }}
-                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-                >
-                  ← Back / Resend Code
-                </button>
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100 dark:border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep("REQUEST");
+                      setOtp("");
+                      setErrorMsg("");
+                      setSuccessMsg("");
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:underline font-medium cursor-pointer"
+                  >
+                    ← Back to Edit Email
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={resendCooldown > 0 || isResending || isLoading}
+                    onClick={handleResendCode}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition text-indigo-600 dark:text-indigo-400 cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isResending ? "animate-spin" : ""}`} />
+                    <span>
+                      {isResending
+                        ? "Resending..."
+                        : resendCooldown > 0
+                        ? `Resend Code (${resendCooldown}s)`
+                        : "Resend Code"}
+                    </span>
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-2">
                   <button
