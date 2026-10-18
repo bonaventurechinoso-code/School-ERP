@@ -46,8 +46,7 @@ async function resolveCallerIdentity(req: Request) {
       const userId = (payload.userId as string) || (payload.id as string) || "master-superadmin-001";
       const isSuper = Boolean(
         payload.isSuperAdmin ||
-        role === "SUPER_ADMIN" ||
-        email === "bonaventure.chinoso@gmail.com"
+        role === "SUPER_ADMIN"
       );
 
       return {

@@ -55,8 +55,10 @@ export async function ensureEmailChangeTable(): Promise<void> {
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_email_change_user ON email_change_requests(user_id);
+      )
+    `);
+    await basePrisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_email_change_user ON email_change_requests(user_id)
     `);
     tableInitialized = true;
   } catch (err: any) {
@@ -133,45 +135,31 @@ export async function requestEmailChange(params: {
 
   // 3. Authenticate current password against database
   let passwordValid = false;
-  const isSuperAdmin = userRole === "SUPER_ADMIN" || normalizedCurrentEmail === "bonaventure.chinoso@gmail.com";
+  const isSuperAdmin = userRole === "SUPER_ADMIN";
 
-  if (isSuperAdmin) {
+  // Check central/tenant User table first
+  const user = await basePrisma.user.findFirst({
+    where: { id: userId },
+  });
+  if (user && user.passwordHash) {
+    passwordValid = await bcrypt.compare(currentPassword, user.passwordHash).catch(() => false);
+  }
+
+  // If not validated and user is Super Admin, check SuperAdmin / PlatformAdmin tables
+  if (!passwordValid && isSuperAdmin) {
     const sa = await basePrisma.superAdmin.findFirst({
       where: {
-        OR: [
-          { id: userId },
-          { email: normalizedCurrentEmail },
-          { email: "bonaventure.chinoso@gmail.com" },
-        ],
+        OR: [{ id: userId }, { email: normalizedCurrentEmail }],
       },
     });
     const pa = await basePrisma.platformAdmin.findFirst({
       where: {
-        OR: [
-          { id: userId },
-          { email: normalizedCurrentEmail },
-          { email: "bonaventure.chinoso@gmail.com" },
-        ],
+        OR: [{ id: userId }, { email: normalizedCurrentEmail }],
       },
     });
-    const u = await (basePrisma.user as any).findFirst({
-      where: {
-        email: { equals: normalizedCurrentEmail, mode: "insensitive" },
-        role: "SUPER_ADMIN",
-      },
-    });
-
-    const targetHash = sa?.passwordHash || pa?.password || u?.passwordHash;
+    const targetHash = sa?.passwordHash || pa?.password;
     if (targetHash) {
       passwordValid = await bcrypt.compare(currentPassword, targetHash).catch(() => false);
-    }
-  } else {
-    // School Admin / Tenant user
-    const user = await basePrisma.user.findFirst({
-      where: { id: userId },
-    });
-    if (user && user.passwordHash) {
-      passwordValid = await bcrypt.compare(currentPassword, user.passwordHash).catch(() => false);
     }
   }
 
@@ -500,59 +488,102 @@ export async function confirmEmailChange(params: {
     };
   }
 
-  // 5. OTP Match! Update Email in authoritative tables
+  // 5. OTP Match! Update Email in authoritative tables transactionally with strict re-read verification
   const { newEmail, currentEmail, userRole, schoolId } = pending;
-  const isSuperAdmin = userRole === "SUPER_ADMIN" || currentEmail === "bonaventure.chinoso@gmail.com";
+  const isSuperAdmin = userRole === "SUPER_ADMIN";
 
-  if (isSuperAdmin) {
-    // Synchronize PlatformAdmin
-    await basePrisma.platformAdmin.updateMany({
-      where: {
-        OR: [{ id: userId }, { email: currentEmail }, { email: "bonaventure.chinoso@gmail.com" }],
-      },
-      data: { email: newEmail, updatedAt: new Date() },
-    });
+  try {
+    await basePrisma.$transaction(async (tx) => {
+      // 1. Check if user exists in User table (authoritative table for tenant admins, staff, students, parents, and platform users)
+      const userRecord = await tx.user.findUnique({
+        where: { id: userId },
+      });
 
-    // Synchronize SuperAdmin
-    await basePrisma.superAdmin.updateMany({
-      where: {
-        OR: [{ id: userId }, { email: currentEmail }, { email: "bonaventure.chinoso@gmail.com" }],
-      },
-      data: { email: newEmail, updatedAt: new Date() },
-    });
+      if (userRecord) {
+        // Update User strictly where: { id: userId } - not by role, not by email string
+        await tx.user.update({
+          where: { id: userId },
+          data: { email: newEmail, updatedAt: new Date() },
+        });
 
-    // Synchronize central User table if applicable
-    await (basePrisma.user as any).updateMany({
-      where: {
-        email: { equals: currentEmail, mode: "insensitive" },
-        role: "SUPER_ADMIN",
-      },
-      data: { email: newEmail, updatedAt: new Date() },
-    });
-  } else {
-    // Standard User / Tenant Admin
-    await basePrisma.user.update({
-      where: { id: userId },
-      data: { email: newEmail, updatedAt: new Date() },
-    });
+        // Immediate re-read & verify email === newEmail (case-insensitive)
+        const reReadUser = await tx.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
 
-    // Also synchronize Staff, Student, or Parent record if linked to user
-    await basePrisma.staff.updateMany({
-      where: { userId },
-      data: { email: newEmail, updatedAt: new Date() },
-    });
+        if (!reReadUser || reReadUser.email.trim().toLowerCase() !== newEmail.trim().toLowerCase()) {
+          throw new Error(`DATABASE_VERIFICATION_FAILED: Re-read email "${reReadUser?.email}" does not match requested email "${newEmail}"`);
+        }
+      } else if (isSuperAdmin) {
+        // Super Admin existing exclusively in PlatformAdmin or SuperAdmin table
+        const paUpdated = await tx.platformAdmin.updateMany({
+          where: { OR: [{ id: userId }, { email: currentEmail }] },
+          data: { email: newEmail, updatedAt: new Date() },
+        });
+        const saUpdated = await tx.superAdmin.updateMany({
+          where: { OR: [{ id: userId }, { email: currentEmail }] },
+          data: { email: newEmail, updatedAt: new Date() },
+        });
 
-    await basePrisma.student.updateMany({
-      where: { userId },
-      data: { email: newEmail },
-    });
+        if (paUpdated.count === 0 && saUpdated.count === 0) {
+          throw new Error("DATABASE_VERIFICATION_FAILED: SuperAdmin/PlatformAdmin record not found for update.");
+        }
+      } else {
+        throw new Error(`DATABASE_VERIFICATION_FAILED: User record with ID "${userId}" not found in database.`);
+      }
 
-    if (schoolId) {
-      await basePrisma.parent.updateMany({
-        where: { email: currentEmail, schoolId },
+      // 2. If user is also SuperAdmin, synchronize PlatformAdmin and SuperAdmin tables
+      if (isSuperAdmin) {
+        await tx.platformAdmin.updateMany({
+          where: { OR: [{ id: userId }, { email: currentEmail }] },
+          data: { email: newEmail, updatedAt: new Date() },
+        });
+        await tx.superAdmin.updateMany({
+          where: { OR: [{ id: userId }, { email: currentEmail }] },
+          data: { email: newEmail, updatedAt: new Date() },
+        });
+      }
+
+      // 3. Synchronize linked staff, student, or parent records if present
+      await tx.staff.updateMany({
+        where: { userId },
+        data: { email: newEmail, updatedAt: new Date() },
+      });
+
+      await tx.student.updateMany({
+        where: { userId },
         data: { email: newEmail },
       });
-    }
+
+      if (schoolId) {
+        await tx.parent.updateMany({
+          where: { email: currentEmail, schoolId },
+          data: { email: newEmail },
+        });
+      }
+    });
+  } catch (txErr: any) {
+    console.error("[EMAIL_CHANGE_TRANSACTION_FAILED]", txErr?.message || txErr);
+    // If verification fails: transaction rolls back, log EMAIL_CHANGE_FAILED, send NO email, revoke NO sessions, return error
+    await logAuditEvent({
+      actorId: userId,
+      action: "EMAIL_CHANGE_FAILED",
+      target: newEmail,
+      schoolId: schoolId || null,
+      ip: clientIp || "unknown",
+      metadata: {
+        oldEmail: currentEmail,
+        attemptedNewEmail: newEmail,
+        error: txErr?.message || String(txErr),
+      },
+    });
+
+    return {
+      success: false,
+      message: "Database verification failed: unable to apply email change. No modifications were made.",
+      code: "DATABASE_VERIFICATION_FAILED",
+    };
   }
 
   // 6. Audit Trail Logging

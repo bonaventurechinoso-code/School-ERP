@@ -45,8 +45,7 @@ async function resolveCallerIdentity(req: Request) {
       const userId = (payload.userId as string) || (payload.id as string) || "master-superadmin-001";
       const isSuper = Boolean(
         payload.isSuperAdmin ||
-        role === "SUPER_ADMIN" ||
-        email === "bonaventure.chinoso@gmail.com"
+        role === "SUPER_ADMIN"
       );
 
       return {
@@ -89,7 +88,12 @@ export async function POST(req: Request) {
     });
 
     if (!result.success) {
-      const status = result.code === "VERIFICATION_LOCKED" ? 423 : 400;
+      const status =
+        result.code === "DATABASE_VERIFICATION_FAILED"
+          ? 500
+          : result.code === "VERIFICATION_LOCKED"
+          ? 423
+          : 400;
       return NextResponse.json(
         { error: result.message, code: result.code },
         { status }
