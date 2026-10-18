@@ -185,8 +185,11 @@ export default async function PublicGuestPortalPage({
   const contactEmail = school.staff.length > 0 ? school.staff[0].email : "admissions@school.local";
   const contactPhone = school.contactPhone || "+234 (0) 800 000 0000";
   
-  // Resolve tier-specific hero background image
-  const heroImageUrl = getHeroImage(preciseTier, (school as any).metadata?.customHeroImage);
+  // Resolve tier-specific hero background image with verified local fallback
+  const fallbackCampusImage = "/hero-bg.jpg";
+  const heroImageUrl = isDemo
+    ? ((school as any).metadata?.customHeroImage || fallbackCampusImage)
+    : (getHeroImage(preciseTier, (school as any).metadata?.customHeroImage) || fallbackCampusImage);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -221,15 +224,15 @@ export default async function PublicGuestPortalPage({
 
       {/* Top Navigation Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex justify-between items-center gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 min-h-[5rem] py-2.5 flex justify-between items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
               <Building2 className="w-6 h-6" />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">{school.name}</h1>
-              <p className="text-[11px] sm:text-xs font-semibold text-indigo-600 uppercase tracking-widest truncate">
-                Academic & Student Admissions Portal
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight truncate">{school.name}</h1>
+              <p className="text-[11px] sm:text-xs font-semibold text-indigo-600 uppercase tracking-wide leading-tight mt-0.5">
+                Academic &amp; Student Admissions
               </p>
             </div>
           </div>
@@ -270,36 +273,37 @@ export default async function PublicGuestPortalPage({
               className="object-cover" 
               alt={`${school.name} Campus`} 
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/75 pointer-events-none" />
+            {/* 45% Opacity Dark Overlay for clear campus image visibility and high-contrast text */}
+            <div className="absolute inset-0 bg-black/45 z-0 pointer-events-none" />
           </div>
 
-          <div className="max-w-7xl mx-auto px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">
             {!isDemo && (
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6 shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
                 <span>Official Institutional Portal</span>
               </div>
             )}
 
-            <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight text-white drop-shadow-lg max-w-4xl">
+            <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] max-w-4xl">
               {finalHeroTitle}
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-slate-200 mb-10 max-w-3xl leading-relaxed mx-auto drop-shadow-md">
+            <p className="text-base sm:text-lg md:text-xl text-white/95 mb-10 max-w-3xl leading-relaxed mx-auto drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] font-medium">
               {finalAboutUs}
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto items-stretch sm:items-center">
               <Link 
                 href={`/${school.subdomain}/apply`}
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-base sm:text-lg shadow-xl hover:shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white rounded-xl font-bold text-sm sm:text-base md:text-lg shadow-xl hover:shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5"
               >
                 <span>Apply Online / Start New Application</span>
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
               </Link>
               <a 
                 href="#contact"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-base sm:text-lg transition-all backdrop-blur-sm border border-white/15"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white/15 hover:bg-white/25 active:scale-[0.99] text-white rounded-xl font-bold text-sm sm:text-base md:text-lg transition-all backdrop-blur-md border border-white/25 shadow-lg"
               >
-                <Phone className="w-4 h-4 text-indigo-300" />
+                <Phone className="w-4 h-4 text-indigo-300 shrink-0" />
                 <span>Contact Admissions</span>
               </a>
             </div>
