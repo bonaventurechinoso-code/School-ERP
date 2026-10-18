@@ -173,10 +173,31 @@ export default function StaffTable({
   const [hasMore, setHasMore] = useState<boolean>(initialHasMore ?? false);
   const [pageIndex, setPageIndex] = useState<number>(0);
 
+  const paramRole = searchParams.get("role");
+  const paramTab = searchParams.get("tab");
+
+  const initialRole = useMemo(() => {
+    if (paramRole) {
+      const up = paramRole.toUpperCase();
+      if (up === "TEACHER" || up === "TEACHERS") return "TEACHER";
+      if (up === "NON_TEACHING" || up === "NON-TEACHING") return "NON_TEACHING";
+      return up;
+    }
+    return "ALL";
+  }, [paramRole]);
+
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [filterRole, setFilterRole] = useState<string>("ALL");
+  const [filterRole, setFilterRole] = useState<string>(initialRole);
   const [filterDepartment, setFilterDepartment] = useState<string>("ALL");
+
+  useEffect(() => {
+    if (paramRole) {
+      const target = paramRole.toUpperCase().includes("NON") ? "NON_TEACHING" : paramRole.toUpperCase();
+      setFilterRole(target);
+      refreshRoster(undefined, target);
+    }
+  }, [paramRole]);
 
   // Drawers & Modals
   const [selectedStaff, setSelectedStaff] = useState<any | null>(null);

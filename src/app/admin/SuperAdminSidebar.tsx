@@ -29,49 +29,38 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    name: "Dashboard",
+    name: "Platform Dashboard",
     href: "/admin",
     icon: LayoutDashboard,
     exact: true,
   },
   {
-    name: "Tenants",
+    name: "Tenants / Schools",
     href: "/admin/tenants",
     icon: Building2,
   },
   {
-    name: "Bank",
-    href: "/admin/bank",
-    icon: Landmark,
-  },
-  {
-    name: "Billings",
+    name: "Subscriptions & Plans",
     href: "/admin/billings",
     icon: CreditCard,
   },
   {
-    name: "Webhooks",
-    href: "/admin/webhooks",
-    icon: Radio,
-    badge: "Live",
+    name: "Platform Finance",
+    href: "/admin/bank",
+    icon: Landmark,
   },
   {
-    name: "Audit Logs",
+    name: "Platform Users & Roles",
     href: "/admin/audit-logs",
-    icon: History,
+    icon: ShieldCheck,
   },
   {
-    name: "Settings",
+    name: "Platform Settings",
     href: "/admin/settings",
     icon: Settings,
   },
   {
-    name: "Security & Password",
-    href: "/admin/security",
-    icon: ShieldCheck,
-  },
-  {
-    name: "Support",
+    name: "Support / Communications",
     href: "/admin/support",
     icon: LifeBuoy,
   },

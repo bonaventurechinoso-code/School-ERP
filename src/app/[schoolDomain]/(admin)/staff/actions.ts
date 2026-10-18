@@ -109,7 +109,11 @@ export async function fetchStaffPaginated(
       const whereClause: any = {
         schoolId,
         ...(status && status !== "ALL" ? { status } : {}),
-        ...(role && role !== "ALL" ? { user: { role: toCanonicalRole(role) } } : {}),
+        ...(role && role !== "ALL"
+          ? role === "NON_TEACHING" || role === "NON-TEACHING"
+            ? { user: { role: { not: "TEACHER" } } }
+            : { user: { role: toCanonicalRole(role) } }
+          : {}),
         ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
       };
 

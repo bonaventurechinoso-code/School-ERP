@@ -636,6 +636,16 @@ export default function TenantsConsoleView({
                       {/* ACTIONS (CLEAN ICON BUTTONS WITH TOOLTIPS) */}
                       <td className="py-4 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* 0. View as Tenant */}
+                          <Link
+                            href={`/${school.subdomain}/dashboard`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                            title={`Switch to ${school.name} tenant context`}
+                          >
+                            <span>View as Tenant</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </Link>
+
                           {/* 1. Edit Tenant */}
                           <EditSchoolModal
                             school={{

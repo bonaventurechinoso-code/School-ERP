@@ -19,6 +19,7 @@ interface TierSwitcherProps {
   tiers?: TierItem[];
   currentTier?: string | null;
   schoolDomain: string;
+  schoolName?: string;
   variant?: "topbar" | "sidebar";
 }
 
@@ -80,6 +81,7 @@ export default function TierSwitcher({
   tiers = [],
   currentTier,
   schoolDomain,
+  schoolName,
   variant = "topbar",
 }: TierSwitcherProps) {
   const router = useRouter();
@@ -224,58 +226,72 @@ export default function TierSwitcher({
 
   // Sidebar Layout: Dedicated Dropdown Selector Component
   if (variant === "sidebar") {
+    // Resolve clean display name for tenant
+    const displayTenantName = (
+      schoolName ||
+      tenant?.name ||
+      (schoolDomain === "egede" ? "EGEDE PRIMARY SCHOOL" : `${schoolDomain.toUpperCase()} SCHOOL`)
+    ).toUpperCase();
+
+    // Format tier display label: Primary School (Basic 1-5)
+    let tierDisplay = activeTierObj.name;
+    if (activeTierObj.name.toUpperCase().includes("PRIMARY")) {
+      tierDisplay = "Primary School (Basic 1-5)";
+    } else if (activeTierObj.sublabel) {
+      tierDisplay = `${activeTierObj.name} (${activeTierObj.sublabel})`;
+    }
+
     return (
       <div className="mt-1 space-y-2">
-        <div className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 tracking-wider">
-          <span className="flex items-center gap-1.5 text-slate-300 dark:text-zinc-400">
-            <Layers className="w-3 h-3 text-indigo-400" />
-            Academic Tier
+        {/* FIX 4: TOP LABEL CHANGED FROM ACADEMIC TIER TO TENANT */}
+        <div className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-400 tracking-wider">
+          <span className="flex items-center gap-1.5 text-indigo-400 font-extrabold tracking-widest text-[10px]">
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            TENANT
+          </span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            ACTIVE
           </span>
         </div>
 
-        {/* Dropdown Selector Component */}
-        <div className="relative">
-          <select
-            value={activeTierObj.name}
-            onChange={(e) => {
-              const selected = effectiveTiers.find(
-                (t) => t.name === e.target.value || t.id === e.target.value
-              );
-              if (selected) handleSelectTier(selected);
-            }}
-            disabled={isPending || effectiveTiers.length <= 1}
-            className="w-full appearance-none bg-slate-800/95 hover:bg-slate-800 text-white border border-slate-700/90 rounded-xl px-3 py-2.5 pr-8 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:cursor-default shadow-xs"
-          >
-            {effectiveTiers.map((tier) => (
-              <option key={tier.id} value={tier.name} className="bg-slate-900 text-white py-1.5 font-medium">
-                {tier.name} {tier.sublabel ? `(${tier.sublabel})` : ""}
-              </option>
-            ))}
-          </select>
-          {effectiveTiers.length > 1 && (
-            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-              <ChevronDown className="w-4 h-4" />
-            </div>
-          )}
-        </div>
-
-        {/* Active Tier Visual Indicator Badge */}
-        <div
-          className={`w-full px-2.5 py-2 rounded-lg text-xs font-semibold border flex items-center justify-between transition-all ${getTierStyle(
-            activeTierObj.name,
-            true
-          )}`}
-        >
-          <div className="flex flex-col min-w-0 pr-2">
-            <span className="font-bold truncate">{activeTierObj.name}</span>
-            {activeTierObj.sublabel && (
-              <span className="text-[10px] opacity-90 truncate">{activeTierObj.sublabel}</span>
-            )}
+        {/* TENANT STATUS BANNER: EGEDE PRIMARY SCHOOL | Primary School (Basic 1-5) | ACTIVE */}
+        <div className="p-2.5 rounded-xl bg-slate-800/80 dark:bg-zinc-900/80 border border-slate-700/80 dark:border-zinc-800 space-y-1 shadow-2xs">
+          <div className="text-xs font-black text-white truncate tracking-tight">
+            {displayTenantName}
           </div>
-          <span className="text-[10px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded bg-white/25 text-white shrink-0">
-            Active
-          </span>
+          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-300 dark:text-zinc-400 font-medium">
+            <span className="truncate">{tierDisplay}</span>
+            <span className="text-[10px] font-bold text-emerald-400 shrink-0">ACTIVE</span>
+          </div>
         </div>
+
+        {/* Dropdown Selector Component (for switching tiers when tenant has multiple) */}
+        {effectiveTiers.length > 1 && (
+          <div className="relative">
+            <select
+              value={activeTierObj.name}
+              onChange={(e) => {
+                const selected = effectiveTiers.find(
+                  (t) => t.name === e.target.value || t.id === e.target.value
+                );
+                if (selected) handleSelectTier(selected);
+              }}
+              disabled={isPending}
+              aria-label="Switch Academic Tier"
+              className="w-full appearance-none bg-slate-800/95 hover:bg-slate-800 text-white border border-slate-700/90 rounded-xl px-3 py-2 pr-8 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-xs"
+            >
+              {effectiveTiers.map((tier) => (
+                <option key={tier.id} value={tier.name} className="bg-slate-900 text-white py-1.5 font-medium">
+                  Switch: {tier.name} {tier.sublabel ? `(${tier.sublabel})` : ""}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <ChevronDown className="w-3.5 h-3.5" />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

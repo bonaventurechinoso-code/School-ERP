@@ -1,5 +1,7 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import TenantsConsoleView from "./TenantsConsoleView";
+import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,14 @@ const BASE_PLATFORM_URL = (
 ).replace(/\/$/, "");
 
 export default async function TenantsPage() {
+  const session = await getSession();
+  const role = ((session?.role || session?.userRole || "") as string).toUpperCase();
+  const isSuperAdmin = role === "SUPER_ADMIN" || session?.isSuperAdmin;
+
+  if (session && !isSuperAdmin) {
+    redirect("/access-denied");
+  }
+
   let schools: any[] = [];
   try {
     const dbSchools = await basePrisma.school.findMany({

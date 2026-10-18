@@ -30,25 +30,20 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const isDev = process.env.NODE_ENV === "development";
 
-  // 1. ISOLATE STUDENTS AND STAFF FROM SUPER ADMIN LAYOUT
-  if (!isDev) {
-    if (userRole === "STUDENT") {
-      redirect("/portal/student");
-    }
-
-    if (userRole === "STAFF") {
-      redirect("/portal/staff");
-    }
-  }
-
-  // Allow SUPER_ADMIN, ADMIN, and SCHOOL_ADMIN for local testing across the entire system
-  const isSuperAdmin = isDev || ["SUPER_ADMIN", "ADMIN", "SCHOOL_ADMIN"].includes(userRole);
-  if (sessionToken && !isSuperAdmin) {
+  // TENANT ADMIN ISOLATION:
+  // Tenant Admins, School Admins, Staff, Teachers, Bursars, and Parents CANNOT access the Platform Owner Console.
+  const isTenantRole = ["TENANT_ADMIN", "SCHOOL_ADMIN", "STAFF", "TEACHER", "BURSAR", "PARENT", "STUDENT"].includes(userRole);
+  if (isTenantRole) {
     return <SuperAdminUnauthorizedGuard userRole={userRole} />;
   }
 
-  if (!sessionToken && !isDev) {
-    redirect("/login");
+  // Only genuine SUPER_ADMIN is authorized to access the Master SaaS platform console
+  const isSuperAdmin = userRole === "SUPER_ADMIN" || (isDev && !isTenantRole && Boolean(sessionToken));
+  if (!isSuperAdmin) {
+    if (!sessionToken) {
+      redirect("/login");
+    }
+    return <SuperAdminUnauthorizedGuard userRole={userRole || "GUEST"} />;
   }
 
   return (
