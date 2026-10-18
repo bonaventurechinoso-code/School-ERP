@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 import {
   ShieldCheck,
   Lock,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 
 export default function SuperAdminSecurityPage() {
+  const [adminEmail, setAdminEmail] = useState("bonaventure.chinoso@gmail.com");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,6 +27,17 @@ export default function SuperAdminSecurityPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.profile?.email) {
+          setAdminEmail(data.profile.email);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,16 +151,20 @@ export default function SuperAdminSecurityPage() {
       {/* Main Grid: Password Update & Security Policies */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form Container */}
-        <div className="lg:col-span-2 p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-6">
-          <div className="border-b border-slate-100 dark:border-zinc-800 pb-4">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-indigo-600" />
-              Update Master Super-Admin Password
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Changes the root credentials used for SaaS platform executive access.
-            </p>
-          </div>
+        <div className="lg:col-span-2 space-y-6">
+          {/* Profile & Change Email Section */}
+          <ChangeEmailCard initialEmail={adminEmail} isSuperAdmin={true} />
+
+          <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-6">
+            <div className="border-b border-slate-100 dark:border-zinc-800 pb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-indigo-600" />
+                Update Master Super-Admin Password
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                Changes the root credentials used for SaaS platform executive access.
+              </p>
+            </div>
 
           {successMsg && (
             <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 flex items-center gap-3 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
@@ -246,6 +263,7 @@ export default function SuperAdminSecurityPage() {
             </div>
           </form>
         </div>
+      </div>
 
         {/* Security Policy Summary Sidebar */}
         <div className="space-y-4">

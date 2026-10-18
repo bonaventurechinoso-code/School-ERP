@@ -1,8 +1,10 @@
 import React from "react";
 import { notFound } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
+import { getSession } from "@/lib/auth";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ActiveSessionsPortal from "@/components/ActiveSessionsPortal";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 import { Shield, KeyRound, Lock, UserCheck } from "lucide-react";
 
 export default async function AdminSecuritySettingsPage({
@@ -11,6 +13,8 @@ export default async function AdminSecuritySettingsPage({
   params: Promise<{ schoolDomain: string }>;
 }) {
   const { schoolDomain } = await paramsPromise;
+  const session = await getSession();
+  const currentEmail = session?.email || "";
 
   const school = await basePrisma.school.findFirst({
     where: {
@@ -41,6 +45,14 @@ export default async function AdminSecuritySettingsPage({
           Manage your credentials, update your login password, and review institutional security guidelines.
         </p>
       </div>
+
+      {/* Profile & Change Email Section */}
+      <ChangeEmailCard
+        initialEmail={currentEmail}
+        brandColor={brandColor}
+        schoolDomain={school.subdomain}
+        isSuperAdmin={false}
+      />
 
       <SecurityPasswordForm
         schoolDomain={school.subdomain}
