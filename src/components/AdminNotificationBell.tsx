@@ -152,11 +152,11 @@ export default function AdminNotificationBell() {
           if (!isOpen) fetchNotifications();
         }}
         aria-label="Platform Notifications"
-        className="relative p-2 rounded-full text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        className="relative w-10 h-10 flex items-center justify-center rounded-full text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shrink-0"
       >
         <Bell className="w-4.5 h-4.5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-rose-600 rounded-full border-2 border-white dark:border-zinc-900 animate-in zoom-in-50 duration-150">
+          <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-rose-600 rounded-full border-2 border-white dark:border-zinc-900 animate-in zoom-in-50 duration-150">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}

@@ -55,7 +55,7 @@ export default function SubscriptionBell() {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full cursor-pointer relative text-slate-600 dark:text-zinc-300 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full cursor-pointer relative text-slate-600 dark:text-zinc-300 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shrink-0"
         aria-label="Subscription Notifications"
         aria-expanded={isOpen}
       >
@@ -63,7 +63,7 @@ export default function SubscriptionBell() {
         
         {/* Pulsing Dot Notification Badge */}
         {requiresAttention && (
-          <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse ring-2 ring-white dark:ring-zinc-900" />
+          <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse ring-2 ring-white dark:ring-zinc-900" />
         )}
       </button>
 

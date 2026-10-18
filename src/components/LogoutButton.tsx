@@ -7,7 +7,7 @@ import { getStoredSession } from "@/lib/session-context";
 
 export default function LogoutButton({
   className = "",
-  label = "Logout",
+  label = "Log out",
   showIcon = true,
   schoolName = "",
 }: {
@@ -63,13 +63,15 @@ export default function LogoutButton({
         aria-label="Log out of your account"
         className={
           className ||
-          "bg-white dark:bg-zinc-900 border border-red-600 text-red-600 dark:text-red-500 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white transition duration-150 cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          "h-10 w-10 md:w-auto md:px-3.5 md:py-2 rounded-full md:rounded-[10px] bg-[#FFF1F1] hover:bg-[#FFE4E6] dark:bg-red-500/10 dark:hover:bg-red-500/20 text-[#C81E1E] dark:text-red-400 font-semibold text-sm flex items-center justify-center md:gap-2 transition-all duration-150 cursor-pointer shadow-none border-0 focus:outline-none focus:ring-2 focus:ring-red-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         }
       >
         {showIcon && (
-          <LogOut className={`w-3.5 h-3.5 shrink-0 ${isLoggingOut ? "animate-pulse" : ""}`} />
+          <LogOut className={`w-4 h-4 shrink-0 ${isLoggingOut ? "animate-pulse" : ""}`} />
         )}
-        <span>{isLoggingOut ? "Signing out..." : label}</span>
+        <span className="hidden md:inline font-semibold text-sm leading-none">
+          {isLoggingOut ? "Signing out..." : label}
+        </span>
       </button>
 
       {/* Confirmation Modal */}
@@ -89,11 +91,11 @@ export default function LogoutButton({
             </div>
 
             <h3 id="logout-modal-title" className="text-base font-bold text-slate-900 dark:text-zinc-100">
-              Logout?
+              Log out?
             </h3>
 
             <p className="text-xs text-slate-600 dark:text-zinc-400 mt-2 leading-relaxed">
-              Are you sure you want to logout from {targetSchoolName}?
+              Are you sure you want to log out from {targetSchoolName}?
             </p>
 
             <div className="mt-6 flex items-center justify-end gap-2.5">
@@ -112,7 +114,7 @@ export default function LogoutButton({
                 disabled={isLoggingOut}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isLoggingOut ? "Signing out..." : "Yes, Logout"}
+                {isLoggingOut ? "Signing out..." : "Yes, Log out"}
               </button>
             </div>
           </div>

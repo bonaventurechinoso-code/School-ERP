@@ -63,11 +63,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               Platform Administration
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             <AdminNotificationBell />
-            <div className="bg-slate-100 dark:bg-zinc-800 rounded-full border border-slate-200 dark:border-zinc-700">
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
             <LogoutButton />
           </div>
         </header>
