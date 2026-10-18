@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { SESSION_COOKIE_NAME } from "@/lib/session-manager";
+import { getSession, isSuperAdminUser } from "@/lib/auth";
 
 const ACCESS_TOKEN_COOKIE_NAME = "accessToken";
 
@@ -20,44 +21,130 @@ async function getAuthenticatedSuperAdmin(req: Request) {
     token =
       cookieStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value ||
       cookieStore.get(SESSION_COOKIE_NAME)?.value ||
-      cookieStore.get("accessToken")?.value;
+      cookieStore.get("accessToken")?.value ||
+      cookieStore.get("next-auth.session-token")?.value ||
+      cookieStore.get("__Secure-next-auth.session-token")?.value;
   } catch {}
 
   const authHeader = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const effectiveToken = token || authHeader;
+
+  let effectiveEmail: string | undefined;
+  let effectiveUserId: string | undefined;
+  let isSuper = false;
 
   if (effectiveToken) {
     try {
       const verified = await jwtVerify(effectiveToken, SECRET_KEY);
       const payload = verified.payload;
       const role = ((payload.role as string) || (payload.userRole as string) || "").toUpperCase();
-      const email = ((payload.email as string) || "").toLowerCase().trim();
-      const isSuper = Boolean(payload.isSuperAdmin || role === "SUPER_ADMIN" || email === "bonaventure.chinoso@gmail.com" || email === "admin@bonaveeict.com.ng");
+      effectiveEmail = ((payload.email as string) || "").toLowerCase().trim();
+      effectiveUserId = payload.userId as string | undefined;
+      isSuper = Boolean(
+        payload.isSuperAdmin ||
+        role === "SUPER_ADMIN" ||
+        effectiveEmail === "bonaventure.chinoso@gmail.com" ||
+        effectiveEmail === "admin@bonaveeict.com.ng"
+      );
+    } catch {}
+  }
 
-      if (isSuper) {
-        const admin = await basePrisma.platformAdmin.findFirst({
-          where: {
-            OR: [
-              ...(payload.userId ? [{ id: payload.userId as string }] : []),
-              { email: "bonaventure.chinoso@gmail.com" },
-              { email: "admin@bonaveeict.com.ng" },
-            ],
-          },
-        });
-        if (admin) return admin;
+  // Also check getSession() if not yet verified
+  if (!isSuper) {
+    try {
+      const session = await getSession();
+      if (session && isSuperAdminUser(session)) {
+        isSuper = true;
+        effectiveEmail = session.email?.toLowerCase().trim();
+        effectiveUserId = session.userId;
       }
     } catch {}
   }
 
-  // Fallback: look up default super admin record
-  return (
-    (await basePrisma.platformAdmin.findUnique({
-      where: { email: "bonaventure.chinoso@gmail.com" },
-    })) ||
-    (await basePrisma.platformAdmin.findUnique({
-      where: { email: "admin@bonaveeict.com.ng" },
-    }))
-  );
+  // Target Super Admin email to search / initialize
+  const targetEmail = effectiveEmail || "bonaventure.chinoso@gmail.com";
+
+  // Check the SAME sources as the login flow:
+  // 1. SuperAdmin table
+  const superAdmin = await basePrisma.superAdmin.findFirst({
+    where: {
+      OR: [
+        ...(effectiveUserId ? [{ id: effectiveUserId }] : []),
+        { email: targetEmail },
+        { email: "bonaventure.chinoso@gmail.com" },
+        { email: "admin@bonaveeict.com.ng" },
+      ],
+    },
+  });
+
+  // 2. PlatformAdmin table
+  const platformAdmin = await basePrisma.platformAdmin.findFirst({
+    where: {
+      OR: [
+        ...(effectiveUserId ? [{ id: effectiveUserId }] : []),
+        { email: targetEmail },
+        { email: "bonaventure.chinoso@gmail.com" },
+        { email: "admin@bonaveeict.com.ng" },
+      ],
+    },
+  });
+
+  // 3. Central User table
+  const userSuperAdmin = await (basePrisma.user as any).findFirst({
+    where: {
+      email: { in: [targetEmail, "bonaventure.chinoso@gmail.com", "admin@bonaveeict.com.ng"], mode: "insensitive" },
+      role: "SUPER_ADMIN",
+      schoolId: null,
+    },
+  });
+
+  let saRecord = superAdmin;
+  let paRecord = platformAdmin;
+
+  // One-time migration: If Super Admin is missing from DB, migrate initial password (bcrypt 12 rounds) to DB once
+  if (!saRecord && !paRecord && !userSuperAdmin && isSuper) {
+    const initialHash = await bcrypt.hash("Password1234", 12);
+    const adminEmail = targetEmail === "admin@bonaveeict.com.ng" ? "admin@bonaveeict.com.ng" : "bonaventure.chinoso@gmail.com";
+
+    paRecord = await basePrisma.platformAdmin.upsert({
+      where: { email: adminEmail },
+      update: { password: initialHash },
+      create: {
+        email: adminEmail,
+        password: initialHash,
+        twoFactorEnabled: false,
+      },
+    });
+
+    saRecord = await basePrisma.superAdmin.upsert({
+      where: { email: adminEmail },
+      update: { passwordHash: initialHash },
+      create: {
+        email: adminEmail,
+        passwordHash: initialHash,
+      },
+    });
+  }
+
+  const existingEmail = saRecord?.email || paRecord?.email || userSuperAdmin?.email || targetEmail;
+  const existingId = paRecord?.id || saRecord?.id || userSuperAdmin?.id || effectiveUserId || "master-superadmin-001";
+  const existingPassword = paRecord?.password || saRecord?.passwordHash || userSuperAdmin?.passwordHash || null;
+  const twoFactorEnabled = paRecord?.twoFactorEnabled ?? false;
+  const createdAt = paRecord?.createdAt || saRecord?.createdAt || new Date();
+
+  // If found in any of the tables, return unified Super Admin entity
+  if (saRecord || paRecord || userSuperAdmin) {
+    return {
+      id: existingId,
+      email: existingEmail,
+      password: existingPassword,
+      twoFactorEnabled,
+      createdAt,
+      isInitialized: Boolean(existingPassword),
+    };
+  }
+
+  return null;
 }
 
 export async function GET(req: Request) {
@@ -121,12 +208,12 @@ export async function POST(req: Request) {
     const admin = await getAuthenticatedSuperAdmin(req);
     if (!admin || !admin.password) {
       return NextResponse.json(
-        { error: "Super Admin account not found or uninitialized.", code: "NOT_FOUND" },
-        { status: 404 }
+        { error: "Unauthorized access or Super Admin account not found in database.", code: "UNAUTHORIZED" },
+        { status: 401 }
       );
     }
 
-    // Authoritative bcrypt verification (NO PLAIN TEXT COMPARISON)
+    // Authoritative verification of current password strictly against database hash
     const isOldPasswordValid = await bcrypt.compare(oldPassword, admin.password).catch(() => false);
     if (!isOldPasswordValid) {
       return NextResponse.json(
@@ -138,33 +225,47 @@ export async function POST(req: Request) {
     // Hash new password with 12 salt rounds (NIST SP 800-63B compliant)
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
 
-    await basePrisma.platformAdmin.updateMany({
-      where: {
-        OR: [
-          { id: admin.id },
-          { email: "bonaventure.chinoso@gmail.com" },
-          { email: "admin@bonaveeict.com.ng" },
-        ],
-      },
-      data: {
+    const targetEmail = admin.email; // Preserves exact super-admin email
+
+    // Synchronize / Initialize PlatformAdmin (upsert initializes if missing, updates if exists)
+    await basePrisma.platformAdmin.upsert({
+      where: { email: targetEmail },
+      update: {
         password: hashedNewPassword,
         updatedAt: new Date(),
       },
+      create: {
+        email: targetEmail,
+        password: hashedNewPassword,
+        twoFactorEnabled: false,
+      },
     });
 
-    await basePrisma.superAdmin.updateMany({
+    // Synchronize / Initialize SuperAdmin (upsert initializes if missing, updates if exists)
+    await basePrisma.superAdmin.upsert({
+      where: { email: targetEmail },
+      update: {
+        passwordHash: hashedNewPassword,
+        updatedAt: new Date(),
+      },
+      create: {
+        email: targetEmail,
+        passwordHash: hashedNewPassword,
+      },
+    });
+
+    // Also synchronize central User table if a Super Admin entry exists
+    await (basePrisma.user as any).updateMany({
       where: {
-        OR: [
-          { id: admin.id },
-          { email: "bonaventure.chinoso@gmail.com" },
-          { email: "admin@bonaveeict.com.ng" },
-        ],
+        email: { equals: targetEmail, mode: "insensitive" },
+        role: "SUPER_ADMIN",
+        schoolId: null,
       },
       data: {
         passwordHash: hashedNewPassword,
         updatedAt: new Date(),
       },
-    });
+    }).catch(() => {});
 
     // Invalidate sessions and refresh tokens
     await basePrisma.session.updateMany({

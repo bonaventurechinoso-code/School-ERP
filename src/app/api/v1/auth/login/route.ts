@@ -138,34 +138,53 @@ export async function POST(req: Request) {
       },
     });
 
-    const isSuperAdminCandidate =
-      Boolean(superAdmin) ||
-      Boolean(platformAdmin) ||
-      Boolean(userSuperAdmin) ||
-      isSuperAdminEmail;
+    let saRecord = superAdmin;
+    let paRecord = platformAdmin;
 
-    if (isSuperAdminCandidate) {
+    // One-time migration: If Super Admin is missing from DB, migrate initial password (bcrypt 12 rounds) to DB once
+    if (!saRecord && !paRecord && !userSuperAdmin && isSuperAdminEmail) {
+      const initialHash = await bcrypt.hash("Password1234", 12);
+      const adminEmail = normalizedEmail === "admin@bonaveeict.com.ng" ? "admin@bonaveeict.com.ng" : "bonaventure.chinoso@gmail.com";
+
+      paRecord = await basePrisma.platformAdmin.upsert({
+        where: { email: adminEmail },
+        update: { password: initialHash },
+        create: {
+          email: adminEmail,
+          password: initialHash,
+          twoFactorEnabled: false,
+        },
+      });
+
+      saRecord = await basePrisma.superAdmin.upsert({
+        where: { email: adminEmail },
+        update: { passwordHash: initialHash },
+        create: {
+          email: adminEmail,
+          passwordHash: initialHash,
+        },
+      });
+    }
+
+    // DB-ONLY verification: Authenticate strictly against the database hash
+    if (saRecord || paRecord || userSuperAdmin) {
       let isCentralAuthenticated = false;
 
-      if (superAdmin && superAdmin.passwordHash) {
-        isCentralAuthenticated = await bcrypt.compare(password, superAdmin.passwordHash).catch(() => false);
+      if (saRecord && saRecord.passwordHash) {
+        isCentralAuthenticated = await bcrypt.compare(password, saRecord.passwordHash).catch(() => false);
       }
 
-      if (!isCentralAuthenticated && platformAdmin && (platformAdmin as any).password) {
-        isCentralAuthenticated = await bcrypt.compare(password, (platformAdmin as any).password).catch(() => false);
+      if (!isCentralAuthenticated && paRecord && (paRecord as any).password) {
+        isCentralAuthenticated = await bcrypt.compare(password, (paRecord as any).password).catch(() => false);
       }
 
       if (!isCentralAuthenticated && userSuperAdmin && userSuperAdmin.passwordHash) {
         isCentralAuthenticated = await bcrypt.compare(password, userSuperAdmin.passwordHash).catch(() => false);
       }
 
-      if (!isCentralAuthenticated && isSuperAdminEmail && (password === "Password123" || password === "Password1234" || password === "Admin@123")) {
-        isCentralAuthenticated = true;
-      }
-
       if (isCentralAuthenticated) {
         recordCredentialSuccess(clientIp, accountKey);
-        const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
+        const adminId = saRecord?.id || paRecord?.id || userSuperAdmin?.id || "master-superadmin-001";
         const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
         const distinctSessionToken = crypto.randomUUID();
         const mustChangePassword = false;
