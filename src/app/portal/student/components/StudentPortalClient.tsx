@@ -19,6 +19,7 @@ import { NavigationSidebar } from "./NavigationSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 import { 
   GraduationCap, 
   Menu, 
@@ -616,6 +617,12 @@ export function StudentPortalClient({ initialData, initialTab }: StudentPortalCl
           {/* TAB 7: SECURITY & PASSWORD MODULE */}
           {activeTab === "SECURITY" && (
             <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
+              <ChangeEmailCard
+                initialEmail={student.email || ""}
+                schoolDomain={school.subdomain}
+                brandColor="#4f46e5"
+                isSuperAdmin={false}
+              />
               <SecurityPasswordForm
                 schoolDomain={school.subdomain}
                 userRole="STUDENT"

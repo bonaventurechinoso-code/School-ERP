@@ -1,5 +1,6 @@
 import React from "react";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 import { getSession } from "@/lib/auth";
 import { basePrisma } from "@/lib/tenant-prisma";
 import Image from "next/image";
@@ -73,6 +74,14 @@ export default async function DashboardSecuritySettingsPage() {
             Update your authentication credentials for <span className="font-semibold text-slate-700 dark:text-zinc-300">{userEmail}</span> at {schoolName}.
           </p>
         </div>
+
+        {/* Change Email Card */}
+        <ChangeEmailCard
+          initialEmail={userEmail}
+          brandColor={brandColor}
+          schoolDomain={schoolDomain}
+          isSuperAdmin={false}
+        />
 
         {/* Password Update Form */}
         <SecurityPasswordForm

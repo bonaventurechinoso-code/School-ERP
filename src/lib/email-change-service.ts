@@ -536,11 +536,23 @@ export async function confirmEmailChange(params: {
       data: { email: newEmail, updatedAt: new Date() },
     });
 
-    // Also synchronize Staff record if linked to user
+    // Also synchronize Staff, Student, or Parent record if linked to user
     await basePrisma.staff.updateMany({
       where: { userId },
       data: { email: newEmail, updatedAt: new Date() },
     });
+
+    await basePrisma.student.updateMany({
+      where: { userId },
+      data: { email: newEmail },
+    });
+
+    if (schoolId) {
+      await basePrisma.parent.updateMany({
+        where: { email: currentEmail, schoolId },
+        data: { email: newEmail },
+      });
+    }
   }
 
   // 6. Audit Trail Logging

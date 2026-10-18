@@ -10,6 +10,7 @@ export default async function ProfilePage() {
       profile={data.profile}
       recentPayslips={data.recentPayslips}
       schoolName={data.teacher.schoolName}
+      schoolDomain={data.teacher.schoolSubdomain}
     />
   );
 }

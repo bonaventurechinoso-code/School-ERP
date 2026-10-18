@@ -14,6 +14,7 @@ import {
   FileText,
 } from "lucide-react";
 import { updateTeacherProfile } from "../actions";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 
 interface ProfileData {
   id?: string;
@@ -42,12 +43,14 @@ interface TeacherProfileClientProps {
   profile: ProfileData;
   recentPayslips: PayslipItem[];
   schoolName: string;
+  schoolDomain?: string;
 }
 
 export function TeacherProfileClient({
   profile,
   recentPayslips,
   schoolName,
+  schoolDomain,
 }: TeacherProfileClientProps) {
   const [firstName, setFirstName] = useState(profile.firstName || "");
   const [lastName, setLastName] = useState(profile.lastName || "");
@@ -175,6 +178,14 @@ export function TeacherProfileClient({
               </div>
             </form>
           </div>
+
+          {/* Change Email Security Card */}
+          <ChangeEmailCard
+            initialEmail={profile.email || ""}
+            brandColor="#059669"
+            schoolDomain={schoolDomain}
+            isSuperAdmin={false}
+          />
 
           {/* Assigned Classes & Subjects */}
           <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs space-y-4">
