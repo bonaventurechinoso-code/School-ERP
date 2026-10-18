@@ -98,33 +98,9 @@ async function getAuthenticatedSuperAdmin(req: Request) {
     },
   });
 
-  let saRecord = superAdmin;
-  let paRecord = platformAdmin;
+  const saRecord = superAdmin;
+  const paRecord = platformAdmin;
 
-  // One-time migration: If Super Admin is missing from DB, migrate initial password (bcrypt 12 rounds) to DB once
-  if (!saRecord && !paRecord && !userSuperAdmin && isSuper) {
-    const initialHash = await bcrypt.hash("Password1234", 12);
-    const adminEmail = targetEmail === "admin@bonaveeict.com.ng" ? "admin@bonaveeict.com.ng" : "bonaventure.chinoso@gmail.com";
-
-    paRecord = await basePrisma.platformAdmin.upsert({
-      where: { email: adminEmail },
-      update: { password: initialHash },
-      create: {
-        email: adminEmail,
-        password: initialHash,
-        twoFactorEnabled: false,
-      },
-    });
-
-    saRecord = await basePrisma.superAdmin.upsert({
-      where: { email: adminEmail },
-      update: { passwordHash: initialHash },
-      create: {
-        email: adminEmail,
-        passwordHash: initialHash,
-      },
-    });
-  }
 
   const existingEmail = saRecord?.email || paRecord?.email || userSuperAdmin?.email || targetEmail;
   const existingId = paRecord?.id || saRecord?.id || userSuperAdmin?.id || effectiveUserId || "master-superadmin-001";

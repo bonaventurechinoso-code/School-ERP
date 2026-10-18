@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "clean-db": "node -e \"const {PrismaClient}=require('@prisma/client');(async()=>{const p=new PrismaClient(); await p.$executeRawUnsafe('DELETE FROM \\\"User\\\"'); await p.$executeRawUnsafe('DELETE FROM \\\"School\\\" WHERE slug IS NULL'); console.log('cleaned'); await p.$disconnect()})()\"",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node scripts/init-superadmin.js && next build",
     "build:local": "prisma generate && next build",
-    "build:render": "npx prisma generate && echo 'Using precompiled local build assets'",
-    "start": "next start",
+    "build:render": "npx prisma generate && node scripts/init-superadmin.js && echo 'Using precompiled local build assets'",
+    "start": "node scripts/init-superadmin.js && next start",
     "lint": "next lint",
     "db:push": "prisma db push"
   },

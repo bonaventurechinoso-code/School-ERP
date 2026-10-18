@@ -92,44 +92,16 @@ export const authOptions: NextAuthOptions = {
             },
           });
 
-          let saRecord = superAdmin;
-          let paRecord = platformAdmin;
-
-          // One-time migration: If Super Admin is missing from DB, migrate initial password (bcrypt 12 rounds) to DB once
-          if (!saRecord && !paRecord && !userSuperAdmin && isSuperAdminEmail) {
-            const initialHash = await bcrypt.hash("Password1234", 12);
-            const adminEmail = normalizedEmail === "admin@bonaveeict.com.ng" ? "admin@bonaveeict.com.ng" : "bonaventure.chinoso@gmail.com";
-
-            paRecord = await basePrisma.platformAdmin.upsert({
-              where: { email: adminEmail },
-              update: { password: initialHash },
-              create: {
-                email: adminEmail,
-                password: initialHash,
-                twoFactorEnabled: false,
-              },
-            });
-
-            saRecord = await basePrisma.superAdmin.upsert({
-              where: { email: adminEmail },
-              update: { passwordHash: initialHash },
-              create: {
-                email: adminEmail,
-                passwordHash: initialHash,
-              },
-            });
-          }
-
           // DB-ONLY verification: Authenticate strictly against the database hash
-          if (saRecord || paRecord || userSuperAdmin) {
+          if (superAdmin || platformAdmin || userSuperAdmin) {
             let isAuthenticated = false;
 
-            if (saRecord?.passwordHash) {
-              isAuthenticated = await bcrypt.compare(rawPassword, saRecord.passwordHash).catch(() => false);
+            if (superAdmin?.passwordHash) {
+              isAuthenticated = await bcrypt.compare(rawPassword, superAdmin.passwordHash).catch(() => false);
             }
 
-            if (!isAuthenticated && paRecord?.password) {
-              isAuthenticated = await bcrypt.compare(rawPassword, paRecord.password).catch(() => false);
+            if (!isAuthenticated && platformAdmin?.password) {
+              isAuthenticated = await bcrypt.compare(rawPassword, platformAdmin.password).catch(() => false);
             }
 
             if (!isAuthenticated && userSuperAdmin?.passwordHash) {
@@ -137,7 +109,7 @@ export const authOptions: NextAuthOptions = {
             }
 
             if (isAuthenticated) {
-              const adminId = saRecord?.id || paRecord?.id || userSuperAdmin?.id || "master-superadmin-001";
+              const adminId = superAdmin?.id || platformAdmin?.id || userSuperAdmin?.id || "master-superadmin-001";
               const permissions = getDefaultPermissionsForRole("SUPER_ADMIN");
               const mustChangePassword = false;
 
