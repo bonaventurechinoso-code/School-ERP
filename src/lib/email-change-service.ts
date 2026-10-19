@@ -310,11 +310,13 @@ export async function requestEmailChange(params: {
     </html>
   `.trim();
 
-  // Send via centralized mail service (Resend in production)
+  // Send via centralized mail service (Resend in production) with verified sender
+  const VERIFIED_SYSTEM_FROM = "noreply@bonaveeict.com.ng";
   let mailResult;
   try {
     mailResult = await mailService.sendMail({
       to: normalizedNewEmail,
+      from: VERIFIED_SYSTEM_FROM,
       subject: `[Security Code] ${rawOtp} is your email change verification code`,
       html: emailHtml,
       schoolId: schoolId || undefined,
@@ -332,9 +334,17 @@ export async function requestEmailChange(params: {
     };
   }
 
-  // Critical: Surface provider failure and prevent advancing to Step 2
-  if (!mailResult || !mailResult.success) {
-    const errorDetail = mailResult?.error || mailResult?.deliveryStatus || "Email provider dispatch failed";
+  // Critical: Require actual live provider delivery (RESEND or SMTP).
+  // Disallow and bypass SIMULATED_DEV fallback from returning a false positive "delivered" status.
+  const isSimulated = mailResult?.provider === "SIMULATED" || mailResult?.deliveryStatus === "SIMULATED_DEV";
+  const isActualDeliverySuccess = Boolean(
+    mailResult?.success && !isSimulated && (mailResult.provider === "RESEND" || mailResult.provider === "SMTP")
+  );
+
+  if (!isActualDeliverySuccess) {
+    const errorDetail = isSimulated
+      ? "Real email dispatch was bypassed (SIMULATED_DEV). A live transactional email provider (RESEND_API_KEY or SMTP credentials) is required to deliver verification codes to real inboxes."
+      : mailResult?.error || mailResult?.deliveryStatus || "Email provider dispatch failed";
     console.error(`[EMAIL_CHANGE] ❌ Failed to dispatch verification email to ${normalizedNewEmail}:`, errorDetail);
 
     // Rollback DB record and in-memory pending record
@@ -356,7 +366,7 @@ export async function requestEmailChange(params: {
 
     return {
       success: false,
-      message: `Failed to deliver verification code to ${normalizedNewEmail}: ${errorDetail}. Please check the email address or contact support.`,
+      message: `Failed to deliver verification code to ${normalizedNewEmail}: ${errorDetail}. Please check your email configuration or contact support.`,
       code: "DELIVERY_FAILED",
     };
   }
@@ -664,9 +674,11 @@ export async function confirmEmailChange(params: {
   `.trim();
 
   try {
+    const VERIFIED_SYSTEM_FROM = "noreply@bonaveeict.com.ng";
     await Promise.allSettled([
       mailService.sendMail({
         to: currentEmail,
+        from: VERIFIED_SYSTEM_FROM,
         subject: "[Security Alert] Your account email address was changed",
         html: confirmationOldHtml,
         schoolId: schoolId || undefined,
@@ -675,6 +687,7 @@ export async function confirmEmailChange(params: {
       }),
       mailService.sendMail({
         to: newEmail,
+        from: VERIFIED_SYSTEM_FROM,
         subject: "[Confirmation] Your account email address has been updated",
         html: confirmationNewHtml,
         schoolId: schoolId || undefined,
