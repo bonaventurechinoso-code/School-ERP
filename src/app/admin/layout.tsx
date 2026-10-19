@@ -8,6 +8,7 @@ import SuperAdminUnauthorizedGuard from "@/components/SuperAdminUnauthorizedGuar
 import SuperAdminSidebar from "./SuperAdminSidebar";
 import AdminNotificationBell from "@/components/AdminNotificationBell";
 import LogoutButton from "@/components/LogoutButton";
+import SuperAdminProfileDropdown from "@/components/SuperAdminProfileDropdown";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -58,10 +59,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               Platform Administration
             </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             <AdminNotificationBell />
             <ThemeToggle />
-            <LogoutButton />
+            <div className="h-5 w-px bg-slate-200 dark:bg-zinc-800 mx-1 hidden sm:block" />
+            <SuperAdminProfileDropdown />
           </div>
         </header>
 

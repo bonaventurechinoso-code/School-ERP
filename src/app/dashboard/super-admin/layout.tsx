@@ -24,6 +24,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { INITIAL_PROOFS, INITIAL_SCHOOLS } from "./mock-data";
 import LogoutButton from "@/components/LogoutButton";
+import SuperAdminProfileDropdown from "@/components/SuperAdminProfileDropdown";
 
 export default function SuperAdminLayout({
   children,
@@ -315,13 +316,9 @@ export default function SuperAdminLayout({
               <span>Tenants ({totalSchoolsCount})</span>
             </Link>
 
-            {/* Profile Avatar */}
-            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow">
-              SA
-            </div>
-
-            {/* Logout Action */}
-            <LogoutButton />
+            {/* Super Admin Profile Dropdown */}
+            <div className="h-5 w-px bg-slate-200 mx-1 hidden sm:block" />
+            <SuperAdminProfileDropdown />
           </div>
         </header>
 

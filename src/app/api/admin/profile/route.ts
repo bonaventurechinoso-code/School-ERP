@@ -108,11 +108,16 @@ async function getAuthenticatedSuperAdmin(req: Request) {
   const twoFactorEnabled = paRecord?.twoFactorEnabled ?? false;
   const createdAt = paRecord?.createdAt || saRecord?.createdAt || new Date();
 
+  const displayName =
+    [userSuperAdmin?.firstName, userSuperAdmin?.lastName].filter(Boolean).join(" ") ||
+    "Super Administrator";
+
   // If found in any of the tables, return unified Super Admin entity
   if (saRecord || paRecord || userSuperAdmin) {
     return {
       id: existingId,
       email: existingEmail,
+      displayName,
       password: existingPassword,
       twoFactorEnabled,
       createdAt,
@@ -135,6 +140,7 @@ export async function GET(req: Request) {
       profile: {
         id: admin.id,
         email: admin.email,
+        displayName: admin.displayName,
         role: "SUPER_ADMIN",
         twoFactorEnabled: admin.twoFactorEnabled,
         createdAt: admin.createdAt,
@@ -151,41 +157,63 @@ export async function POST(req: Request) {
     const oldPassword = body.oldPassword || body.currentPassword;
     const newPassword = body.newPassword;
     const confirmPassword = body.confirmPassword;
+    const displayName = body.displayName;
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
-
-    if (!oldPassword || !newPassword) {
-      return NextResponse.json(
-        { error: "Both current password and new password are required." },
-        { status: 400 }
-      );
-    }
-
-    if (confirmPassword && newPassword !== confirmPassword) {
-      return NextResponse.json(
-        { error: "New password and confirmation do not match." },
-        { status: 400 }
-      );
-    }
-
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: "New password must be at least 8 characters long." },
-        { status: 400 }
-      );
-    }
-
-    if (oldPassword === newPassword) {
-      return NextResponse.json(
-        { error: "New password cannot be the same as your current password." },
-        { status: 400 }
-      );
-    }
 
     const admin = await getAuthenticatedSuperAdmin(req);
     if (!admin || !admin.password) {
       return NextResponse.json(
         { error: "Unauthorized access or Super Admin account not found in database.", code: "UNAUTHORIZED" },
         { status: 401 }
+      );
+    }
+
+    const targetEmail = admin.email; // Preserves exact super-admin email
+
+    // Case 1: Profile Details Update (Display Name) without password change
+    if (displayName && !newPassword && !oldPassword) {
+      const parts = String(displayName).trim().split(" ");
+      const firstName = parts[0] || "Super";
+      const lastName = parts.slice(1).join(" ") || "Administrator";
+
+      await (basePrisma.user as any).updateMany({
+        where: {
+          email: { equals: targetEmail, mode: "insensitive" },
+          role: "SUPER_ADMIN",
+          schoolId: null,
+        },
+        data: {
+          firstName,
+          lastName,
+          updatedAt: new Date(),
+        },
+      }).catch(() => {});
+
+      await logAuditEvent({
+        actorId: admin.id,
+        action: "SUPER_ADMIN_PROFILE_UPDATE",
+        target: admin.email,
+        schoolId: null,
+        ip: clientIp,
+        metadata: {
+          actor_email: admin.email,
+          displayName,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Profile details updated successfully.",
+        displayName: `${firstName} ${lastName}`.trim(),
+      });
+    }
+
+    // Case 2: Password Update (Requires current and new password)
+    if (!oldPassword || !newPassword) {
+      return NextResponse.json(
+        { error: "Both current password and new password are required." },
+        { status: 400 }
       );
     }
 
@@ -200,8 +228,6 @@ export async function POST(req: Request) {
 
     // Hash new password with 12 salt rounds (NIST SP 800-63B compliant)
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
-
-    const targetEmail = admin.email; // Preserves exact super-admin email
 
     // Synchronize / Initialize PlatformAdmin (upsert initializes if missing, updates if exists)
     await basePrisma.platformAdmin.upsert({

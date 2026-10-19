@@ -17,6 +17,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Landmark,
+  UserCircle,
 } from "lucide-react";
 
 interface NavItem {
@@ -170,9 +171,33 @@ export default function SuperAdminSidebar() {
       </nav>
 
       {/* Bottom Status & Footer */}
-      <div className="p-3.5 border-t border-slate-800/80 dark:border-zinc-800/80 space-y-2.5">
-        <div className="p-3 rounded-xl bg-slate-900/60 dark:bg-zinc-900/50 border border-slate-800 dark:border-zinc-800/80 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-2.5">
+      <div className="p-3.5 border-t border-slate-800/80 dark:border-zinc-800/80 space-y-2">
+        {/* Super-Admin User Slot */}
+        <Link
+          href="/admin/profile"
+          className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+            pathname === "/admin/profile"
+              ? "bg-indigo-600/15 border-indigo-500/30 text-white"
+              : "bg-slate-900/40 hover:bg-slate-800/60 border-slate-800/80 text-slate-300 hover:text-white"
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-linear-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 ring-1 ring-white/10">
+              SA
+            </div>
+            <div className="min-w-0 text-left">
+              <span className="text-xs font-semibold text-white block truncate">Super-Admin</span>
+              <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors block truncate">
+                Account & Security
+              </span>
+            </div>
+          </div>
+          <UserCircle className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-colors shrink-0" />
+        </Link>
+
+        {/* System Health Status */}
+        <div className="p-2.5 rounded-xl bg-slate-900/60 dark:bg-zinc-900/50 border border-slate-800 dark:border-zinc-800/80 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -182,10 +207,10 @@ export default function SuperAdminSidebar() {
               <span className="text-[10px] text-slate-400 dark:text-zinc-500">PostgreSQL Core • 100%</span>
             </div>
           </div>
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         </div>
 
-        <div className="px-2 text-[10px] text-slate-500 dark:text-zinc-500 flex items-center justify-between font-mono">
+        <div className="px-1 text-[10px] text-slate-500 dark:text-zinc-500 flex items-center justify-between font-mono">
           <span>v2.4 SaaS Core</span>
           <Link
             href="/"
