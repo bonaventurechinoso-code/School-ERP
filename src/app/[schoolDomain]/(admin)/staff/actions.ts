@@ -893,7 +893,12 @@ export async function fetchSchoolClassesAction(schoolIdentifier: string) {
     const tenantDb = getTenantClient(schoolId);
     const classrooms = await tenantDb.classroom.findMany({
       where: { schoolId },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        tierId: true,
+        tier: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
     return { success: true, data: classrooms };
@@ -912,7 +917,13 @@ export async function fetchSchoolSubjectsAction(schoolIdentifier: string) {
     const tenantDb = getTenantClient(schoolId);
     const courses = await tenantDb.course.findMany({
       where: { schoolId },
-      select: { id: true, name: true, code: true },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        tierId: true,
+        tier: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
     return { success: true, data: courses };

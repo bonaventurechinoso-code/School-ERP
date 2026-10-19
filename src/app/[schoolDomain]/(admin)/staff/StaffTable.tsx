@@ -86,6 +86,43 @@ const QUALIFICATIONS = [
   "Ph.D (Doctor of Philosophy)",
 ];
 
+const PRIMARY_EDUCATION_SUBJECTS = [
+  "Mathematics",
+  "English Language",
+  "Basic Science & Technology",
+  "Social Studies",
+  "Civic Education",
+  "Agricultural Science",
+  "Computer Studies / ICT",
+  "Cultural & Creative Arts (CCA)",
+  "Physical & Health Education (PHE)",
+  "Christian Religious Studies (CRS)",
+  "Islamic Religious Studies (IRS)",
+  "Home Economics",
+  "Verbal Reasoning",
+  "Quantitative Reasoning",
+  "French",
+];
+
+const SECONDARY_EDUCATION_SUBJECTS = [
+  "Mathematics",
+  "Further Mathematics",
+  "English Language",
+  "Literature-in-English",
+  "Biology",
+  "Chemistry",
+  "Physics",
+  "Agricultural Science",
+  "Economics",
+  "Government",
+  "Geography",
+  "Civic Education",
+  "Computer Science / ICT",
+  "Commerce",
+  "Financial Accounting",
+  "History",
+];
+
 function getStaffAssignmentLabel(tier?: string | null): string {
   if (!tier) return "Subject / Class Assigned";
   const norm = tier.toUpperCase().trim();
@@ -250,9 +287,23 @@ export default function StaffTable({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Dynamic querying for Subject / Class Assigned select field based on Role
+  // Dynamic querying and Searchable Combobox for Subject / Class Assigned select field
   const [assignmentOptions, setAssignmentOptions] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  const [assignmentDropdownOpen, setAssignmentDropdownOpen] = useState(false);
+  const assignmentDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (assignmentDropdownRef.current && !assignmentDropdownRef.current.contains(e.target as Node)) {
+        setAssignmentDropdownOpen(false);
+        setAssignmentSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -262,26 +313,198 @@ export default function StaffTable({
       setIsLoadingOptions(true);
       try {
         if (roleLower.includes("class teacher") || roleLower.includes("form teacher")) {
-          // If Class Teacher, fetch items from Class / Section database records
+          // If Class Teacher, fetch items from Class / Section database records and filter strictly by active tier
           const res = await fetchSchoolClassesAction(schoolDomain);
           if (isMounted) {
-            setAssignmentOptions(
-              (res.data || []).map((c: any) => ({
-                id: c.id,
-                name: c.name,
-              }))
-            );
+            const rawClasses = res.data || [];
+            let filteredClasses: { id: string; name: string }[] = [];
+
+            if (tierCategory === "PRIMARY") {
+              // STRICT PRIMARY FILTER: Exclude Nursery, JSS, SSS, and Higher Education 100-400 levels
+              filteredClasses = rawClasses
+                .filter((c: any) => {
+                  const cName = (c.name || "").trim();
+                  const cTierName = (c.tier?.name || "").toLowerCase();
+
+                  // Explicit exclusions: Nursery, Secondary, Higher Education
+                  const isNursery =
+                    /daycare|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
+                    cTierName.includes("nursery") ||
+                    cTierName.includes("daycare");
+                  const isSecondary =
+                    /jss|sss|junior|senior|secondary|high school|grade 7|grade 8|grade 9|grade 10|grade 11|grade 12/i.test(cName) ||
+                    cTierName.includes("secondary");
+                  const isHigherEd =
+                    /level|100|200|300|400|500|nd |hnd |university|college/i.test(cName) ||
+                    cTierName.includes("higher") ||
+                    cTierName.includes("university");
+
+                  if (isNursery || isSecondary || isHigherEd) return false;
+
+                  // Inclusion: Matches primary pattern or primary tier
+                  const isPrimaryMatch =
+                    /primary|basic|grade [1-6]|class [1-6]/i.test(cName) ||
+                    cTierName.includes("primary");
+                  return isPrimaryMatch;
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                }));
+            } else if (tierCategory === "NURSERY") {
+              filteredClasses = rawClasses
+                .filter((c: any) => {
+                  const cName = (c.name || "").trim();
+                  const cTierName = (c.tier?.name || "").toLowerCase();
+                  return (
+                    /daycare|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
+                    cTierName.includes("nursery") ||
+                    cTierName.includes("daycare")
+                  );
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                }));
+            } else if (tierCategory === "SECONDARY") {
+              filteredClasses = rawClasses
+                .filter((c: any) => {
+                  const cName = (c.name || "").trim();
+                  const cTierName = (c.tier?.name || "").toLowerCase();
+                  return (
+                    /jss|sss|junior|senior|secondary/i.test(cName) ||
+                    cTierName.includes("secondary")
+                  );
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                }));
+            } else {
+              filteredClasses = rawClasses
+                .filter((c: any) => {
+                  const cName = (c.name || "").trim();
+                  const cTierName = (c.tier?.name || "").toLowerCase();
+                  return (
+                    /level|100|200|300|400|500|nd|hnd/i.test(cName) ||
+                    cTierName.includes("higher") ||
+                    cTierName.includes("university")
+                  );
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                }));
+            }
+
+            setAssignmentOptions(filteredClasses);
           }
         } else if (roleLower.includes("subject teacher") || roleLower.includes("subject")) {
-          // If Subject Teacher, fetch records from Subject database layout
+          // If Subject Teacher, fetch records from Subject database layout and filter strictly by active tier
           const res = await fetchSchoolSubjectsAction(schoolDomain);
           if (isMounted) {
-            setAssignmentOptions(
-              (res.data || []).map((s: any) => ({
-                id: s.id,
-                name: s.code ? `${s.name} (${s.code})` : s.name,
-              }))
-            );
+            const rawCourses = res.data || [];
+            let filteredSubjects: { id: string; name: string }[] = [];
+
+            // Helper to detect higher institution university course codes like MATH101, CSC201, 200 Level
+            const isUniversityCourseCode = (course: any) => {
+              const name = (course.name || "").trim();
+              const code = (course.code || "").trim().toUpperCase();
+              const tierName = (course.tier?.name || "").toLowerCase();
+              const hasCurriculumCode =
+                /\b[A-Z]{2,4}\s*\d{3}\b/i.test(code) ||
+                /\b[A-Z]{2,4}\s*\d{3}\b/i.test(name);
+              const hasHigherEdTerms =
+                /100\s*level|200\s*level|300\s*level|400\s*level|faculty|polytechnic|university/i.test(name) ||
+                tierName.includes("higher") ||
+                tierName.includes("university") ||
+                tierName.includes("tertiary");
+              return hasCurriculumCode || hasHigherEdTerms;
+            };
+
+            const isSecondary =
+              tierCategory === "SECONDARY" ||
+              /secondary|jss|sss|senior|high/i.test(effectiveTier);
+            const isPrimary =
+              tierCategory === "PRIMARY" ||
+              /primary|basic|elementary|nursery|daycare/i.test(effectiveTier);
+
+            if (isSecondary) {
+              // 1. SECONDARY TIER: Exclude university course codes unless explicitly higher institution
+              const dbSecondaryCourses = rawCourses
+                .filter((c: any) => {
+                  const tierName = (c.tier?.name || "").toLowerCase();
+                  return tierName.includes("secondary") || (!tierName && !isUniversityCourseCode(c));
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  // Strip university code suffix like (MATH101) for secondary school display
+                  name: c.name,
+                }));
+
+              // Baseline standard Nigerian secondary school subjects (Junior & Senior levels)
+              const standardSubjects = SECONDARY_EDUCATION_SUBJECTS.map((s) => {
+                const existing = dbSecondaryCourses.find(
+                  (c: any) => c.name.toLowerCase() === s.toLowerCase()
+                );
+                return {
+                  id: existing ? existing.id : s,
+                  name: s,
+                };
+              });
+
+              // Combine DB secondary courses with standard secondary subjects, eliminating duplicates
+              const seenNames = new Set<string>();
+              filteredSubjects = [];
+              for (const s of [...dbSecondaryCourses, ...standardSubjects]) {
+                const lower = s.name.toLowerCase();
+                if (!seenNames.has(lower)) {
+                  seenNames.add(lower);
+                  filteredSubjects.push(s);
+                }
+              }
+            } else if (isPrimary) {
+              // 2. PRIMARY TIER: Exclude university course codes (like MATH101) & secondary-only subjects
+              const dbPrimaryCourses = rawCourses
+                .filter((c: any) => {
+                  if (isUniversityCourseCode(c)) return false;
+                  const tierName = (c.tier?.name || "").toLowerCase();
+                  return tierName.includes("primary") || !tierName;
+                })
+                .map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                }));
+
+              // Baseline standard Nigerian primary school subjects
+              const standardSubjects = PRIMARY_EDUCATION_SUBJECTS.map((s) => {
+                const existing = dbPrimaryCourses.find(
+                  (c: any) => c.name.toLowerCase() === s.toLowerCase()
+                );
+                return {
+                  id: existing ? existing.id : s,
+                  name: s,
+                };
+              });
+
+              const seenNames = new Set<string>();
+              filteredSubjects = [];
+              for (const s of [...dbPrimaryCourses, ...standardSubjects]) {
+                const lower = s.name.toLowerCase();
+                if (!seenNames.has(lower)) {
+                  seenNames.add(lower);
+                  filteredSubjects.push(s);
+                }
+              }
+            } else {
+              // 3. TERTIARY / HIGHER INSTITUTION TIER: Expose university courses with codes
+              filteredSubjects = rawCourses.map((c: any) => ({
+                id: c.id,
+                name: c.code ? `${c.name} (${c.code})` : c.name,
+              }));
+            }
+
+            setAssignmentOptions(filteredSubjects);
           }
         } else {
           // Fallback to department / faculty records
@@ -307,7 +530,7 @@ export default function StaffTable({
     return () => {
       isMounted = false;
     };
-  }, [createData.role, schoolDomain, departments]);
+  }, [createData.role, schoolDomain, departments, tierCategory]);
 
   const dynamicAssignmentLabel = useMemo(() => {
     const roleLower = (createData.role || "").toLowerCase();
@@ -319,6 +542,19 @@ export default function StaffTable({
     }
     return staffAssignmentLabel;
   }, [createData.role, staffAssignmentLabel]);
+
+  // Real-time search filtered options for Combobox
+  const filteredAssignmentOptions = useMemo(() => {
+    const q = assignmentSearch.toLowerCase().trim();
+    if (!q) return assignmentOptions;
+    return assignmentOptions.filter((opt) =>
+      opt.name.toLowerCase().includes(q)
+    );
+  }, [assignmentOptions, assignmentSearch]);
+
+  const selectedAssignmentOption = useMemo(() => {
+    return assignmentOptions.find((opt) => opt.id === createData.departmentId);
+  }, [assignmentOptions, createData.departmentId]);
 
   // Refresh roster
   const refreshRoster = (query?: string, role?: string, dept?: string) => {
@@ -968,20 +1204,95 @@ export default function StaffTable({
               </select>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-600 mb-1">{dynamicAssignmentLabel}</label>
-              <select
-                value={createData.departmentId}
-                onChange={(e) => setCreateData({ ...createData, departmentId: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-              >
-                <option value="">
-                  {isLoadingOptions ? "Loading options..." : `-- Select ${dynamicAssignmentLabel} --`}
-                </option>
-                {assignmentOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>{opt.name}</option>
-                ))}
-              </select>
+            {/* Searchable Subject / Class Assigned Combobox */}
+            <div ref={assignmentDropdownRef} className="relative">
+              <label className="block font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                <span>{dynamicAssignmentLabel}</span>
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                  {tierCategory === "SECONDARY" ? "Secondary School" : tierCategory === "PRIMARY" ? "Primary School" : tierBadgeLabel}
+                </span>
+              </label>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignmentDropdownOpen((o) => !o);
+                    setAssignmentSearch("");
+                  }}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white text-xs flex items-center justify-between text-left focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <span className={selectedAssignmentOption ? "text-slate-800 font-semibold truncate" : "text-slate-400"}>
+                    {isLoadingOptions
+                      ? "Loading records..."
+                      : selectedAssignmentOption
+                      ? selectedAssignmentOption.name
+                      : `-- Select ${dynamicAssignmentLabel} --`}
+                  </span>
+                  <span className="text-slate-400 text-xs ml-2">&#9660;</span>
+                </button>
+
+                {assignmentDropdownOpen && (
+                  <div className="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-in fade-in-50 duration-150">
+                    {/* Sticky search input at top */}
+                    <div className="sticky top-0 p-2 bg-slate-50 border-b border-slate-100 z-10">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={assignmentSearch}
+                          onChange={(e) => setAssignmentSearch(e.target.value)}
+                          placeholder={`Search ${dynamicAssignmentLabel.toLowerCase()}...`}
+                          className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Options List */}
+                    <div className="max-h-52 overflow-y-auto divide-y divide-slate-50">
+                      {/* Optional clear selection option */}
+                      <div
+                        onClick={() => {
+                          setCreateData({ ...createData, departmentId: "" });
+                          setAssignmentDropdownOpen(false);
+                          setAssignmentSearch("");
+                        }}
+                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer italic transition"
+                      >
+                        -- Unassigned / Clear --
+                      </div>
+
+                      {filteredAssignmentOptions.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          {isLoadingOptions ? "Loading records..." : "No matching items found."}
+                        </div>
+                      ) : (
+                        filteredAssignmentOptions.map((opt) => (
+                          <div
+                            key={opt.id}
+                            onClick={() => {
+                              setCreateData({ ...createData, departmentId: opt.id });
+                              setAssignmentDropdownOpen(false);
+                              setAssignmentSearch("");
+                            }}
+                            className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between transition ${
+                              createData.departmentId === opt.id
+                                ? "bg-indigo-50 font-bold text-indigo-700"
+                                : "text-slate-700 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>{opt.name}</span>
+                            {createData.departmentId === opt.id && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="block font-semibold text-slate-600 mb-1">Telephone Phone</label>
