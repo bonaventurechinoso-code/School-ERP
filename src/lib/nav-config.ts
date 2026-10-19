@@ -1,22 +1,20 @@
 import { ComponentType } from "react";
 import {
-  Home,
-  Users,
-  UserPlus,
-  Briefcase,
-  UserCheck,
+  LayoutDashboard,
+  Building2,
+  BookOpen,
   Calendar,
   GraduationCap,
-  FileSpreadsheet,
-  BookOpen,
+  Users,
+  UserCheck,
+  Briefcase,
   CreditCard,
   FileCheck2,
   Landmark,
   Coins,
-  Building2,
   MessageSquare,
   Settings,
-  LayoutDashboard,
+  FileSpreadsheet,
   Clock,
 } from "lucide-react";
 
@@ -26,6 +24,8 @@ export interface NavChildItem {
   href: (domain: string) => string;
   icon?: ComponentType<{ className?: string }>;
   exact?: boolean;
+  matchPaths?: string[];
+  badge?: string;
 }
 
 export interface NavItemConfig {
@@ -37,192 +37,169 @@ export interface NavItemConfig {
   exact?: boolean;
   children?: NavChildItem[];
   allowedRoles?: string[];
+  matchPaths?: string[];
 }
 
 export interface NavGroupConfig {
   id: string;
-  title?: string; // Group title: "DASHBOARD", "PEOPLE", "ACADEMIC", "FINANCE", "SYSTEM"
+  title?: string;
   items: NavItemConfig[];
 }
 
 /**
- * MASTER TENANT NAVIGATION CONFIGURATION
- * Single source of truth driving both Desktop and Mobile sidebars.
- *
- * Exact hierarchy:
- * - DASHBOARD: Dashboard
- * - PEOPLE: Students, Parents, Staff (collapsible Staff module: Staff Directory, Attendance & Leave)
- * - ACADEMIC: Classes & Sections, Subjects, Attendance, Assessments, Academic Records, Results, Timetable
- * - FINANCE: Fees, Payment Verifications, Bank Account, Bursar Workspace, Management & Payroll
- * - SYSTEM: Communications, Enrollment, Public Portal Settings
+ * MASTER TENANT ACCORDION NAVIGATION ARCHITECTURE
+ * 4 Distinct, Elegant Parent Accordion Folders:
+ * - 📂 Academic Engine
+ *   * Dashboard Overview
+ *   * Classes & Sections
+ *   * Subjects & Timetables
+ *   * Attendance Tracking
+ *   * Assessments, Records & Results
+ * - 📂 People Management
+ *   * Students Roster & Enrollment
+ *   * Parents Directory
+ *   * Staff Directory & Attendance / Leave
+ * - 📂 Finance Hub
+ *   * Fees Management
+ *   * Payment Verifications
+ *   * Bank Account Configurations
+ *   * Bursar Workspace & Payroll
+ * - 📂 System Administration
+ *   * Communications Desk
+ *   * Public Portal Settings
  */
 export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
-  // DASHBOARD
   {
-    id: "dashboard-group",
-    title: "DASHBOARD",
+    id: "main-accordions",
     items: [
+      // 1. 📂 Academic Engine
       {
-        id: "dashboard",
-        label: "Dashboard",
+        id: "academic-engine",
+        label: "Academic Engine",
         href: (domain) => `/${domain}/dashboard`,
-        icon: Home,
-        exact: true,
-      },
-    ],
-  },
-
-  // PEOPLE
-  {
-    id: "people",
-    title: "PEOPLE",
-    items: [
-      {
-        id: "students",
-        label: "Students",
-        href: (domain) => `/${domain}/students`,
-        icon: Users,
-      },
-      {
-        id: "parents",
-        label: "Parents",
-        href: (domain) => `/${domain}/parents`,
-        icon: Users,
-      },
-      {
-        id: "staff-group",
-        label: "Staff",
-        href: (domain) => `/${domain}/staff`,
-        icon: Briefcase,
+        icon: GraduationCap,
         children: [
           {
-            id: "staff-directory",
-            label: "Staff Directory",
-            href: (domain) => `/${domain}/staff`,
-            icon: Users,
+            id: "dashboard-overview",
+            label: "Dashboard Overview",
+            href: (domain) => `/${domain}/dashboard`,
+            icon: LayoutDashboard,
             exact: true,
           },
           {
-            id: "staff-attendance",
-            label: "Attendance & Leave",
-            href: (domain) => `/${domain}/staff?tab=attendance`,
+            id: "classes-sections",
+            label: "Classes & Sections",
+            href: (domain) => `/${domain}/classes`,
+            icon: Building2,
+          },
+          {
+            id: "subjects-timetables",
+            label: "Subjects & Timetables",
+            href: (domain) => `/${domain}/subjects`,
+            icon: BookOpen,
+            matchPaths: ["/timetable", "/scheduling?tab=timetable"],
+          },
+          {
+            id: "attendance-tracking",
+            label: "Attendance Tracking",
+            href: (domain) => `/${domain}/scheduling?tab=attendance`,
             icon: Calendar,
+          },
+          {
+            id: "assessments-records-results",
+            label: "Assessments, Records & Results",
+            href: (domain) => `/${domain}/exams`,
+            icon: FileSpreadsheet,
+            matchPaths: ["/report-cards", "/transcripts", "/assessments"],
           },
         ],
       },
-    ],
-  },
 
-  // ACADEMIC
-  {
-    id: "academic",
-    title: "ACADEMIC",
-    items: [
+      // 2. 📂 People Management
       {
-        id: "classes-sections",
-        label: "Classes & Sections",
-        href: (domain) => `/${domain}/classes`,
-        icon: Building2,
+        id: "people-management",
+        label: "People Management",
+        href: (domain) => `/${domain}/students`,
+        icon: Users,
+        children: [
+          {
+            id: "students-enrollment",
+            label: "Students Roster & Enrollment",
+            href: (domain) => `/${domain}/students`,
+            icon: Users,
+            matchPaths: ["/admissions"],
+          },
+          {
+            id: "parents-directory",
+            label: "Parents Directory",
+            href: (domain) => `/${domain}/parents`,
+            icon: UserCheck,
+          },
+          {
+            id: "staff-directory-attendance",
+            label: "Staff Directory & Attendance / Leave",
+            href: (domain) => `/${domain}/staff`,
+            icon: Briefcase,
+            matchPaths: ["/hr"],
+          },
+        ],
       },
-      {
-        id: "subjects",
-        label: "Subjects",
-        href: (domain) => `/${domain}/subjects`,
-        icon: BookOpen,
-      },
-      {
-        id: "attendance",
-        label: "Attendance",
-        href: (domain) => `/${domain}/scheduling?tab=attendance`,
-        icon: Calendar,
-      },
-      {
-        id: "assessments",
-        label: "Assessments",
-        href: (domain) => `/${domain}/exams`,
-        icon: GraduationCap,
-      },
-      {
-        id: "academic-records",
-        label: "Academic Records",
-        href: (domain) => `/${domain}/transcripts`,
-        icon: BookOpen,
-      },
-      {
-        id: "results",
-        label: "Results",
-        href: (domain) => `/${domain}/report-cards`,
-        icon: FileSpreadsheet,
-      },
-      {
-        id: "timetable",
-        label: "Timetable",
-        href: (domain) => `/${domain}/scheduling?tab=timetable`,
-        icon: Clock,
-      },
-    ],
-  },
 
-  // FINANCE
-  {
-    id: "finance",
-    title: "FINANCE",
-    items: [
+      // 3. 📂 Finance Hub
       {
-        id: "fees",
-        label: "Fees",
+        id: "finance-hub",
+        label: "Finance Hub",
         href: (domain) => `/${domain}/finance/fees`,
-        icon: CreditCard,
-      },
-      {
-        id: "payment-verifications",
-        label: "Payment Verifications",
-        href: (domain) => `/${domain}/finance/verifications`,
-        icon: FileCheck2,
-      },
-      {
-        id: "bank-account",
-        label: "Bank Account",
-        href: (domain) => `/${domain}/finance/bank-account`,
         icon: Landmark,
+        children: [
+          {
+            id: "fees-management",
+            label: "Fees Management",
+            href: (domain) => `/${domain}/finance/fees`,
+            icon: CreditCard,
+          },
+          {
+            id: "payment-verifications",
+            label: "Payment Verifications",
+            href: (domain) => `/${domain}/finance/verifications`,
+            icon: FileCheck2,
+          },
+          {
+            id: "bank-account-configs",
+            label: "Bank Account Configurations",
+            href: (domain) => `/${domain}/finance/bank-account`,
+            icon: Landmark,
+          },
+          {
+            id: "bursar-workspace-payroll",
+            label: "Bursar Workspace & Payroll",
+            href: (domain) => `/${domain}/finance/bursar-workspace`,
+            icon: Coins,
+            matchPaths: ["/hr"],
+          },
+        ],
       },
-      {
-        id: "bursar-workspace",
-        label: "Bursar Workspace",
-        href: (domain) => `/${domain}/finance/bursar-workspace`,
-        icon: Coins,
-      },
-      {
-        id: "management-payroll",
-        label: "Management & Payroll",
-        href: (domain) => `/${domain}/hr`,
-        icon: Building2,
-      },
-    ],
-  },
 
-  // SYSTEM
-  {
-    id: "system",
-    title: "SYSTEM",
-    items: [
+      // 4. 📂 System Administration
       {
-        id: "communications",
-        label: "Communications",
+        id: "system-admin",
+        label: "System Administration",
         href: (domain) => `/${domain}/communications`,
-        icon: MessageSquare,
-      },
-      {
-        id: "enrollment",
-        label: "Enrollment",
-        href: (domain) => `/${domain}/admissions`,
-        icon: UserPlus,
-      },
-      {
-        id: "public-portal-settings",
-        label: "Public Portal Settings",
-        href: (domain) => `/${domain}/portal-settings`,
         icon: Settings,
+        children: [
+          {
+            id: "communications-desk",
+            label: "Communications Desk",
+            href: (domain) => `/${domain}/communications`,
+            icon: MessageSquare,
+          },
+          {
+            id: "public-portal-settings",
+            label: "Public Portal Settings",
+            href: (domain) => `/${domain}/portal-settings`,
+            icon: Settings,
+          },
+        ],
       },
     ],
   },
@@ -231,9 +208,9 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
 /**
  * Filtered Navigation by RBAC Role Tiers
  * - Teacher: My Classes, My Students, Attendance, Assessments, Results
- * - Bursar: Fees, Payment Verifications, Bank Account
+ * - Bursar: Fees, Payment Verifications, Bank Account, Workspace
  * - Parent/Student: My Children, Fees, Results, Communications
- * - Tenant Admin / Super Admin (View as Tenant): Master 5-group structure
+ * - Tenant Admin / Super Admin (View as Tenant): Master 4-accordion structure
  */
 export function getTenantNavigation(
   role?: string | null,
@@ -314,6 +291,12 @@ export function getTenantNavigation(
             label: "Bank Account",
             href: (d) => `/${d}/finance/bank-account`,
             icon: Landmark,
+          },
+          {
+            id: "bursar-workspace",
+            label: "Bursar Workspace",
+            href: (d) => `/${d}/finance/bursar-workspace`,
+            icon: Coins,
           },
         ],
       },

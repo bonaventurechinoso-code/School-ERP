@@ -28,16 +28,15 @@ export const BASE_TENANT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "bonav
 export function getSecureCookieOptions(maxAge: number = SESSION_MAX_AGE_SECONDS, targetHost?: string) {
   const isProd = process.env.NODE_ENV === "production";
 
-  // Strict host-only cookie scoping:
-  // Leaving domain undefined instructs browsers to enforce RFC 6265 Host-Only scoping,
-  // preventing cookie leakage across sibling tenant subdomains (e.g. stpeter vs umawa)
-  // and eliminating root-domain session contamination.
+  // Safe local dev check: only apply cookie domain if in dev or explicitly configured
+  const domain = !isProd ? (process.env.SESSION_DOMAIN || undefined) : undefined;
+
   return {
     httpOnly: true,
     secure: isProd,
     sameSite: "lax" as const,
     path: "/",
-    domain: undefined,
+    domain: domain,
     maxAge: maxAge,
   };
 }

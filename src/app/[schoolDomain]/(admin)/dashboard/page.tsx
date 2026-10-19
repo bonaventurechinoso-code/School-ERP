@@ -69,7 +69,7 @@ export default async function TenantDashboard({
       />
 
       {/* Asynchronous Modular KPI Card Grid with Independent Suspense Boundaries */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
 
         {/* 1. Student Roster Module */}
         <Suspense fallback={<DashboardSkeleton />}>

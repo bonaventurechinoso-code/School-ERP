@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { MessageSquare, X, Send, Bot, AlertCircle, RefreshCw, Minus, RotateCcw, Sparkles } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
@@ -26,6 +26,15 @@ export default function AIChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const pathname = usePathname();
+  const isDashboard = Boolean(pathname?.endsWith("/dashboard"));
+
+  useEffect(() => {
+    const handleOpenAi = () => setIsOpen(true);
+    window.addEventListener("open-institutional-ai", handleOpenAi);
+    return () => window.removeEventListener("open-institutional-ai", handleOpenAi);
+  }, []);
 
   // Tenant and Session resolution for contextual queries
   const params = useParams();
@@ -564,8 +573,8 @@ export default function AIChatWidget() {
         </div>
       )}
 
-      {/* Draggable Floating Button: Full pill on desktop, circular icon on mobile */}
-      {!isOpen && (
+      {/* Draggable Floating Button: Hidden on dashboard since anchored in the top utility toolbar */}
+      {!isOpen && !isDashboard && (
         <button
           ref={buttonRef}
           style={buttonStyle}

@@ -224,74 +224,33 @@ export default function TierSwitcher({
     });
   };
 
-  // Sidebar Layout: Dedicated Dropdown Selector Component
+  // Sidebar Layout: Clean Compact Tier Switcher (Rendered only when multiple tiers exist)
   if (variant === "sidebar") {
-    // Resolve clean display name for tenant
-    const displayTenantName = (
-      schoolName ||
-      tenant?.name ||
-      (schoolDomain === "egede" ? "EGEDE PRIMARY SCHOOL" : `${schoolDomain.toUpperCase()} SCHOOL`)
-    ).toUpperCase();
-
-    // Format tier display label: Primary School (Basic 1-5)
-    let tierDisplay = activeTierObj.name;
-    if (activeTierObj.name.toUpperCase().includes("PRIMARY")) {
-      tierDisplay = "Primary School (Basic 1-5)";
-    } else if (activeTierObj.sublabel) {
-      tierDisplay = `${activeTierObj.name} (${activeTierObj.sublabel})`;
-    }
+    if (effectiveTiers.length <= 1) return null;
 
     return (
-      <div className="mt-1 space-y-2">
-        {/* FIX 4: TOP LABEL CHANGED FROM ACADEMIC TIER TO TENANT */}
-        <div className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-400 tracking-wider">
-          <span className="flex items-center gap-1.5 text-indigo-400 font-extrabold tracking-widest text-[10px]">
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            TENANT
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            ACTIVE
-          </span>
+      <div className="relative mt-2">
+        <select
+          value={activeTierObj.name}
+          onChange={(e) => {
+            const selected = effectiveTiers.find(
+              (t) => t.name === e.target.value || t.id === e.target.value
+            );
+            if (selected) handleSelectTier(selected);
+          }}
+          disabled={isPending}
+          aria-label="Switch Academic Tier"
+          className="w-full appearance-none bg-slate-800/90 hover:bg-slate-800 text-white border border-slate-700/80 rounded-xl px-2.5 py-1.5 pr-7 text-[11px] font-semibold focus:outline-hidden focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer shadow-xs"
+        >
+          {effectiveTiers.map((tier) => (
+            <option key={tier.id} value={tier.name} className="bg-slate-900 text-white py-1 font-medium">
+              Switch Tier: {tier.name} {tier.sublabel ? `(${tier.sublabel})` : ""}
+            </option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+          <ChevronDown className="w-3.5 h-3.5" />
         </div>
-
-        {/* TENANT STATUS BANNER: EGEDE PRIMARY SCHOOL | Primary School (Basic 1-5) | ACTIVE */}
-        <div className="p-2.5 rounded-xl bg-slate-800/80 dark:bg-zinc-900/80 border border-slate-700/80 dark:border-zinc-800 space-y-1 shadow-2xs">
-          <div className="text-xs font-black text-white truncate tracking-tight">
-            {displayTenantName}
-          </div>
-          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-300 dark:text-zinc-400 font-medium">
-            <span className="truncate">{tierDisplay}</span>
-            <span className="text-[10px] font-bold text-emerald-400 shrink-0">ACTIVE</span>
-          </div>
-        </div>
-
-        {/* Dropdown Selector Component (for switching tiers when tenant has multiple) */}
-        {effectiveTiers.length > 1 && (
-          <div className="relative">
-            <select
-              value={activeTierObj.name}
-              onChange={(e) => {
-                const selected = effectiveTiers.find(
-                  (t) => t.name === e.target.value || t.id === e.target.value
-                );
-                if (selected) handleSelectTier(selected);
-              }}
-              disabled={isPending}
-              aria-label="Switch Academic Tier"
-              className="w-full appearance-none bg-slate-800/95 hover:bg-slate-800 text-white border border-slate-700/90 rounded-xl px-3 py-2 pr-8 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-xs"
-            >
-              {effectiveTiers.map((tier) => (
-                <option key={tier.id} value={tier.name} className="bg-slate-900 text-white py-1.5 font-medium">
-                  Switch: {tier.name} {tier.sublabel ? `(${tier.sublabel})` : ""}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-              <ChevronDown className="w-3.5 h-3.5" />
-            </div>
-          </div>
-        )}
       </div>
     );
   }

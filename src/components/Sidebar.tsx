@@ -40,7 +40,7 @@ export interface SidebarProps {
 }
 
 /**
- * High-fidelity Skeleton UI rendered while session/tenant state is actively resolving
+ * High-fidelity Skeleton UI matching the consolidated Tenant Card geometry
  */
 export function SidebarSkeleton({
   isSidebarOpen,
@@ -53,50 +53,44 @@ export function SidebarSkeleton({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 w-72 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:min-w-[16rem] md:max-w-[16rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+      className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
         isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
       }`}
     >
-      {/* Header Skeleton */}
-      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50 shrink-0">
-        <div className="flex items-center gap-3 min-w-0 w-full">
-          <div className="w-9 h-9 rounded-xl bg-slate-800 animate-pulse shrink-0" />
+      {/* Consolidated Tenant Card Skeleton */}
+      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-slate-800 animate-pulse shrink-0" />
           <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="h-4 w-28 bg-slate-800 rounded-md animate-pulse" />
-            <div className="h-2 w-16 bg-slate-800/60 rounded-md animate-pulse" />
+            <div className="h-3.5 w-28 bg-slate-800 rounded-md animate-pulse" />
+            <div className="h-2.5 w-16 bg-slate-800/60 rounded-md animate-pulse" />
           </div>
         </div>
         <button
-          className="md:hidden p-2 -mr-2 rounded-lg hover:bg-slate-800 active:scale-95 transition-all"
+          className="md:hidden p-1.5 rounded-lg text-slate-400"
           onClick={() => setIsSidebarOpen(false)}
         >
-          <X className="w-5 h-5 text-slate-400" />
+          <X className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Tier Switcher Skeleton */}
-      <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40 shrink-0">
-        <div className="h-9 w-full rounded-xl bg-slate-800/70 animate-pulse" />
-      </div>
-
       {/* Nav Items Skeleton */}
-      <div className="flex-1 min-h-0 px-3 py-6 flex flex-col gap-2 overflow-hidden">
+      <div className="flex-1 min-h-0 px-3 py-4 flex flex-col gap-2 overflow-hidden">
         {[
-          { w: "w-28", id: "s1" },
+          { w: "w-32", id: "s1" },
           { w: "w-36", id: "s2" },
-          { w: "w-24", id: "s3" },
+          { w: "w-28", id: "s3" },
           { w: "w-32", id: "s4" },
-          { w: "w-20", id: "s5" },
-          { w: "w-28", id: "s6" },
-          { w: "w-32", id: "s7" },
-          { w: "w-24", id: "s8" },
         ].map((item) => (
           <div
             key={item.id}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/30 border border-slate-800/40 animate-pulse"
+            className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/30 border border-slate-800/40 animate-pulse"
           >
-            <div className="w-5 h-5 rounded-lg bg-slate-800 shrink-0" />
-            <div className={`h-3.5 ${item.w} bg-slate-800 rounded-md`} />
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 rounded-md bg-slate-800 shrink-0" />
+              <div className={`h-3 ${item.w} bg-slate-800 rounded-md`} />
+            </div>
+            <div className="w-3 h-3 bg-slate-800 rounded-md" />
           </div>
         ))}
       </div>
@@ -128,28 +122,75 @@ export default function Sidebar({
     return getTenantNavigation(effectiveRole, staffRole, schoolDomain);
   }, [effectiveRole, staffRole, schoolDomain]);
 
-  // Collapsible groups state (e.g. "staff-group")
+  // Collapsible accordions state: "academic-engine" open by default
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    "staff-group": true,
+    "academic-engine": true,
   });
+
+  // Clean School Display Name
+  const cleanSchoolName = useMemo(() => {
+    const raw = schoolName || tenant?.name || (schoolDomain === "egede" ? "Egede Primary School" : `${schoolDomain} School`);
+    return raw.trim();
+  }, [schoolName, tenant?.name, schoolDomain]);
+
+  // 2-Letter Monogram Avatar
+  const monogram = useMemo(() => {
+    const words = cleanSchoolName.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return cleanSchoolName.substring(0, 2).toUpperCase();
+  }, [cleanSchoolName]);
+
+  // Active Educational Tier Label
+  const activeTierLabel = useMemo(() => {
+    if (currentTier) {
+      const match = tiers.find(
+        (t) => t.id === currentTier || t.slug === currentTier || t.name.toLowerCase() === currentTier.toLowerCase()
+      );
+      if (match) return match.name;
+    }
+    if (tiers && tiers.length > 0) {
+      return tiers[0].name;
+    }
+    return "Institutional Portal";
+  }, [tiers, currentTier]);
+
+  // Helper to determine active status of items including merged matchPaths
+  const isItemActive = (href: string, exact?: boolean, matchPaths?: string[]) => {
+    const [basePath, queryString] = href.split("?");
+    if (queryString) {
+      const urlParams = new URLSearchParams(queryString);
+      const matchesParams = Array.from(urlParams.entries()).every(
+        ([k, v]) => searchParams.get(k) === v
+      );
+      if (pathname === basePath && matchesParams) return true;
+    } else {
+      if (exact) {
+        if (pathname === basePath || pathname === `${basePath}/`) return true;
+      } else {
+        if (pathname.startsWith(basePath)) return true;
+      }
+    }
+
+    if (matchPaths && matchPaths.length > 0) {
+      return matchPaths.some((mp) => {
+        const fullMp = `/${schoolDomain}${mp}`;
+        return pathname === fullMp || pathname.startsWith(`${fullMp}/`) || pathname.startsWith(`${fullMp}?`);
+      });
+    }
+
+    return false;
+  };
 
   // Auto-expand group if current path matches any of its children
   useEffect(() => {
     navGroups.forEach((group) => {
       group.items.forEach((item) => {
         if (item.children && item.children.length > 0) {
-          const hasActiveChild = item.children.some((child) => {
-            const childHref = child.href(schoolDomain);
-            const [basePath, queryString] = childHref.split("?");
-            if (queryString) {
-              const urlParams = new URLSearchParams(queryString);
-              const matchesParams = Array.from(urlParams.entries()).every(
-                ([k, v]) => searchParams.get(k) === v
-              );
-              return pathname === basePath && matchesParams;
-            }
-            return pathname === basePath;
-          });
+          const hasActiveChild = item.children.some((child) =>
+            isItemActive(child.href(schoolDomain), child.exact, child.matchPaths)
+          );
           if (hasActiveChild) {
             setExpandedGroups((prev) => ({ ...prev, [item.id]: true }));
           }
@@ -165,22 +206,6 @@ export default function Sidebar({
     }));
   };
 
-  // Helper to determine active status of item
-  const isItemActive = (href: string, exact?: boolean) => {
-    const [basePath, queryString] = href.split("?");
-    if (queryString) {
-      const urlParams = new URLSearchParams(queryString);
-      const matchesParams = Array.from(urlParams.entries()).every(
-        ([k, v]) => searchParams.get(k) === v
-      );
-      return pathname === basePath && matchesParams;
-    }
-    if (exact) {
-      return pathname === basePath || pathname === `${basePath}/`;
-    }
-    return pathname.startsWith(basePath);
-  };
-
   // 1. LOADING GUARD
   if (loading && !effectiveRole) {
     return (
@@ -194,73 +219,92 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 w-72 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-64 md:min-w-[16rem] md:max-w-[16rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+      className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 md:w-72 md:min-w-[18rem] md:max-w-[18rem] h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
         isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
       }`}
     >
-      {/* Brand Header */}
-      <div className="p-4 sm:p-5 font-bold text-lg tracking-wide border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50 dark:bg-zinc-950/50 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          {tenant?.branding?.logoUrl ? (
-            <Image
-              src={tenant.branding.logoUrl}
-              alt={schoolName}
-              width={36}
-              height={36}
-              className="w-9 h-9 rounded-xl object-contain border border-slate-800 shadow-sm shrink-0"
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-              <GraduationCap className="w-5 h-5 text-white" />
+      {/* 1. SINGLE, HIGHLY POLISHED TENANT IDENTITY CARD */}
+      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 dark:bg-zinc-950/80 shrink-0">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {/* Monogram Avatar with Minimal Status Dot */}
+            <div className="relative shrink-0">
+              {tenant?.branding?.logoUrl ? (
+                <Image
+                  src={tenant.branding.logoUrl}
+                  alt={cleanSchoolName}
+                  width={38}
+                  height={38}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain border border-slate-700/80 shadow-xs"
+                />
+              ) : (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-linear-to-tr from-indigo-600 via-indigo-700 to-violet-600 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center shadow-xs border border-white/10 tracking-tight">
+                  {monogram}
+                </div>
+              )}
+              {/* Single minimal green indicator dot */}
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900 dark:ring-zinc-950 shadow-xs"
+                title="Tenant Active"
+              />
             </div>
-          )}
-          <span className="truncate text-base font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
-            {(schoolName || "EGEDE PRIMARY SCHOOL").toUpperCase()}
-          </span>
+
+            {/* Clean Institution Title without middle-word ellipses */}
+            <div className="min-w-0 flex-1">
+              <span className="block text-xs sm:text-sm font-bold text-white tracking-tight leading-snug line-clamp-2">
+                {cleanSchoolName}
+              </span>
+              <span className="block text-[10px] text-slate-400 dark:text-zinc-400 font-medium truncate mt-0.5">
+                {activeTierLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Mobile Close Button */}
+          <button
+            className="md:hidden p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all shrink-0 cursor-pointer"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          className="md:hidden p-2 -mr-2 rounded-lg hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
-          onClick={() => setIsSidebarOpen(false)}
-          aria-label="Close sidebar"
-        >
-          <X className="w-5 h-5 text-slate-400" />
-        </button>
+
+        {/* Compact Tier Switcher (Rendered only when multiple tiers exist) */}
+        {tiers && tiers.length > 1 && (
+          <div className="mt-2.5 pt-2 border-t border-slate-800/60">
+            <TierSwitcher
+              tiers={tiers}
+              currentTier={currentTier}
+              schoolDomain={schoolDomain}
+              schoolName={schoolName}
+              variant="sidebar"
+            />
+          </div>
+        )}
       </div>
 
-      {/* FIX 4: TOP LABEL (TENANT) & Tenant Switcher / Status Banner */}
-      <div className="px-3 py-2.5 border-b border-slate-800/60 bg-slate-900/40 shrink-0">
-        <TierSwitcher
-          tiers={tiers}
-          currentTier={currentTier}
-          schoolDomain={schoolDomain}
-          schoolName={schoolName}
-          variant="sidebar"
-        />
-      </div>
-
-      {/* Reactive Navigation Modules with Groups (PEOPLE, ACADEMIC, FINANCE, SYSTEM) */}
-      <nav className="flex-1 min-h-0 px-3 py-3 flex flex-col gap-1 overflow-y-auto overscroll-contain">
+      {/* 2. COLLAPSIBLE ACCORDION NAVIGATION ARCHITECTURE */}
+      <nav className="flex-1 min-h-0 px-2.5 py-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
         {navGroups.map((group) => {
           return (
             <div key={group.id} className="space-y-1">
-              {/* Group Section Header */}
               {group.title && (
-                <div className="px-3 pt-3.5 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase">
+                <div className="px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase">
                   {group.title}
                 </div>
               )}
 
-              {/* Group Items */}
               {group.items.map((item) => {
                 const itemHref = item.href(schoolDomain);
                 const hasChildren = item.children && item.children.length > 0;
                 const isExpanded = expandedGroups[item.id] ?? false;
                 const Icon = item.icon;
 
-                // Collapsible parent item
+                // Collapsible parent accordion folder
                 if (hasChildren) {
                   const anyChildActive = item.children!.some((child) =>
-                    isItemActive(child.href(schoolDomain), child.exact)
+                    isItemActive(child.href(schoolDomain), child.exact, child.matchPaths)
                   );
 
                   return (
@@ -268,29 +312,37 @@ export default function Sidebar({
                       <button
                         type="button"
                         onClick={() => toggleGroup(item.id)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                        title={item.label}
+                        className={`w-full flex items-start justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                           anyChildActive
-                            ? "bg-indigo-600/10 text-indigo-400 font-bold"
+                            ? "bg-indigo-600/15 text-white font-bold"
                             : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Icon className={`w-4 h-4 shrink-0 ${anyChildActive ? "text-indigo-400" : "text-slate-400"}`} />
-                          <span className="truncate">{item.label}</span>
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${anyChildActive ? "text-indigo-400" : "text-slate-400"}`} />
+                          <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left">
+                            {item.label}
+                          </span>
                         </div>
-                        {isExpanded ? (
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        ) : (
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0 ml-1.5 mt-0.5">
+                          {anyChildActive && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                          )}
+                          {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                        </div>
                       </button>
 
-                      {/* Collapsible Children */}
+                      {/* Accordion Children with clean vector icons & relative indent margins */}
                       {isExpanded && (
-                        <div className="pl-4 pr-1 py-0.5 space-y-0.5 border-l border-slate-800/80 ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
                           {item.children!.map((child) => {
                             const childHref = child.href(schoolDomain);
-                            const isChildActive = isItemActive(childHref, child.exact);
+                            const isChildActive = isItemActive(childHref, child.exact, child.matchPaths);
                             const ChildIcon = child.icon;
 
                             return (
@@ -298,7 +350,8 @@ export default function Sidebar({
                                 key={child.id}
                                 href={childHref}
                                 onClick={() => setIsSidebarOpen(false)}
-                                className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-150 ${
+                                title={child.label}
+                                className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 ${
                                   isChildActive
                                     ? "bg-indigo-600/20 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
                                     : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
@@ -306,12 +359,14 @@ export default function Sidebar({
                               >
                                 {ChildIcon && (
                                   <ChildIcon
-                                    className={`w-3.5 h-3.5 shrink-0 ${
+                                    className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
                                       isChildActive ? "text-indigo-400" : "text-slate-500"
                                     }`}
                                   />
                                 )}
-                                <span className="truncate">{child.label}</span>
+                                <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left">
+                                  {child.label}
+                                </span>
                               </Link>
                             );
                           })}
@@ -321,30 +376,33 @@ export default function Sidebar({
                   );
                 }
 
-                // Regular Top-Level Item
-                const isActive = isItemActive(itemHref, item.exact);
+                // Regular top-level item (fallback for single-tier roles)
+                const isActive = isItemActive(itemHref, item.exact, item.matchPaths);
 
                 return (
                   <Link
                     key={item.id}
                     href={itemHref}
                     onClick={() => setIsSidebarOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 group active:scale-98 ${
+                    title={item.label}
+                    className={`flex items-start justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 group active:scale-98 ${
                       isActive
                         ? "bg-indigo-600/15 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
                         : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <Icon
-                        className={`w-4 h-4 shrink-0 transition-colors ${
+                        className={`w-4 h-4 shrink-0 mt-0.5 transition-colors ${
                           isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
                         }`}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left">
+                        {item.label}
+                      </span>
                     </div>
                     {item.badge && (
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                      <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 mt-0.5">
                         {item.badge}
                       </span>
                     )}
