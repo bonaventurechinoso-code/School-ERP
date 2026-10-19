@@ -884,3 +884,41 @@ export async function deletePayrollVoucherAction(
   }
 }
 
+/**
+ * Fetch active classes / sections for school onboarding dropdowns
+ */
+export async function fetchSchoolClassesAction(schoolIdentifier: string) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    const classrooms = await tenantDb.classroom.findMany({
+      where: { schoolId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return { success: true, data: classrooms };
+  } catch (error: any) {
+    console.error("[fetchSchoolClassesAction] Error:", error);
+    return { success: false, data: [] };
+  }
+}
+
+/**
+ * Fetch active subjects / courses for school onboarding dropdowns
+ */
+export async function fetchSchoolSubjectsAction(schoolIdentifier: string) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const tenantDb = getTenantClient(schoolId);
+    const courses = await tenantDb.course.findMany({
+      where: { schoolId },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+    });
+    return { success: true, data: courses };
+  } catch (error: any) {
+    console.error("[fetchSchoolSubjectsAction] Error:", error);
+    return { success: false, data: [] };
+  }
+}
+

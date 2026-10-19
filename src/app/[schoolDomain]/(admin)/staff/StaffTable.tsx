@@ -10,6 +10,8 @@ import {
   updateStaffStatus,
   fetchStaffPaginated,
   markStaffQuickAttendanceAction,
+  fetchSchoolClassesAction,
+  fetchSchoolSubjectsAction,
 } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import {
@@ -247,6 +249,76 @@ export default function StaffTable({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Dynamic querying for Subject / Class Assigned select field based on Role
+  const [assignmentOptions, setAssignmentOptions] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const roleLower = (createData.role || "").toLowerCase();
+
+    async function loadAssignmentOptions() {
+      setIsLoadingOptions(true);
+      try {
+        if (roleLower.includes("class teacher") || roleLower.includes("form teacher")) {
+          // If Class Teacher, fetch items from Class / Section database records
+          const res = await fetchSchoolClassesAction(schoolDomain);
+          if (isMounted) {
+            setAssignmentOptions(
+              (res.data || []).map((c: any) => ({
+                id: c.id,
+                name: c.name,
+              }))
+            );
+          }
+        } else if (roleLower.includes("subject teacher") || roleLower.includes("subject")) {
+          // If Subject Teacher, fetch records from Subject database layout
+          const res = await fetchSchoolSubjectsAction(schoolDomain);
+          if (isMounted) {
+            setAssignmentOptions(
+              (res.data || []).map((s: any) => ({
+                id: s.id,
+                name: s.code ? `${s.name} (${s.code})` : s.name,
+              }))
+            );
+          }
+        } else {
+          // Fallback to department / faculty records
+          if (isMounted) {
+            setAssignmentOptions(
+              (departments || []).map((d: any) => ({
+                id: d.id,
+                name: d.name,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load assignment options:", err);
+        if (isMounted) setAssignmentOptions([]);
+      } finally {
+        if (isMounted) setIsLoadingOptions(false);
+      }
+    }
+
+    loadAssignmentOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [createData.role, schoolDomain, departments]);
+
+  const dynamicAssignmentLabel = useMemo(() => {
+    const roleLower = (createData.role || "").toLowerCase();
+    if (roleLower.includes("class teacher") || roleLower.includes("form teacher")) {
+      return "Class / Section Assigned";
+    }
+    if (roleLower.includes("subject teacher") || roleLower.includes("subject")) {
+      return "Subject Assigned";
+    }
+    return staffAssignmentLabel;
+  }, [createData.role, staffAssignmentLabel]);
 
   // Refresh roster
   const refreshRoster = (query?: string, role?: string, dept?: string) => {
@@ -897,15 +969,17 @@ export default function StaffTable({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">{staffAssignmentLabel}</label>
+              <label className="block font-semibold text-slate-600 mb-1">{dynamicAssignmentLabel}</label>
               <select
                 value={createData.departmentId}
                 onChange={(e) => setCreateData({ ...createData, departmentId: e.target.value })}
                 className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
               >
-                <option value="">-- Select {staffAssignmentLabel} --</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
+                <option value="">
+                  {isLoadingOptions ? "Loading options..." : `-- Select ${dynamicAssignmentLabel} --`}
+                </option>
+                {assignmentOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.name}</option>
                 ))}
               </select>
             </div>
