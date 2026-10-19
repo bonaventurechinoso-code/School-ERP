@@ -51,7 +51,7 @@ export interface NavGroupConfig {
  *
  * Exact hierarchy:
  * - DASHBOARD: Dashboard
- * - PEOPLE: Students, Parents, Teachers, Staff (collapsible Staff module)
+ * - PEOPLE: Students, Parents, Staff (collapsible Staff module: Staff Directory, Attendance & Leave)
  * - ACADEMIC: Classes & Sections, Subjects, Attendance, Assessments, Academic Records, Results, Timetable
  * - FINANCE: Fees, Payment Verifications, Bank Account, Bursar Workspace, Management & Payroll
  * - SYSTEM: Communications, Enrollment, Public Portal Settings
@@ -90,12 +90,6 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
         icon: Users,
       },
       {
-        id: "teachers",
-        label: "Teachers",
-        href: (domain) => `/${domain}/staff?role=TEACHER`,
-        icon: UserCheck,
-      },
-      {
         id: "staff-group",
         label: "Staff",
         href: (domain) => `/${domain}/staff`,
@@ -103,26 +97,14 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
         children: [
           {
             id: "staff-directory",
-            label: "All Staff Directory",
+            label: "Staff Directory",
             href: (domain) => `/${domain}/staff`,
             icon: Users,
             exact: true,
           },
           {
-            id: "staff-teachers",
-            label: "Teachers",
-            href: (domain) => `/${domain}/staff?role=TEACHER`,
-            icon: UserCheck,
-          },
-          {
-            id: "staff-non-teaching",
-            label: "Non-Teaching Staff",
-            href: (domain) => `/${domain}/staff?role=NON_TEACHING`,
-            icon: Briefcase,
-          },
-          {
             id: "staff-attendance",
-            label: "Staff Attendance & Leave",
+            label: "Attendance & Leave",
             href: (domain) => `/${domain}/staff?tab=attendance`,
             icon: Calendar,
           },

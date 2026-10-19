@@ -63,11 +63,25 @@ export default function UserProfileDropdown({
     };
   }, [isOpen]);
 
-  const displayName = session?.name || session?.email?.split("@")[0] || "Administrator";
-  const displayEmail = session?.email || "admin@" + (schoolDomain ? `${schoolDomain}.edu.ng` : "bonaveeict.com.ng");
-  const displayRole = (staffRole || role || tenant?.userRole || "Tenant Admin")
-    .replace(/_/g, " ")
-    .toUpperCase();
+  const isSuper =
+    (role || session?.role || tenant?.userRole || "").toUpperCase() === "SUPER_ADMIN" ||
+    session?.email === "bonaventure.chinoso@gmail.com" ||
+    session?.email === "admin@bonaveeict.com.ng";
+
+  // Tenant header must show tenant user only; never leak Super Admin identity
+  const displayName = isSuper
+    ? (schoolName ? `${schoolName} Admin` : "School Administrator")
+    : (session?.name || session?.firstName ? `${session?.firstName || ""} ${session?.lastName || ""}`.trim() : session?.email?.split("@")[0] || "Administrator");
+
+  const displayEmail = isSuper
+    ? `admin@${schoolDomain || "tenant"}.edu.ng`
+    : (session?.email || `admin@${schoolDomain || "tenant"}.edu.ng`);
+
+  const displayRole = isSuper
+    ? "SCHOOL ADMINISTRATOR"
+    : (staffRole || role || tenant?.userRole || "Tenant Admin")
+        .replace(/_/g, " ")
+        .toUpperCase();
 
   const initials = displayName
     .split(" ")

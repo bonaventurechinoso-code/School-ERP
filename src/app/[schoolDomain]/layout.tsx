@@ -151,6 +151,22 @@ export default async function TenantLayout({
 
 
   if (session) {
+    const isSuper =
+      (session.role || "").toUpperCase() === "SUPER_ADMIN" ||
+      Boolean(session.isSuperAdmin) ||
+      session.email === "bonaventure.chinoso@gmail.com" ||
+      session.email === "admin@bonaveeict.com.ng";
+
+    if (isSuper) {
+      session = {
+        ...session,
+        name: `${school.name} Admin`,
+        firstName: `${school.name}`,
+        lastName: "Admin",
+        email: `admin@${schoolDomain}.edu.ng`,
+      };
+    }
+
     tenantData.userRole = session.role;
     tenantData.session = session;
     tenantData.permissions = session.permissions;

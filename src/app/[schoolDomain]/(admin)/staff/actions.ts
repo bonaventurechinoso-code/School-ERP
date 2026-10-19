@@ -110,8 +110,10 @@ export async function fetchStaffPaginated(
         schoolId,
         ...(status && status !== "ALL" ? { status } : {}),
         ...(role && role !== "ALL"
-          ? role === "NON_TEACHING" || role === "NON-TEACHING"
+          ? role.toUpperCase().includes("NON")
             ? { user: { role: { not: "TEACHER" } } }
+            : role.toUpperCase().includes("TEACH")
+            ? { user: { role: "TEACHER" } }
             : { user: { role: toCanonicalRole(role) } }
           : {}),
         ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),

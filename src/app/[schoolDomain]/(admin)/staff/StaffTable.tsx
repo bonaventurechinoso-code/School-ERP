@@ -174,17 +174,16 @@ export default function StaffTable({
   const [pageIndex, setPageIndex] = useState<number>(0);
 
   const paramRole = searchParams.get("role");
+  const paramFilter = searchParams.get("filter");
   const paramTab = searchParams.get("tab");
 
   const initialRole = useMemo(() => {
-    if (paramRole) {
-      const up = paramRole.toUpperCase();
-      if (up === "TEACHER" || up === "TEACHERS") return "TEACHER";
-      if (up === "NON_TEACHING" || up === "NON-TEACHING") return "NON_TEACHING";
-      return up;
-    }
+    const raw = (paramFilter || paramRole || "").trim().toUpperCase();
+    if (raw.includes("TEACH")) return "TEACHER";
+    if (raw.includes("NON")) return "NON_TEACHING";
+    if (raw && raw !== "ALL") return raw;
     return "ALL";
-  }, [paramRole]);
+  }, [paramFilter, paramRole]);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -192,12 +191,13 @@ export default function StaffTable({
   const [filterDepartment, setFilterDepartment] = useState<string>("ALL");
 
   useEffect(() => {
-    if (paramRole) {
-      const target = paramRole.toUpperCase().includes("NON") ? "NON_TEACHING" : paramRole.toUpperCase();
+    const raw = (paramFilter || paramRole || "").trim().toUpperCase();
+    if (raw) {
+      const target = raw.includes("NON") ? "NON_TEACHING" : raw.includes("TEACH") ? "TEACHER" : raw;
       setFilterRole(target);
       refreshRoster(undefined, target);
     }
-  }, [paramRole]);
+  }, [paramFilter, paramRole]);
 
   // Drawers & Modals
   const [selectedStaff, setSelectedStaff] = useState<any | null>(null);
@@ -691,95 +691,141 @@ export default function StaffTable({
   return (
     <div className="space-y-6">
       {/* TOOLBAR & SEARCH BAR */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-wrap justify-between items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-slate-800">Staff Directory</h3>
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
-                {tierBadgeLabel}
-              </span>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-5">
+        {/* ROW 1: HEADER & FILTER CHIPS */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+              <Users className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">Showing staff assigned to {schoolName} ({tierBadgeLabel || "Secondary School Tier"})</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-800">Staff Directory</h3>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                  {tierBadgeLabel}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">Showing personnel assigned to {schoolName} ({tierBadgeLabel || "Institutional Tier"})</p>
+            </div>
+          </div>
+
+          {/* FILTER CHIPS: All Staff | Teachers | Non-Teaching Staff */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200/80 dark:border-zinc-700/80 self-start md:self-auto overflow-x-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => handleFilterRoleChange("ALL")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                filterRole === "ALL"
+                  ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              All Staff
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFilterRoleChange("TEACHER")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                filterRole === "TEACHER"
+                  ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Teachers</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFilterRoleChange("NON_TEACHING")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                filterRole === "NON_TEACHING"
+                  ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Non-Teaching Staff</span>
+            </button>
           </div>
         </div>
 
-        {/* ACTIONS */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* SEARCH */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search staff by name or email..."
-              value={searchQuery}
-              onChange={handleSearchChange}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-56 bg-slate-50/50"
-            />
+        {/* ROW 2: SEARCH, SPECIFIC ROLE DROPDOWN, DEPARTMENTS, ACTIONS */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* SEARCH */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search staff by name or email..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-56 sm:w-64 bg-slate-50/50"
+              />
+            </div>
+
+            {/* FILTER ROLE */}
+            <select
+              value={filterRole}
+              onChange={(e) => handleFilterRoleChange(e.target.value)}
+              disabled={isPending}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
+            >
+              <option value="ALL">All Roles ({activeRolesList.length})</option>
+              {isTertiary ? (
+                <>
+                  <optgroup label="Academic Staff Roles">
+                    {TERTIARY_ACADEMIC_STAFF_ROLES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Non-Academic Staff Roles">
+                    {TERTIARY_NON_ACADEMIC_STAFF_ROLES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                activeRolesList.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))
+              )}
+            </select>
+
+            {/* FILTER DEPT */}
+            <select
+              value={filterDepartment}
+              onChange={(e) => handleFilterDeptChange(e.target.value)}
+              disabled={isPending}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
+            >
+              <option value="ALL">All {staffAssignmentLabel} ({departments.length})</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
           </div>
 
-          {/* FILTER ROLE */}
-          <select
-            value={filterRole}
-            onChange={(e) => handleFilterRoleChange(e.target.value)}
-            disabled={isPending}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
-          >
-            <option value="ALL">All Roles ({activeRolesList.length})</option>
-            {isTertiary ? (
-              <>
-                <optgroup label="Academic Staff Roles">
-                  {TERTIARY_ACADEMIC_STAFF_ROLES.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Non-Academic Staff Roles">
-                  {TERTIARY_NON_ACADEMIC_STAFF_ROLES.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </optgroup>
-              </>
-            ) : (
-              activeRolesList.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))
-            )}
-          </select>
+          <div className="flex items-center gap-2.5">
+            {/* DEPARTMENTS BUTTON */}
+            <button
+              onClick={() => setIsDeptModalOpen(true)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Building2 className="w-4 h-4 text-indigo-600" />
+              <span>{staffAssignmentLabel} ({departments.length})</span>
+            </button>
 
-          {/* FILTER DEPT */}
-          <select
-            value={filterDepartment}
-            onChange={(e) => handleFilterDeptChange(e.target.value)}
-            disabled={isPending}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
-          >
-            <option value="ALL">All {staffAssignmentLabel} ({departments.length})</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-
-          {/* DEPARTMENTS BUTTON */}
-          <button
-            onClick={() => setIsDeptModalOpen(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5"
-          >
-            <Building2 className="w-4 h-4 text-indigo-600" />
-            <span>{staffAssignmentLabel} ({departments.length})</span>
-          </button>
-
-          {/* ADD STAFF BUTTON */}
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Onboard New Staff</span>
-          </button>
+            {/* ADD STAFF BUTTON */}
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Onboard New Staff</span>
+            </button>
+          </div>
         </div>
       </div>
 

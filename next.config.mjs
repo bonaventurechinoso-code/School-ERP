@@ -62,6 +62,11 @@ const nextConfig = {
         permanent: false,
       },
       {
+        source: '/:schoolDomain/teachers',
+        destination: '/:schoolDomain/staff?filter=teaching',
+        permanent: false,
+      },
+      {
         source: '/admin/subscriptions',
         destination: '/admin/billings',
         permanent: false,
