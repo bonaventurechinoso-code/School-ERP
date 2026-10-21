@@ -56,6 +56,7 @@ function LoginPageContent() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [schoolCodeError, setSchoolCodeError] = useState<string | null>(null);
 
   // Multi-tenant branding states
   const [resolvedSubdomain, setResolvedSubdomain] = useState<string | null>(null);
@@ -353,6 +354,7 @@ function LoginPageContent() {
 
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const performLogin = async (customEmail?: string, customPassword?: string, customSchoolCode?: string) => {
+    setSchoolCodeError(null);
     setIsSubmitting(true);
 
     const emailToUse = customEmail !== undefined ? customEmail : email;
@@ -362,6 +364,22 @@ function LoginPageContent() {
     const normalizedEmail = emailToUse.trim().toLowerCase();
     const effectiveSchoolCode = (schoolCodeToUse.trim() || resolvedSubdomain || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
+
+    // Check if authenticating without a school code as super admin
+    const isKnownSuperAdmin =
+      normalizedEmail === "bonaventure.chinoso@gmail.com" ||
+      normalizedEmail === "admin@bonaveeict.com.ng" ||
+      normalizedEmail === "superadmin@platform.com";
+
+    // Immediate client-side validation guard: School code is mandatory for institutional workspace access
+    if (!effectiveSchoolCode && !isKnownSuperAdmin) {
+      const errorMsg = "School Code is required to access your workspace.";
+      setSchoolCodeError(errorMsg);
+      showToast(errorMsg, "error");
+      setIsSubmitting(false);
+      setAuthToken(null);
+      return;
+    }
 
     const loginPayload: Record<string, any> = {
       email: normalizedEmail,
@@ -393,23 +411,67 @@ function LoginPageContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(loginPayload),
         });
-        if (loginRes.ok) {
-          apiLoginData = await loginRes.json();
+
+        const resData = await loginRes.json().catch(() => null);
+
+        if (!loginRes.ok) {
+          setIsSubmitting(false);
+          setAuthToken(null);
+          const errorMsg =
+            resData?.error ||
+            (!effectiveSchoolCode
+              ? "School Code is required to access your workspace."
+              : "Invalid credentials. Please verify your email and password.");
+
+          if (!effectiveSchoolCode || resData?.error?.toLowerCase().includes("school code")) {
+            setSchoolCodeError(errorMsg);
+          }
+          showToast(errorMsg, "error");
+          return;
         }
+
+        apiLoginData = resData;
       } catch (directErr) {
         console.warn("[Login] Direct endpoint attempt fell back to NextAuth provider:", directErr);
       }
 
       // 2. NextAuth signIn wrapper synchronization
-      const res = await signIn("credentials", {
-        ...loginPayload,
-        redirect: false,
-      });
+      let res: any = null;
+      try {
+        res = await signIn("credentials", {
+          ...loginPayload,
+          redirect: false,
+        });
+      } catch (signInErr: any) {
+        setIsSubmitting(false);
+        setAuthToken(null);
+        const errMsg = !effectiveSchoolCode
+          ? "School Code is required to access your workspace."
+          : (signInErr?.message || "Invalid credentials. Please verify your email and password.");
+        if (!effectiveSchoolCode) {
+          setSchoolCodeError(errMsg);
+        }
+        showToast(errMsg, "error");
+        return;
+      }
 
       if (res?.error && !apiLoginData?.success) {
         setAuthToken(null);
-        showToast("Invalid credentials. Please verify your email and password.", "error");
         setIsSubmitting(false);
+        const rawErr = typeof res.error === "string" ? res.error : "";
+        const isSchoolCodeErr =
+          !effectiveSchoolCode ||
+          rawErr.toLowerCase().includes("school code") ||
+          rawErr.toLowerCase().includes("tenant");
+
+        const displayErr = isSchoolCodeErr
+          ? "School Code is required to access your workspace."
+          : "Invalid credentials. Please verify your email and password.";
+
+        if (isSchoolCodeErr) {
+          setSchoolCodeError(displayErr);
+        }
+        showToast(displayErr, "error");
         return;
       }
 
@@ -541,8 +603,11 @@ function LoginPageContent() {
       // parent -> /[tenant]/parent
       const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
       if (!targetCode) {
-        showToast("School Code is required to continue.", "error");
+        const missingSchoolMsg = "School Code is required to access your workspace.";
+        setSchoolCodeError(missingSchoolMsg);
+        showToast(missingSchoolMsg, "error");
         setIsSubmitting(false);
+        setAuthToken(null);
         return;
       }
 
@@ -572,8 +637,13 @@ function LoginPageContent() {
         router.push(`/${targetCode}/dashboard`);
       }
     } catch (err: any) {
-      showToast(err.message || "An unexpected error occurred during authentication.", "error");
       setIsSubmitting(false);
+      setAuthToken(null);
+      const errMsg = err?.message || "An unexpected error occurred during authentication.";
+      if (!effectiveSchoolCode) {
+        setSchoolCodeError("School Code is required to access your workspace.");
+      }
+      showToast(errMsg, "error");
     }
   };
 
@@ -727,26 +797,37 @@ function LoginPageContent() {
                   onChange={(e) => {
                     if (!resolvedSubdomain) {
                       setSchoolCode(e.target.value);
+                      if (schoolCodeError) {
+                        setSchoolCodeError(null);
+                      }
                     }
                   }}
                   readOnly={Boolean(resolvedSubdomain)}
                   placeholder="e.g. greenspring"
                   autoComplete="off"
                   disabled={isSubmitting}
-                  className={`block w-full rounded-xl border border-slate-200 px-4 py-3 text-sm placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10 ${
-                    resolvedSubdomain
-                      ? "bg-slate-100/90 text-slate-700 font-medium cursor-not-allowed select-none"
-                      : "bg-white text-slate-900"
+                  className={`block w-full rounded-xl border px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10 ${
+                    schoolCodeError
+                      ? "border-rose-300 focus:border-rose-500 focus:ring-rose-100 bg-white text-slate-900"
+                      : resolvedSubdomain
+                        ? "border-slate-200 bg-slate-100/90 text-slate-700 font-medium cursor-not-allowed select-none focus:border-indigo-600 focus:ring-indigo-100"
+                        : "border-slate-200 bg-white text-slate-900 focus:border-indigo-600 focus:ring-indigo-100"
                   }`}
                 />
                 <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                   {resolvedSubdomain ? (
                     <Lock className="w-4 h-4 text-slate-500" />
                   ) : (
-                    <Building2 className="w-4 h-4" />
+                    <Building2 className={`w-4 h-4 ${schoolCodeError ? "text-rose-500" : ""}`} />
                   )}
                 </div>
               </div>
+              {schoolCodeError && (
+                <p className="text-xs text-rose-600 font-medium flex items-center gap-1.5 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                  <span>{schoolCodeError}</span>
+                </p>
+              )}
             </div>
 
             {/* 2. Modern Floating Label Email Input (Pure White Backdrop, Crisp Slate Border) */}
