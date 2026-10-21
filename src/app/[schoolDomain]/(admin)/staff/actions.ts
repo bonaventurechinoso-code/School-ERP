@@ -8,6 +8,8 @@ import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
 import { sendStaffEnrollmentConfirmationEmail } from "@/lib/mail";
+import { getSession } from "@/lib/auth";
+import { checkRouteAuthorization } from "@/lib/permissions";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -83,6 +85,19 @@ export async function fetchStaffPaginated(
   }
 ): Promise<CursorPaginationResult<any>> {
   const schoolId = await resolveSchoolId(schoolIdentifier);
+
+  // Strict session and RBAC authorization verification
+  const session = await getSession(undefined, schoolId);
+  const auth = checkRouteAuthorization("/staff", session?.role, session?.staffRole);
+  if (!auth.allowed) {
+    return {
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      limit: options?.limit || 25,
+    };
+  }
+
   const role = options?.role;
   const status = options?.status;
   const departmentId = options?.departmentId;
@@ -208,6 +223,14 @@ export async function fetchStaffPaginated(
 export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: string) {
   try {
     const schoolId = await resolveSchoolId(schoolIdentifier);
+
+    // Strict session and RBAC authorization verification
+    const session = await getSession(undefined, schoolId);
+    const auth = checkRouteAuthorization("/staff", session?.role, session?.staffRole);
+    if (!auth.allowed) {
+      return { success: false, error: "Access Denied: Administrative privileges required to view personnel profiles." };
+    }
+
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
 

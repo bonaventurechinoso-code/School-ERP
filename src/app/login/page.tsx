@@ -563,7 +563,7 @@ function LoginPageContent() {
         staffRole.includes("TEACHER") ||
         staffRole.includes("STAFF")
       ) {
-        router.push(`/${targetCode}/staff`);
+        router.push(`/${targetCode}/portal/staff`);
       } else if (effectiveRole === "STUDENT") {
         router.push(`/${targetCode}/student`);
       } else if (effectiveRole === "PARENT") {

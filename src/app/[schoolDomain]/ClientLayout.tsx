@@ -32,6 +32,20 @@ export default function ClientLayout({
   const params = useParams();
   const pathname = usePathname();
   const schoolDomain = (params?.schoolDomain as string) || "egede";
+  const { session, role: sessionRole, staffRole } = useSession();
+  const tenant = useTenant();
+
+  const effectiveRole = (sessionRole || tenant?.userRole || session?.role || "").trim().toUpperCase();
+  const effectiveStaffRole = (staffRole || session?.staffRole || "").trim().toUpperCase();
+  const combinedRole = `${effectiveRole} ${effectiveStaffRole}`;
+
+  const isAdminDesk =
+    combinedRole.includes("SUPER_ADMIN") ||
+    combinedRole.includes("SCHOOL_ADMIN") ||
+    combinedRole.includes("PRINCIPAL") ||
+    combinedRole.includes("HEADMASTER") ||
+    combinedRole.includes("BURSAR") ||
+    combinedRole.includes("ADMIN");
 
   return (
     <div className="flex flex-1 h-screen max-h-screen w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950 relative">
@@ -67,7 +81,7 @@ export default function ClientLayout({
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold truncate">
-                Administrative Desk
+                {isAdminDesk ? "Administrative Desk" : "Staff Educator Workspace"}
               </h1>
               <p className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-zinc-200 truncate md:hidden">
                 {schoolName}

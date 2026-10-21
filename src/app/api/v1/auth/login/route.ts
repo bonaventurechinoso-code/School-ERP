@@ -342,6 +342,23 @@ export async function POST(req: Request) {
       },
     });
 
+    if (!localUser) {
+      localUser = await (basePrisma.user as any).findFirst({
+        where: {
+          email: { equals: normalizedEmail, mode: "insensitive" },
+          OR: [
+            { schoolId: tenant.id },
+            { schoolId: null },
+            { staff: { is: { schoolId: tenant.id } } },
+          ],
+        },
+        include: {
+          staff: { include: { department: { include: { tier: true } } } },
+          student: { include: { tier: true } },
+        },
+      });
+    }
+
     if (!localUser && (isDemoTenant || normalizedEmail === "headmaster@demo.edu.ng")) {
       localUser = await (basePrisma.user as any).findFirst({
         where: {
@@ -550,9 +567,23 @@ export async function POST(req: Request) {
       });
 
       if (staffMember) {
+        let passwordHashToCompare = staffMember.user?.passwordHash;
+        if (!passwordHashToCompare) {
+          const directUser = await basePrisma.user.findFirst({
+            where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+            select: { id: true, passwordHash: true, role: true, mustChangePassword: true },
+          });
+          if (directUser) {
+            passwordHashToCompare = directUser.passwordHash;
+            if (!staffMember.user) {
+              (staffMember as any).user = directUser;
+            }
+          }
+        }
+
         let isStaffValid = false;
-        if (staffMember.user?.passwordHash) {
-          isStaffValid = await bcrypt.compare(password, staffMember.user.passwordHash).catch(() => false);
+        if (passwordHashToCompare) {
+          isStaffValid = await bcrypt.compare(password, passwordHashToCompare).catch(() => false);
           if (!isStaffValid && isDev && (password === "Welcome123" || password === "Password123" || password === "Password@123")) {
             isStaffValid = true;
           }
@@ -669,8 +700,8 @@ export async function POST(req: Request) {
         redirectTarget = "/admin";
       } else if (normRole === "SCHOOL_ADMIN" || normRole === Role.SCHOOL_ADMIN) {
         redirectTarget = `/${tenant.subdomain}/dashboard`;
-      } else if (normRole === "TEACHER" || normRole === Role.TEACHER) {
-        redirectTarget = `/${tenant.subdomain}/staff`;
+      } else if (normRole === "TEACHER" || normRole === Role.TEACHER || normRole === "STAFF") {
+        redirectTarget = `/${tenant.subdomain}/portal/staff`;
       } else if (normRole === "STUDENT" || normRole === Role.STUDENT) {
         redirectTarget = `/${tenant.subdomain}/student`;
       } else if (normRole === "PARENT" || normRole === Role.PARENT) {

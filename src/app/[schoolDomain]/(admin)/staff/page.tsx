@@ -1,6 +1,9 @@
 import React, { Suspense } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { checkRouteAuthorization } from "@/lib/permissions";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import StaffTable from "./StaffTable";
@@ -16,6 +19,23 @@ export default async function StaffPage({
 }) {
   const params = await paramsPromise;
   const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+
+  // Strict Request-Scoped Server Auth Verification (bound to target tenant)
+  const session = await getSession(undefined, params.schoolDomain);
+  if (!session) {
+    redirect(`/login?school=${encodeURIComponent(params.schoolDomain)}`);
+  }
+
+  // Enforce granular RBAC route authorization
+  const auth = checkRouteAuthorization(
+    `/${params.schoolDomain}/staff`,
+    session.role,
+    session.staffRole
+  );
+
+  if (!auth.allowed) {
+    redirect(`/${params.schoolDomain}/portal/staff?denied=true`);
+  }
 
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
