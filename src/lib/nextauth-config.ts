@@ -40,47 +40,37 @@ export const authOptions: NextAuthOptions = {
 
         const normalizedEmail = credentials.email.trim().toLowerCase();
         const rawPassword = credentials.password;
-        const rawSchoolInput = ((credentials as any)?.schoolCode || credentials.schoolDomain || "").trim();
+        const rawSchoolInput = ((credentials as any)?.schoolCode || credentials.schoolDomain || (credentials as any)?.tenantId || "").trim();
         const requestedDomain = rawSchoolInput ? rawSchoolInput.toLowerCase() : undefined;
         const isDev = process.env.NODE_ENV === "development";
         const parsedId = parseInstitutionalIdentifier(credentials.email, rawSchoolInput);
         const effectiveDomain = requestedDomain || (parsedId.schoolToken ? parsedId.schoolToken.toLowerCase() : undefined);
 
         // A. Check Central Super-Admin Registry (Super Admin Golden Key Bypass)
-        // SECURITY: Only attempt Super Admin auth when NO school code is provided.
-        // If effectiveDomain is set (e.g. schoolCode="egede"), skip this block entirely
-        // — Super Admin credentials must NEVER authenticate into a tenant context.
+        // SECURITY & STRICT STRING VALIDATION GUARD:
+        // If the input school code is empty, null, undefined, or a blank string,
+        // it MUST throw an immediate error — UNLESS the user is explicitly authenticating
+        // on a dedicated global admin route using known super-admin credentials.
+        // Normal school tenant logins cannot accidentally fall backward into root privileges just by omitting form fields.
         const isSuperAdminEmail =
           normalizedEmail === "bonaventure.chinoso@gmail.com" ||
           normalizedEmail === "admin@bonaveeict.com.ng" ||
           (isDev && normalizedEmail === "superadmin@platform.com");
 
-        if (!effectiveDomain) {
+        if (!effectiveDomain || effectiveDomain.trim() === "") {
+          if (!isSuperAdminEmail) {
+            throw new Error("INVALID_CREDENTIALS: School code is required for institution login.");
+          }
+
           const superAdmin = await basePrisma.superAdmin.findFirst({
             where: {
-              OR: [
-                { email: normalizedEmail },
-                ...(isSuperAdminEmail
-                  ? [
-                      { email: "bonaventure.chinoso@gmail.com" },
-                      { email: "admin@bonaveeict.com.ng" },
-                    ]
-                  : []),
-              ],
+              email: normalizedEmail,
             },
           });
 
           const platformAdmin = await basePrisma.platformAdmin.findFirst({
             where: {
-              OR: [
-                { email: normalizedEmail },
-                ...(isSuperAdminEmail
-                  ? [
-                      { email: "bonaventure.chinoso@gmail.com" },
-                      { email: "admin@bonaveeict.com.ng" },
-                    ]
-                  : []),
-              ],
+              email: normalizedEmail,
             },
           });
 

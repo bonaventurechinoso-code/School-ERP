@@ -92,51 +92,57 @@ export async function POST(req: Request) {
     }
 
     // =========================================================================
-    // TENANT-SCOPED LOGIN
-    // - No school code  -> platform login: Super Admin only (schoolId IS NULL).
-    // - School code set -> tenant login: user must exist in THAT tenant.
-    //   Super Admin credentials are never evaluated in a tenant context.
+    // TENANT-SCOPED LOGIN & STRICT SUPER ADMIN VALIDATION GUARD
+    // - Strict string validation guard: If the input school code is empty,
+    //   null, undefined, or a blank string, it MUST throw an immediate 401
+    //   INVALID_CREDENTIALS or 400 BAD_REQUEST error — UNLESS the user is
+    //   explicitly authenticating on a dedicated global admin route using
+    //   known super-admin credentials.
+    // - Normal school tenant logins cannot accidentally fall backward into
+    //   root privileges just by omitting form fields.
     // =========================================================================
-    if (!targetSchoolCode) {
     const isSuperAdminEmail =
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
       (isDev && normalizedEmail === "superadmin@platform.com");
 
-    const superAdmin = await basePrisma.superAdmin.findFirst({
-      where: {
-        OR: [
-          { email: normalizedEmail },
-          ...(isSuperAdminEmail
-            ? [
-              { email: "bonaventure.chinoso@gmail.com" },
-              { email: "admin@bonaveeict.com.ng" },
-            ]
-            : []),
-        ],
-      },
-    });
-    const platformAdmin = await basePrisma.platformAdmin.findFirst({
-      where: {
-        OR: [
-          { email: normalizedEmail },
-          ...(isSuperAdminEmail
-            ? [
-              { email: "bonaventure.chinoso@gmail.com" },
-              { email: "admin@bonaveeict.com.ng" },
-            ]
-            : []),
-        ],
-      },
-    });
+    const referer = req.headers.get("referer") || "";
+    const isDedicatedAdminRoute =
+      referer.includes("/admin") ||
+      explicitSchool.toLowerCase() === "admin" ||
+      Boolean((body as any)?.isAdminLogin) ||
+      Boolean((body as any)?.isPlatformAdmin);
 
-    const userSuperAdmin = await (basePrisma.user as any).findFirst({
-      where: {
-        email: { equals: normalizedEmail, mode: "insensitive" },
-        role: "SUPER_ADMIN",
-        schoolId: null,
-      },
-    });
+    if (!targetSchoolCode || targetSchoolCode.trim() === "") {
+      // Immediate rejection guard: Normal tenant logins missing schoolCode MUST NOT fall back to platform admin
+      if (!isSuperAdminEmail) {
+        return NextResponse.json(
+          {
+            error: "School code is required for institution login.",
+            code: "INVALID_CREDENTIALS",
+          },
+          { status: 401 }
+        );
+      }
+
+      const superAdmin = await basePrisma.superAdmin.findFirst({
+        where: {
+          email: normalizedEmail,
+        },
+      });
+      const platformAdmin = await basePrisma.platformAdmin.findFirst({
+        where: {
+          email: normalizedEmail,
+        },
+      });
+
+      const userSuperAdmin = await (basePrisma.user as any).findFirst({
+        where: {
+          email: { equals: normalizedEmail, mode: "insensitive" },
+          role: "SUPER_ADMIN",
+          schoolId: null,
+        },
+      });
 
     // DB-ONLY verification: Authenticate strictly against the database hash
     if (superAdmin || platformAdmin || userSuperAdmin) {
