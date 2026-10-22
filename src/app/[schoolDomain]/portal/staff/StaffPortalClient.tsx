@@ -43,6 +43,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import {
@@ -717,9 +718,17 @@ export default function StaffPortalClient({
           ))}
         </nav>
 
-        {/* Institutional Footer */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 shrink-0">
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
+        {/* Institutional & Profile Actions Footer */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 shrink-0 space-y-2">
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all duration-150 cursor-pointer text-left group"
+          >
+            <LogOut className="w-4 h-4 text-rose-400 group-hover:text-rose-300 transition-colors shrink-0" />
+            <span className="font-bold tracking-tight">Logout</span>
+          </button>
+          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/40">
             <span className="font-mono text-[10px] truncate max-w-[140px]">.{schoolDomain}</span>
             <span className="font-bold text-slate-300">2026/2027 Session</span>
           </div>
@@ -763,13 +772,14 @@ export default function StaffPortalClient({
               <Briefcase className="w-3.5 h-3.5" />
               <span>Teacher ERP</span>
             </Link>
-            <Link
-              href={`/${schoolDomain}/login`}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-white transition shadow-xs"
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-white transition shadow-xs cursor-pointer group"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Switch User</span>
-            </Link>
+              <LogOut className="w-3.5 h-3.5 text-rose-400 group-hover:text-rose-300 transition-colors" />
+              <span>Logout</span>
+            </button>
           </div>
         </header>
 
