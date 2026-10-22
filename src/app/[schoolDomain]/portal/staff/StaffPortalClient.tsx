@@ -44,11 +44,13 @@ import {
   User,
   ChevronDown,
   Bell,
+  Mail,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
+import ChangeEmailCard from "@/components/ChangeEmailCard";
 import {
   saveClassroomAttendance,
   saveClassroomGrades,
@@ -207,6 +209,7 @@ export default function StaffPortalClient({
   // Payslip Modal State
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecordItem | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
 
   // Profile Dropdown State
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -2426,6 +2429,39 @@ export default function StaffPortalClient({
       {/* ========================================================================= */}
       {activeTab === "security" && (
         <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
+          {/* Account Information Layout Block */}
+          <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base truncate">
+                      Account Information
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                      Primary
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 font-mono truncate">
+                    {staffProfile?.email || "educator@school.edu"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowChangeEmailModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 transition shadow-2xs cursor-pointer shrink-0"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Change email</span>
+              </button>
+            </div>
+          </div>
+
           <SecurityPasswordForm
             schoolDomain={schoolDomain}
             userRole={staffRole || "STAFF"}
@@ -2772,6 +2808,31 @@ export default function StaffPortalClient({
                 <Send className="w-3.5 h-3.5" />
                 <span>{isPending ? "Submitting..." : "Submit Application"}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CHANGE EMAIL                                                       */}
+      {/* ========================================================================= */}
+      {showChangeEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-xl w-full overflow-hidden relative">
+            <button
+              type="button"
+              onClick={() => setShowChangeEmailModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition z-10 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="p-6">
+              <ChangeEmailCard
+                initialEmail={staffProfile?.email || ""}
+                brandColor="#059669"
+                schoolDomain={schoolDomain}
+                isSuperAdmin={false}
+              />
             </div>
           </div>
         </div>
