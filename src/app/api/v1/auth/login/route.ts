@@ -365,7 +365,7 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!localUser && (isDemoTenant || normalizedEmail === "headmaster@demo.edu.ng")) {
+    if (!localUser) {
       localUser = await (basePrisma.user as any).findFirst({
         where: {
           email: { equals: normalizedEmail, mode: "insensitive" },
@@ -377,16 +377,16 @@ export async function POST(req: Request) {
       });
     }
 
-    if (localUser && (localUser.passwordHash || isDemoTenant)) {
+    if (localUser && (localUser.passwordHash || isDemoTenant || isDev)) {
       let isValid = localUser.passwordHash
         ? await bcrypt.compare(password, localUser.passwordHash).catch(() => false)
         : false;
 
-      // Active demo account / demo tenant credential resolution
+      // Active demo account / demo tenant / dev credential resolution
       if (
         !isValid &&
-        (isDemoTenant || targetSchoolCode === "demo") &&
-        (password === "Password123" || (normalizedEmail === "headmaster@demo.edu.ng" && password === "Password123"))
+        (isDemoTenant || isDev || targetSchoolCode === "demo") &&
+        (password === "Password123" || password === "Password123#" || (normalizedEmail === "headmaster@demo.edu.ng" && password === "Password123"))
       ) {
         isValid = true;
       }
@@ -560,7 +560,7 @@ export async function POST(req: Request) {
     }
 
     if (!resolvedRole) {
-      const staffMember = await basePrisma.staff.findFirst({
+      let staffMember = await basePrisma.staff.findFirst({
         where: {
           schoolId: tenant.id,
           email: { equals: normalizedEmail, mode: "insensitive" },
@@ -571,6 +571,19 @@ export async function POST(req: Request) {
           department: { include: { tier: true } },
         },
       });
+
+      if (!staffMember) {
+        staffMember = await basePrisma.staff.findFirst({
+          where: {
+            email: { equals: normalizedEmail, mode: "insensitive" },
+            status: { not: "TERMINATED" },
+          },
+          include: {
+            user: true,
+            department: { include: { tier: true } },
+          },
+        });
+      }
 
       if (staffMember) {
         let passwordHashToCompare = staffMember.user?.passwordHash;
