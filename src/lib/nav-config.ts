@@ -17,6 +17,11 @@ import {
   FileSpreadsheet,
   Clock,
   UserPlus,
+  Sparkles,
+  User,
+  Award,
+  CheckSquare,
+  Receipt,
 } from "lucide-react";
 
 export interface NavChildItem {
@@ -226,45 +231,224 @@ export function getTenantNavigation(
 ): NavGroupConfig[] {
   const normalized = `${role || ""} ${staffRole || ""}`.trim().toUpperCase();
 
-  // 1. TEACHER TIER
+  // 1. HIGHER INSTITUTIONS / TERTIARY FACULTY TIER (University, Polytechnic, COE)
   if (
-    normalized.includes("TEACHER") ||
-    normalized.includes("INSTRUCTOR") ||
-    normalized.includes("LECTURER")
+    normalized.includes("LECTURER") ||
+    normalized.includes("PROFESSOR") ||
+    normalized.includes("READER") ||
+    normalized.includes("DEAN") ||
+    normalized.includes("HOD") ||
+    normalized.includes("TERTIARY") ||
+    normalized.includes("FACULTY")
   ) {
     return [
       {
-        id: "teacher-nav",
+        id: "academic-faculty-engine",
+        title: "ACADEMIC & FACULTY ENGINE",
         items: [
           {
-            id: "teacher-classes",
-            label: "My Classes",
+            id: "tertiary-course-outline",
+            label: "Course Outline Manager",
+            href: (d) => `/${d}/portal/staff?tab=lessons`,
+            icon: BookOpen,
+          },
+          {
+            id: "tertiary-lecture-timetables",
+            label: "Lecture Timetables",
+            href: (d) => `/${d}/portal/staff?tab=schedule`,
+            icon: Calendar,
+          },
+          {
+            id: "tertiary-student-registrations",
+            label: "Semester Student Registrations",
+            href: (d) => `/${d}/portal/staff?tab=rosters`,
+            icon: Users,
+          },
+          {
+            id: "tertiary-grading-bookmarks",
+            label: "Examination Grading Bookmarks",
+            href: (d) => `/${d}/portal/staff?tab=gradebook`,
+            icon: Award,
+          },
+        ],
+      },
+      {
+        id: "research-institution",
+        title: "RESEARCH & INSTITUTION",
+        items: [
+          {
+            id: "tertiary-departmental-circulars",
+            label: "Departmental Circulars",
+            href: (d) => `/${d}/portal/staff?tab=circulars`,
+            icon: MessageSquare,
+          },
+          {
+            id: "tertiary-research-trackers",
+            label: "Research / Grant Trackers",
+            href: (d) => `/${d}/portal/staff?tab=research`,
+            icon: Sparkles,
+          },
+          {
+            id: "tertiary-leave-portals",
+            label: "Staff Leave Portals",
+            href: (d) => `/${d}/portal/staff?tab=leaves`,
+            icon: Clock,
+          },
+          {
+            id: "tertiary-profile-settings",
+            label: "My Profile Settings",
+            href: (d) => `/${d}/portal/staff?tab=profile`,
+            icon: User,
+          },
+        ],
+      },
+    ];
+  }
+
+  // 2. DAYCARE / NURSERY SCHOOL TIER (Early Childhood Care & Education)
+  if (
+    normalized.includes("CAREGIVER") ||
+    normalized.includes("DAYCARE") ||
+    normalized.includes("NURSERY") ||
+    normalized.includes("EARLY YEARS") ||
+    normalized.includes("NANNY") ||
+    normalized.includes("CRECHE") ||
+    normalized.includes("PLAYGROUP") ||
+    normalized.includes("KINDERGARTEN")
+  ) {
+    return [
+      {
+        id: "early-academics-care",
+        title: "EARLY ACADEMICS & CARE",
+        items: [
+          {
+            id: "daycare-rosters",
+            label: "Classroom Rosters (Infant Lists)",
+            href: (d) => `/${d}/portal/staff?tab=rosters`,
+            icon: Users,
+          },
+          {
+            id: "daycare-activity-logs",
+            label: "Daily Activity logs (Feeding/Nap schedules)",
+            href: (d) => `/${d}/portal/staff?tab=schedule`,
+            icon: Calendar,
+          },
+          {
+            id: "daycare-growth-trackers",
+            label: "Child Growth Trackers (Milestones)",
+            href: (d) => `/${d}/portal/staff?tab=gradebook`,
+            icon: Award,
+          },
+          {
+            id: "daycare-health-vitals",
+            label: "Immunization & Health Vitals",
+            href: (d) => `/${d}/portal/staff?tab=lessons`,
+            icon: BookOpen,
+          },
+        ],
+      },
+      {
+        id: "guardian-engine",
+        title: "GUARDIAN ENGINE",
+        items: [
+          {
+            id: "daycare-circulars",
+            label: "Parent Circulars/Memos",
+            href: (d) => `/${d}/portal/staff?tab=circulars`,
+            icon: MessageSquare,
+          },
+          {
+            id: "daycare-dropoff-logs",
+            label: "Drop-off/Pick-up Logs",
+            href: (d) => `/${d}/portal/staff?tab=attendance`,
+            icon: Clock,
+          },
+          {
+            id: "daycare-leave-portals",
+            label: "Staff Leave Portals",
+            href: (d) => `/${d}/portal/staff?tab=leaves`,
+            icon: Briefcase,
+          },
+          {
+            id: "daycare-profile-settings",
+            label: "My Profile Settings",
+            href: (d) => `/${d}/portal/staff?tab=profile`,
+            icon: User,
+          },
+        ],
+      },
+    ];
+  }
+
+  // 3. TEACHER TIER (Primary & Secondary K-12)
+  if (
+    normalized.includes("TEACHER") ||
+    normalized.includes("INSTRUCTOR")
+  ) {
+    return [
+      {
+        id: "academic-engine",
+        title: "ACADEMIC ENGINE",
+        items: [
+          {
+            id: "teacher-overview",
+            label: "Dashboard Overview",
             href: (d) => `/${d}/portal/staff`,
             icon: LayoutDashboard,
           },
           {
-            id: "teacher-students",
-            label: "My Students",
+            id: "teacher-rosters",
+            label: "Classroom Rosters",
             href: (d) => `/${d}/portal/staff?tab=rosters`,
             icon: Users,
           },
           {
             id: "teacher-attendance",
-            label: "Attendance",
-            href: (d) => `/${d}/scheduling?tab=attendance`,
+            label: "Daily Attendance",
+            href: (d) => `/${d}/portal/staff?tab=attendance`,
+            icon: CheckSquare,
+          },
+          {
+            id: "teacher-gradebook",
+            label: "Gradebook & Assessments",
+            href: (d) => `/${d}/portal/staff?tab=gradebook`,
+            icon: Award,
+          },
+          {
+            id: "teacher-schedule",
+            label: "Teaching Schedule",
+            href: (d) => `/${d}/portal/staff?tab=schedule`,
             icon: Calendar,
           },
           {
-            id: "teacher-assessments",
-            label: "Assessments",
-            href: (d) => `/${d}/exams`,
-            icon: GraduationCap,
+            id: "teacher-lessons",
+            label: "Lesson Notes & Schemes",
+            href: (d) => `/${d}/portal/staff?tab=lessons`,
+            icon: BookOpen,
+          },
+        ],
+      },
+      {
+        id: "personnel-account",
+        title: "PERSONNEL & ACCOUNT",
+        items: [
+          {
+            id: "teacher-leaves",
+            label: "Staff Leave Requests",
+            href: (d) => `/${d}/portal/staff?tab=leaves`,
+            icon: Clock,
           },
           {
-            id: "teacher-results",
-            label: "Results",
-            href: (d) => `/${d}/report-cards`,
-            icon: FileSpreadsheet,
+            id: "teacher-payslips",
+            label: "My Remuneration & Payslips",
+            href: (d) => `/${d}/portal/staff?tab=payslips`,
+            icon: Receipt,
+          },
+          {
+            id: "teacher-profile-settings",
+            label: "My Profile Settings",
+            href: (d) => `/${d}/portal/staff?tab=profile`,
+            icon: User,
           },
         ],
       },

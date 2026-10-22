@@ -18,9 +18,22 @@ export default async function TenantStaffPortalPage({
   const { schoolDomain } = await paramsPromise;
   const searchParams = await searchParamsPromise;
   const isAccessDenied = searchParams.denied === "true" || searchParams.denied === "1";
-  const validTabs = ["overview", "rosters", "attendance", "gradebook", "schedule", "lessons", "leaves", "payslips"] as const;
+  const validTabs = [
+    "overview",
+    "rosters",
+    "attendance",
+    "gradebook",
+    "schedule",
+    "lessons",
+    "leaves",
+    "payslips",
+    "circulars",
+    "research",
+    "profile",
+    "security",
+  ] as const;
   const requestedTab = validTabs.includes(searchParams.tab as any)
-    ? (searchParams.tab as "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips")
+    ? (searchParams.tab as typeof validTabs[number])
     : "overview";
 
   const [school, session] = await Promise.all([

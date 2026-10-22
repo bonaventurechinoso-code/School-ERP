@@ -45,6 +45,7 @@ import {
   ChevronDown,
   Bell,
   Mail,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -120,7 +121,7 @@ interface StaffPortalClientProps {
   initialStudents: StudentItem[];
   initialLessonNotes?: LessonNoteData[];
   initialLeaveRequests?: LeaveRequestData[];
-  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile";
+  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile" | "circulars" | "research";
   isAccessDenied?: boolean;
 }
 
@@ -146,7 +147,20 @@ export default function StaffPortalClient({
   defaultTab = "overview",
   isAccessDenied = false,
 }: StaffPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile">(defaultTab);
+  const [activeTab, setActiveTab] = useState<
+    | "overview"
+    | "rosters"
+    | "attendance"
+    | "gradebook"
+    | "schedule"
+    | "lessons"
+    | "leaves"
+    | "payslips"
+    | "security"
+    | "profile"
+    | "circulars"
+    | "research"
+  >(defaultTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -610,8 +624,177 @@ export default function StaffPortalClient({
     return parts[0].slice(0, 2).toUpperCase();
   }, [staffName]);
 
-  const navSections = useMemo(
-    () => [
+  // Resolve active tier object and tertiary indicator
+  const activeTierObj = useMemo(() => {
+    return initialTiers.find((t) => t.id === selectedTierId) || initialTiers[0];
+  }, [initialTiers, selectedTierId]);
+
+  const isTertiary = useMemo(() => {
+    const roleNorm = (staffRole || "").toUpperCase();
+    const tierNorm = (activeTierObj?.name || "").toUpperCase();
+    return (
+      roleNorm.includes("LECTURER") ||
+      roleNorm.includes("PROFESSOR") ||
+      roleNorm.includes("READER") ||
+      roleNorm.includes("DEAN") ||
+      roleNorm.includes("HOD") ||
+      roleNorm.includes("FACULTY") ||
+      tierNorm.includes("UNIVERSITY") ||
+      tierNorm.includes("TERTIARY") ||
+      tierNorm.includes("POLYTECHNIC") ||
+      tierNorm.includes("COLLEGE")
+    );
+  }, [staffRole, activeTierObj]);
+
+  const isDaycare = useMemo(() => {
+    const roleNorm = (staffRole || "").toUpperCase();
+    const tierNorm = (activeTierObj?.name || "").toUpperCase();
+    return (
+      roleNorm.includes("CAREGIVER") ||
+      roleNorm.includes("DAYCARE") ||
+      roleNorm.includes("NURSERY") ||
+      roleNorm.includes("EARLY YEARS") ||
+      roleNorm.includes("NANNY") ||
+      roleNorm.includes("CRECHE") ||
+      roleNorm.includes("PLAYGROUP") ||
+      roleNorm.includes("KINDERGARTEN") ||
+      tierNorm.includes("DAYCARE") ||
+      tierNorm.includes("NURSERY") ||
+      tierNorm.includes("EARLY") ||
+      tierNorm.includes("CRECHE") ||
+      tierNorm.includes("PLAYGROUP") ||
+      tierNorm.includes("KINDERGARTEN")
+    );
+  }, [staffRole, activeTierObj]);
+
+  const navSections = useMemo(() => {
+    if (isTertiary) {
+      return [
+        {
+          title: "ACADEMIC & FACULTY ENGINE",
+          items: [
+            {
+              id: "lessons",
+              label: "Course Outline Manager",
+              icon: BookOpen,
+              badge: null,
+            },
+            {
+              id: "schedule",
+              label: "Lecture Timetables",
+              icon: Calendar,
+              badge: initialTimetable.length ? `${initialTimetable.length} hrs` : null,
+            },
+            {
+              id: "rosters",
+              label: "Semester Student Registrations",
+              icon: Users,
+              badge: classStudents.length ? `${classStudents.length}` : null,
+            },
+            {
+              id: "gradebook",
+              label: "Examination Grading Bookmarks",
+              icon: Award,
+              badge: null,
+            },
+          ],
+        },
+        {
+          title: "RESEARCH & INSTITUTION",
+          items: [
+            {
+              id: "circulars",
+              label: "Departmental Circulars",
+              icon: MessageSquare,
+              badge: null,
+            },
+            {
+              id: "research",
+              label: "Research / Grant Trackers",
+              icon: Sparkles,
+              badge: null,
+            },
+            {
+              id: "leaves",
+              label: "Staff Leave Portals",
+              icon: Clock,
+              badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null,
+            },
+            {
+              id: "profile",
+              label: "My Profile Settings",
+              icon: User,
+              badge: null,
+            },
+          ],
+        },
+      ];
+    }
+
+    if (isDaycare) {
+      return [
+        {
+          title: "EARLY ACADEMICS & CARE",
+          items: [
+            {
+              id: "rosters",
+              label: "Classroom Rosters (Infant Lists)",
+              icon: Users,
+              badge: classStudents.length ? `${classStudents.length} Infants` : null,
+            },
+            {
+              id: "schedule",
+              label: "Daily Activity logs (Feeding/Nap schedules)",
+              icon: Calendar,
+              badge: initialTimetable.length ? `${initialTimetable.length} Logs` : null,
+            },
+            {
+              id: "gradebook",
+              label: "Child Growth Trackers (Milestones)",
+              icon: Award,
+              badge: null,
+            },
+            {
+              id: "lessons",
+              label: "Immunization & Health Vitals",
+              icon: BookOpen,
+              badge: null,
+            },
+          ],
+        },
+        {
+          title: "GUARDIAN ENGINE",
+          items: [
+            {
+              id: "circulars",
+              label: "Parent Circulars/Memos",
+              icon: MessageSquare,
+              badge: null,
+            },
+            {
+              id: "attendance",
+              label: "Drop-off/Pick-up Logs",
+              icon: Clock,
+              badge: "Daily",
+            },
+            {
+              id: "leaves",
+              label: "Staff Leave Portals",
+              icon: Briefcase,
+              badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null,
+            },
+            {
+              id: "profile",
+              label: "My Profile Settings",
+              icon: User,
+              badge: null,
+            },
+          ],
+        },
+      ];
+    }
+
+    return [
       {
         title: "ACADEMIC ENGINE",
         items: [
@@ -628,11 +811,11 @@ export default function StaffPortalClient({
         items: [
           { id: "leaves", label: "Staff Leave Requests", icon: Clock, badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt, badge: null },
+          { id: "profile", label: "My Profile Settings", icon: User, badge: null },
         ],
       },
-    ],
-    [classStudents.length, initialTimetable.length, initialLeaveRequests.length]
-  );
+    ];
+  }, [isTertiary, isDaycare, classStudents.length, initialTimetable.length, initialLeaveRequests.length]);
 
   const allNavItems = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
 
@@ -711,8 +894,8 @@ export default function StaffPortalClient({
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                       isActive
-                        ? "bg-emerald-600/20 text-emerald-400 dark:text-emerald-300 font-bold border border-emerald-500/30"
-                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white border border-transparent"
+                        ? "bg-emerald-600/20 text-emerald-400 dark:text-emerald-300 font-bold border-l-2 border-emerald-500 shadow-2xs"
+                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white border-l-2 border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -757,10 +940,14 @@ export default function StaffPortalClient({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold truncate">
-                  Staff Educator Workspace
+                  {isTertiary
+                    ? "Faculty Academic Workspace"
+                    : isDaycare
+                    ? "Early Childhood & Daycare Caregiver Workspace"
+                    : "Staff Educator Workspace"}
                 </h1>
                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
-                  {selectedClass} Classroom Workspace
+                  {selectedClass} {isTertiary ? "Course Unit" : isDaycare ? "Care Pod / Playgroup" : "Classroom Workspace"}
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-zinc-200 truncate">
@@ -832,7 +1019,7 @@ export default function StaffPortalClient({
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/50 uppercase tracking-wider">
-                            STAFF EDUCATOR
+                            {isTertiary ? "TERTIARY FACULTY / LECTURER" : isDaycare ? "EARLY CHILDHOOD CAREGIVER" : "STAFF EDUCATOR"}
                           </span>
                         </div>
                       </div>
@@ -851,7 +1038,20 @@ export default function StaffPortalClient({
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors text-left cursor-pointer"
                     >
                       <User className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>Profile</span>
+                      <span>My Profile Settings</span>
+                    </button>
+
+                    {/* Change Email */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowChangeEmailModal(true);
+                        setIsProfileDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors text-left cursor-pointer"
+                    >
+                      <Mail className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>Change Email</span>
                     </button>
 
                     {/* 2. Security & Password */}
@@ -1132,10 +1332,10 @@ export default function StaffPortalClient({
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
               <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                {selectedClass} Student Directory
+                {selectedClass} {isDaycare ? "Infant & Toddler Roster" : isTertiary ? "Course Student Registration Roster" : "Student Directory"}
               </h3>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                {classStudents.length} Students Enrolled
+                {classStudents.length} {isDaycare ? "Infants Registered" : "Students Enrolled"}
               </span>
             </div>
 
@@ -1143,11 +1343,11 @@ export default function StaffPortalClient({
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
                   <tr>
-                    <th className="px-6 py-3.5">Student Name</th>
-                    <th className="px-6 py-3.5">Admission / Reg #</th>
-                    <th className="px-6 py-3.5">Class / Stream</th>
+                    <th className="px-6 py-3.5">{isDaycare ? "Infant / Child Name" : "Student Name"}</th>
+                    <th className="px-6 py-3.5">{isDaycare ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
+                    <th className="px-6 py-3.5">{isDaycare ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
                     <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5">Guardian Phone</th>
+                    <th className="px-6 py-3.5">{isDaycare ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -1195,11 +1395,13 @@ export default function StaffPortalClient({
           {/* Printable Attendance Sheet Header */}
           <div className="hidden print:block mb-6 text-center border-b border-slate-300 pb-4">
             <h1 className="text-xl font-black uppercase tracking-wide text-black">{schoolName}</h1>
-            <p className="text-sm font-semibold text-slate-700">Official Daily Classroom Attendance Register</p>
+            <p className="text-sm font-semibold text-slate-700">
+              {isDaycare ? "Official Daily Drop-off & Pick-up Custody Register" : "Official Daily Classroom Attendance Register"}
+            </p>
             <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
-              <span><strong>Class / Arm:</strong> {selectedClass}</span>
+              <span><strong>{isDaycare ? "Care Pod / Group:" : "Class / Arm:"}</strong> {selectedClass}</span>
               <span><strong>Date:</strong> {attendanceDate}</span>
-              <span><strong>Staff Member:</strong> {staffName} ({staffRole})</span>
+              <span><strong>Caregiver / Staff:</strong> {staffName} ({staffRole})</span>
             </div>
           </div>
 
@@ -1207,7 +1409,7 @@ export default function StaffPortalClient({
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  Attendance Date:
+                  {isDaycare ? "Custody Log Date:" : "Attendance Date:"}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -1458,7 +1660,7 @@ export default function StaffPortalClient({
                 ) : (
                   <FileCheck className="w-3.5 h-3.5" />
                 )}
-                <span>{isCompilingReportCards ? "Compiling..." : "Compile Class Report Cards"}</span>
+                <span>{isCompilingReportCards ? "Compiling..." : isDaycare ? "Compile Growth Records" : "Compile Class Report Cards"}</span>
               </button>
 
               <button
@@ -1468,7 +1670,7 @@ export default function StaffPortalClient({
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{isPending ? "Persisting Marks..." : "Save Grades (Dual Sync)"}</span>
+                <span>{isPending ? "Persisting Marks..." : isDaycare ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
               </button>
             </div>
           </div>
@@ -1617,8 +1819,8 @@ export default function StaffPortalClient({
             </div>
 
             <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/40 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400 font-semibold">
-              <span>Class Stream: {selectedClass} • Subject: {selectedSubject}</span>
-              <span>Grading Engine: NERDC 20/20/60 Standard Continuous Assessment</span>
+              <span>{isDaycare ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isDaycare ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
+              <span>{isDaycare ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
             </div>
           </div>
         </div>
@@ -1630,9 +1832,17 @@ export default function StaffPortalClient({
       {activeTab === "schedule" && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Weekly Teaching Timetable</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {isDaycare
+                ? "Daily Activity Logs & Care Routine (Feeding / Nap Schedules)"
+                : isTertiary
+                ? "Weekly Lecture & Seminar Timetable"
+                : "Weekly Teaching Timetable"}
+            </h3>
             <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Assigned lecture periods, course codes, and classroom halls for {staffName}.
+              {isDaycare
+                ? `Scheduled infant feeding times, nap windows, diaper checks, and outdoor sensory sessions for ${selectedClass}.`
+                : `Assigned lecture periods, course codes, and classroom halls for ${staffName}.`}
             </p>
           </div>
 
@@ -1649,7 +1859,7 @@ export default function StaffPortalClient({
                       {day}
                     </h4>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                      {periods.length} Periods
+                      {periods.length} {isDaycare ? "Care Blocks" : "Periods"}
                     </span>
                   </div>
 
@@ -1939,10 +2149,20 @@ export default function StaffPortalClient({
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-emerald-600" />
-                <span>Lesson Notes & Curriculum Schemes</span>
+                <span>
+                  {isDaycare
+                    ? "Immunization Records & Pediatric Health Vitals"
+                    : isTertiary
+                    ? "Course Outlines & Syllabus Architectures"
+                    : "Lesson Notes & Curriculum Schemes"}
+                </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review.
+                {isDaycare
+                  ? "Maintain pediatric immunization schedules, allergy warning tags, and infant health vital check logs."
+                  : isTertiary
+                  ? "Structure and publish courseware syllabi, lecture modules, and academic reading lists for faculty appraisal."
+                  : "Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review."}
               </p>
             </div>
             <button
@@ -1967,7 +2187,7 @@ export default function StaffPortalClient({
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>New Lesson Plan</span>
+              <span>{isDaycare ? "Log Health Vital / Vaccine" : isTertiary ? "New Course Outline" : "New Lesson Plan"}</span>
             </button>
           </div>
 
@@ -2288,6 +2508,14 @@ export default function StaffPortalClient({
               <div className="flex items-center gap-2 pt-2 sm:pt-0 shrink-0">
                 <button
                   type="button"
+                  onClick={() => setShowChangeEmailModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Change Email</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveTab("security")}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
                 >
@@ -2467,6 +2695,296 @@ export default function StaffPortalClient({
             userRole={staffRole || "STAFF"}
             brandColor="#059669"
           />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: DEPARTMENTAL CIRCULARS & SENATE MEMOS (TERTIARY / UNIVERSITY)         */}
+      {/* ========================================================================= */}
+      {activeTab === "circulars" && (
+        <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                  {isDaycare ? "Parent Circulars & Daycare Bulletins" : "Departmental Circulars & Senate Resolutions"}
+                </h2>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                  {isDaycare ? "Early Childhood Communications" : "Tertiary Academic Registry"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                {isDaycare
+                  ? "Caregiver updates, feeding advisories, pediatric health alerts, and guardian notices."
+                  : "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."}
+              </p>
+            </div>
+            <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+              {isDaycare ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Active Circulars
+              </p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                4 Official
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                Action Required
+              </p>
+              <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                2 Directives
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                {isDaycare ? "Academic Term" : "Current Semester"}
+              </p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {isDaycare ? "1st Term Care" : "1st Semester"}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {(isDaycare ? [
+              {
+                ref: "DCR/2026/CIRC/04",
+                date: "October 20, 2026",
+                title: "Infant Nutritional Guidelines & Weekly Puree/Snack Schedules",
+                body: "Caregivers are to adhere strictly to the updated dietary allergy chart. Organic puree and fruit snacking schedules for Toddler Pods A & B are now posted.",
+                priority: "HIGH PRIORITY",
+                tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
+              },
+              {
+                ref: "DCR/2026/MEMO/11",
+                date: "October 16, 2026",
+                title: "Mandatory Guardian Identification Verification for Afternoon Pick-ups",
+                body: "All evening release staff must verify authorized guardian photo IDs or dynamic mobile OTP verification passes prior to releasing toddlers to drivers or relatives.",
+                priority: "ACTION REQUIRED",
+                tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
+              },
+              {
+                ref: "DCR/2026/HLT/02",
+                date: "October 11, 2026",
+                title: "Pediatric Wellness Protocol & Morning Temperature Screening Routine",
+                body: "Morning drop-off health checks for early fever, skin rashes, or respiratory distress must be logged directly into the Health Vitals Tracker upon arrival.",
+                priority: "HEALTH DIRECTIVE",
+                tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
+              },
+              {
+                ref: "DCR/2026/GEN/09",
+                date: "October 02, 2026",
+                title: "Monthly Parent-Caregiver Early Childhood Milestone Reviews",
+                body: "Scheduled one-on-one parent conferences for fine motor, language acquisition, and sensory developmental assessment updates begin next Monday.",
+                priority: "GENERAL NOTICE",
+                tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
+              },
+            ] : [
+              {
+                ref: "SEN/2026/RES/08",
+                date: "October 18, 2026",
+                title: "Senate Directives on Mid-Semester Continuous Assessment Score Uploads",
+                body: "All faculty members and course lecturers are instructed to conclude continuous assessments (CA1 & CA2) and lock student portal grades on or before Friday, November 14th.",
+                priority: "HIGH PRIORITY",
+                tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
+              },
+              {
+                ref: "DCS/2026/CIRC/14",
+                date: "October 14, 2026",
+                title: "Departmental Board of Studies Meeting & Curriculum Moderation",
+                body: "The statutory semester meeting for external examiner appointments and courseware syllabus moderation is scheduled for the Faculty Board Room.",
+                priority: "STATUTORY",
+                tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
+              },
+              {
+                ref: "FAS/2026/MEMO/03",
+                date: "October 09, 2026",
+                title: "Vetting of Examination Questions & Standard Marking Keys",
+                body: "Please submit sealed course examination papers along with complete model answers to the Departmental Examination Officer for internal vetting.",
+                priority: "ACTION REQUIRED",
+                tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
+              },
+              {
+                ref: "REG/2026/GEN/22",
+                date: "September 28, 2026",
+                title: "Research Ethics & Institutional Review Board Clearance Notice",
+                body: "All empirical studies involving undergraduate and postgraduate student subjects must secure institutional IRB ethics compliance before fieldwork commences.",
+                priority: "GENERAL CIRCULAR",
+                tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
+              },
+            ]).map((circ, idx) => (
+              <div
+                key={idx}
+                className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${circ.tagColor}`}>
+                      {circ.priority}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
+                      {circ.ref}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400">{circ.date}</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    {circ.title}
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                    {circ.body}
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                  <span>Authorizing Body: Academic Senate & Registry</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Acknowledged</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: RESEARCH & GRANT TRACKERS (TERTIARY / UNIVERSITY)                     */}
+      {/* ========================================================================= */}
+      {activeTab === "research" && (
+        <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                  Research & Grant Trackers
+                </h2>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                  Scholarly Portfolio
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                Manage competitive institutional research grants, indexed journal publication trackers, and postgraduate thesis supervisions.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+              ORCID: 0009-0004-7128-3391
+            </span>
+          </div>
+
+          {/* Research Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Funded Grants
+              </p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                ₦28.5M
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                Indexed Publications
+              </p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                14 Articles
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                Active Projects
+              </p>
+              <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                3 Ongoing
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                Postgraduate Theses
+              </p>
+              <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+                5 Advisees
+              </p>
+            </div>
+          </div>
+
+          {/* Research Projects List */}
+          <div className="space-y-3">
+            {[
+              {
+                title: "Distributed Fault-Tolerant Architectures for Large-Scale Enterprise School ERP Systems",
+                sponsor: "TETFund National Research Fund (NRF)",
+                grantCode: "TETF/NRF/2025/APP/0192",
+                amount: "₦16,000,000",
+                progress: 65,
+                stage: "Empirical Benchmarking Phase",
+                status: "ACTIVE",
+              },
+              {
+                title: "Machine Learning Approaches to Continuous Formative Assessment & Student Attrition Early Warning",
+                sponsor: "Institutional Seed Grant (Faculty of Science)",
+                grantCode: "UNIV/ISG/2026/04",
+                amount: "₦4,500,000",
+                progress: 85,
+                stage: "Peer Review & Journal Submission",
+                status: "UNDER REVIEW",
+              },
+              {
+                title: "Comparative Study of Multitenant Postgres Row-Level Security vs Database-Per-Tenant Isolation",
+                sponsor: "International Computing Research Consortium",
+                grantCode: "ICRC/GR/2026/B2",
+                amount: "₦8,000,000",
+                progress: 30,
+                stage: "Data Collection & Architecture Modeling",
+                status: "ACTIVE",
+              },
+            ].map((proj, idx) => (
+              <div
+                key={idx}
+                className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                      {proj.status}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
+                      {proj.grantCode}
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                    {proj.amount}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    {proj.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Funding Agency: <strong>{proj.sponsor}</strong> • Stage: <em>{proj.stage}</em>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Research Milestone Progress</span>
+                    <span className="font-bold">{proj.progress}%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${proj.progress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
