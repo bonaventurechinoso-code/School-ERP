@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect, useTransition } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, useTransition } from "react";
 import {
   CreditCard,
   FileText,
@@ -40,6 +40,10 @@ import {
   ArrowDownRight,
   Briefcase,
   Phone,
+  FileCheck,
+  Copy,
+  RefreshCw,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -86,6 +90,63 @@ export default function BursarPortalClient({
   const [selectedMethod, setSelectedMethod] = useState("ALL");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Application Fees & Admissions Payments state for cross-referencing
+  const [admissionsApplications, setAdmissionsApplications] = useState<any[]>([]);
+  const [admissionsLoading, setAdmissionsLoading] = useState(false);
+  const [admissionsSearch, setAdmissionsSearch] = useState("");
+  const [appFeeFilter, setAppFeeFilter] = useState("ALL");
+  const [selectedProofPreview, setSelectedProofPreview] = useState<any | null>(null);
+  const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
+
+  const fetchAdmissionsForBursar = useCallback(async () => {
+    setAdmissionsLoading(true);
+    try {
+      const res = await fetch(`/api/v1/admissions?status=ALL&tenant_id=${encodeURIComponent(schoolDomain)}`, {
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": schoolDomain,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setAdmissionsApplications(json.data || []);
+      }
+    } catch {
+      // Graceful fallback
+    } finally {
+      setAdmissionsLoading(false);
+    }
+  }, [schoolDomain]);
+
+  useEffect(() => {
+    if (activeTab === "application-fees" && admissionsApplications.length === 0) {
+      fetchAdmissionsForBursar();
+    }
+  }, [activeTab, fetchAdmissionsForBursar, admissionsApplications.length]);
+
+  // Combined cross-referenced admission applications and registration payment proofs
+  const crossReferencedAdmissions = useMemo(() => {
+    return admissionsApplications.filter((app) => {
+      const query = admissionsSearch.toLowerCase();
+      const fullName = `${app.firstName || ""} ${app.lastName || ""}`.toLowerCase();
+      const appNo = (app.applicationNo || "").toLowerCase();
+      const classApplied = (app.classApplied || "").toLowerCase();
+      const matchesSearch =
+        !query ||
+        fullName.includes(query) ||
+        appNo.includes(query) ||
+        classApplied.includes(query);
+
+      const status = (app.status || "new").toLowerCase();
+      const matchesFilter =
+        appFeeFilter === "ALL" ||
+        (appFeeFilter === "admitted" && status === "admitted") ||
+        (appFeeFilter === "pending" && (status === "docs_pending" || status === "under_review" || status === "new"));
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [admissionsApplications, admissionsSearch, appFeeFilter]);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -121,6 +182,12 @@ export default function BursarPortalClient({
           label: "Fee Collection Panels",
           icon: CreditCard,
           badge: initialData.recentPayments.length ? `${initialData.recentPayments.length}` : null,
+        },
+        {
+          id: "application-fees",
+          label: "Application Fees",
+          icon: Receipt,
+          badge: null,
         },
         {
           id: "invoices",
@@ -370,6 +437,7 @@ export default function BursarPortalClient({
                 <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate mt-0.5">
                   {activeTab === "overview" && "Treasury & Financial Overview"}
                   {activeTab === "fees" && "Fee Collection Panels"}
+                  {activeTab === "application-fees" && "Application Fees & Admissions Payments"}
                   {activeTab === "invoices" && "Invoice Generation & Billing"}
                   {activeTab === "expenses" && "Expense Trackers & Disbursements"}
                   {activeTab === "ledger" && "Financial Ledger Books"}
@@ -854,6 +922,351 @@ export default function BursarPortalClient({
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: APPLICATION FEES & ADMISSIONS PAYMENTS CROSS-REFERENCE               */}
+          {/* ========================================================================= */}
+          {activeTab === "application-fees" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                      Application Fees & Admissions Payments
+                    </h2>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/60">
+                      Bursar Verification Desk
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Reconcile application fee transactions, teller proofs, and registration deposits for incoming student admissions.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => fetchAdmissionsForBursar()}
+                    disabled={admissionsLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-zinc-200 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${admissionsLoading ? "animate-spin" : ""}`} />
+                    <span>Sync Registry</span>
+                  </button>
+                  <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                    {admissionsApplications.length} Registered Candidates
+                  </span>
+                </div>
+              </div>
+
+              {/* Admissions Payment KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Total Applicants Tracked
+                  </p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    {admissionsApplications.length}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Pending Clearance
+                  </p>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                    {admissionsApplications.filter((a) => a.status !== "admitted").length}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Admitted & Fee-Cleared
+                  </p>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                    {admissionsApplications.filter((a) => a.status === "admitted").length}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                    Audit Queue Proofs
+                  </p>
+                  <p className="text-2xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
+                    {pendingProofs.length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Incoming Payment Proofs Clearance Section */}
+              {pendingProofs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                      Pending Audit Proofs ({pendingProofs.length})
+                    </h3>
+                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                      Requires Bursar Sign-off
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pendingProofs.map((proof) => (
+                      <div
+                        key={proof.id}
+                        className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400">
+                              Application / Bank Proof
+                            </span>
+                            <h4 className="text-base font-black text-slate-900 dark:text-white mt-1.5">
+                              {proof.studentName}
+                            </h4>
+                            <p className="text-xs text-slate-400 font-mono">
+                              Ref/Admission: {proof.admissionNumber}
+                            </p>
+                          </div>
+                          <span className="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">
+                            {formatNaira(proof.amount)}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/50 space-y-1 text-xs">
+                          <p className="text-slate-500">
+                            Bank: <strong>{proof.payerBankName}</strong>
+                          </p>
+                          <p className="text-slate-500">
+                            Session / Teller: <strong className="font-mono">{proof.sessionId}</strong>
+                          </p>
+                          <p className="text-slate-500">
+                            Payment Date: <strong>{proof.paidAt}</strong>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleVerifyProof(proof.id, "REJECTED")}
+                            className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-600 dark:text-zinc-300 hover:bg-slate-100 transition cursor-pointer"
+                          >
+                            Reject Proof
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleVerifyProof(proof.id, "APPROVED")}
+                            className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Verify & Clear</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Candidates & Registration Cross-Reference Roster */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900 p-3.5 rounded-2xl border border-slate-200/80 dark:border-zinc-800 shadow-2xs">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={admissionsSearch}
+                      onChange={(e) => setAdmissionsSearch(e.target.value)}
+                      placeholder="Cross-reference candidate by name, application number, or class..."
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-cyan-500/30"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+                    <select
+                      value={appFeeFilter}
+                      onChange={(e) => setAppFeeFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-700 dark:text-zinc-200 focus:outline-hidden focus:ring-2 focus:ring-cyan-500/30"
+                    >
+                      <option value="ALL">All Application Stages</option>
+                      <option value="pending">Pending Clearance</option>
+                      <option value="admitted">Admitted & Cleared</option>
+                    </select>
+                  </div>
+                </div>
+
+                {admissionsLoading ? (
+                  <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl">
+                    <RefreshCw className="w-8 h-8 text-cyan-500 animate-spin mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
+                      Cross-referencing Admissions Registry...
+                    </p>
+                  </div>
+                ) : crossReferencedAdmissions.length === 0 ? (
+                  <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl">
+                    <Receipt className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
+                      No candidate application records matching criteria
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      New registrations will appear here for bursar payment cross-referencing.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300 uppercase tracking-wider font-extrabold text-[10px]">
+                          <tr>
+                            <th className="px-5 py-3.5">Application No</th>
+                            <th className="px-5 py-3.5">Candidate Name</th>
+                            <th className="px-5 py-3.5">Class Applied</th>
+                            <th className="px-5 py-3.5">Parent Contact</th>
+                            <th className="px-5 py-3.5">Admissions Status</th>
+                            <th className="px-5 py-3.5">Fee Clearance</th>
+                            <th className="px-5 py-3.5 text-right">Reference Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                          {crossReferencedAdmissions.map((candidate) => {
+                            const isAdmitted = candidate.status?.toLowerCase() === "admitted";
+                            return (
+                              <tr
+                                key={candidate.id}
+                                className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition"
+                              >
+                                <td className="px-5 py-4 font-mono font-bold text-slate-900 dark:text-zinc-100 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{candidate.applicationNo}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(candidate.applicationNo);
+                                        setCopiedAppId(candidate.applicationNo);
+                                        setTimeout(() => setCopiedAppId(null), 2000);
+                                      }}
+                                      title="Copy Application Number"
+                                      className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    {copiedAppId === candidate.applicationNo && (
+                                      <span className="text-[10px] text-emerald-500 font-bold">Copied!</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-5 py-4 font-bold text-slate-900 dark:text-white">
+                                  {candidate.firstName} {candidate.lastName}
+                                </td>
+                                <td className="px-5 py-4 font-semibold text-slate-600 dark:text-zinc-300">
+                                  {candidate.classApplied}
+                                </td>
+                                <td className="px-5 py-4 text-slate-500 dark:text-zinc-400">
+                                  <p className="font-mono">{candidate.parentPhone || "—"}</p>
+                                </td>
+                                <td className="px-5 py-4 whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                      isAdmitted
+                                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
+                                        : "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300"
+                                    }`}
+                                  >
+                                    {candidate.status || "new"}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                      isAdmitted
+                                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                                        : "bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                                    }`}
+                                  >
+                                    {isAdmitted ? "Fee Cleared" : "Clearance In Progress"}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedProofPreview(candidate)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold transition text-xs cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                                    <span>Cross-Reference</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cross-Reference Detail Drawer/Modal */}
+              {selectedProofPreview && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+                  <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-800/40">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white">
+                          Admissions Fee Cross-Reference
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                          Verification record for {selectedProofPreview.firstName} {selectedProofPreview.lastName}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProofPreview(null)}
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-800 text-xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Application No</span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">{selectedProofPreview.applicationNo}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Class Applied</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{selectedProofPreview.classApplied}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Parent Phone</span>
+                          <span className="font-mono text-slate-700 dark:text-zinc-300">{selectedProofPreview.parentPhone || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Admissions Status</span>
+                          <span className="font-bold uppercase text-cyan-600 dark:text-cyan-400">{selectedProofPreview.status}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/60 text-xs text-cyan-800 dark:text-cyan-300">
+                        <p className="font-bold">Bursary Cross-Reference Checklist</p>
+                        <p className="mt-0.5 text-[11px] text-cyan-700 dark:text-cyan-400/90 leading-relaxed">
+                          Confirm that the candidate&apos;s registration deposit or application form fee matches the official tenant account records before validating clearance for formal matriculation.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end px-6 py-3.5 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProofPreview(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-zinc-100 text-white dark:text-slate-950 text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

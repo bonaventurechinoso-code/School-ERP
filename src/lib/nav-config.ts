@@ -16,6 +16,7 @@ import {
   Settings,
   FileSpreadsheet,
   Clock,
+  UserPlus,
 } from "lucide-react";
 
 export interface NavChildItem {
@@ -127,7 +128,13 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Students Roster & Enrollment",
             href: (domain) => `/${domain}/students`,
             icon: Users,
-            matchPaths: ["/admissions"],
+          },
+          {
+            id: "admissions",
+            label: "Admissions",
+            href: (domain) => `/${domain}/admissions`,
+            icon: UserPlus,
+            matchPaths: ["/admissions", "/admin/admissions", "/settings/admissions"],
           },
           {
             id: "parents-directory",

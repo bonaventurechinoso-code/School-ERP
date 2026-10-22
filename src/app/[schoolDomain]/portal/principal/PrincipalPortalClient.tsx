@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect, useTransition } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, useTransition } from "react";
 import {
   Briefcase,
   Layers,
@@ -36,6 +36,9 @@ import {
   RefreshCw,
   Printer,
   Download,
+  UserPlus,
+  Eye,
+  Copy,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -73,6 +76,71 @@ export default function PrincipalPortalClient({
   const [staffSearchQuery, setStaffSearchQuery] = useState("");
   const [selectedDay, setSelectedDay] = useState<string>("MONDAY");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Admissions state for Principal read-only tracking
+  const [admissionsList, setAdmissionsList] = useState<any[]>([]);
+  const [admissionsLoading, setAdmissionsLoading] = useState(false);
+  const [admissionsError, setAdmissionsError] = useState<string | null>(null);
+  const [admissionsSearchQuery, setAdmissionsSearchQuery] = useState("");
+  const [admissionsStatusFilter, setAdmissionsStatusFilter] = useState("ALL");
+  const [selectedAdmissionsApplicant, setSelectedAdmissionsApplicant] = useState<any | null>(null);
+  const [copiedAppNo, setCopiedAppNo] = useState<string | null>(null);
+
+  const fetchAdmissionsData = useCallback(async () => {
+    setAdmissionsLoading(true);
+    setAdmissionsError(null);
+    try {
+      const res = await fetch(`/api/v1/admissions?status=ALL&tenant_id=${encodeURIComponent(schoolDomain)}`, {
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": schoolDomain,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load applications (${res.status})`);
+      }
+      const json = await res.json();
+      setAdmissionsList(json.data || []);
+    } catch (err: any) {
+      setAdmissionsError(err.message || "Failed to load admissions applications");
+    } finally {
+      setAdmissionsLoading(false);
+    }
+  }, [schoolDomain]);
+
+  useEffect(() => {
+    if (activeTab === "admissions" && admissionsList.length === 0) {
+      fetchAdmissionsData();
+    }
+  }, [activeTab, fetchAdmissionsData, admissionsList.length]);
+
+  const filteredAdmissions = useMemo(() => {
+    return admissionsList.filter((app) => {
+      const matchesStatus =
+        admissionsStatusFilter === "ALL" ||
+        app.status?.toLowerCase() === admissionsStatusFilter.toLowerCase();
+      const query = admissionsSearchQuery.toLowerCase();
+      const fullName = `${app.firstName || ""} ${app.lastName || ""}`.toLowerCase();
+      const appNo = (app.applicationNo || "").toLowerCase();
+      const classApplied = (app.classApplied || "").toLowerCase();
+      const matchesSearch =
+        !query ||
+        fullName.includes(query) ||
+        appNo.includes(query) ||
+        classApplied.includes(query);
+      return matchesStatus && matchesSearch;
+    });
+  }, [admissionsList, admissionsStatusFilter, admissionsSearchQuery]);
+
+  const admissionsMetrics = useMemo(() => {
+    const total = admissionsList.length;
+    const newCount = admissionsList.filter((a) => a.status === "new").length;
+    const reviewCount = admissionsList.filter(
+      (a) => a.status === "under_review" || a.status === "docs_pending"
+    ).length;
+    const admittedCount = admissionsList.filter((a) => a.status === "admitted").length;
+    return { total, newCount, reviewCount, admittedCount };
+  }, [admissionsList]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -132,6 +200,12 @@ export default function PrincipalPortalClient({
           label: "Exam Performance Sheets",
           icon: Award,
           badge: initialData.examSheets.length ? `${initialData.examSheets.length}` : null,
+        },
+        {
+          id: "admissions",
+          label: "Admissions",
+          icon: UserPlus,
+          badge: null,
         },
       ],
     },
@@ -356,6 +430,7 @@ export default function PrincipalPortalClient({
                   {activeTab === "schedules" && "Master Teaching Schedules"}
                   {activeTab === "attendance" && "Global Institutional Attendance Metrics"}
                   {activeTab === "exams" && "Exam Performance Sheets"}
+                  {activeTab === "admissions" && "Executive Admissions Application Tracking"}
                   {activeTab === "staff" && "Staff Directory & Onboarding"}
                   {activeTab === "reports" && "Academic Performance Reports"}
                   {activeTab === "leaves" && "Executive Leave Approvals"}
@@ -1031,6 +1106,360 @@ export default function PrincipalPortalClient({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: EXECUTIVE ADMISSIONS APPLICATION TRACKING & REVIEW                   */}
+          {/* ========================================================================= */}
+          {activeTab === "admissions" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                      Admissions Application Tracking & Review
+                    </h2>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                      Executive Read-Only
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Executive oversight and review of prospective candidate submissions, credential verifications, and enrolment pipeline.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => fetchAdmissionsData()}
+                    disabled={admissionsLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-zinc-200 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${admissionsLoading ? "animate-spin" : ""}`} />
+                    <span>Refresh Registry</span>
+                  </button>
+                  <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                    {admissionsList.length} total applicant{admissionsList.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Admissions Executive KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Total Inquiries & Apps
+                  </p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    {admissionsMetrics.total}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Under Review / Screening
+                  </p>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                    {admissionsMetrics.reviewCount}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Admitted / Enrolled
+                  </p>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                    {admissionsMetrics.admittedCount}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    New Submissions
+                  </p>
+                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                    {admissionsMetrics.newCount}
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter & Search Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-zinc-900 p-3.5 rounded-2xl border border-slate-200/80 dark:border-zinc-800 shadow-2xs">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={admissionsSearchQuery}
+                    onChange={(e) => setAdmissionsSearchQuery(e.target.value)}
+                    placeholder="Search applicants by name, application number, or class..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+                  <select
+                    value={admissionsStatusFilter}
+                    onChange={(e) => setAdmissionsStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-700 dark:text-zinc-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="new">New Submissions</option>
+                    <option value="docs_pending">Docs Pending</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="admitted">Admitted</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Applications List Table */}
+              {admissionsLoading ? (
+                <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl">
+                  <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
+                    Loading Admissions Registry...
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Retrieving candidate records and credential statuses under Executive RBAC.
+                  </p>
+                </div>
+              ) : admissionsError ? (
+                <div className="p-8 text-center bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl">
+                  <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{admissionsError}</p>
+                  <button
+                    type="button"
+                    onClick={() => fetchAdmissionsData()}
+                    className="mt-3 px-4 py-2 bg-slate-900 dark:bg-zinc-800 text-white rounded-xl text-xs font-bold hover:bg-slate-800"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : filteredAdmissions.length === 0 ? (
+                <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl">
+                  <UserPlus className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
+                    No matching applications found
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {admissionsSearchQuery || admissionsStatusFilter !== "ALL"
+                      ? "Try adjusting your search query or status filter."
+                      : "New online applicant submissions will appear here for executive oversight."}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300 uppercase tracking-wider font-extrabold text-[10px]">
+                        <tr>
+                          <th className="px-5 py-3.5">Application No</th>
+                          <th className="px-5 py-3.5">Applicant Name</th>
+                          <th className="px-5 py-3.5">Class Applied</th>
+                          <th className="px-5 py-3.5">Parent Contact</th>
+                          <th className="px-5 py-3.5">Submission Date</th>
+                          <th className="px-5 py-3.5">Status</th>
+                          <th className="px-5 py-3.5 text-right">Executive Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                        {filteredAdmissions.map((applicant) => {
+                          const status = (applicant.status || "new").toLowerCase();
+                          return (
+                            <tr
+                              key={applicant.id}
+                              className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition"
+                            >
+                              <td className="px-5 py-4 font-mono font-bold text-slate-900 dark:text-zinc-100 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{applicant.applicationNo}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(applicant.applicationNo);
+                                      setCopiedAppNo(applicant.applicationNo);
+                                      setTimeout(() => setCopiedAppNo(null), 2000);
+                                    }}
+                                    title="Copy Application Number"
+                                    className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                  {copiedAppNo === applicant.applicationNo && (
+                                    <span className="text-[10px] text-emerald-500 font-bold">Copied!</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-5 py-4 font-bold text-slate-900 dark:text-white">
+                                {applicant.firstName} {applicant.lastName}
+                              </td>
+                              <td className="px-5 py-4 font-semibold text-slate-600 dark:text-zinc-300">
+                                {applicant.classApplied}
+                              </td>
+                              <td className="px-5 py-4 text-slate-500 dark:text-zinc-400">
+                                <p className="font-mono">{applicant.parentPhone || "—"}</p>
+                                {applicant.email && (
+                                  <p className="text-[11px] truncate max-w-[150px]">{applicant.email}</p>
+                                )}
+                              </td>
+                              <td className="px-5 py-4 text-slate-500 dark:text-zinc-400 whitespace-nowrap font-mono text-[11px]">
+                                {applicant.createdAt
+                                  ? new Date(applicant.createdAt).toLocaleDateString(undefined, {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "—"}
+                              </td>
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    status === "admitted"
+                                      ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                                      : status === "rejected"
+                                      ? "bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+                                      : status === "docs_pending"
+                                      ? "bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                                      : status === "under_review"
+                                      ? "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                                      : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
+                                  }`}
+                                >
+                                  {status.replace("_", " ")}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAdmissionsApplicant(applicant)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold transition text-xs cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Review Dossier</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Read-Only Applicant Dossier Inspector Modal */}
+              {selectedAdmissionsApplicant && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+                  <div className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden">
+                    {/* Modal Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-800/40">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">
+                            {selectedAdmissionsApplicant.firstName} {selectedAdmissionsApplicant.lastName}
+                          </h3>
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 font-mono">
+                            {selectedAdmissionsApplicant.applicationNo}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                          Candidate Registration Dossier (Read-Only Review)
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAdmissionsApplicant(null)}
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Modal Body */}
+                    <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-800 text-xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Class Applied</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{selectedAdmissionsApplicant.classApplied}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Current Status</span>
+                          <span className="font-bold uppercase text-amber-600 dark:text-amber-400">
+                            {selectedAdmissionsApplicant.status}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Parent Contact</span>
+                          <span className="font-mono text-slate-700 dark:text-zinc-300">{selectedAdmissionsApplicant.parentPhone || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Email Address</span>
+                          <span className="font-mono text-slate-700 dark:text-zinc-300 truncate block">{selectedAdmissionsApplicant.email || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Registration Date</span>
+                          <span className="text-slate-700 dark:text-zinc-300">
+                            {selectedAdmissionsApplicant.createdAt ? new Date(selectedAdmissionsApplicant.createdAt).toLocaleDateString() : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Verified By</span>
+                          <span className="text-slate-700 dark:text-zinc-300 font-semibold">{selectedAdmissionsApplicant.verifiedBy || "Pending Review"}</span>
+                        </div>
+                      </div>
+
+                      {/* Documents Checklist */}
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-2">
+                          Credentials & Documents Checklist
+                        </h4>
+                        {selectedAdmissionsApplicant.credentialsJson && Array.isArray(selectedAdmissionsApplicant.credentialsJson) && selectedAdmissionsApplicant.credentialsJson.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {selectedAdmissionsApplicant.credentialsJson.map((doc: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs"
+                              >
+                                <span className="font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-tight">
+                                  {doc.type?.replace(/_/g, " ") || `Document #${idx + 1}`}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                    doc.verified
+                                      ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
+                                      : "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400"
+                                  }`}
+                                >
+                                  {doc.verified ? "Verified" : "Pending Verification"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/30 border border-slate-200/60 dark:border-zinc-800">
+                            No uploaded credential records attached to this application register entry.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+                        <p className="font-bold">Principal Executive Oversight Notice</p>
+                        <p className="mt-0.5 text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed">
+                          This portal view provides executive monitoring. Enrollment decisions, document approvals, and student conversions are managed according to school registration workflows.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="flex items-center justify-end px-6 py-3.5 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAdmissionsApplicant(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-zinc-100 text-white dark:text-slate-950 text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        Close Dossier
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

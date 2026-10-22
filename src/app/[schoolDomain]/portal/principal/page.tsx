@@ -26,6 +26,7 @@ export default async function TenantPrincipalPortalPage({
     "leaves",
     "profile",
     "security",
+    "admissions",
   ] as const;
 
   const requestedTab = validTabs.includes(searchParams.tab as any)

@@ -26,6 +26,7 @@ export default async function TenantBursarPortalPage({
     "arrears",
     "profile",
     "security",
+    "application-fees",
   ] as const;
 
   const requestedTab = validTabs.includes(searchParams.tab as any)
