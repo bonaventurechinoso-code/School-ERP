@@ -37,6 +37,7 @@ import {
   PlusCircle,
   FileCheck,
   KeyRound,
+  ShieldAlert,
 } from "lucide-react";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import {
@@ -109,6 +110,7 @@ interface StaffPortalClientProps {
   initialLessonNotes?: LessonNoteData[];
   initialLeaveRequests?: LeaveRequestData[];
   defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security";
+  isAccessDenied?: boolean;
 }
 
 function formatNaira(amount: number): string {
@@ -131,6 +133,7 @@ export default function StaffPortalClient({
   initialLessonNotes = [],
   initialLeaveRequests = [],
   defaultTab = "overview",
+  isAccessDenied = false,
 }: StaffPortalClientProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security">(defaultTab);
   const [isPending, startTransition] = useTransition();
@@ -572,39 +575,192 @@ export default function StaffPortalClient({
     return grouped;
   }, [initialTimetable]);
 
+  const staffInitials = useMemo(() => {
+    if (!staffName) return "ST";
+    const parts = staffName.trim().split(/\s+/);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  }, [staffName]);
+
+  const navSections = useMemo(
+    () => [
+      {
+        title: "Workspace & Classroom",
+        items: [
+          { id: "overview", label: "Dashboard Overview", icon: Briefcase, badge: null },
+          { id: "rosters", label: "Classroom Rosters", icon: Users, badge: classStudents.length ? `${classStudents.length}` : null },
+          { id: "attendance", label: "Daily Attendance", icon: CheckSquare, badge: "Daily" },
+          { id: "gradebook", label: "Gradebook & Assessments", icon: Award, badge: null },
+        ],
+      },
+      {
+        title: "Academic Planning",
+        items: [
+          { id: "schedule", label: "Teaching Schedule", icon: Calendar, badge: initialTimetable.length ? `${initialTimetable.length} hrs` : null },
+          { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen, badge: null },
+        ],
+      },
+      {
+        title: "Personnel & Account",
+        items: [
+          { id: "leaves", label: "Staff Leave Requests", icon: Clock, badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null },
+          { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt, badge: null },
+          { id: "security", label: "Security & Password", icon: KeyRound, badge: null },
+        ],
+      },
+    ],
+    [classStudents.length, initialTimetable.length, initialLeaveRequests.length]
+  );
+
+  const allNavItems = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
+
   return (
-    <div className="space-y-6">
-      {/* Navigation Tab Bar */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2 overflow-x-auto hide-scrollbar print:hidden">
-        {[
-          { id: "overview", label: "Dashboard Overview", icon: Briefcase },
-          { id: "rosters", label: "Classroom Rosters", icon: Users },
-          { id: "attendance", label: "Daily Attendance", icon: CheckSquare },
-          { id: "gradebook", label: "Gradebook & Assessments", icon: Award },
-          { id: "schedule", label: "Teaching Schedule", icon: Calendar },
-          { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen },
-          { id: "leaves", label: "Staff Leave Requests", icon: Clock },
-          { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt },
-          { id: "security", label: "Security & Password", icon: KeyRound },
-        ].map((tab) => {
-          const isActive = activeTab === tab.id;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                isActive
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                  : "text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-61px)]">
+      {/* ========================================================================= */}
+      {/* 1. TRUE STRUCTURAL PERSISTENT SIDEBAR PANEL                              */}
+      {/* ========================================================================= */}
+      <aside className="w-full md:w-64 lg:w-72 shrink-0 bg-white dark:bg-zinc-900 border-r border-slate-200/90 dark:border-zinc-800/90 flex flex-col md:sticky md:top-[61px] md:h-[calc(100vh-61px)] z-20 shadow-xs print:hidden">
+        {/* Educator Identity Card */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800/80 bg-gradient-to-b from-slate-50/80 to-white dark:from-zinc-900 dark:to-zinc-900/60">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-black text-sm shadow-md shadow-emerald-600/20 shrink-0">
+              {staffInitials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-black text-slate-900 dark:text-white truncate leading-tight">
+                {staffName}
+              </h2>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                  {staffRole}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+            <span className="truncate">{staffProfile?.department || "Academics & Instruction"}</span>
+            <span className="font-semibold text-slate-700 dark:text-zinc-300 shrink-0">{selectedClass}</span>
+          </div>
+        </div>
+
+        {/* Sidebar Navigation Links */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+          {navSections.map((section, idx) => (
+            <div key={idx} className="space-y-1">
+              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-2">
+                {section.title}
+              </p>
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const isActive = activeTab === item.id;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveTab(item.id as any)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer text-left group ${
+                        isActive
+                          ? "bg-emerald-600 text-white font-bold shadow-sm shadow-emerald-600/20"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Icon
+                          className={`w-4 h-4 shrink-0 transition-colors ${
+                            isActive
+                              ? "text-white"
+                              : "text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300"
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold shrink-0 ${
+                            isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400"
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Institutional Context Footer */}
+        <div className="p-3.5 border-t border-slate-100 dark:border-zinc-800/80 bg-slate-50/60 dark:bg-zinc-900/60">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 truncate">
+                {schoolName}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono truncate">
+                {schoolDomain}
+              </p>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50 shrink-0">
+              Session 26/27
+            </span>
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================================= */}
+      {/* 2. CLEAN WORKSPACE MAIN GRID & FLUID CONTAINER                           */}
+      {/* ========================================================================= */}
+      <section className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+        {/* Mobile Horizontal Navigation Chips (Visible only on < md) */}
+        <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200/80 dark:border-zinc-800/80 hide-scrollbar print:hidden">
+          {allNavItems.map((item) => {
+            const isActive = activeTab === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id as any)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                  isActive
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Access Denied Interception Notice */}
+        {isAccessDenied && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="p-2 rounded-xl bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black text-red-900 dark:text-red-200 uppercase tracking-wider">
+                  Administrative Area Restricted
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-200 dark:bg-red-900 font-extrabold text-red-800 dark:text-red-200">
+                  STAFF PERMISSION LOCK
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-red-800/90 dark:text-red-300/90 mt-1 font-medium leading-relaxed">
+                Super administrative consoles and billing/wallet configurations are strictly isolated to School and Platform Administrators. You have been redirected to your staff educator portal for <strong>{schoolName}</strong>.
+              </p>
+            </div>
+          </div>
+        )}
 
       {/* ========================================================================= */}
       {/* TAB 1: OVERVIEW & DASHBOARD METRICS                                       */}
@@ -2308,6 +2464,7 @@ export default function StaffPortalClient({
           </div>
         </div>
       )}
+      </section>
     </div>
   );
 }

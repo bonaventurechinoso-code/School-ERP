@@ -103,31 +103,8 @@ export default async function TenantStaffPortalPage({
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-6">
-        {/* Access Denied Interception Notice */}
-        {isAccessDenied && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="p-2 rounded-xl bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 shrink-0">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-red-900 dark:text-red-200 uppercase tracking-wider">
-                  Administrative Area Restricted
-                </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-200 dark:bg-red-900 font-extrabold text-red-800 dark:text-red-200">
-                  STAFF PERMISSION LOCK
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-red-800/90 dark:text-red-300/90 mt-1 font-medium leading-relaxed">
-                Super administrative consoles and billing/wallet configurations are strictly isolated to School and Platform Administrators. You have been redirected to your staff educator portal for <strong>{school.name}</strong>.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Interactive Staff Portal Client Module */}
+      {/* Main Workspace Container */}
+      <main className="flex-1 flex flex-col w-full min-h-0">
         <StaffPortalClient
           schoolId={school.id}
           schoolName={school.name}
@@ -144,6 +121,7 @@ export default async function TenantStaffPortalPage({
           initialLessonNotes={initialData.lessonNotes}
           initialLeaveRequests={initialData.leaveRequests}
           defaultTab={requestedTab}
+          isAccessDenied={isAccessDenied}
         />
       </main>
     </div>
