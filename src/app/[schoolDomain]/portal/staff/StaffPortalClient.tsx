@@ -38,7 +38,12 @@ import {
   FileCheck,
   KeyRound,
   ShieldAlert,
+  Menu,
+  LogOut,
+  ArrowLeft,
 } from "lucide-react";
+import Link from "next/link";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import {
   saveClassroomAttendance,
@@ -136,6 +141,7 @@ export default function StaffPortalClient({
   isAccessDenied = false,
 }: StaffPortalClientProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security">(defaultTab);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Tier & Class Filtering
@@ -615,339 +621,455 @@ export default function StaffPortalClient({
   const allNavItems = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
 
   return (
-    <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-61px)]">
-      {/* ========================================================================= */}
-      {/* 1. TRUE STRUCTURAL PERSISTENT SIDEBAR PANEL                              */}
-      {/* ========================================================================= */}
-      <aside className="w-full md:w-64 lg:w-72 shrink-0 bg-white dark:bg-zinc-900 border-r border-slate-200/90 dark:border-zinc-800/90 flex flex-col md:sticky md:top-[61px] md:h-[calc(100vh-61px)] z-20 shadow-xs print:hidden">
-        {/* Educator Identity Card */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800/80 bg-gradient-to-b from-slate-50/80 to-white dark:from-zinc-900 dark:to-zinc-900/60">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-black text-sm shadow-md shadow-emerald-600/20 shrink-0">
+    <div className="flex flex-1 h-screen max-h-screen w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950 relative">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 dark:bg-black/60 backdrop-blur-sm z-40 md:hidden transition-all duration-300"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* 1. True Left-Hand Side Panel (Full-height persistent sidebar matching Admin layout) */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+          isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
+        }`}
+      >
+        {/* Consolidated Tenant / Profile Header Block */}
+        <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center shadow-xs border border-white/10 tracking-tight shrink-0 relative">
               {staffInitials}
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-900 dark:ring-zinc-950 shadow-xs"
+                title="Staff Active"
+              />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-black text-slate-900 dark:text-white truncate leading-tight">
+              <span className="block text-xs sm:text-sm font-bold text-white tracking-tight leading-snug truncate">
                 {staffName}
-              </h2>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
-                  {staffRole}
-                </span>
-              </div>
+              </span>
+              <span className="block text-[10px] text-slate-400 dark:text-zinc-400 font-medium truncate mt-0.5">
+                {staffRole} • {schoolName}
+              </span>
             </div>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
-            <span className="truncate">{staffProfile?.department || "Academics & Instruction"}</span>
-            <span className="font-semibold text-slate-700 dark:text-zinc-300 shrink-0">{selectedClass}</span>
-          </div>
+          {/* Mobile Close Button */}
+          <button
+            className="md:hidden p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all shrink-0 cursor-pointer"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Sidebar Navigation Links */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {navSections.map((section, idx) => (
-            <div key={idx} className="space-y-1">
-              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-2">
-                {section.title}
-              </p>
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const isActive = activeTab === item.id;
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setActiveTab(item.id as any)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer text-left group ${
-                        isActive
-                          ? "bg-emerald-600 text-white font-bold shadow-sm shadow-emerald-600/20"
-                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-zinc-800/60"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon
-                          className={`w-4 h-4 shrink-0 transition-colors ${
-                            isActive
-                              ? "text-white"
-                              : "text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300"
-                          }`}
-                        />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.badge && (
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold shrink-0 ${
-                            isActive
-                              ? "bg-white/20 text-white"
-                              : "bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400"
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+        {/* Stream / Department Context Pill */}
+        <div className="px-3.5 py-2 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between text-[11px] shrink-0">
+          <span className="text-slate-400 font-medium truncate">{staffProfile?.department || "Academic Staff"}</span>
+          <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md truncate max-w-[120px]">
+            {selectedClass}
+          </span>
+        </div>
+
+        {/* Navigation Architecture */}
+        <nav className="flex-1 min-h-0 px-2.5 py-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
+          {navSections.map((group, gIdx) => (
+            <div key={gIdx} className="space-y-1">
+              <div className="px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase">
+                {group.title}
               </div>
+
+              {group.items.map((item) => {
+                const isActive = activeTab === item.id;
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(item.id as any);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? "bg-emerald-600/20 text-emerald-400 dark:text-emerald-300 font-bold border border-emerald-500/30"
+                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white border border-transparent"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {isActive ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    ) : item.badge ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold shrink-0">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           ))}
-        </div>
+        </nav>
 
-        {/* Institutional Context Footer */}
-        <div className="p-3.5 border-t border-slate-100 dark:border-zinc-800/80 bg-slate-50/60 dark:bg-zinc-900/60">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 truncate">
-                {schoolName}
-              </p>
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono truncate">
-                {schoolDomain}
-              </p>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50 shrink-0">
-              Session 26/27
-            </span>
+        {/* Institutional Footer */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 shrink-0">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-mono text-[10px] truncate max-w-[140px]">.{schoolDomain}</span>
+            <span className="font-bold text-slate-300">2026/2027 Session</span>
           </div>
         </div>
       </aside>
 
-      {/* ========================================================================= */}
-      {/* 2. CLEAN WORKSPACE MAIN GRID & FLUID CONTAINER                           */}
-      {/* ========================================================================= */}
-      <section className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
-        {/* Mobile Horizontal Navigation Chips (Visible only on < md) */}
-        <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200/80 dark:border-zinc-800/80 hide-scrollbar print:hidden">
-          {allNavItems.map((item) => {
-            const isActive = activeTab === item.id;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                  isActive
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800"
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Access Denied Interception Notice */}
-        {isAccessDenied && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="p-2 rounded-xl bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 shrink-0">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
+      {/* 2. Main Content Canvas */}
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
+        {/* Unified Top Navigation / Status Header matching Admin layout */}
+        <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex items-center justify-between gap-2.5 sm:gap-4 w-full px-3.5 sm:px-6 md:px-8 py-2.5 md:py-3.5 shadow-xs flex-shrink-0 sticky top-0 z-20 transition-colors duration-200">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+            <button
+              className="md:hidden w-10 h-10 -ml-1 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full active:scale-95 transition-all touch-manipulation flex items-center justify-center shrink-0 cursor-pointer"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open navigation drawer"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-red-900 dark:text-red-200 uppercase tracking-wider">
-                  Administrative Area Restricted
-                </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-200 dark:bg-red-900 font-extrabold text-red-800 dark:text-red-200">
-                  STAFF PERMISSION LOCK
+                <h1 className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold truncate">
+                  Staff Educator Workspace
+                </h1>
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                  {selectedClass} Classroom Workspace
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-red-800/90 dark:text-red-300/90 mt-1 font-medium leading-relaxed">
-                Super administrative consoles and billing/wallet configurations are strictly isolated to School and Platform Administrators. You have been redirected to your staff educator portal for <strong>{schoolName}</strong>.
+              <p className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-zinc-200 truncate">
+                {schoolName} • {staffName}
               </p>
             </div>
           </div>
-        )}
 
-      {/* ========================================================================= */}
-      {/* TAB 1: OVERVIEW & DASHBOARD METRICS                                       */}
-      {/* ========================================================================= */}
-      {activeTab === "overview" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Welcome Banner */}
-          <div className="bg-gradient-to-br from-emerald-900 via-teal-950 to-slate-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold mb-3 border border-emerald-500/30">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>{staffRole} • Active Staff</span>
+          {/* Top-right utility controls */}
+          <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle />
+            <Link
+              href="/teacher/my-class"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs"
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Teacher ERP</span>
+            </Link>
+            <Link
+              href={`/${schoolDomain}/login`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-white transition shadow-xs"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Switch User</span>
+            </Link>
+          </div>
+        </header>
+
+        {/* High-Density Dashboard Canvas Container */}
+        <div className="p-4 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full space-y-6">
+          {/* Access Denied Interception Notice */}
+          {isAccessDenied && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="p-2 rounded-xl bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-black text-red-900 dark:text-red-200 uppercase tracking-wider">
+                    Administrative Area Restricted
+                  </h2>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-200 dark:bg-red-900 font-extrabold text-red-800 dark:text-red-200">
+                    STAFF PERMISSION LOCK
+                  </span>
                 </div>
-                <h2 className="text-2xl sm:text-4xl font-black tracking-tight mb-2">
-                  Welcome, {staffName}
-                </h2>
-                <p className="text-sm text-emerald-200 max-w-xl">
-                  Manage your assigned classrooms for <strong>{schoolName}</strong>. Conduct morning roll calls, enter continuous assessment scores, view teaching schedules, and review remuneration payslips.
+                <p className="text-xs sm:text-sm text-red-800/90 dark:text-red-300/90 mt-1 font-medium leading-relaxed">
+                  Super administrative consoles and billing/wallet configurations are strictly isolated to School and Platform Administrators. You have been redirected to your staff educator portal for <strong>{schoolName}</strong>.
                 </p>
               </div>
-
-              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shrink-0">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-                  <Briefcase className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-200 uppercase font-bold tracking-wider">Department</p>
-                  <p className="text-sm font-black text-white">{staffProfile?.department || "Academics & Instruction"}</p>
-                </div>
-              </div>
             </div>
-          </div>
+          )}
 
-          {/* Metric Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Assigned Classes</span>
-                <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                {initialClassrooms.length || 4}
-              </p>
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">
-                Active Cohorts
-              </span>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Total Students</span>
-                <BookOpen className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                {initialStudents.length}
-              </p>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 mt-1 block">
-                Enrolled Learners
-              </span>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Weekly Periods</span>
-                <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                {initialTimetable.length || 0}
-              </p>
-              <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mt-1 block">
-                Scheduled Teaching Hours
-              </span>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider">Base Salary</span>
-                <Receipt className="w-4 h-4 text-amber-500" />
-              </div>
-              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono truncate">
-                {formatNaira(staffProfile?.baseSalary || 220000)}
-              </p>
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">
-                Monthly Remuneration
-              </span>
-            </div>
-          </div>
-
-          {/* Isolated Miniature Educator Summary Strip (< 15% Screen Height) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            {/* 1. Daily Roll Call Readiness */}
-            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
-                    <CheckSquare className="w-4 h-4" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider">Morning Roll Call</span>
+          {/* ========================================================================= */}
+          {/* TAB 1: OVERVIEW & DASHBOARD METRICS                                       */}
+          {/* ========================================================================= */}
+          {activeTab === "overview" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Dashboard Client Header */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Educator Command Center
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                      {staffRole} • Active Staff
+                    </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium">Daily Register</span>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-zinc-50 truncate">
+                    Welcome, {staffName}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                    Classroom management for <strong className="font-semibold text-slate-700 dark:text-zinc-200">{schoolName}</strong> ({selectedClass}). Roll calls, continuous assessments, schedule, and remuneration.
+                  </p>
                 </div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  Date: {attendanceDate}
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                  Synchronized attendance for {selectedClass} and assigned cohorts.
-                </p>
-              </div>
-              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  Ready for roll call
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("attendance")}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
-                >
-                  Take Attendance <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
 
-            {/* 2. Assessment & Grading Matrix */}
-            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                    <Award className="w-4 h-4" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider">Assessment Status</span>
+                {/* Quick Filter / Class Context Selector */}
+                <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-zinc-700/80">
+                    <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div className="text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Classroom</p>
+                      <select
+                        value={selectedClass}
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                        className="text-xs font-bold text-slate-900 dark:text-white bg-transparent outline-none cursor-pointer"
+                      >
+                        {initialClassrooms.map((c) => (
+                          <option key={c.id} value={c.name} className="dark:bg-zinc-900 text-slate-900 dark:text-white">
+                            {c.name}
+                          </option>
+                        ))}
+                        {initialClassrooms.length === 0 && (
+                          <option value="JSS 1">JSS 1</option>
+                        )}
+                      </select>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium">WAEC Standard</span>
                 </div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {selectedTerm} • {academicYear}
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                  Continuous assessment (CA1, CA2) and term examination entry.
-                </p>
               </div>
-              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400">
-                  Gradebook Active
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("gradebook")}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                >
-                  Enter Scores <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
 
-            {/* 3. Assigned Cohorts Directory */}
-            <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                    <Users className="w-4 h-4" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider">Class Directory</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-medium">Rosters</span>
-                </div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {classStudents.length} Learners in {selectedClass}
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                  Access student records, guardian emergency lines, and bio details.
-                </p>
-              </div>
-              <div className="pt-3 mt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400">
-                  {initialClassrooms.length} assigned stream(s)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("rosters")}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+              {/* High-Density Modular KPI Statistics Grid matching Admin benchmark */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+                {/* 1. Assigned Classes */}
+                <div
+                  className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+                  style={{ borderTopColor: "#4f46e5" }}
                 >
-                  View Directory <ArrowRight className="w-3 h-3" />
-                </button>
+                  <div className="flex items-center justify-between gap-2 relative z-10">
+                    <h3 className="font-bold text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 truncate">
+                      Assigned Classes
+                    </h3>
+                    <div
+                      className="p-2 sm:p-2.5 rounded-xl shadow-2xs shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5"
+                      style={{ backgroundColor: "#4f46e514", color: "#4f46e5" }}
+                    >
+                      <Users className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    </div>
+                  </div>
+
+                  <div className="my-2 relative z-10">
+                    <p className="text-3xl sm:text-4xl lg:text-[40px] font-black tracking-tight text-slate-900 dark:text-white leading-none truncate">
+                      {initialClassrooms.length || 4}
+                    </p>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 relative z-10 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 truncate">
+                      Active Cohorts
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: "#4f46e5" }} />
+                  </div>
+                </div>
+
+                {/* 2. Total Students */}
+                <div
+                  className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+                  style={{ borderTopColor: "#0284c7" }}
+                >
+                  <div className="flex items-center justify-between gap-2 relative z-10">
+                    <h3 className="font-bold text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 truncate">
+                      Total Students
+                    </h3>
+                    <div
+                      className="p-2 sm:p-2.5 rounded-xl shadow-2xs shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5"
+                      style={{ backgroundColor: "#0284c714", color: "#0284c7" }}
+                    >
+                      <BookOpen className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    </div>
+                  </div>
+
+                  <div className="my-2 relative z-10">
+                    <p className="text-3xl sm:text-4xl lg:text-[40px] font-black tracking-tight text-slate-900 dark:text-white leading-none truncate">
+                      {initialStudents.length}
+                    </p>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 relative z-10 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 truncate">
+                      Enrolled Learners
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: "#0284c7" }} />
+                  </div>
+                </div>
+
+                {/* 3. Weekly Periods */}
+                <div
+                  className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+                  style={{ borderTopColor: "#7c3aed" }}
+                >
+                  <div className="flex items-center justify-between gap-2 relative z-10">
+                    <h3 className="font-bold text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 truncate">
+                      Weekly Periods
+                    </h3>
+                    <div
+                      className="p-2 sm:p-2.5 rounded-xl shadow-2xs shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5"
+                      style={{ backgroundColor: "#7c3aed14", color: "#7c3aed" }}
+                    >
+                      <Calendar className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    </div>
+                  </div>
+
+                  <div className="my-2 relative z-10">
+                    <p className="text-3xl sm:text-4xl lg:text-[40px] font-black tracking-tight text-slate-900 dark:text-white leading-none truncate">
+                      {initialTimetable.length || 0}
+                    </p>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 relative z-10 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 truncate">
+                      Scheduled Teaching Hours
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: "#7c3aed" }} />
+                  </div>
+                </div>
+
+                {/* 4. Base Salary */}
+                <div
+                  className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
+                  style={{ borderTopColor: "#059669" }}
+                >
+                  <div className="flex items-center justify-between gap-2 relative z-10">
+                    <h3 className="font-bold text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 truncate">
+                      Base Salary
+                    </h3>
+                    <div
+                      className="p-2 sm:p-2.5 rounded-xl shadow-2xs shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5"
+                      style={{ backgroundColor: "#05966914", color: "#059669" }}
+                    >
+                      <Receipt className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    </div>
+                  </div>
+
+                  <div className="my-2 relative z-10">
+                    <p className="text-2xl sm:text-3xl lg:text-[32px] font-black tracking-tight text-slate-900 dark:text-white leading-none truncate font-mono">
+                      {formatNaira(staffProfile?.baseSalary || 220000)}
+                    </p>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 relative z-10 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 truncate">
+                      Monthly Remuneration
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: "#059669" }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Educator Action Summary Strip */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 pt-1">
+                {/* 1. Daily Roll Call Readiness */}
+                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
+                        <CheckSquare className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Morning Roll Call</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Daily Register</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      Date: {attendanceDate}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      Synchronized attendance for {selectedClass} and assigned cohorts.
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      Ready for roll call
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("attendance")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
+                    >
+                      Take Attendance <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Assessment & Grading Matrix */}
+                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                        <Award className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Assessment Status</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">WAEC Standard</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {selectedTerm} • {academicYear}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      Continuous assessment (CA1, CA2) and term examination entry.
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      Gradebook Active
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("gradebook")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors cursor-pointer"
+                    >
+                      Enter Scores <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Assigned Cohorts Directory */}
+                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                        <Users className="w-4 h-4" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Class Directory</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Rosters</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {classStudents.length} Learners in {selectedClass}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                      Access student records, guardian emergency lines, and bio details.
+                    </p>
+                  </div>
+                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      {initialClassrooms.length} assigned stream(s)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("rosters")}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                    >
+                      View Directory <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* ========================================================================= */}
       {/* TAB 2: CLASSROOM ROSTERS                                                  */}
@@ -2464,7 +2586,21 @@ export default function StaffPortalClient({
           </div>
         </div>
       )}
-      </section>
+        </div>
+
+        {/* Tenant Dashboard Footer matching Admin */}
+        <footer className="mt-auto border-t border-slate-200/60 dark:border-zinc-800/60 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xs py-4 px-4 md:px-8 transition-colors duration-200">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-zinc-400">
+            <div className="flex items-center gap-2">
+              <span>Powered by BonaVee ICT • School ERP Platform</span>
+            </div>
+            <div className="text-center sm:text-right shrink-0">
+              <span>© {new Date().getFullYear()} {schoolName}. All rights reserved.</span>
+            </div>
+          </div>
+        </footer>
+      </main>
     </div>
   );
 }
+
