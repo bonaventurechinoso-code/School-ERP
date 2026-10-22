@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useTransition } from "react";
+import React, { useState, useMemo, useEffect, useTransition, useRef } from "react";
 import {
   Users,
   BookOpen,
@@ -41,6 +41,8 @@ import {
   Menu,
   LogOut,
   ArrowLeft,
+  User,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -204,6 +206,20 @@ export default function StaffPortalClient({
   // Payslip Modal State
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecordItem | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // Profile Dropdown State
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Filtered Students for the selected class & search
   const classStudents = useMemo(() => {
@@ -593,23 +609,18 @@ export default function StaffPortalClient({
   const navSections = useMemo(
     () => [
       {
-        title: "Workspace & Classroom",
+        title: "ACADEMIC ENGINE",
         items: [
           { id: "overview", label: "Dashboard Overview", icon: Briefcase, badge: null },
           { id: "rosters", label: "Classroom Rosters", icon: Users, badge: classStudents.length ? `${classStudents.length}` : null },
           { id: "attendance", label: "Daily Attendance", icon: CheckSquare, badge: "Daily" },
           { id: "gradebook", label: "Gradebook & Assessments", icon: Award, badge: null },
-        ],
-      },
-      {
-        title: "Academic Planning",
-        items: [
           { id: "schedule", label: "Teaching Schedule", icon: Calendar, badge: initialTimetable.length ? `${initialTimetable.length} hrs` : null },
           { id: "lessons", label: "Lesson Notes & Schemes", icon: BookOpen, badge: null },
         ],
       },
       {
-        title: "Personnel & Account",
+        title: "PERSONNEL & ACCOUNT",
         items: [
           { id: "leaves", label: "Staff Leave Requests", icon: Clock, badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt, badge: null },
@@ -773,14 +784,109 @@ export default function StaffPortalClient({
               <Briefcase className="w-3.5 h-3.5" />
               <span>Teacher ERP</span>
             </Link>
-            <button
-              type="button"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-white transition shadow-xs cursor-pointer group"
-            >
-              <LogOut className="w-3.5 h-3.5 text-rose-400 group-hover:text-rose-300 transition-colors" />
-              <span>Log out</span>
-            </button>
+            {/* Admin-pattern Profile Selection Dropdown */}
+            <div className="relative" ref={profileDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                aria-expanded={isProfileDropdownOpen}
+                aria-haspopup="true"
+                aria-label="Staff profile menu"
+                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800/80 transition-all cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:scale-98"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs ring-1 ring-white dark:ring-zinc-900">
+                  {staffInitials}
+                </div>
+                <div className="hidden md:flex flex-col text-left leading-tight pr-1">
+                  <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 truncate max-w-[130px]">
+                    {staffName}
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 truncate max-w-[130px]">
+                    {staffRole || "Teacher"}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 transition-transform duration-200 ${
+                    isProfileDropdownOpen ? "rotate-180 text-emerald-500" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {isProfileDropdownOpen && (
+                <div
+                  role="menu"
+                  aria-orientation="vertical"
+                  className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 select-none"
+                >
+                  {/* Top Header Section: User Snapshot */}
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-800/80">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                        {staffInitials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate">
+                          {staffName}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 truncate">
+                          {staffProfile?.email || "educator@school.edu"}
+                        </p>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/50 uppercase tracking-wider">
+                            STAFF EDUCATOR
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Navigation List Options */}
+                  <div className="py-1.5 px-1 space-y-0.5 text-xs font-medium text-slate-700 dark:text-zinc-300">
+                    {/* 1. Profile */}
+                    <Link
+                      href="/teacher/profile"
+                      onClick={() => setIsProfileDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors"
+                    >
+                      <User className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>Profile</span>
+                    </Link>
+
+                    {/* 2. Security & Password */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("security");
+                        setIsProfileDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors text-left cursor-pointer"
+                    >
+                      <KeyRound className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Security & Password</span>
+                    </button>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="my-1 border-t border-slate-100 dark:border-zinc-800/80" />
+
+                  {/* 3. Log out */}
+                  <div className="px-1 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileDropdownOpen(false);
+                        setShowLogoutConfirm(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer text-left"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0 text-red-500" />
+                      <span>Log out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
