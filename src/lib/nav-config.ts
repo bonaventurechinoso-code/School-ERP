@@ -232,13 +232,13 @@ export function getTenantNavigation(
           {
             id: "teacher-classes",
             label: "My Classes",
-            href: (d) => `/teacher/my-class`,
+            href: (d) => `/${d}/portal/staff`,
             icon: LayoutDashboard,
           },
           {
             id: "teacher-students",
             label: "My Students",
-            href: (d) => `/teacher/students`,
+            href: (d) => `/${d}/portal/staff?tab=rosters`,
             icon: Users,
           },
           {

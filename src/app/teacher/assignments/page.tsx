@@ -1,16 +1,17 @@
-import React from "react";
-import { getTeacherAssignments } from "../actions";
-import { TeacherAssignmentsClient } from "./TeacherAssignmentsClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function AssignmentsPage() {
-  const data = await getTeacherAssignments();
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherAssignmentsClient
-      initialAssignments={data.assignments}
-      assignedClasses={data.teacher.assignedClasses}
-      assignedSubjects={data.teacher.assignedSubjects}
-      schoolName={data.teacher.schoolName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=lessons`);
 }

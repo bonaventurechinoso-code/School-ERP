@@ -1,30 +1,17 @@
-import React from "react";
-import { getTeacherGradebookData } from "../actions";
-import { TeacherGradebookClient } from "./TeacherGradebookClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
-export default async function GradebookPage({
-  searchParams: searchParamsPromise,
-}: {
-  searchParams: Promise<{ class?: string; subject?: string; term?: string }>;
-}) {
-  const searchParams = await searchParamsPromise;
-  const data = await getTeacherGradebookData(
-    searchParams.class,
-    searchParams.subject,
-    searchParams.term
-  );
+export default async function GradebookPage() {
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherGradebookClient
-      initialClass={data.selectedClass}
-      initialSubject={data.selectedSubject}
-      initialTerm={data.term}
-      initialAcademicYear={data.academicYear}
-      assignedClasses={data.assignedClasses}
-      assignedSubjects={data.assignedSubjects}
-      students={data.students}
-      initialGradesMap={data.gradesMap}
-      schoolName={data.teacher.schoolName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=gradebook`);
 }

@@ -1,16 +1,17 @@
-export const dynamic = 'force-dynamic';
-import React from "react";
-import { getTeacherSupportTickets } from "../actions";
-import { TeacherSupportClient } from "./TeacherSupportClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function SupportPage() {
-  const data = await getTeacherSupportTickets();
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherSupportClient
-      initialTickets={data.tickets}
-      schoolName={data.teacher.schoolName}
-      teacherEmail={data.teacher.staffEmail}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff`);
 }

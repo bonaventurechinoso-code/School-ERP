@@ -1,20 +1,17 @@
-import React from "react";
-import { getTeacherStudents } from "../actions";
-import { TeacherStudentsClient } from "./TeacherStudentsClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
-export default async function StudentsPage({
-  searchParams: searchParamsPromise,
-}: {
-  searchParams: Promise<{ q?: string; class?: string }>;
-}) {
-  const searchParams = await searchParamsPromise;
-  const data = await getTeacherStudents(searchParams.q, searchParams.class);
+export default async function StudentsPage() {
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherStudentsClient
-      initialStudents={data.students}
-      assignedClasses={data.assignedClasses}
-      schoolName={data.teacher.schoolName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=rosters`);
 }

@@ -1,38 +1,19 @@
-export const dynamic = 'force-dynamic';
-import React from "react";
-import { getTeacherContext, TeacherContext } from "./actions";
-import { TeacherShell } from "./TeacherShell";
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
+export default async function TeacherLayout() {
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-export const metadata = {
-  title: "Teacher Portal | School ERP",
-  description: "Teacher classroom dashboard, attendance roll-call, continuous assessment gradebook, and timetable.",
-};
-
-export default async function TeacherLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const context = await getTeacherContext();
-
-  const fallbackContext: TeacherContext = context || {
-    staffId: "demo-teacher-id",
-    staffName: "Mr. Ayodeji Balogun",
-    staffEmail: "teacher@school.edu.ng",
-    staffRole: "Class Teacher",
-    departmentName: "General Academics",
-    schoolId: "default-school",
-    schoolName: "Greenwood Academy",
-    schoolSubdomain: "greenwood",
-    assignedClasses: ["JSS 1", "JSS 2", "SSS 1"],
-    assignedSubjects: ["Mathematics", "Further Mathematics", "English Language"],
-  };
-
-  return (
-    <TeacherShell teacherContext={fallbackContext}>
-      {children}
-    </TeacherShell>
-  );
+  redirect(`/${targetDomain}/portal/staff`);
 }

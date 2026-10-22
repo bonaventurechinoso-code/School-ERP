@@ -1,23 +1,17 @@
-import React from "react";
-import { getTeacherAttendanceData } from "../actions";
-import { TeacherAttendanceClient } from "./TeacherAttendanceClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
-export default async function AttendancePage({
-  searchParams: searchParamsPromise,
-}: {
-  searchParams: Promise<{ date?: string; class?: string }>;
-}) {
-  const searchParams = await searchParamsPromise;
-  const data = await getTeacherAttendanceData(searchParams.date, searchParams.class);
+export default async function AttendancePage() {
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherAttendanceClient
-      initialDate={data.date}
-      initialClass={data.selectedClass}
-      assignedClasses={data.assignedClasses}
-      students={data.students}
-      initialAttendanceMap={data.attendanceMap}
-      schoolName={data.teacher.schoolName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=attendance`);
 }

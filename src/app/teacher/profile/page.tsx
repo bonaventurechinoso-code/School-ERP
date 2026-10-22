@@ -1,16 +1,17 @@
-import React from "react";
-import { getTeacherProfile } from "../actions";
-import { TeacherProfileClient } from "./TeacherProfileClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function ProfilePage() {
-  const data = await getTeacherProfile();
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherProfileClient
-      profile={data.profile}
-      recentPayslips={data.recentPayslips}
-      schoolName={data.teacher.schoolName}
-      schoolDomain={data.teacher.schoolSubdomain}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=security`);
 }

@@ -1,15 +1,17 @@
-import React from "react";
-import { getTeacherTimetable } from "../actions";
-import { TeacherTimetableClient } from "./TeacherTimetableClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function TimetablePage() {
-  const data = await getTeacherTimetable();
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherTimetableClient
-      timetable={data.timetable}
-      schoolName={data.teacher.schoolName}
-      teacherName={data.teacher.staffName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff?tab=schedule`);
 }

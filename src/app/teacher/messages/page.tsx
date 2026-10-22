@@ -1,15 +1,17 @@
-import React from "react";
-import { getTeacherMessages } from "../actions";
-import { TeacherMessagesClient } from "./TeacherMessagesClient";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function MessagesPage() {
-  const data = await getTeacherMessages();
+  const session = await getSession();
+  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!targetDomain) {
+    const defaultSchool = await basePrisma.school.findFirst({
+      where: { isActive: true },
+      select: { subdomain: true },
+    });
+    targetDomain = defaultSchool?.subdomain || "greenwood";
+  }
 
-  return (
-    <TeacherMessagesClient
-      notices={data.notices}
-      directMessages={data.directMessages}
-      schoolName={data.teacher.schoolName}
-    />
-  );
+  redirect(`/${targetDomain}/portal/staff`);
 }

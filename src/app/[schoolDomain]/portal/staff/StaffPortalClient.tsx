@@ -777,13 +777,6 @@ export default function StaffPortalClient({
           {/* Top-right utility controls */}
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
-            <Link
-              href="/teacher/my-class"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs"
-            >
-              <Briefcase className="w-3.5 h-3.5" />
-              <span>Teacher ERP</span>
-            </Link>
             {/* Admin-pattern Profile Selection Dropdown */}
             <div className="relative" ref={profileDropdownRef}>
               <button
@@ -844,14 +837,17 @@ export default function StaffPortalClient({
                   {/* Navigation List Options */}
                   <div className="py-1.5 px-1 space-y-0.5 text-xs font-medium text-slate-700 dark:text-zinc-300">
                     {/* 1. Profile */}
-                    <Link
-                      href="/teacher/profile"
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("overview");
+                        setIsProfileDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors text-left cursor-pointer"
                     >
                       <User className="w-4 h-4 text-emerald-500 shrink-0" />
                       <span>Profile</span>
-                    </Link>
+                    </button>
 
                     {/* 2. Security & Password */}
                     <button
