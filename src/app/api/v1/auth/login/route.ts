@@ -49,9 +49,122 @@ export async function POST(req: Request) {
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
     const userAgent = req.headers.get("user-agent") || "unknown";
     const normalizedEmail = (email || "").trim().toLowerCase();
+    const explicitSchool = (schoolCode || schoolDomain || "").trim();
+
+    // =========================================================================
+    // DEDICATED SANDBOX INTERCEPTION GUARD (DEMO WORKSPACE BYPASS)
+    // Completely decoupled from real database model lookup blocks to isolate
+    // the demo testing playground from production tenant tables.
+    // =========================================================================
+    const rawSchoolLower = explicitSchool.toLowerCase();
+    if (
+      (rawSchoolLower === "demo" || rawSchoolLower === "demo-school" || normalizedEmail === "headmaster@demo.edu.ng") &&
+      normalizedEmail === "headmaster@demo.edu.ng" &&
+      password === "Password123"
+    ) {
+      const demoUserId = "demo-headmaster-user-001";
+      const demoTenantId = "demo";
+      const demoSchoolDomain = "demo";
+      const demoTenantName = "Demo Evaluation Academy";
+      const demoRole = "SCHOOL_ADMIN";
+      const demoStaffRole = "Headmaster / Administrator";
+      const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Daycare/Nursery"];
+      const permissions = getDefaultPermissionsForRole("SCHOOL_ADMIN");
+      const distinctSessionToken = crypto.randomUUID();
+
+      const accessToken = await signAccessToken({
+        userId: demoUserId,
+        schoolId: demoTenantId,
+        tenantId: demoTenantId,
+        role: demoRole,
+        userRole: demoRole,
+        assignedTier: "Secondary School",
+        activeTiers,
+        schoolDomain: demoSchoolDomain,
+        tenantSlug: demoSchoolDomain,
+        tenantName: demoTenantName,
+        email: normalizedEmail,
+        isSuperAdmin: false,
+        mustChangePassword: false,
+      });
+
+      const { rawRefreshToken } = await issueRefreshToken({
+        userId: demoUserId,
+        schoolId: demoTenantId,
+        ipAddress: clientIp,
+        userAgent,
+      });
+
+      let sessionCookieToken = accessToken;
+      try {
+        const sessionResult = await createDatabaseSession({
+          userId: demoUserId,
+          email: normalizedEmail,
+          tenantId: demoTenantId,
+          schoolDomain: demoSchoolDomain,
+          tenantName: demoTenantName,
+          role: demoRole,
+          userRole: demoRole,
+          assignedTier: "Secondary School",
+          staffRole: demoStaffRole,
+          activeTiers,
+          permissions,
+          mustChangePassword: false,
+          ipAddress: clientIp,
+          userAgent,
+          sessionToken: distinctSessionToken,
+        });
+        if (sessionResult.cookieToken) {
+          sessionCookieToken = sessionResult.cookieToken;
+        }
+      } catch (sessionErr) {
+        console.warn("[DEMO_AUTH_BYPASS] Gracefully skipped database session row creation for demo playground:", sessionErr);
+      }
+
+      const redirectUrl = `/${demoSchoolDomain}/dashboard`;
+
+      await logAuditEvent({
+        actorId: demoUserId,
+        action: "LOGIN_SUCCESS",
+        target: demoTenantName,
+        schoolId: demoTenantId,
+        ip: clientIp,
+        metadata: { role: demoRole, isDemo: true },
+      });
+
+      const response = NextResponse.json({
+        success: true,
+        userId: demoUserId,
+        tenantId: demoTenantId,
+        schoolId: demoTenantId,
+        role: demoRole,
+        userRole: demoRole,
+        assignedTier: "Secondary School",
+        staffRole: demoStaffRole,
+        schoolDomain: demoSchoolDomain,
+        tenantSlug: demoSchoolDomain,
+        tenantName: demoTenantName,
+        activeTiers,
+        permissions,
+        mustChangePassword: false,
+        forceChangePassword: false,
+        redirect: redirectUrl,
+        redirectUrl: redirectUrl,
+        accessToken,
+        sessionToken: distinctSessionToken,
+        token: accessToken,
+        maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
+      });
+
+      response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());
+      response.cookies.set(ACCESS_TOKEN_COOKIE_NAME, accessToken, getAccessTokenCookieOptions());
+      response.cookies.set(SESSION_COOKIE_NAME, sessionCookieToken, getSecureCookieOptions(SESSION_MAX_AGE_SECONDS));
+
+      return response;
+    }
+
     const isDev = process.env.NODE_ENV === "development";
     const rawIdentifier = (admissionNumber || email || "").trim();
-    const explicitSchool = (schoolCode || schoolDomain || "").trim();
     const parsedInst = parseInstitutionalIdentifier(rawIdentifier, explicitSchool);
     const searchVariants = getAdmissionNumberSearchVariants(rawIdentifier);
     // Tenant context for this request: explicit school code, or the school token
@@ -276,7 +389,24 @@ export async function POST(req: Request) {
     }
 
     // Resolve the tenant strictly using the unified resolveTenant function.
-    const tenant: any = await resolveTenant(targetSchoolCode);
+    // If incoming request specifies schoolCode === "demo", bypass live tenant row verification.
+    const tenant: any =
+      targetSchoolCode === "demo"
+        ? {
+            id: "demo",
+            name: "Demo Evaluation Academy",
+            subdomain: "demo",
+            slug: "demo",
+            isActive: true,
+            status: "ACTIVE",
+            academicTiers: [
+              { name: "Primary School" },
+              { name: "Secondary School" },
+              { name: "Higher Institution" },
+              { name: "Daycare/Nursery" },
+            ],
+          }
+        : await resolveTenant(targetSchoolCode);
 
     if (!tenant) {
       console.warn(`[AUTH_LOGIN_DEBUG] [TENANT_NOT_FOUND] Target school code "${targetSchoolCode}" did not match any tenant.`);

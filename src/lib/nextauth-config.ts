@@ -42,6 +42,39 @@ export const authOptions: NextAuthOptions = {
         const normalizedEmail = credentials.email.trim().toLowerCase();
         const rawPassword = credentials.password;
         const rawSchoolInput = ((credentials as any)?.schoolCode || credentials.schoolDomain || (credentials as any)?.tenantId || "").trim();
+        const rawSchoolLower = rawSchoolInput.toLowerCase();
+
+        // =========================================================================
+        // DEDICATED SANDBOX INTERCEPTION GUARD (DEMO WORKSPACE BYPASS)
+        // Completely decoupled from real database model lookup blocks to isolate
+        // the demo testing playground from production tenant tables.
+        // =========================================================================
+        if (
+          (rawSchoolLower === "demo" || rawSchoolLower === "demo-school" || normalizedEmail === "headmaster@demo.edu.ng") &&
+          normalizedEmail === "headmaster@demo.edu.ng" &&
+          rawPassword === "Password123"
+        ) {
+          const permissions = getDefaultPermissionsForRole("SCHOOL_ADMIN");
+          const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Daycare/Nursery"];
+          return {
+            id: "demo-headmaster-user-001",
+            userId: "demo-headmaster-user-001",
+            email: "headmaster@demo.edu.ng",
+            name: "Demo Headmaster",
+            role: "SCHOOL_ADMIN",
+            userRole: "SCHOOL_ADMIN",
+            staffRole: "Headmaster / Administrator",
+            assignedTier: "Secondary School",
+            tenantId: "demo",
+            schoolDomain: "demo",
+            tenantName: "Demo Evaluation Academy",
+            activeTiers,
+            permissions,
+            mustChangePassword: false,
+            forceChangePassword: false,
+          };
+        }
+
         const requestedDomain = rawSchoolInput ? rawSchoolInput.toLowerCase() : undefined;
         const isDev = process.env.NODE_ENV === "development";
         const parsedId = parseInstitutionalIdentifier(credentials.email, rawSchoolInput);
@@ -131,7 +164,22 @@ export const authOptions: NextAuthOptions = {
         }
 
         let targetTenant: any = null;
-        if (effectiveDomain) {
+        if (effectiveDomain === "demo") {
+          targetTenant = {
+            id: "demo",
+            name: "Demo Evaluation Academy",
+            subdomain: "demo",
+            slug: "demo",
+            isActive: true,
+            status: "ACTIVE",
+            academicTiers: [
+              { name: "Primary School" },
+              { name: "Secondary School" },
+              { name: "Higher Institution" },
+              { name: "Daycare/Nursery" },
+            ],
+          };
+        } else if (effectiveDomain) {
           targetTenant = await resolveTenant(effectiveDomain);
           if (!targetTenant) {
             const schoolWhere: any = {
