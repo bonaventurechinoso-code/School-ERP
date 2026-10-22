@@ -162,6 +162,17 @@ export default function StaffPortalClient({
     | "research"
   >(defaultTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("Academic Engine");
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSection((prev) => {
+      if (prev === sectionTitle || (prev === "Academic Engine" && sectionTitle.toLowerCase().includes("academic"))) {
+        return null;
+      }
+      return sectionTitle;
+    });
+  };
+
   const [isPending, startTransition] = useTransition();
 
   // Tier & Class Filtering
@@ -671,7 +682,8 @@ export default function StaffPortalClient({
     if (isTertiary) {
       return [
         {
-          title: "ACADEMIC & FACULTY ENGINE",
+          title: "Academic & Faculty Engine",
+          icon: GraduationCap,
           items: [
             {
               id: "lessons",
@@ -700,7 +712,8 @@ export default function StaffPortalClient({
           ],
         },
         {
-          title: "RESEARCH & INSTITUTION",
+          title: "Research & Institution",
+          icon: Sparkles,
           items: [
             {
               id: "circulars",
@@ -734,7 +747,8 @@ export default function StaffPortalClient({
     if (isDaycare) {
       return [
         {
-          title: "EARLY ACADEMICS & CARE",
+          title: "Early Academics & Care",
+          icon: GraduationCap,
           items: [
             {
               id: "rosters",
@@ -763,7 +777,8 @@ export default function StaffPortalClient({
           ],
         },
         {
-          title: "GUARDIAN ENGINE",
+          title: "Guardian Engine",
+          icon: Briefcase,
           items: [
             {
               id: "circulars",
@@ -796,7 +811,8 @@ export default function StaffPortalClient({
 
     return [
       {
-        title: "ACADEMIC ENGINE",
+        title: "Academic Engine",
+        icon: GraduationCap,
         items: [
           { id: "overview", label: "Dashboard Overview", icon: Briefcase, badge: null },
           { id: "rosters", label: "Classroom Rosters", icon: Users, badge: classStudents.length ? `${classStudents.length}` : null },
@@ -807,7 +823,8 @@ export default function StaffPortalClient({
         ],
       },
       {
-        title: "PERSONNEL & ACCOUNT",
+        title: "Personnel & Account",
+        icon: Briefcase,
         items: [
           { id: "leaves", label: "Staff Leave Requests", icon: Clock, badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt, badge: null },
@@ -818,6 +835,14 @@ export default function StaffPortalClient({
   }, [isTertiary, isDaycare, classStudents.length, initialTimetable.length, initialLeaveRequests.length]);
 
   const allNavItems = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
+
+  // Auto-expand accordion section containing the active tab
+  useEffect(() => {
+    const currentGroup = navSections.find((g) => g.items.some((it) => it.id === activeTab));
+    if (currentGroup && expandedSection !== currentGroup.title) {
+      setExpandedSection(currentGroup.title);
+    }
+  }, [activeTab, navSections]);
 
   return (
     <div className="flex flex-1 h-screen max-h-screen w-full overflow-hidden bg-slate-50 transition-colors duration-200 dark:bg-zinc-950 relative">
@@ -873,47 +898,99 @@ export default function StaffPortalClient({
           </span>
         </div>
 
-        {/* Navigation Architecture */}
+        {/* Collapsible Accordion Navigation Architecture */}
         <nav className="flex-1 min-h-0 px-2.5 py-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
-          {navSections.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1">
-              <div className="px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase">
-                {group.title}
-              </div>
+          {navSections.map((group, gIdx) => {
+            const anyChildActive = group.items.some((item) => activeTab === item.id);
+            const isExpanded =
+              expandedSection === group.title ||
+              (expandedSection === "Academic Engine" && gIdx === 0);
+            const FolderIcon = group.icon;
 
-              {group.items.map((item) => {
-                const isActive = activeTab === item.id;
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveTab(item.id as any);
-                      setIsSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                      isActive
-                        ? "bg-emerald-600/20 text-emerald-400 dark:text-emerald-300 font-bold border-l-2 border-emerald-500 shadow-2xs"
-                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white border-l-2 border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-                    {isActive ? (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    ) : item.badge ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold shrink-0">
-                        {item.badge}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+            return (
+              <div key={group.title || gIdx} className="space-y-0.5">
+                {/* Main Folder Accordion Row */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection(group.title)}
+                  title={group.title}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                    anyChildActive
+                      ? "bg-emerald-600/15 text-white font-bold"
+                      : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <FolderIcon
+                      className={`w-4 h-4 shrink-0 transition-colors ${
+                        anyChildActive ? "text-emerald-400" : "text-slate-400"
+                      }`}
+                    />
+                    <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left truncate">
+                      {group.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+                    {anyChildActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    )}
+                    {isExpanded ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Indented Child Links */}
+                {isExpanded && (
+                  <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+                    {group.items.map((child) => {
+                      const isChildActive = activeTab === child.id;
+                      const ChildIcon = child.icon;
+
+                      return (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(child.id as any);
+                            setIsSidebarOpen(false);
+                          }}
+                          title={child.label}
+                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
+                            isChildActive
+                              ? "bg-emerald-600/20 text-white font-bold border-l-2 border-emerald-500 shadow-2xs"
+                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border-l-2 border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {ChildIcon && (
+                              <ChildIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isChildActive ? "text-emerald-400" : "text-slate-500"
+                                }`}
+                              />
+                            )}
+                            <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left truncate">
+                              {child.label}
+                            </span>
+                          </div>
+                          {isChildActive ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          ) : child.badge ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold shrink-0">
+                              {child.badge}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Institutional Footer */}

@@ -58,11 +58,16 @@ export default function StudentPortalClient({
 }: StudentPortalClientProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("My Academics");
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
   const [selectedTimetableDay, setSelectedTimetableDay] = useState("MONDAY");
   const [submittedAssignmentMsg, setSubmittedAssignmentMsg] = useState<string | null>(null);
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSection((prev) => (prev === sectionTitle ? null : sectionTitle));
+  };
 
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -86,77 +91,92 @@ export default function StudentPortalClient({
   }, [initialData.student.name]);
 
   // Sidebar navigation sections strictly adhering to Student RBAC
-  const navSections = [
-    {
-      title: "STUDENT DESK",
-      items: [
-        {
-          id: "overview",
-          label: "Academic Overview",
-          icon: GraduationCap,
-          badge: null,
-        },
-      ],
-    },
-    {
-      title: "MY ACADEMICS",
-      items: [
-        {
-          id: "attendance",
-          label: "My Daily Attendance",
-          icon: CheckSquare,
-          badge: `${initialData.metrics.attendanceRate}%`,
-        },
-        {
-          id: "timetable",
-          label: "Class Timetable",
-          icon: Calendar,
-          badge: null,
-        },
-        {
-          id: "assignments",
-          label: "Assignment Submissions",
-          icon: BookOpen,
-          badge: initialData.metrics.pendingAssignmentsCount ? `${initialData.metrics.pendingAssignmentsCount} due` : null,
-        },
-        {
-          id: "reportcards",
-          label: "Termly Report Cards",
-          icon: Award,
-          badge: initialData.reportCards.length ? `${initialData.reportCards.length}` : null,
-        },
-      ],
-    },
-    {
-      title: "CAMPUS WORKSPACE",
-      items: [
-        {
-          id: "noticeboard",
-          label: "School Noticeboard",
-          icon: Bell,
-          badge: initialData.notices.length ? `${initialData.notices.length}` : null,
-        },
-        {
-          id: "resources",
-          label: "Learning Resources",
-          icon: FileText,
-          badge: `${initialData.learningResources.length}`,
-        },
-        {
-          id: "fees",
-          label: "Fees & Invoices",
-          icon: Receipt,
-          badge: initialData.metrics.outstandingFees > 0 ? "Due" : null,
-        },
-        {
-          id: "profile",
-          label: "My Profile Settings",
-          icon: User,
-          badge: null,
-        },
-      ],
-    },
-  ];
+  const navSections = useMemo(
+    () => [
+      {
+        title: "My Academics",
+        icon: GraduationCap,
+        items: [
+          {
+            id: "overview",
+            label: "Academic Overview",
+            icon: GraduationCap,
+            badge: null,
+          },
+          {
+            id: "attendance",
+            label: "My Daily Attendance",
+            icon: CheckSquare,
+            badge: `${initialData.metrics.attendanceRate}%`,
+          },
+          {
+            id: "timetable",
+            label: "Class Timetable",
+            icon: Calendar,
+            badge: null,
+          },
+          {
+            id: "assignments",
+            label: "Assignment Submissions",
+            icon: BookOpen,
+            badge: initialData.metrics.pendingAssignmentsCount ? `${initialData.metrics.pendingAssignmentsCount} due` : null,
+          },
+          {
+            id: "reportcards",
+            label: "Termly Report Cards",
+            icon: Award,
+            badge: initialData.reportCards.length ? `${initialData.reportCards.length}` : null,
+          },
+        ],
+      },
+      {
+        title: "Campus Workspace",
+        icon: Building2,
+        items: [
+          {
+            id: "noticeboard",
+            label: "School Noticeboard",
+            icon: Bell,
+            badge: initialData.notices.length ? `${initialData.notices.length}` : null,
+          },
+          {
+            id: "resources",
+            label: "Learning Resources",
+            icon: FileText,
+            badge: `${initialData.learningResources.length}`,
+          },
+          {
+            id: "fees",
+            label: "Fees & Invoices",
+            icon: Receipt,
+            badge: initialData.metrics.outstandingFees > 0 ? "Due" : null,
+          },
+          {
+            id: "profile",
+            label: "My Profile Settings",
+            icon: User,
+            badge: null,
+          },
+        ],
+      },
+    ],
+    [
+      initialData.metrics.attendanceRate,
+      initialData.metrics.pendingAssignmentsCount,
+      initialData.reportCards.length,
+      initialData.notices.length,
+      initialData.learningResources.length,
+      initialData.metrics.outstandingFees,
+    ]
+  );
+
+  // Auto-expand accordion section containing the active tab
+  useEffect(() => {
+    const currentGroup = navSections.find((g) => g.items.some((it) => it.id === activeTab));
+    if (currentGroup && expandedSection !== currentGroup.title) {
+      setExpandedSection(currentGroup.title);
+    }
+  }, [activeTab, navSections]);
 
   // Filtered timetable for selected day
   const filteredTimetable = useMemo(() => {
@@ -215,56 +235,99 @@ export default function StudentPortalClient({
           </button>
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {navSections.map((section) => (
-            <div key={section.title} className="space-y-1">
-              <p className="px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500">
-                {section.title}
-              </p>
-              <div className="mt-1.5 space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all group ${
-                        isActive
-                          ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shadow-xs"
-                          : "text-slate-300 hover:text-white hover:bg-slate-800/60 dark:hover:bg-zinc-800/60"
+        {/* Collapsible Accordion Navigation Architecture */}
+        <nav className="flex-1 min-h-0 px-2.5 py-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
+          {navSections.map((group, gIdx) => {
+            const anyChildActive = group.items.some((item) => activeTab === item.id);
+            const isExpanded =
+              expandedSection === group.title ||
+              (expandedSection === "My Academics" && gIdx === 0);
+            const FolderIcon = group.icon;
+
+            return (
+              <div key={group.title || gIdx} className="space-y-0.5">
+                {/* Main Folder Accordion Row */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection(group.title)}
+                  title={group.title}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                    anyChildActive
+                      ? "bg-indigo-500/15 text-white font-bold"
+                      : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <FolderIcon
+                      className={`w-4 h-4 shrink-0 transition-colors ${
+                        anyChildActive ? "text-indigo-400" : "text-slate-400"
                       }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon
-                          className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${
-                            isActive ? "text-indigo-400" : "text-slate-400"
-                          }`}
-                        />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.badge && (
-                        <span
-                          className={`px-2 py-0.5 text-[9px] font-black rounded-full uppercase tracking-wider shrink-0 ${
-                            isActive
-                              ? "bg-indigo-400 text-slate-950 font-black"
-                              : "bg-slate-800 text-slate-400 border border-slate-700/60"
+                    />
+                    <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left truncate">
+                      {group.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+                    {anyChildActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                    )}
+                    {isExpanded ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Indented Child Links */}
+                {isExpanded && (
+                  <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+                    {group.items.map((child) => {
+                      const isChildActive = activeTab === child.id;
+                      const ChildIcon = child.icon;
+
+                      return (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(child.id);
+                            setIsSidebarOpen(false);
+                          }}
+                          title={child.label}
+                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
+                            isChildActive
+                              ? "bg-indigo-500/20 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
+                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border-l-2 border-transparent"
                           }`}
                         >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {ChildIcon && (
+                              <ChildIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isChildActive ? "text-indigo-400" : "text-slate-500"
+                                }`}
+                              />
+                            )}
+                            <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left truncate">
+                              {child.label}
+                            </span>
+                          </div>
+                          {isChildActive ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                          ) : child.badge ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold shrink-0">
+                              {child.badge}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Persistent Footer in Sidebar */}

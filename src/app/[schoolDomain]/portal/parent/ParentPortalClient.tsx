@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect, useTransition } from "react";
 import {
   Users,
+  Heart,
   CheckSquare,
   Calendar,
   Award,
@@ -63,9 +64,14 @@ export default function ParentPortalClient({
 }: ParentPortalClientProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("My Wards (Children)");
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSection((prev) => (prev === sectionTitle ? null : sectionTitle));
+  };
 
   // Multi-Child Selector State (Requirement 4)
   const [selectedWardId, setSelectedWardId] = useState<string>(
@@ -132,77 +138,92 @@ export default function ParentPortalClient({
   }, [initialData.parent.name]);
 
   // Sidebar navigation structure strictly adhering to Family RBAC
-  const navSections = [
-    {
-      title: "FAMILY DESK",
-      items: [
-        {
-          id: "overview",
-          label: "Family Overview",
-          icon: Home,
-          badge: `${initialData.wards.length} ${initialData.wards.length === 1 ? "Ward" : "Wards"}`,
-        },
-      ],
-    },
-    {
-      title: "MY WARDS (CHILDREN)",
-      items: [
-        {
-          id: "attendance",
-          label: "Children's Attendance",
-          icon: CheckSquare,
-          badge: `${activeWard.metrics.attendanceRate}%`,
-        },
-        {
-          id: "timetable",
-          label: "Academic Timetables",
-          icon: Calendar,
-          badge: null,
-        },
-        {
-          id: "reportcards",
-          label: "Terminal Report Cards",
-          icon: Award,
-          badge: activeWard.reportCards.length ? `${activeWard.reportCards.length}` : null,
-        },
-        {
-          id: "remarks",
-          label: "Behavioral Remarks",
-          icon: ClipboardList,
-          badge: `${activeWard.behavioralRemarks.length}`,
-        },
-      ],
-    },
-    {
-      title: "ACCOUNTS & SERVICES",
-      items: [
-        {
-          id: "fees",
-          label: "School Fee Bills",
-          icon: Receipt,
-          badge: activeWard.metrics.outstandingFees > 0 ? "Due" : null,
-        },
-        {
-          id: "proof",
-          label: "Upload Proof of Payment",
-          icon: CreditCard,
-          badge: "Submit",
-        },
-        {
-          id: "noticeboard",
-          label: "School Noticeboard",
-          icon: Bell,
-          badge: initialData.notices.length ? `${initialData.notices.length}` : null,
-        },
-        {
-          id: "profile",
-          label: "My Profile Settings",
-          icon: User,
-          badge: null,
-        },
-      ],
-    },
-  ];
+  const navSections = useMemo(
+    () => [
+      {
+        title: "My Wards (Children)",
+        icon: Heart,
+        items: [
+          {
+            id: "overview",
+            label: "Family Overview",
+            icon: Home,
+            badge: `${initialData.wards.length} ${initialData.wards.length === 1 ? "Ward" : "Wards"}`,
+          },
+          {
+            id: "attendance",
+            label: "Children's Attendance",
+            icon: CheckSquare,
+            badge: `${activeWard.metrics.attendanceRate}%`,
+          },
+          {
+            id: "timetable",
+            label: "Academic Timetables",
+            icon: Calendar,
+            badge: null,
+          },
+          {
+            id: "reportcards",
+            label: "Terminal Report Cards",
+            icon: Award,
+            badge: activeWard.reportCards.length ? `${activeWard.reportCards.length}` : null,
+          },
+          {
+            id: "remarks",
+            label: "Behavioral Remarks",
+            icon: ClipboardList,
+            badge: `${activeWard.behavioralRemarks.length}`,
+          },
+        ],
+      },
+      {
+        title: "Accounts & Services",
+        icon: CreditCard,
+        items: [
+          {
+            id: "fees",
+            label: "School Fee Bills",
+            icon: Receipt,
+            badge: activeWard.metrics.outstandingFees > 0 ? "Due" : null,
+          },
+          {
+            id: "proof",
+            label: "Upload Proof of Payment",
+            icon: CreditCard,
+            badge: "Submit",
+          },
+          {
+            id: "noticeboard",
+            label: "School Noticeboard",
+            icon: Bell,
+            badge: initialData.notices.length ? `${initialData.notices.length}` : null,
+          },
+          {
+            id: "profile",
+            label: "My Profile Settings",
+            icon: User,
+            badge: null,
+          },
+        ],
+      },
+    ],
+    [
+      initialData.wards.length,
+      activeWard.metrics.attendanceRate,
+      activeWard.reportCards.length,
+      activeWard.behavioralRemarks.length,
+      activeWard.metrics.outstandingFees,
+      initialData.notices.length,
+    ]
+  );
+
+  // Auto-expand accordion section containing the active tab
+  useEffect(() => {
+    const currentGroup = navSections.find((g) => g.items.some((it) => it.id === activeTab));
+    if (currentGroup && expandedSection !== currentGroup.title) {
+      setExpandedSection(currentGroup.title);
+    }
+  }, [activeTab, navSections]);
 
   // Submit proof of payment action
   const handleSubmitProof = (e: React.FormEvent) => {
@@ -296,56 +317,99 @@ export default function ParentPortalClient({
           </button>
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {navSections.map((section) => (
-            <div key={section.title} className="space-y-1">
-              <p className="px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500">
-                {section.title}
-              </p>
-              <div className="mt-1.5 space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all group ${
-                        isActive
-                          ? "bg-slate-800 text-white border border-slate-700 shadow-xs ring-1 ring-slate-600/50"
-                          : "text-slate-300 hover:text-white hover:bg-slate-800/60 dark:hover:bg-zinc-800/60"
+        {/* Collapsible Accordion Navigation Architecture */}
+        <nav className="flex-1 min-h-0 px-2.5 py-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
+          {navSections.map((group, gIdx) => {
+            const anyChildActive = group.items.some((item) => activeTab === item.id);
+            const isExpanded =
+              expandedSection === group.title ||
+              (expandedSection === "My Wards (Children)" && gIdx === 0);
+            const FolderIcon = group.icon;
+
+            return (
+              <div key={group.title || gIdx} className="space-y-0.5">
+                {/* Main Folder Accordion Row */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection(group.title)}
+                  title={group.title}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                    anyChildActive
+                      ? "bg-slate-800 text-white font-bold"
+                      : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <FolderIcon
+                      className={`w-4 h-4 shrink-0 transition-colors ${
+                        anyChildActive ? "text-indigo-400" : "text-slate-400"
                       }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon
-                          className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${
-                            isActive ? "text-slate-200" : "text-slate-400"
-                          }`}
-                        />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.badge && (
-                        <span
-                          className={`px-2 py-0.5 text-[9px] font-black rounded-full uppercase tracking-wider shrink-0 ${
-                            isActive
-                              ? "bg-white text-slate-950 font-black"
-                              : "bg-slate-800 text-slate-400 border border-slate-700/60"
+                    />
+                    <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left truncate">
+                      {group.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+                    {anyChildActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                    )}
+                    {isExpanded ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Indented Child Links */}
+                {isExpanded && (
+                  <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+                    {group.items.map((child) => {
+                      const isChildActive = activeTab === child.id;
+                      const ChildIcon = child.icon;
+
+                      return (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(child.id);
+                            setIsSidebarOpen(false);
+                          }}
+                          title={child.label}
+                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
+                            isChildActive
+                              ? "bg-slate-800 text-white font-bold border-l-2 border-indigo-400 shadow-2xs"
+                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border-l-2 border-transparent"
                           }`}
                         >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {ChildIcon && (
+                              <ChildIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isChildActive ? "text-indigo-400" : "text-slate-500"
+                                }`}
+                              />
+                            )}
+                            <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left truncate">
+                              {child.label}
+                            </span>
+                          </div>
+                          {isChildActive ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                          ) : child.badge ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold shrink-0">
+                              {child.badge}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Persistent Footer in Sidebar */}
