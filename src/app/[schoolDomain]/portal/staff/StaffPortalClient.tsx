@@ -43,6 +43,7 @@ import {
   ArrowLeft,
   User,
   ChevronDown,
+  Bell,
 } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
@@ -117,7 +118,7 @@ interface StaffPortalClientProps {
   initialStudents: StudentItem[];
   initialLessonNotes?: LessonNoteData[];
   initialLeaveRequests?: LeaveRequestData[];
-  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security";
+  defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile";
   isAccessDenied?: boolean;
 }
 
@@ -143,7 +144,7 @@ export default function StaffPortalClient({
   defaultTab = "overview",
   isAccessDenied = false,
 }: StaffPortalClientProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile">(defaultTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -624,7 +625,6 @@ export default function StaffPortalClient({
         items: [
           { id: "leaves", label: "Staff Leave Requests", icon: Clock, badge: initialLeaveRequests.length ? `${initialLeaveRequests.length}` : null },
           { id: "payslips", label: "My Remuneration & Payslips", icon: Receipt, badge: null },
-          { id: "security", label: "Security & Password", icon: KeyRound, badge: null },
         ],
       },
     ],
@@ -730,17 +730,9 @@ export default function StaffPortalClient({
           ))}
         </nav>
 
-        {/* Institutional & Profile Actions Footer */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 shrink-0 space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowLogoutConfirm(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all duration-150 cursor-pointer text-left group"
-          >
-            <LogOut className="w-4 h-4 text-rose-400 group-hover:text-rose-300 transition-colors shrink-0" />
-            <span className="font-bold tracking-tight">Log out</span>
-          </button>
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/40">
+        {/* Institutional Footer */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 shrink-0">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span className="font-mono text-[10px] truncate max-w-[140px]">.{schoolDomain}</span>
             <span className="font-bold text-slate-300">2026/2027 Session</span>
           </div>
@@ -777,6 +769,16 @@ export default function StaffPortalClient({
           {/* Top-right utility controls */}
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
+            {/* Notification Bell */}
+            <button
+              type="button"
+              aria-label="Staff notifications"
+              className="relative p-2 sm:p-2.5 rounded-full sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800/80 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:scale-98 shrink-0 flex items-center justify-center"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900" />
+            </button>
+
             {/* Admin-pattern Profile Selection Dropdown */}
             <div className="relative" ref={profileDropdownRef}>
               <button
@@ -840,7 +842,7 @@ export default function StaffPortalClient({
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveTab("overview");
+                        setActiveTab("profile");
                         setIsProfileDropdownOpen(false);
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/70 transition-colors text-left cursor-pointer"
@@ -1082,102 +1084,6 @@ export default function StaffPortalClient({
                       Monthly Remuneration
                     </span>
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: "#059669" }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Educator Action Summary Strip */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 pt-1">
-                {/* 1. Daily Roll Call Readiness */}
-                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
-                        <CheckSquare className="w-4 h-4" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Morning Roll Call</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-medium">Daily Register</span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      Date: {attendanceDate}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                      Synchronized attendance for {selectedClass} and assigned cohorts.
-                    </p>
-                  </div>
-                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                      Ready for roll call
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("attendance")}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors cursor-pointer"
-                    >
-                      Take Attendance <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. Assessment & Grading Matrix */}
-                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                        <Award className="w-4 h-4" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Assessment Status</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-medium">WAEC Standard</span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {selectedTerm} • {academicYear}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                      Continuous assessment (CA1, CA2) and term examination entry.
-                    </p>
-                  </div>
-                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
-                      Gradebook Active
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("gradebook")}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors cursor-pointer"
-                    >
-                      Enter Scores <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* 3. Assigned Cohorts Directory */}
-                <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                        <Users className="w-4 h-4" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Class Directory</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-medium">Rosters</span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {classStudents.length} Learners in {selectedClass}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                      Access student records, guardian emergency lines, and bio details.
-                    </p>
-                  </div>
-                  <div className="pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
-                      {initialClassrooms.length} assigned stream(s)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("rosters")}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-                    >
-                      View Directory <ArrowRight className="w-3 h-3" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -2340,6 +2246,177 @@ export default function StaffPortalClient({
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: EDUCATOR PROFILE                                                     */}
+      {/* ========================================================================= */}
+      {activeTab === "profile" && (
+        <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl">
+          {/* Header Card */}
+          <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-emerald-500/10 via-transparent to-transparent rounded-bl-full pointer-events-none" />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 relative z-10">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shrink-0 shadow-md ring-4 ring-emerald-50 dark:ring-emerald-950/40">
+                {staffInitials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                    {staffProfile?.role || staffRole || "Staff Educator"}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                    {staffProfile?.department || "Academic Faculty"}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {staffProfile?.status || "ACTIVE"}
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">
+                  {staffName}
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
+                  {staffProfile?.email || "educator@school.edu"} • {schoolName}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 pt-2 sm:pt-0 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("security")}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Security & Password</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Employment & Institution Card */}
+            <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
+                <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Institutional Profile
+                </h3>
+              </div>
+              <dl className="space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">School Institution</dt>
+                  <dd className="font-bold text-slate-900 dark:text-white">{schoolName}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Institutional Domain</dt>
+                  <dd className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">{schoolDomain}.school.edu</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Department</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.department || "Academic Division"}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Staff Designation</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{staffRole}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Assigned Cohort</dt>
+                  <dd className="font-bold text-slate-900 dark:text-white">{selectedClass}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Compensation & Bank Card */}
+            <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
+                <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Payroll & Disbursement
+                </h3>
+              </div>
+              <dl className="space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Base Monthly Remuneration</dt>
+                  <dd className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {formatNaira(staffProfile?.baseSalary || 220000)}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Beneficiary Bank</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.bankName || "First Bank of Nigeria"}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Account Number</dt>
+                  <dd className="font-mono font-bold text-slate-900 dark:text-white">{staffProfile?.bankAccountNumber || "3081294810"}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Account Name</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.accountName || staffName}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500 dark:text-zinc-400">Disbursement Status</dt>
+                  <dd className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle className="w-3.5 h-3.5" /> Synchronized
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          {/* Assigned Classes and Courses Card */}
+          <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Curriculum & Classroom Scope
+                </h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                {initialClassrooms.length} Classroom Streams Assigned
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Assigned Stream Cohorts
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {initialClassrooms.map((c) => (
+                    <span
+                      key={c.id}
+                      className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${
+                        c.name === selectedClass
+                          ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                          : "bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
+                      }`}
+                    >
+                      {c.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Assigned Subject Disciplines
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {initialCourses.map((crs) => (
+                    <span
+                      key={crs.id}
+                      className="text-xs px-3 py-1.5 rounded-xl font-medium bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
+                    >
+                      {crs.name} ({crs.code})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
