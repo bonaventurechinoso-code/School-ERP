@@ -31,6 +31,9 @@ function PipelineSkeleton() {
   );
 }
 
+import { getSession } from "@/lib/auth";
+import { checkRouteAuthorization } from "@/lib/admissions.service";
+
 export default async function AdmissionsPage({
   params: paramsPromise,
   searchParams: searchParamsPromise,
@@ -40,6 +43,27 @@ export default async function AdmissionsPage({
 }) {
   const params = await paramsPromise;
   const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+
+  // Server-side RBAC validation
+  const session = await getSession(undefined, params.schoolDomain);
+  const auth = checkRouteAuthorization(session, { resource: "admissions", action: "view" });
+
+  if (!auth.allowed) {
+    return (
+      <div className="p-8 max-w-xl mx-auto my-12 bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-6 text-center shadow-sm">
+        <div className="w-12 h-12 bg-rose-100 dark:bg-rose-950 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 font-bold text-xl">
+          ✕
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-zinc-100">403 Forbidden</h2>
+        <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2">
+          {auth.reason || "Access Denied: You do not have permission to access the Admissions module."}
+        </p>
+      </div>
+    );
+  }
+
+  const mutateAuth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+  const canMutate = mutateAuth.canMutate;
 
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
@@ -187,75 +211,74 @@ export default async function AdmissionsPage({
   return (
     <div className="space-y-8 animate-in fade-in duration-500 h-full flex flex-col">
       {/* HEADER & TIER BOUNDARY ISOLATION */}
-      {/* Bug 1 fix: flex-col on mobile, flex-row on desktop (lg:) with nowrap title */}
-      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5 lg:flex-nowrap">
-        <div className="min-w-0 lg:shrink-0 lg:max-w-none">
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100 lg:whitespace-nowrap">
+      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5 w-full">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800 dark:text-zinc-100 break-words">
             Admissions &amp; Enrollment
           </h2>
-          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-sm sm:text-base">
+          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm md:text-base leading-relaxed">
             Track and manage prospective candidates from initial inquiry to entrance assessment and final matriculation.
           </p>
         </div>
 
-        {/* Bug 2 fix: Tier boundary enforcement — show ONLY the active tier tab/indicator */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 shrink-0">
+        {/* Tier boundary enforcement — show ONLY the active tier tab/indicator */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/80 w-full sm:w-auto shrink-0">
           <span
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs flex items-center gap-2"
+            className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs flex items-center gap-2"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            {activeTierDisplayName} ({totalLeads})
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span className="truncate">{activeTierDisplayName} ({totalLeads})</span>
           </span>
         </div>
       </header>
 
-      {/* 5-STAGE ADMISSIONS FUNNEL COCKPIT */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* 5-STAGE ADMISSIONS FUNNEL COCKPIT: Fluid Responsive Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 w-full">
         {/* Stage 1: Inquiries */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-amber-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Inquiries</span>
-            <Users className="w-4 h-4 text-amber-500" />
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-amber-500 min-w-0">
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <span className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider truncate">Inquiries</span>
+            <Users className="w-4 h-4 text-amber-500 shrink-0" />
           </div>
-          <p className="text-3xl font-black text-slate-800">{inquiryCount}</p>
+          <p className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-zinc-100 truncate">{inquiryCount}</p>
         </div>
 
         {/* Stage 2: Applications & KYC */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-blue-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Screening & KYC</span>
-            <FileCheck className="w-4 h-4 text-blue-500" />
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-blue-500 min-w-0">
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <span className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider truncate">Screening &amp; KYC</span>
+            <FileCheck className="w-4 h-4 text-blue-500 shrink-0" />
           </div>
-          <p className="text-3xl font-black text-slate-800">{appliedCount}</p>
+          <p className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-zinc-100 truncate">{appliedCount}</p>
         </div>
 
         {/* Stage 3: Entrance Exam & Interview */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-purple-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Exams & Interview</span>
-            <Clock className="w-4 h-4 text-purple-500" />
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-purple-500 min-w-0">
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <span className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider truncate">Exams &amp; Interview</span>
+            <Clock className="w-4 h-4 text-purple-500 shrink-0" />
           </div>
-          <p className="text-3xl font-black text-slate-800">{interviewCount}</p>
+          <p className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-zinc-100 truncate">{interviewCount}</p>
         </div>
 
         {/* Stage 4: Provisional Offers */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-indigo-500">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Offers Extended</span>
-            <Award className="w-4 h-4 text-indigo-500" />
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-indigo-500 min-w-0">
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <span className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider truncate">Offers Extended</span>
+            <Award className="w-4 h-4 text-indigo-500 shrink-0" />
           </div>
-          <p className="text-3xl font-black text-slate-800">{approvedCount}</p>
+          <p className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-zinc-100 truncate">{approvedCount}</p>
         </div>
 
         {/* Stage 5: Enrolled & Conversion Rate */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-emerald-500 col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Matriculated</span>
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
+        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 border-t-4 border-t-emerald-500 col-span-2 sm:col-span-1 md:col-span-1 min-w-0">
+          <div className="flex items-center justify-between mb-2 gap-1">
+            <span className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider truncate">Matriculated</span>
+            <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
           </div>
-          <p className="text-3xl font-black text-slate-800">
+          <p className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-zinc-100 truncate">
             {enrolledCount}
-            <span className="text-xs font-normal text-slate-400 ml-1">({conversionRate}% Conv.)</span>
+            <span className="text-xs font-normal text-slate-400 dark:text-zinc-500 ml-1">({conversionRate}% Conv.)</span>
           </p>
         </div>
       </div>
@@ -267,6 +290,7 @@ export default async function AdmissionsPage({
           schoolDomain={params.schoolDomain}
           tiers={school.academicTiers}
           schoolName={school.name}
+          canMutate={canMutate}
         />
       </Suspense>
     </div>

@@ -13,6 +13,19 @@ import { generateAdmissionNumber, getExamSubjectsForTier } from "@/lib/tenant-ti
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword } from "@/lib/security-service";
+import { getSession } from "@/lib/auth";
+import {
+  checkRouteAuthorization,
+  convertLeadToRegister,
+  checkDuplicate,
+  getTenantFromSession,
+} from "@/lib/admissions.service";
+import { DuplicateCheckMatch } from "@/lib/admissions.types";
+import {
+  isAdmissionsAuthorized,
+  findDuplicateAdmissionEntry,
+  executeLeadToRegisterTransition,
+} from "@/modules/enrollment/enrollment.controller";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -63,6 +76,49 @@ export async function createAdmissionLeadAction(payload: {
 }) {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
+
+    // SYSTEM ANTI-DUPLICATE GUARD (DEDUPLICATION):
+    // Compound validation key: [schoolId + Student Name + Parent Phone/Email]
+    const dupCheck = await findDuplicateAdmissionEntry({
+      tenantId: schoolId,
+      studentName: payload.applicantName.trim(),
+      parentPhone: payload.parentPhone || payload.parentContact,
+      email: payload.parentEmail || payload.studentEmail,
+    });
+
+    if (dupCheck.isDuplicate && dupCheck.leadRecord) {
+      // Merge incoming inquiry payload into active lead record to prevent data fracturing
+      const existingLogs = Array.isArray(dupCheck.leadRecord.logs)
+        ? (dupCheck.leadRecord.logs as any[])
+        : [];
+      const updatedLogs = [
+        ...existingLogs,
+        {
+          timestamp: new Date().toISOString(),
+          action: "INQUIRY_MERGED",
+          note: `Follow-up inquiry registered via ${payload.source || "Walk-In"}. Merged into active record without fracturing.`,
+        },
+      ];
+
+      const mergedLead = await basePrisma.admissionLead.update({
+        where: { id: dupCheck.leadRecord.id },
+        data: {
+          targetGrade: payload.targetGrade.trim() || dupCheck.leadRecord.targetGrade,
+          parentContact: payload.parentContact.trim() || dupCheck.leadRecord.parentContact,
+          parentPhone: payload.parentPhone?.trim() || dupCheck.leadRecord.parentPhone,
+          parentEmail: payload.parentEmail?.trim().toLowerCase() || dupCheck.leadRecord.parentEmail,
+          studentEmail: payload.studentEmail?.trim().toLowerCase() || dupCheck.leadRecord.studentEmail,
+          studentPhone: payload.studentPhone?.trim() || dupCheck.leadRecord.studentPhone,
+          logs: updatedLogs as any,
+        },
+        include: { tier: true },
+      });
+
+      await invalidateAdmissionsNamespace(schoolId);
+      safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+      return { success: true, lead: mergedLead, deduplicated: true };
+    }
+
     const uploadToken = crypto.randomUUID();
     const uploadExpiresAt = new Date();
     uploadExpiresAt.setDate(uploadExpiresAt.getDate() + 30); // 30 days valid
@@ -120,6 +176,16 @@ export async function updateLeadDocumentsAction(payload: {
 }) {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
+
+    // RBAC Permissions Check: Restrict structural state mutations strictly to authorized roles
+    const session = await getSession(undefined, payload.schoolDomain);
+    if (session && !isAdmissionsAuthorized(session.role, session.staffRole)) {
+      return {
+        success: false,
+        error: "Unauthorized: Document verification and rejection is strictly restricted to Registrar, Admissions Officer, or Superadmin roles.",
+      };
+    }
+
     const lead = await basePrisma.admissionLead.findUnique({
       where: { id: payload.leadId },
     });
@@ -489,6 +555,16 @@ export async function enrollApplicantAction(payload: {
     }
     const schoolId = await resolveSchoolId(payload.schoolId);
 
+    // RBAC Permissions Check: Restrict 'Convert to Student' strictly to authorized roles
+    const session = await getSession(undefined, schoolDomain);
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized: Student matriculation is strictly restricted to Registrar, Admissions Officer, or Superadmin roles."),
+      };
+    }
+
     // 1. Fetch applicant lead with academic tier context
     const lead = await basePrisma.admissionLead.findUnique({
       where: { id: leadId },
@@ -747,8 +823,51 @@ export async function updateLeadStatusAction(payload: {
     }
     const schoolId = await resolveSchoolId(payload.schoolId);
 
+    // RBAC Permissions Check: Restrict structural status transitions strictly to authorized roles
+    const session = await getSession(undefined, schoolDomain);
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized: Admissions status transitions are strictly restricted to Registrar, Admissions Officer, or Superadmin roles."),
+      };
+    }
+
     if (status === "ENROLLED") {
       return await enrollApplicantAction({ leadId, schoolId, schoolDomain });
+    }
+
+    // AUTOMATED FUNNEL STATE MACHINE:
+    // If transitioning beyond INQUIRY (e.g. APPLIED, INTERVIEW, APPROVED), atomically promote/sync to live AdmissionRegister
+    if (status !== "INQUIRY") {
+      try {
+        const lead = await basePrisma.admissionLead.findUnique({ where: { id: leadId } });
+        if (lead) {
+          const nameParts = (lead.applicantName || "").trim().split(" ");
+          const firstName = nameParts[0] || "Student";
+          const lastName = nameParts.slice(1).join(" ") || "Applicant";
+          let regStatus = "docs_pending";
+          if (status === "APPROVED") regStatus = "approved";
+          else if (status === "INTERVIEW") regStatus = "under_review";
+          else if (status === "APPLIED") regStatus = "docs_pending";
+
+          await executeLeadToRegisterTransition({
+            tenantId: schoolId,
+            leadId: lead.id,
+            bioData: {
+              firstName,
+              lastName,
+              classApplied: lead.targetGrade || "N/A",
+              parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+              email: lead.studentEmail || lead.parentEmail || null,
+              parentName: lead.parentName || null,
+            },
+            status: regStatus,
+          });
+        }
+      } catch (transErr) {
+        console.warn("[updateLeadStatusAction] Auto-transition to register warning:", transErr);
+      }
     }
 
     let updatedLead;
@@ -980,3 +1099,135 @@ export async function requestApplicantDocsAction(payload: {
     return { success: false, error: error?.message || "Failed to request applicant documents." };
   }
 }
+
+/**
+ * Convert lead to live AdmissionRegister inside atomic Prisma transaction
+ */
+export async function convertLeadToRegisterAction(payload: {
+  leadId: string;
+  schoolId: string;
+  schoolDomain: string;
+  reason?: string;
+  formFeePaid?: boolean;
+}) {
+  const { leadId, schoolDomain, reason, formFeePaid } = payload;
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, schoolDomain);
+
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized: Conversion to Register is strictly restricted to authorized Admissions staff."),
+      };
+    }
+
+    const result = await convertLeadToRegister(leadId, { reason, formFeePaid }, session || { schoolId });
+    safeRevalidate(`/${schoolDomain}/admissions`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    return result;
+  } catch (error: any) {
+    console.error("[convertLeadToRegisterAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to convert lead to register." };
+  }
+}
+
+/**
+ * Check for duplicate applicant entries using compound key and fuzzy matching
+ */
+export async function checkDuplicateAction(payload: {
+  schoolId: string;
+  name: string;
+  phone?: string;
+  email?: string;
+}): Promise<DuplicateCheckMatch> {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    return await checkDuplicate(schoolId, payload.name, payload.phone, payload.email);
+  } catch (error: any) {
+    console.error("[checkDuplicateAction] Error:", error);
+    return { isDuplicate: false };
+  }
+}
+
+/**
+ * Merge incoming duplicate data directly into an existing active record
+ */
+export async function mergeDuplicateAction(payload: {
+  existingRegisterId: string;
+  incomingData: {
+    firstName?: string;
+    lastName?: string;
+    classApplied?: string;
+    parentPhone?: string;
+    email?: string;
+    documents?: any[];
+    formFeePaid?: boolean;
+  };
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized to merge admissions records."),
+      };
+    }
+
+    const existing = await basePrisma.admissionRegister.findUnique({
+      where: { id: payload.existingRegisterId },
+    });
+
+    if (!existing) {
+      return { success: false, error: "Existing register record not found." };
+    }
+
+    const existingCreds = typeof existing.credentialsJson === "object" && existing.credentialsJson !== null
+      ? (existing.credentialsJson as any)
+      : {};
+
+    const existingDocs = Array.isArray(existingCreds.documents)
+      ? existingCreds.documents
+      : [];
+    const mergedDocs = [...existingDocs, ...(payload.incomingData.documents || [])];
+
+    const statusLog = {
+      fromStatus: existing.status,
+      toStatus: existing.status,
+      changedById: session?.name || "Admissions Officer",
+      reason: "Duplicate records merged into active register file.",
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedLogs = [...(existingCreds.statusLogs || []), statusLog];
+
+    const updated = await basePrisma.admissionRegister.update({
+      where: { id: existing.id },
+      data: {
+        parentPhone: payload.incomingData.parentPhone || existing.parentPhone,
+        email: payload.incomingData.email || existing.email,
+        classApplied: payload.incomingData.classApplied || existing.classApplied,
+        credentialsJson: {
+          ...existingCreds,
+          documents: mergedDocs,
+          statusLogs: updatedLogs,
+          formFeePaid: payload.incomingData.formFeePaid ?? existingCreds.formFeePaid ?? false,
+        },
+      },
+    });
+
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    return { success: true, record: updated };
+  } catch (error: any) {
+    console.error("[mergeDuplicateAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to merge duplicate records." };
+  }
+}
+

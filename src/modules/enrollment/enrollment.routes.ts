@@ -5,6 +5,11 @@ import {
   verifyDocument,
   admitApplicant,
   rejectApplicant,
+  updateApplicantStatus,
+  executeLeadToRegisterTransition,
+  findDuplicateAdmissionEntry,
+  isAdmissionsAuthorized,
+  assertAdmissionsAuthorized,
 } from "./enrollment.controller";
 
 export const enrollmentService = {
@@ -14,6 +19,11 @@ export const enrollmentService = {
   verifyDocument,
   admitApplicant,
   rejectApplicant,
+  updateApplicantStatus,
+  executeLeadToRegisterTransition,
+  findDuplicateAdmissionEntry,
+  isAdmissionsAuthorized,
+  assertAdmissionsAuthorized,
 };
 
 export default enrollmentService;

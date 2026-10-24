@@ -29,6 +29,8 @@ import {
   Send,
   Calculator,
   Loader2,
+  History,
+  Lock,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
@@ -46,6 +48,7 @@ export interface ApplicantDossierDrawerProps {
   schoolId: string;
   schoolDomain: string;
   schoolName: string;
+  canMutate?: boolean;
   onLeadUpdated?: () => void;
   onPrintOfferLetter?: (lead: any) => void;
   onPrintExamSlip?: (lead: any) => void;
@@ -93,12 +96,13 @@ export default function ApplicantDossierDrawer({
   schoolId,
   schoolDomain,
   schoolName,
+  canMutate = false,
   onLeadUpdated,
   onPrintOfferLetter,
   onPrintExamSlip,
 }: ApplicantDossierDrawerProps) {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [activeTab, setActiveTab] = useState<"bio" | "documents" | "screening" | "offer">("bio");
+  const [activeTab, setActiveTab] = useState<"bio" | "documents" | "screening" | "offer" | "timeline">("bio");
   const [isPending, startTransition] = useTransition();
   const [alertMsg, setAlertMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -517,6 +521,7 @@ export default function ApplicantDossierDrawer({
               { id: "documents", label: "Statutory KYC Docs", icon: FileCheck },
               { id: "screening", label: "Exam & Interview", icon: Star },
               { id: "offer", label: "Offer & Matriculation", icon: Award },
+              { id: "timeline", label: "Audit Timeline", icon: History },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -793,7 +798,7 @@ export default function ApplicantDossierDrawer({
                             <div>
                               <p className="font-bold text-slate-900 text-base">{req.label}</p>
                               {hasFile ? (
-                                <p className="text-xs sm:text-sm text-slate-500 font-mono truncate max-w-[240px] sm:max-w-md mt-0.5">
+                                <p className="text-xs sm:text-sm text-slate-500 font-mono truncate max-w-full sm:max-w-md mt-0.5">
                                   {doc.fileName || `${req.label}.pdf`} •{" "}
                                   <span className={isVerified ? "text-emerald-600 font-bold" : isRejected ? "text-rose-600 font-bold" : "text-indigo-600 font-semibold"}>
                                     {isVerified ? "Verified ✓" : isRejected ? "Rejected ✗" : "Uploaded"}
@@ -1282,14 +1287,21 @@ export default function ApplicantDossierDrawer({
                     (e.g. <strong className="font-mono text-indigo-600">GW/SEC/2026/001</strong>), register the candidate into the student roster, and archive this lead.
                   </p>
 
-                  <button
-                    onClick={handleFinalizeEnrollment}
-                    disabled={isPending}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2 mt-2 cursor-pointer"
-                  >
-                    <UserCheck className="w-5 h-5" />
-                    <span>Finalize Enrollment &amp; Matriculate Student</span>
-                  </button>
+                  {canMutate ? (
+                    <button
+                      onClick={handleFinalizeEnrollment}
+                      disabled={isPending}
+                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                    >
+                      <UserCheck className="w-5 h-5" />
+                      <span>Finalize Enrollment &amp; Matriculate Student</span>
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2 font-medium">
+                      <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Student matriculation is restricted to authorized Registrar, Admissions Officer, or Superadmin.</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-emerald-50 border border-emerald-200 p-6 md:p-8 rounded-2xl text-sm sm:text-base text-emerald-800 flex items-center gap-3.5">
@@ -1302,6 +1314,51 @@ export default function ApplicantDossierDrawer({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: AUDIT TIMELINE (from AdmissionStatusLog) */}
+          {activeTab === "timeline" && (
+            <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+              <h4 className="text-sm font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-3 flex items-center justify-between">
+                <span>Applicant Funnel &amp; State Audit Trail</span>
+                <span className="text-xs text-indigo-600 font-bold">
+                  {Array.isArray(lead.logs) ? lead.logs.length : 1} Event(s)
+                </span>
+              </h4>
+
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                {(Array.isArray(lead.logs) && lead.logs.length > 0 ? lead.logs : [
+                  {
+                    timestamp: lead.createdAt,
+                    action: "LEAD_CREATED",
+                    note: "Initial inquiry registered into admissions funnel.",
+                    operator: lead.assignedCounselor || "Admissions System"
+                  }
+                ]).map((log: any, lIdx: number) => (
+                  <div key={lIdx} className="relative group">
+                    <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] shadow-xs">
+                      ✓
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-xs uppercase tracking-wider text-indigo-600">
+                          {log.action || log.toStatus || "STATUS_TRANSITION"}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {log.timestamp || log.createdAt ? new Date(log.timestamp || log.createdAt).toLocaleString() : "Audit Logged"}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-700 font-medium">
+                        {log.note || log.reason || "State machine transition executed."}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Authorized by: <strong className="text-slate-600">{log.operator || log.changedById || "Admissions System"}</strong>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           </div>

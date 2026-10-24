@@ -563,40 +563,24 @@ export async function POST(
       const firstName = nameParts[0] || "Student";
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
 
-      const existingReg = await (basePrisma as any).admissionRegister?.findFirst({
-        where: {
-          schoolId,
-          OR: [
-            { applicationId: lead.id },
-            { email: lead.studentEmail || lead.parentEmail || undefined },
-          ],
-        },
-      });
+      const { executeLeadToRegisterTransition } = await import(
+        "@/modules/enrollment/enrollment.controller"
+      );
 
-      if (existingReg) {
-        await (basePrisma as any).admissionRegister.update({
-          where: { id: existingReg.id },
-          data: {
-            credentialsJson: credsList,
-            status: "under_review",
-          },
-        });
-      } else {
-        await (basePrisma as any).admissionRegister?.create({
-          data: {
-            schoolId,
-            applicationId: lead.id,
-            firstName,
-            lastName,
-            gradeApplyingFor: lead.targetGrade || "N/A",
-            parentName: lead.parentName || "Guardian",
-            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
-            email: lead.studentEmail || lead.parentEmail || null,
-            credentialsJson: credsList,
-            status: "under_review",
-          },
-        });
-      }
+      await executeLeadToRegisterTransition({
+        tenantId: schoolId,
+        leadId: lead.id,
+        bioData: {
+          firstName,
+          lastName,
+          classApplied: lead.targetGrade || "N/A",
+          parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+          email: lead.studentEmail || lead.parentEmail || null,
+          parentName: lead.parentName || null,
+        },
+        credentials: credsList,
+        status: "docs_pending",
+      });
     } catch (regErr) {
       console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
     }

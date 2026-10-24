@@ -142,67 +142,113 @@ export async function POST(request: NextRequest) {
     const uploadExpiresAt = new Date();
     uploadExpiresAt.setDate(uploadExpiresAt.getDate() + 30); // 30-day secure upload window
 
-    // Insert new application explicitly as INQUIRY
-    const newLead = await tenantDb.admissionLead.create({
-      data: {
-        schoolId: school.id,
-        applicantName: applicantName || data.fullName,
-        studentEmail,
-        studentPhone,
-        parentName,
-        parentContact: parentContact || "N/A",
-        parentPhone: parentContact || null,
-        parentEmail,
-        tierId: effectiveTierId!,
-        targetGrade: effectiveTargetGrade,
-        source: "Website",
-        status: "INQUIRY",
-        uploadToken,
-        uploadExpiresAt,
-        documents: {
-          passwordHash: hashedPassword,
-          academicTier: finalTierName,
-          targetClass: effectiveTargetGrade,
-          targetClassCohort: effectiveTargetGrade,
-        },
-      }
+    const fullName = (applicantName || data.fullName || "Student").trim();
+    const nameParts = fullName.split(" ");
+    const firstName = nameParts[0] || "Student";
+    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+    // 1. SYSTEM ANTI-DUPLICATE GUARD (DEDUPLICATION):
+    // Compound validation key: [schoolId + Student Name + Parent Phone/Email]
+    const { findDuplicateAdmissionEntry, executeLeadToRegisterTransition } = await import(
+      "@/modules/enrollment/enrollment.controller"
+    );
+
+    const dupCheck = await findDuplicateAdmissionEntry({
+      tenantId: school.id,
+      firstName,
+      lastName,
+      studentName: fullName,
+      parentPhone: parentContact || studentPhone || null,
+      email: studentEmail || parentEmail || null,
     });
 
-    // Global Admission Register record creation with tenantId scoping
-    let appNo = `APP-${Date.now().toString().slice(-6)}`;
-    try {
-      const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
-      appNo = await generateApplicationNo(school.id);
-      const nameParts = (applicantName || data.fullName || "Student").trim().split(" ");
-      const fName = nameParts[0] || "Student";
-      const lName = nameParts.slice(1).join(" ") || "Applicant";
-      await basePrisma.admissionRegister.create({
+    let newLead: any = dupCheck.leadRecord;
+
+    if (newLead) {
+      // Merge incoming payload into active lead to prevent data fracturing
+      newLead = await tenantDb.admissionLead.update({
+        where: { id: newLead.id },
         data: {
-          tenantId: school.id,
-          applicationNo: appNo,
-          firstName: fName,
-          lastName: lName,
-          classApplied: effectiveTargetGrade,
-          parentPhone: parentContact || studentPhone || "N/A",
-          email: studentEmail || parentEmail || null,
-          status: "docs_pending",
-          credentialsJson: [
-            {
-              type: "TIER_INFO",
-              academicTier: finalTierName,
-              targetClass: effectiveTargetGrade,
-              targetClassCohort: effectiveTargetGrade,
-            }
-          ] as any,
+          targetGrade: effectiveTargetGrade,
+          studentEmail: studentEmail || newLead.studentEmail,
+          studentPhone: studentPhone || newLead.studentPhone,
+          parentName: parentName || newLead.parentName,
+          parentContact: parentContact || newLead.parentContact,
+          parentPhone: parentContact || newLead.parentPhone,
+          parentEmail: parentEmail || newLead.parentEmail,
+          uploadToken: newLead.uploadToken || uploadToken,
+          uploadExpiresAt: newLead.uploadExpiresAt || uploadExpiresAt,
+          status: "CONVERTED",
+          documents: {
+            ...((newLead.documents as any) || {}),
+            passwordHash: hashedPassword,
+            academicTier: finalTierName,
+            targetClass: effectiveTargetGrade,
+            targetClassCohort: effectiveTargetGrade,
+          },
         },
       });
-    } catch (regErr: any) {
-      if (regErr?.code === "P2002") {
-        console.warn("[PUBLIC_SUBMIT] Unique constraint on admissionRegister:", regErr);
-      } else {
-        console.warn("[PUBLIC_SUBMIT] Warning: could not mirror to admission_registers:", regErr);
-      }
+    } else {
+      // Create new lead flagged CONVERTED since bio-data is submitted
+      newLead = await tenantDb.admissionLead.create({
+        data: {
+          schoolId: school.id,
+          applicantName: fullName,
+          studentEmail,
+          studentPhone,
+          parentName,
+          parentContact: parentContact || "N/A",
+          parentPhone: parentContact || null,
+          parentEmail,
+          tierId: effectiveTierId!,
+          targetGrade: effectiveTargetGrade,
+          source: "Website",
+          status: "CONVERTED",
+          uploadToken,
+          uploadExpiresAt,
+          documents: {
+            passwordHash: hashedPassword,
+            academicTier: finalTierName,
+            targetClass: effectiveTargetGrade,
+            targetClassCohort: effectiveTargetGrade,
+          },
+          logs: [
+            {
+              timestamp: new Date().toISOString(),
+              action: "BIO_DATA_SUBMITTED",
+              note: "Bio-data submitted via public application portal. Transitioned to live AdmissionRegister.",
+            },
+          ],
+        },
+      });
     }
+
+    // 2. AUTOMATED FUNNEL STATE MACHINE:
+    // Millisecond bio-data is submitted, atomically create/merge into live AdmissionRegister (Status: DOCS_PENDING)
+    const transitionResult = await executeLeadToRegisterTransition({
+      tenantId: school.id,
+      leadId: newLead.id,
+      bioData: {
+        firstName,
+        lastName,
+        classApplied: effectiveTargetGrade,
+        parentPhone: parentContact || studentPhone || "N/A",
+        email: studentEmail || parentEmail || null,
+        parentName,
+      },
+      credentials: [
+        {
+          type: "TIER_INFO",
+          docType: "tierInfo",
+          name: "Academic Tier Metadata",
+          verified: false,
+          key: "academicTier",
+        },
+      ],
+      status: "docs_pending",
+    });
+
+    const appNo = transitionResult.registerRecord.applicationNo;
 
     // Provision or sync Student portal user record
     const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();

@@ -25,11 +25,12 @@ import NewInquiryModal from "./NewInquiryModal";
 import AdmissionRegisterTable from "./AdmissionRegisterTable";
 
 const STAGES = [
-  { id: "INQUIRY", label: "Initial Inquiry", color: "border-t-amber-500", bg: "bg-amber-500/10 text-amber-800" },
-  { id: "APPLIED", label: "Application & KYC", color: "border-t-blue-500", bg: "bg-blue-500/10 text-blue-800" },
-  { id: "INTERVIEW", label: "Entrance Exam", color: "border-t-purple-500", bg: "bg-purple-500/10 text-purple-800" },
-  { id: "APPROVED", label: "Provisional Offer", color: "border-t-indigo-500", bg: "bg-indigo-500/10 text-indigo-800" },
-  { id: "ENROLLED", label: "Matriculated", color: "border-t-emerald-500", bg: "bg-emerald-500/10 text-emerald-800" },
+  { id: "INQUIRY", label: "Inquiry", color: "border-t-slate-500", bg: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
+  { id: "DOCS_PENDING", label: "Docs Pending", color: "border-t-amber-500", bg: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
+  { id: "VERIFIED", label: "Verified", color: "border-t-blue-500", bg: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" },
+  { id: "APPROVED", label: "Approved", color: "border-t-emerald-500", bg: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" },
+  { id: "REJECTED", label: "Rejected", color: "border-t-rose-500", bg: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200" },
+  { id: "CONVERTED", label: "Converted to Student", color: "border-t-violet-500", bg: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" },
 ];
 
 function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
@@ -73,12 +74,14 @@ export default function AdmissionsPipeline({
   schoolDomain,
   tiers,
   schoolName = "Greenwood Academy",
+  canMutate = false,
 }: {
   leads: LeadWithTier[];
   schoolId: string;
   schoolDomain?: string;
   tiers: AcademicTier[];
   schoolName?: string;
+  canMutate?: boolean;
 }) {
   const router = useRouter();
   const [localLeads, setLocalLeads] = useState<LeadWithTier[]>(leads);
@@ -390,23 +393,23 @@ export default function AdmissionsPipeline({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* TABS SWITCHER: ADMISSION LEADS (LEGACY) [LEFT] vs ADMISSION REGISTER (LIVE) [RIGHT] */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4 mb-2">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4 mb-2 w-full">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setMainTab("leads")}
-            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
+            className={`w-full sm:w-auto justify-center px-4 sm:px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
               mainTab === "leads"
                 ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
                 : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span>Admission Leads (Legacy)</span>
+            <Users className="w-4 h-4 shrink-0" />
+            <span className="truncate">Admission Leads (Legacy)</span>
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
                 mainTab === "leads"
                   ? "bg-white/20 text-white"
                   : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
@@ -419,16 +422,16 @@ export default function AdmissionsPipeline({
           <button
             type="button"
             onClick={() => setMainTab("register")}
-            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
+            className={`w-full sm:w-auto justify-center px-4 sm:px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
               mainTab === "register"
                 ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
                 : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Admission Register (Live)</span>
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span className="truncate">Admission Register (Live)</span>
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
                 mainTab === "register"
                   ? "bg-white/20 text-white"
                   : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
@@ -445,265 +448,278 @@ export default function AdmissionsPipeline({
           schoolId={schoolId}
           schoolDomain={schoolDomain || ""}
           schoolName={schoolName}
+          canMutate={canMutate}
         />
       ) : (
         <>
-          {/* TOOLBAR & CONTROLS */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Admissions Pipeline</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Managing {filteredLeads.length} prospective inquiry leads
-            </p>
-          </div>
-        </div>
-
-        {/* CONTROLS */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* SEARCH */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by student or parent..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/50"
-            />
-          </div>
-
-          {/* FILTER STAGE */}
-          <select
-            value={filterStage}
-            onChange={(e) => setFilterStage(e.target.value)}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
-          >
-            <option value="ALL">All Stages (5)</option>
-            {STAGES.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-
-          {/* LOG INQUIRY BUTTON */}
-          <button
-            onClick={() => setIsInquiryModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Log Walk-In Inquiry</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KANBAN BOARD VIEW */}
-      {viewMode === "kanban" ? (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
-          {STAGES.map((stage, sIdx) => {
-            const stageLeads = filteredLeads.filter((l) => l.status === stage.id);
-
-            return (
-              <div
-                key={stage.id}
-                className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/70 flex flex-col gap-3 min-h-[500px]"
-              >
-                {/* COLUMN HEADER */}
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black tracking-tight text-slate-800 uppercase">
-                      {stage.label}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-700 shadow-2xs">
-                      {stageLeads.length}
-                    </span>
-                  </div>
-                </div>
-
-                {/* CARDS LIST */}
-                <div className="space-y-3 flex-1">
-                  {stageLeads.length > 0 ? (
-                    stageLeads.map((lead) => {
-                      const docCount = Object.keys(lead.documents || {}).length;
-
-                      return (
-                        <div
-                          key={lead.id}
-                          onClick={() => openDossier(lead)}
-                          className={`bg-white rounded-xl p-4 border border-slate-200 shadow-xs hover:shadow-md transition cursor-pointer border-t-4 ${stage.color} space-y-3`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h4 className="font-black text-slate-800 text-xs leading-tight hover:text-indigo-600 transition">
-                                {lead.applicantName}
-                              </h4>
-                              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                {lead.targetGrade || (lead as any).targetClass} • <span className="text-indigo-600 font-semibold">{lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}</span>
-                              </p>
-                            </div>
-                            <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {lead.id.slice(0, 4).toUpperCase()}
-                            </span>
-                          </div>
-
-                          {/* PARENT CONTACT */}
-                          <div className="text-[11px] text-slate-600 flex items-center gap-1.5 font-mono">
-                            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{lead.parentPhone || lead.parentContact}</span>
-                          </div>
-
-                          {/* FOOTER BADGES & ADVANCE */}
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDossier(lead);
-                                }}
-                                className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-md transition"
-                              >
-                                Dossier
-                              </button>
-                              <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
-                                <FileCheck className="w-3 h-3 text-emerald-500" />
-                                <span>{docCount}</span>
-                              </span>
-                            </div>
-
-                            {sIdx < STAGES.length - 1 ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStageAdvance(lead.id, lead.status);
-                                }}
-                                className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 font-bold rounded-lg transition flex items-center gap-1"
-                                title={`Advance to ${STAGES[sIdx + 1].label}`}
-                              >
-                                <span>Advance</span>
-                                <ArrowRight className="w-3 h-3" />
-                              </button>
-                            ) : (
-                              <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> Enrolled
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400">
-                      No applicants in this stage
-                    </div>
-                  )}
-                </div>
+          {/* TOOLBAR & CONTROLS: Stacks cleanly on mobile viewports */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+                <Users className="w-5 h-5" />
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* TABULAR ROSTER LIST VIEW */
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
-                  <th className="p-4">Candidate & Ref</th>
-                  <th className="p-4">Target Cohort</th>
-                  <th className="p-4">Parent / Contact</th>
-                  <th className="p-4">Current Stage</th>
-                  <th className="p-4">KYC Documents</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredLeads.length > 0 ? (
-                  filteredLeads.map((lead) => {
-                    const docCount = Object.keys(lead.documents || {}).length;
-                    const stageObj = STAGES.find((s) => s.id === lead.status) || STAGES[0];
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Admissions Pipeline</h3>
+                <p className="text-xs text-slate-400 mt-0.5 truncate">
+                  Managing {filteredLeads.length} prospective inquiry leads
+                </p>
+              </div>
+            </div>
 
-                    return (
-                      <tr key={lead.id} className="hover:bg-slate-50/70 transition">
-                        <td className="p-4">
-                          <button
-                            onClick={() => openDossier(lead)}
-                            className="font-bold text-slate-800 hover:text-indigo-600 transition text-left cursor-pointer"
-                          >
-                            {lead.applicantName}
-                          </button>
-                          <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
-                            ADM-{lead.id.slice(0, 6).toUpperCase()}
-                          </span>
-                        </td>
+            {/* CONTROLS */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+              {/* SEARCH */}
+              <div className="relative w-full sm:w-64 md:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by student or parent..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/50"
+                />
+              </div>
 
-                        <td className="p-4 font-semibold text-slate-700">
-                          {lead.targetGrade || (lead as any).targetClass}
-                          <span className="text-[10px] text-indigo-600 font-medium block">
-                            {lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}
-                          </span>
-                        </td>
+              {/* FILTER STAGE */}
+              <select
+                value={filterStage}
+                onChange={(e) => setFilterStage(e.target.value)}
+                className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
+              >
+                <option value="ALL">All Stages (5)</option>
+                {STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
 
-                        <td className="p-4 text-slate-600 font-mono">
-                          <span className="font-sans font-bold text-slate-800 block">
-                            {lead.parentName || "Parent / Guardian"}
-                          </span>
-                          <span>{lead.parentPhone || lead.parentContact}</span>
-                        </td>
+              {/* LOG INQUIRY BUTTON */}
+              <button
+                onClick={() => setIsInquiryModalOpen(true)}
+                className="w-full sm:w-auto justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs sm:text-sm transition shadow-sm flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">Log Walk-In Inquiry</span>
+              </button>
+            </div>
+          </div>
 
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${stageObj.bg}`}>
-                            {stageObj.label}
-                          </span>
-                        </td>
+          {/* KANBAN BOARD VIEW */}
+          {viewMode === "kanban" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start w-full">
+              {STAGES.map((stage, sIdx) => {
+                const stageLeads = filteredLeads.filter((l) => l.status === stage.id);
 
-                        <td className="p-4">
-                          <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                            <FileCheck className="w-3.5 h-3.5 text-emerald-500" />
-                            <span>{docCount} verified</span>
-                          </span>
-                        </td>
+                return (
+                  <div
+                    key={stage.id}
+                    className="bg-slate-50/80 rounded-2xl p-3.5 sm:p-4 border border-slate-200/70 flex flex-col gap-3 min-h-[350px] md:min-h-[500px] w-full"
+                  >
+                    {/* COLUMN HEADER */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-black tracking-tight text-slate-800 uppercase truncate">
+                          {stage.label}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-700 shadow-2xs shrink-0">
+                          {stageLeads.length}
+                        </span>
+                      </div>
+                    </div>
 
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
+                    {/* CARDS LIST */}
+                    <div className="space-y-3 flex-1 w-full">
+                      {stageLeads.length > 0 ? (
+                        stageLeads.map((lead) => {
+                          const docCount = Object.keys(lead.documents || {}).length;
+
+                          return (
+                            <div
+                              key={lead.id}
                               onClick={() => openDossier(lead)}
-                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[11px] transition"
+                              className={`bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200 shadow-xs hover:shadow-md transition cursor-pointer border-t-4 ${stage.color} space-y-2.5 sm:space-y-3 w-full`}
                             >
-                              Dossier
-                            </button>
-                            <button
-                              onClick={() => printAdmissionOfferLetter(lead)}
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                              title="Print Offer Letter"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => printExamAdmitSlip(lead)}
-                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
-                              title="Print Exam Admit Slip"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="font-black text-slate-800 text-xs sm:text-sm leading-tight hover:text-indigo-600 transition truncate break-words">
+                                    {lead.applicantName}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
+                                    {lead.targetGrade || (lead as any).targetClass} • <span className="text-indigo-600 font-semibold">{lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}</span>
+                                  </p>
+                                </div>
+                                <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                  {lead.id.slice(0, 4).toUpperCase()}
+                                </span>
+                              </div>
+
+                              {/* PARENT CONTACT */}
+                              <div className="text-[11px] text-slate-600 flex items-center gap-1.5 font-mono min-w-0">
+                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">{lead.parentPhone || lead.parentContact}</span>
+                              </div>
+
+                              {/* FOOTER BADGES & ADVANCE */}
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDossier(lead);
+                                    }}
+                                    className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-md transition"
+                                  >
+                                    Dossier
+                                  </button>
+                                  <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
+                                    <FileCheck className="w-3 h-3 text-emerald-500" />
+                                    <span>{docCount}</span>
+                                  </span>
+                                </div>
+
+                                {canMutate && sIdx < STAGES.length - 1 ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStageAdvance(lead.id, lead.status);
+                                    }}
+                                    className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 font-bold rounded-lg transition flex items-center gap-1 shrink-0"
+                                    title={`Advance to ${STAGES[sIdx + 1].label}`}
+                                  >
+                                    <span>Advance</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </button>
+                                ) : sIdx >= STAGES.length - 1 ? (
+                                  <span className="text-violet-600 font-bold text-[10px] flex items-center gap-1 shrink-0">
+                                    <CheckCircle2 className="w-3 h-3" /> Converted
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="h-32 sm:h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400">
+                          No applicants in this stage
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* TABULAR ROSTER LIST VIEW: Stacked Cards on Mobile Viewports */
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden w-full">
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm block md:table">
+                  <thead className="hidden md:table-header-group">
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
+                      <th className="p-4">Candidate &amp; Ref</th>
+                      <th className="p-4">Target Cohort</th>
+                      <th className="p-4">Parent / Contact</th>
+                      <th className="p-4">Current Stage</th>
+                      <th className="p-4">KYC Documents</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="block md:table-row-group p-3 sm:p-4 md:p-0 space-y-4 md:space-y-0 divide-y-0 md:divide-y divide-slate-100">
+                    {filteredLeads.length > 0 ? (
+                      filteredLeads.map((lead) => {
+                        const docCount = Object.keys(lead.documents || {}).length;
+                        const stageObj = STAGES.find((s) => s.id === lead.status) || STAGES[0];
+
+                        return (
+                          <tr
+                            key={lead.id}
+                            className="block md:table-row bg-white rounded-2xl md:rounded-none p-4 md:p-4 border border-slate-200 md:border-0 shadow-xs md:shadow-none space-y-3 md:space-y-0 hover:bg-slate-50/70 transition"
+                          >
+                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 min-w-0">
+                              <div className="flex items-center justify-between md:justify-start gap-2">
+                                <button
+                                  onClick={() => openDossier(lead)}
+                                  className="font-bold text-slate-800 hover:text-indigo-600 transition text-left cursor-pointer truncate break-words text-xs sm:text-sm"
+                                >
+                                  {lead.applicantName}
+                                </button>
+                                <span className="md:hidden">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${stageObj.bg}`}>
+                                    {stageObj.label}
+                                  </span>
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
+                                ADM-{lead.id.slice(0, 6).toUpperCase()}
+                              </span>
+                            </td>
+
+                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 font-semibold text-slate-700 min-w-0">
+                              <div className="truncate">
+                                {lead.targetGrade || (lead as any).targetClass}
+                              </div>
+                              <span className="text-[10px] text-indigo-600 font-medium block truncate">
+                                {lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}
+                              </span>
+                            </td>
+
+                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 text-slate-600 font-mono min-w-0">
+                              <span className="font-sans font-bold text-slate-800 block truncate">
+                                {lead.parentName || "Parent / Guardian"}
+                              </span>
+                              <span className="truncate block">{lead.parentPhone || lead.parentContact}</span>
+                            </td>
+
+                            <td className="hidden md:table-cell py-4 px-4 whitespace-nowrap">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${stageObj.bg}`}>
+                                {stageObj.label}
+                              </span>
+                            </td>
+
+                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4">
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+                                <FileCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                <span>{docCount} verified</span>
+                              </span>
+                            </td>
+
+                            <td className="block md:table-cell pt-3 md:py-4 px-0 md:px-4 text-right border-t border-slate-100 md:border-0">
+                              <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                                <button
+                                  onClick={() => openDossier(lead)}
+                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[11px] sm:text-xs transition"
+                                >
+                                  Dossier
+                                </button>
+                                <button
+                                  onClick={() => printAdmissionOfferLetter(lead)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
+                                  title="Print Offer Letter"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => printExamAdmitSlip(lead)}
+                                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
+                                  title="Print Exam Admit Slip"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr className="block md:table-row">
+                        <td colSpan={6} className="p-8 text-center text-slate-400 text-xs block md:table-cell">
+                          No applicants found matching filter criteria.
                         </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
-                      No applicants found matching filter criteria.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -718,6 +734,7 @@ export default function AdmissionsPipeline({
         schoolId={schoolId}
         schoolDomain={schoolDomain || "greenwood"}
         schoolName={schoolName}
+        canMutate={canMutate}
         onLeadUpdated={() => router.refresh()}
         onPrintOfferLetter={printAdmissionOfferLetter}
         onPrintExamSlip={printExamAdmitSlip}

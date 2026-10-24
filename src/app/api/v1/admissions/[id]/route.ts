@@ -63,6 +63,17 @@ export async function PATCH(
 
     const { searchParams } = new URL(request.url);
     const targetStatus = body.status || searchParams.get("status");
+    const userRole = request.headers.get("x-user-role") || request.headers.get("role") || body.userRole || body.role;
+    const staffRole = request.headers.get("x-staff-role") || body.staffRole;
+
+    const { checkRouteAuthorization } = await import("@/lib/admissions.service");
+    const auth = checkRouteAuthorization({ role: userRole, staffRole }, { resource: "admissions", action: "mutate" });
+    if (!auth.canMutate) {
+      return NextResponse.json(
+        { error: "403 Forbidden: " + (auth.reason || "Mutation restricted to authorized staff.") },
+        { status: 403 }
+      );
+    }
 
     // If status is provided, update status
     if (targetStatus) {
@@ -71,6 +82,8 @@ export async function PATCH(
         tenantId: effectiveTenantId,
         status: targetStatus,
         verifiedBy: body.verifiedBy || body.verified_by,
+        userRole,
+        staffRole,
       });
       return NextResponse.json({ success: true, data: updated });
     }
@@ -83,6 +96,8 @@ export async function PATCH(
         docType: body.doc_type || body.docType,
         verified: body.verified !== undefined ? body.verified : true,
         verifiedBy: body.verifiedBy || body.verified_by,
+        userRole,
+        staffRole,
       });
       return NextResponse.json({ success: true, data: updated });
     }

@@ -36,11 +36,24 @@ export async function POST(
     }
 
     const targetId = registerRecord ? registerRecord.id : id;
+    const userRole = request.headers.get("x-user-role") || request.headers.get("role") || body.userRole || body.role;
+    const staffRole = request.headers.get("x-staff-role") || body.staffRole;
+
+    const { checkRouteAuthorization } = await import("@/lib/admissions.service");
+    const auth = checkRouteAuthorization({ role: userRole, staffRole }, { resource: "admissions", action: "mutate" });
+    if (!auth.canMutate) {
+      return NextResponse.json(
+        { error: "403 Forbidden: " + (auth.reason || "Student matriculation is restricted to authorized staff.") },
+        { status: 403 }
+      );
+    }
 
     const result = await admitApplicant({
       id: targetId,
       tenantId: effectiveTenantId,
       verifiedBy: body.verifiedBy || body.verified_by,
+      userRole,
+      staffRole,
     });
 
     return NextResponse.json({
