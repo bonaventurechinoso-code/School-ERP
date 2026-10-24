@@ -6,12 +6,9 @@ import fs from "fs";
 import path from "path";
 import * as jose from "jose";
 
-export const config = {
-  api: {
-    bodyParser: false,
-    responseLimit: false,
-  },
-};
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 120; // Allow sufficient time for multi-file streaming uploads
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 
@@ -24,10 +21,109 @@ const ALLOWED_DOC_MIMES = [
   "image/jpg",
 ];
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-tenant-id, tenant-id, x-school-id, x-school-domain",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
+interface IngestedStreamFile {
+  name: string;
+  filename: string;
+  type: string;
+  size: number;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  toWebFile(): File;
+}
+
+interface ParsedMultipartStream {
+  fields: Record<string, string>;
+  files: Record<string, IngestedStreamFile>;
+}
+
+/**
+ * Stream-reader fallback for raw multipart/form-data incoming streams when standard
+ * body parser is bypassed, chunked, or encounters stream boundary interruptions.
+ */
+function parseMultipartStreamBuffer(bodyBuffer: Buffer, boundary: string): ParsedMultipartStream {
+  const result: ParsedMultipartStream = { fields: {}, files: {} };
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  let start = 0;
+
+  while (start < bodyBuffer.length) {
+    const boundaryIdx = bodyBuffer.indexOf(boundaryBuffer, start);
+    if (boundaryIdx === -1) break;
+
+    const nextBoundaryIdx = bodyBuffer.indexOf(boundaryBuffer, boundaryIdx + boundaryBuffer.length);
+    if (nextBoundaryIdx === -1) break;
+
+    const part = bodyBuffer.subarray(boundaryIdx + boundaryBuffer.length, nextBoundaryIdx);
+    start = nextBoundaryIdx;
+
+    let headerEnd = part.indexOf("\r\n\r\n");
+    let delimiterLen = 4;
+    if (headerEnd === -1) {
+      headerEnd = part.indexOf("\n\n");
+      delimiterLen = 2;
+    }
+    if (headerEnd === -1) continue;
+
+    const headerStr = part.subarray(0, headerEnd).toString("utf-8");
+    let content = part.subarray(headerEnd + delimiterLen);
+    if (content.length >= 2 && content[content.length - 2] === 13 && content[content.length - 1] === 10) {
+      content = content.subarray(0, content.length - 2);
+    } else if (content.length >= 1 && content[content.length - 1] === 10) {
+      content = content.subarray(0, content.length - 1);
+    }
+
+    const nameMatch = headerStr.match(/name=["']([^"']+)["']/i);
+    const filenameMatch = headerStr.match(/filename=["']([^"']+)["']/i);
+    const contentTypeMatch = headerStr.match(/Content-Type:\s*([^\r\n;]+)/i);
+
+    if (nameMatch) {
+      const fieldName = nameMatch[1];
+      if (filenameMatch) {
+        const filename = filenameMatch[1];
+        const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : "application/octet-stream";
+        if (content.length > 0) {
+          const chunkBuffer = Buffer.from(content);
+          result.files[fieldName] = {
+            name: fieldName,
+            filename,
+            type: contentType,
+            size: chunkBuffer.length,
+            arrayBuffer: async () =>
+              chunkBuffer.buffer.slice(
+                chunkBuffer.byteOffset,
+                chunkBuffer.byteOffset + chunkBuffer.byteLength
+              ),
+            toWebFile: () => new File([chunkBuffer], filename, { type: contentType }),
+          };
+        }
+      } else {
+        result.fields[fieldName] = content.toString("utf-8").trim();
+      }
+    }
+  }
+
+  return result;
+}
+
 /**
  * Resolves the active multi-tenant context from incoming request headers, query, referer, or host.
  */
-function resolveRequestTenantContext(request: NextRequest, formData?: FormData): {
+function resolveRequestTenantContext(
+  request: NextRequest,
+  formData?: FormData | null,
+  fallbackFields?: Record<string, string>
+): {
   subdomain: string | null;
   tenantId: string | null;
 } {
@@ -47,7 +143,9 @@ function resolveRequestTenantContext(request: NextRequest, formData?: FormData):
   // 3. Form data entries if present
   const formTenant = formData
     ? ((formData.get("schoolDomain") || formData.get("subdomain") || formData.get("tenantId")) as string | null)
-    : null;
+    : fallbackFields
+      ? (fallbackFields["schoolDomain"] || fallbackFields["subdomain"] || fallbackFields["tenantId"] || null)
+      : null;
 
   // 4. Referer URL path segment: /{schoolDomain}/admissions/upload/...
   let refererTenant: string | null = null;
@@ -103,7 +201,7 @@ export async function GET(
     });
 
     if (!lead) {
-      return NextResponse.json({ error: "Applicant not found" }, { status: 404 });
+      return NextResponse.json({ error: "Applicant not found" }, { status: 404, headers: corsHeaders });
     }
 
     const leadAny = lead as any;
@@ -126,11 +224,11 @@ export async function GET(
     }
 
     if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
-      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403 });
+      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
     if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date()) {
-      return NextResponse.json({ error: "Upload link has expired. Please request a new link." }, { status: 403 });
+      return NextResponse.json({ error: "Upload link has expired. Please request a new link." }, { status: 403, headers: corsHeaders });
     }
 
     return NextResponse.json({
@@ -150,10 +248,10 @@ export async function GET(
         birthCertificateUrl: leadAny.birthCertificateUrl || null,
         medicalRecordsUrl: leadAny.medicalRecordsUrl || null,
       },
-    });
+    }, { headers: corsHeaders });
   } catch (err: any) {
     console.error("[UPLOAD_API_GET] Error validating applicant:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -164,11 +262,36 @@ export async function POST(
   const { applicantId } = await paramsPromise;
 
   try {
-    const formData = await request.formData();
-    const token = (formData.get("token") as string) || request.nextUrl.searchParams.get("token");
+    let formData: FormData | null = null;
+    let streamFallback: ParsedMultipartStream | null = null;
+
+    // Resilient stream ingestion: Attempt standard formData parsing, fall back to raw stream buffer reader
+    try {
+      formData = await request.formData();
+    } catch (formErr: any) {
+      console.warn("[UPLOAD_STREAM] Standard request.formData() failed or raw payload stream received:", formErr?.message);
+      try {
+        const contentType = request.headers.get("content-type") || "";
+        const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+        const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
+
+        if (boundary) {
+          const rawBuffer = Buffer.from(await request.arrayBuffer());
+          streamFallback = parseMultipartStreamBuffer(rawBuffer, boundary);
+          console.log("[UPLOAD_STREAM] Successfully parsed raw stream payload. Discovered files:", Object.keys(streamFallback.files));
+        }
+      } catch (streamErr) {
+        console.error("[UPLOAD_STREAM] Failed to read raw incoming stream:", streamErr);
+      }
+    }
+
+    const token =
+      (formData ? (formData.get("token") as string) : null) ||
+      streamFallback?.fields["token"] ||
+      request.nextUrl.searchParams.get("token");
 
     // Resolve incoming multi-tenant context from headers, referer, or host
-    const tenantCtx = resolveRequestTenantContext(request, formData);
+    const tenantCtx = resolveRequestTenantContext(request, formData, streamFallback?.fields);
 
     // 1. Verify Lead and Token
     const lead = await basePrisma.admissionLead.findUnique({
@@ -180,7 +303,7 @@ export async function POST(
     });
 
     if (!lead) {
-      return NextResponse.json({ error: "Applicant not found" }, { status: 404 });
+      return NextResponse.json({ error: "Applicant not found" }, { status: 404, headers: corsHeaders });
     }
 
     // Resolve school entity ensuring alignment with dynamic multi-tenant context
@@ -221,11 +344,11 @@ export async function POST(
     }
 
     if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
-      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403 });
+      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
     if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date()) {
-      return NextResponse.json({ error: "Upload token has expired" }, { status: 403 });
+      return NextResponse.json({ error: "Upload token has expired" }, { status: 403, headers: corsHeaders });
     }
 
     // 2. Prepare Storage Directory
@@ -249,15 +372,28 @@ export async function POST(
     const { uploadToUploadthing } = await import("@/lib/uploadthing");
 
     for (const item of fileFields) {
-      const file = formData.get(item.field);
-      if (file && typeof file === "object" && "arrayBuffer" in file && (file as File).size > 0) {
-        const fileObj = file as File;
+      let fileObj: File | null = null;
 
+      if (formData) {
+        const formVal = formData.get(item.field);
+        if (formVal && typeof formVal === "object" && "arrayBuffer" in formVal && (formVal as File).size > 0) {
+          fileObj = formVal as File;
+        }
+      }
+
+      if (!fileObj && streamFallback && streamFallback.files[item.field]) {
+        const streamFile = streamFallback.files[item.field];
+        if (streamFile.size > 0) {
+          fileObj = streamFile.toWebFile();
+        }
+      }
+
+      if (fileObj) {
         // Size check (Max 5MB)
         if (fileObj.size > MAX_FILE_SIZE_BYTES) {
           return NextResponse.json(
             { error: `File "${fileObj.name}" exceeds the 5MB size limit.` },
-            { status: 400 }
+            { status: 400, headers: corsHeaders }
           );
         }
 
@@ -265,10 +401,11 @@ export async function POST(
         if (!item.allowedMimes.includes(fileObj.type.toLowerCase())) {
           return NextResponse.json(
             {
-              error: `Invalid file type for ${item.field}. Allowed types: ${item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
-                }`,
+              error: `Invalid file type for ${item.field}. Allowed types: ${
+                item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
+              }`,
             },
-            { status: 400 }
+            { status: 400, headers: corsHeaders }
           );
         }
 
@@ -281,7 +418,11 @@ export async function POST(
           const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
           const customName = `${item.prefix}-${lead.id.slice(0, 8)}-${Date.now()}${safeExt}`;
 
-          const utResult = await uploadToUploadthing(fileObj, customName);
+          // Race with 12s timeout so slow cloud calls do not break or hang the client socket
+          const utPromise = uploadToUploadthing(fileObj, customName);
+          const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), 12000));
+          const utResult = await Promise.race([utPromise, timeoutPromise]);
+
           if (utResult && utResult.url) {
             publicUrl = utResult.url;
             savedName = utResult.name || customName;
@@ -328,7 +469,7 @@ export async function POST(
     }
 
     if (uploadedFileList.length === 0) {
-      return NextResponse.json({ error: "No files were selected for upload" }, { status: 400 });
+      return NextResponse.json({ error: "No files were selected for upload" }, { status: 400, headers: corsHeaders });
     }
 
     updateData.documents = currentDocs;
@@ -420,21 +561,20 @@ export async function POST(
 
       const nameParts = (lead.applicantName || "").trim().split(" ");
       const firstName = nameParts[0] || "Student";
-      const lastName = nameParts.slice(1).join(" ") || "Applicant";
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
 
-      const existingReg = await basePrisma.admissionRegister.findFirst({
+      const existingReg = await (basePrisma as any).admissionRegister?.findFirst({
         where: {
-          tenantId: schoolId,
+          schoolId,
           OR: [
+            { applicationId: lead.id },
             { email: lead.studentEmail || lead.parentEmail || undefined },
-            { parentPhone: lead.parentPhone || lead.parentContact || undefined },
-            { firstName, lastName },
           ],
         },
       });
 
       if (existingReg) {
-        await basePrisma.admissionRegister.update({
+        await (basePrisma as any).admissionRegister.update({
           where: { id: existingReg.id },
           data: {
             credentialsJson: credsList,
@@ -442,15 +582,14 @@ export async function POST(
           },
         });
       } else {
-        const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
-        const appNo = await generateApplicationNo(schoolId);
-        await basePrisma.admissionRegister.create({
+        await (basePrisma as any).admissionRegister?.create({
           data: {
-            tenantId: schoolId,
-            applicationNo: appNo,
+            schoolId,
+            applicationId: lead.id,
             firstName,
             lastName,
-            classApplied: lead.targetGrade,
+            gradeApplyingFor: lead.targetGrade || "N/A",
+            parentName: lead.parentName || "Guardian",
             parentPhone: lead.parentPhone || lead.parentContact || "N/A",
             email: lead.studentEmail || lead.parentEmail || null,
             credentialsJson: credsList,
@@ -491,13 +630,12 @@ export async function POST(
       documents: currentDocs,
       uploadedCount: uploadedFileList.length,
       lead: updatedLead,
-    });
+    }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[UPLOAD_API_POST] Error uploading documents:", error);
     return NextResponse.json(
       { error: error?.message || "Failed to process file upload" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
-
