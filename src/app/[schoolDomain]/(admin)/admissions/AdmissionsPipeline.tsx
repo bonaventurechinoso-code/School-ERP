@@ -392,50 +392,52 @@ export default function AdmissionsPipeline({
   return (
     <div className="space-y-6">
       {/* TABS SWITCHER: ADMISSION LEADS (LEGACY) [LEFT] vs ADMISSION REGISTER (LIVE) [RIGHT] */}
-      <div className="flex items-center gap-3 border-b border-slate-200 dark:border-zinc-800 pb-3">
-        <button
-          type="button"
-          onClick={() => setMainTab("leads")}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs ${
-            mainTab === "leads"
-              ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
-              : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Admission Leads (Legacy)</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4 mb-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setMainTab("leads")}
+            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
               mainTab === "leads"
-                ? "bg-white/20 text-white"
-                : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+                ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
+                : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
             }`}
           >
-            {prospectiveInquiryLeads.length}
-          </span>
-        </button>
+            <Users className="w-4 h-4" />
+            <span>Admission Leads (Legacy)</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                mainTab === "leads"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+              }`}
+            >
+              {prospectiveInquiryLeads.length}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setMainTab("register")}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs ${
-            mainTab === "register"
-              ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
-              : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Admission Register (Live)</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+          <button
+            type="button"
+            onClick={() => setMainTab("register")}
+            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
               mainTab === "register"
-                ? "bg-white/20 text-white"
-                : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
+                ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
+                : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
             }`}
           >
-            Live
-          </span>
-        </button>
+            <ShieldCheck className="w-4 h-4" />
+            <span>Admission Register (Live)</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                mainTab === "register"
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
+              }`}
+            >
+              Live
+            </span>
+          </button>
+        </div>
       </div>
 
       {mainTab === "register" ? (
@@ -447,9 +449,9 @@ export default function AdmissionsPipeline({
       ) : (
         <>
           {/* TOOLBAR & CONTROLS */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-wrap justify-between items-center gap-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
@@ -463,14 +465,14 @@ export default function AdmissionsPipeline({
         {/* CONTROLS */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* SEARCH */}
-          <div className="relative">
+          <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search by student or parent..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-56 bg-slate-50/50"
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/50"
             />
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   X,
   Phone,
@@ -18,6 +18,8 @@ import {
   Ban,
   Download,
   Copy,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { requestApplicantDocsAction } from "./actions";
 
@@ -41,7 +43,7 @@ export interface AdmissionRegisterRecord {
     verified?: boolean;
     size?: number;
     uploadedAt?: string;
-  }> | null;
+  }> | Record<string, any> | any | null;
   status: string;
   verifiedBy?: string | null;
   verifiedAt?: string | null;
@@ -71,8 +73,117 @@ export default function AdmissionRegisterDrawer({
   schoolName = "Greenwood Academy",
   schoolDomain,
 }: AdmissionRegisterDrawerProps) {
+  const [isMaximized, setIsMaximized] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedAppNo, setCopiedAppNo] = useState(false);
+
+  // Normalize and parse uploaded credentials from Array, Object Map, or JSON String
+  const normalizedDocs = useMemo(() => {
+    if (!applicant?.credentialsJson) return [];
+
+    let rawData: any = applicant.credentialsJson;
+    if (typeof rawData === "string") {
+      try {
+        rawData = JSON.parse(rawData);
+      } catch {
+        rawData = [];
+      }
+    }
+
+    const items: any[] = [];
+    if (Array.isArray(rawData)) {
+      rawData.forEach((item) => {
+        if (item && typeof item === "object") {
+          // Exclude internal metadata nodes like TIER_INFO
+          if (
+            item.type === "TIER_INFO" ||
+            (!item.url && !item.fileUrl && !item.path && !item.filename && !item.fileName && !item.savedName)
+          ) {
+            return;
+          }
+          items.push(item);
+        }
+      });
+    } else if (rawData && typeof rawData === "object") {
+      Object.entries(rawData).forEach(([key, val]) => {
+        if (key === "TIER_INFO") return;
+        if (val && typeof val === "object") {
+          items.push({
+            docKey: key,
+            ...val,
+          });
+        } else if (typeof val === "string" && val.trim().length > 0) {
+          items.push({
+            docKey: key,
+            url: val,
+            fileUrl: val,
+            fileName: val.split("/").pop() || key,
+          });
+        }
+      });
+    }
+
+    const getDocTitle = (item: any) => {
+      const key = (item.docType || item.type || item.key || item.docKey || "").toLowerCase();
+      if (key.includes("passport")) return "Passport Photograph";
+      if (key.includes("birth")) return "Birth Certificate / Age Declaration";
+      if (key.includes("result") || key.includes("academic")) return "Previous Academic Results";
+      if (key.includes("medical")) return "Medical Certificate of Fitness";
+      if (key.includes("transfer") || key.includes("transcript")) return "Transfer Certificate / Transcript";
+      return item.name || item.originalName || item.docType || item.type || "Official Credential Document";
+    };
+
+    const resolveUrl = (raw?: string | null) => {
+      if (!raw) return "";
+      const trimmed = raw.trim();
+      if (!trimmed) return "";
+      if (
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("https://") ||
+        trimmed.startsWith("blob:") ||
+        trimmed.startsWith("data:")
+      ) {
+        return trimmed;
+      }
+      if (trimmed.startsWith("/api/uploads/")) {
+        return trimmed;
+      }
+      if (trimmed.startsWith("/uploads/")) {
+        return `/api${trimmed}`;
+      }
+      if (trimmed.startsWith("uploads/")) {
+        return `/api/${trimmed}`;
+      }
+      if (trimmed.startsWith("/")) {
+        return trimmed;
+      }
+      return `/api/uploads/${trimmed}`;
+    };
+
+    return items
+      .map((item, idx) => {
+        const rawUrl = item.url || item.fileUrl || item.path || item.link || item.assetUrl || "";
+        const fileUrl = resolveUrl(rawUrl);
+        const fileName =
+          item.fileName ||
+          item.filename ||
+          item.savedName ||
+          item.originalName ||
+          (rawUrl ? rawUrl.split("/").pop()?.split("?")[0] : "") ||
+          `${item.docKey || "credential"}-${idx + 1}`;
+        const typeLabel = getDocTitle(item);
+
+        return {
+          id: item.id || `doc-${idx}`,
+          typeLabel,
+          fileName,
+          fileUrl,
+          verified: Boolean(item.verified),
+          size: item.size || item.fileSize,
+        };
+      })
+      .filter((d) => Boolean(d.fileUrl));
+  }, [applicant?.credentialsJson]);
 
   if (!isOpen || !applicant) return null;
 
@@ -122,11 +233,15 @@ export default function AdmissionRegisterDrawer({
     setTimeout(() => setCopiedAppNo(false), 2000);
   };
 
-  const docs = Array.isArray(applicant.credentialsJson) ? applicant.credentialsJson : [];
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full sm:max-w-2xl md:max-w-3xl bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 animate-in slide-in-from-right duration-300">
+      <div
+        className={`w-full ${
+          isMaximized
+            ? "max-w-7xl sm:max-w-7xl md:max-w-7xl lg:max-w-7xl xl:max-w-full"
+            : "sm:max-w-2xl md:max-w-3xl"
+        } bg-white dark:bg-zinc-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 transition-all duration-300 animate-in slide-in-from-right`}
+      >
         {/* DRAWER HEADER */}
         <div className="p-6 md:p-8 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/70 dark:bg-zinc-900/80">
           <div>
@@ -156,12 +271,30 @@ export default function AdmissionRegisterDrawer({
               Applying for: <strong className="text-slate-800 dark:text-zinc-200">{applicant.classApplied}</strong>
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/50 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsMaximized((prev) => !prev)}
+              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer"
+              aria-label={isMaximized ? "Restore sheet width" : "Maximize sheet width"}
+              title={isMaximized ? "Restore standard width" : "Maximize width"}
+            >
+              {isMaximized ? (
+                <Minimize2 className="w-5 h-5 text-slate-600 dark:text-zinc-300" />
+              ) : (
+                <Maximize2 className="w-5 h-5 text-slate-600 dark:text-zinc-300" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer"
+              aria-label="Close sheet"
+              title="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* DRAWER BODY */}
@@ -216,11 +349,11 @@ export default function AdmissionRegisterDrawer({
                 Verified Credentials &amp; Uploads
               </h4>
               <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-zinc-400">
-                {docs.length} file{docs.length === 1 ? "" : "s"} uploaded
+                {normalizedDocs.length} file{normalizedDocs.length === 1 ? "" : "s"} uploaded
               </span>
             </div>
 
-            {docs.length === 0 ? (
+            {normalizedDocs.length === 0 ? (
               <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/20">
                 <FileText className="w-9 h-9 text-slate-300 dark:text-zinc-600 mx-auto mb-2" />
                 <p className="text-sm font-bold text-slate-600 dark:text-zinc-300">
@@ -231,49 +364,45 @@ export default function AdmissionRegisterDrawer({
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5">
-                {docs.map((doc, idx) => (
+              <div className="space-y-3">
+                {normalizedDocs.map((doc, idx) => (
                   <div
-                    key={idx}
-                    className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between hover:border-indigo-300 transition"
+                    key={doc.id || idx}
+                    className="group p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100 dark:border-emerald-900">
                         <FileCheck className="w-5 h-5" />
                       </div>
-                      <div>
-                        <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-zinc-200">
-                          {doc.type || doc.docType || doc.originalName || doc.name || `Document ${idx + 1}`}
-                        </p>
-                        <p className="text-xs text-slate-400 font-mono mt-0.5">
-                          {doc.filename || doc.name || "Attached in application register"}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-zinc-100 truncate">
+                            {doc.typeLabel}
+                          </p>
+                          {doc.verified && (
+                            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono mt-0.5 truncate" title={doc.fileName}>
+                          {doc.fileName}
                         </p>
                       </div>
                     </div>
-                    {(() => {
-                      const rawUrl = (doc.url || doc.path || (doc as any).fileUrl || "").trim();
-                      const resolvedUrl = rawUrl
-                        ? rawUrl.startsWith("http://") || rawUrl.startsWith("https://")
-                          ? rawUrl
-                          : rawUrl.startsWith("/uploads/")
-                          ? `/api${rawUrl}`
-                          : rawUrl.startsWith("/")
-                          ? rawUrl
-                          : `/api/uploads/${rawUrl}`
-                        : "";
-                      if (!resolvedUrl) return null;
-                      return (
-                        <a
-                          href={resolvedUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Download className="w-4 h-4" />
-                          View
-                        </a>
-                      );
-                    })()}
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs hover:shadow-xs"
+                        title={`Open and preview ${doc.fileName} in new tab`}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Preview File</span>
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
