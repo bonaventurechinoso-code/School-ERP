@@ -31,6 +31,7 @@ import {
   DuplicateCheckMatch,
   AdmissionStatus,
 } from "@/lib/admissions.types";
+import { getApplicantDocsSummary } from "@/lib/admissions-docs";
 
 export type { AdmissionRegisterRecord };
 
@@ -425,19 +426,9 @@ export default function AdmissionRegisterTable({
     );
   };
 
-  // Extract docs metadata
+  // Extract canonical 4 docs metadata
   const getDocsSummary = (r: AdmissionRegisterRecord) => {
-    let docs: any[] = [];
-    if (Array.isArray(r.credentialsJson)) {
-      docs = r.credentialsJson;
-    } else if (typeof r.credentialsJson === "object" && r.credentialsJson !== null) {
-      docs = Array.isArray(r.credentialsJson.documents) ? r.credentialsJson.documents : [];
-    }
-    const total = docs.length;
-    const verified = docs.filter((d: any) => d.verified).length;
-    if (total === 0) return { label: "No Uploads", status: "empty" };
-    if (verified === total) return { label: `${verified}/${total} Verified`, status: "verified" };
-    return { label: `${verified}/${total} Uploaded`, status: "pending" };
+    return getApplicantDocsSummary(r);
   };
 
   // Filtered Records
@@ -657,18 +648,26 @@ export default function AdmissionRegisterTable({
 
                       {/* DOCS STATUS */}
                       <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 min-w-0">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${
-                            docsSummary.status === "verified"
-                              ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200"
-                              : docsSummary.status === "pending"
-                              ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200"
-                              : "bg-slate-100 dark:bg-zinc-800 text-slate-500"
-                          }`}
-                        >
-                          <FileCheck className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{docsSummary.label}</span>
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${
+                              docsSummary.status === "verified"
+                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200"
+                                : docsSummary.status === "pending"
+                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200"
+                                : "bg-slate-100 dark:bg-zinc-800 text-slate-500"
+                            }`}
+                          >
+                            <FileCheck className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{docsSummary.uploadedCount}/5 Uploaded</span>
+                          </span>
+                          {docsSummary.mandatoryVerifiedCount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 pl-0.5">
+                              <CheckCircle2 className="w-3 h-3 shrink-0" />
+                              <span>{docsSummary.mandatoryVerifiedCount}/4 Verified</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* FORM FEE PAID */}

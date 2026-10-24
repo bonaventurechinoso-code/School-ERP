@@ -25,6 +25,8 @@ import {
   History,
   Check,
   ChevronRight,
+  UploadCloud,
+  Loader2,
 } from "lucide-react";
 import { requestApplicantDocsAction } from "./actions";
 import { useSession } from "@/lib/session-context";
@@ -34,6 +36,7 @@ import {
   AdmissionStatusLog,
   AdmissionStatus,
 } from "@/lib/admissions.types";
+import { resolveApplicantDocs, CanonicalDocument } from "@/lib/admissions-docs";
 
 export type { AdmissionRegisterRecord };
 
@@ -66,121 +69,174 @@ export default function AdmissionRegisterDrawer({
   const [copiedAppNo, setCopiedAppNo] = useState(false);
   const [activeTab, setActiveTab] = useState<"dossier" | "timeline">("dossier");
 
+  const [localApplicant, setLocalApplicant] = useState<AdmissionRegisterRecord | null>(applicant);
+  const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  React.useEffect(() => {
+    setLocalApplicant(applicant);
+    setToastMsg(null);
+  }, [applicant]);
+
   // RBAC Permission Profile
   const userRole = (session?.role || session?.staffRole || (session as any)?.userRole || (session?.user as any)?.role || "").toUpperCase();
   const isAuthorized = canMutate || isAdmissionsAuthorized(userRole, session?.staffRole);
 
-  // Normalize credentials documents
-  const normalizedDocs = useMemo(() => {
-    if (!applicant?.credentialsJson) return [];
+  // Canonical KYC Documents Resolution (5 docs: 4 Mandatory, 1 Optional)
+  const canonicalDocs = useMemo<CanonicalDocument[]>(() => {
+    return resolveApplicantDocs(localApplicant);
+  }, [localApplicant]);
 
-    let rawData: any = applicant.credentialsJson;
-    if (typeof rawData === "string") {
-      try {
-        rawData = JSON.parse(rawData);
-      } catch {
-        rawData = [];
-      }
-    }
+  const mandatoryDocs = useMemo(() => canonicalDocs.filter((d) => !d.isOptional), [canonicalDocs]);
+  const optionalDocs = useMemo(() => canonicalDocs.filter((d) => d.isOptional), [canonicalDocs]);
 
-    const items: any[] = [];
-    if (Array.isArray(rawData)) {
-      rawData.forEach((item) => {
-        if (item && typeof item === "object") {
-          if (
-            item.type === "TIER_INFO" ||
-            (!item.url && !item.fileUrl && !item.path && !item.filename && !item.fileName && !item.savedName)
-          ) {
-            return;
-          }
-          items.push(item);
-        }
+  const mandatoryVerifiedCount = mandatoryDocs.filter((d) => d.verified).length;
+  const mandatoryUploadedCount = mandatoryDocs.filter((d) => d.hasFile).length;
+  const optionalUploadedCount = optionalDocs.filter((d) => d.hasFile).length;
+  const totalUploadedCount = canonicalDocs.filter((d) => d.hasFile).length;
+
+  const handlePreview = (doc: CanonicalDocument) => {
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
+    } else {
+      setToastMsg({
+        type: "error",
+        text: "File not found on server — please re-upload",
       });
-    } else if (rawData && typeof rawData === "object") {
-      if (Array.isArray(rawData.documents)) {
-        rawData.documents.forEach((item: any) => items.push(item));
-      } else {
-        Object.entries(rawData).forEach(([key, val]) => {
-          if (key === "TIER_INFO" || key === "statusLogs" || key === "formFeePaid" || key === "convertedFromLead") return;
-          if (val && typeof val === "object") {
-            items.push({
-              docKey: key,
-              ...val,
-            });
-          } else if (typeof val === "string" && val.trim().length > 0) {
-            items.push({
-              docKey: key,
-              url: val,
-              fileUrl: val,
-              fileName: val.split("/").pop() || key,
-            });
-          }
-        });
-      }
     }
+  };
 
-    const getDocTitle = (item: any) => {
-      const key = (item.docType || item.type || item.key || item.docKey || "").toLowerCase();
-      if (key.includes("passport")) return "Passport Photograph";
-      if (key.includes("birth")) return "Birth Certificate / Age Declaration";
-      if (key.includes("result") || key.includes("academic")) return "Previous Academic Results";
-      if (key.includes("medical")) return "Medical Certificate of Fitness";
-      if (key.includes("transfer") || key.includes("transcript")) return "Transfer Certificate / Transcript";
-      return item.name || item.originalName || item.docType || item.type || "Official Credential Document";
-    };
+  const handleVerifyDoc = async (docKey: string) => {
+    if (!localApplicant) return;
+    try {
+      setIsProcessing(true);
+      const tenantId = (session as any)?.schoolId || localApplicant.tenantId;
+      const res = await fetch(`/api/v1/admissions/${localApplicant.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+          "x-user-role": userRole,
+          ...(session?.staffRole ? { "x-staff-role": session.staffRole } : {}),
+        },
+        body: JSON.stringify({
+          docType: docKey,
+          verified: true,
+          verifiedBy: session?.name || "Admissions Officer",
+        }),
+      });
 
-    const resolveUrl = (raw?: string | null) => {
-      if (!raw) return "";
-      const trimmed = raw.trim();
-      if (!trimmed) return "";
-      if (
-        trimmed.startsWith("http://") ||
-        trimmed.startsWith("https://") ||
-        trimmed.startsWith("blob:") ||
-        trimmed.startsWith("data:")
-      ) {
-        return trimmed;
+      if (!res.ok) {
+        throw new Error("Failed to verify document on server");
       }
-      if (trimmed.startsWith("/api/uploads/")) return trimmed;
-      if (trimmed.startsWith("/uploads/")) return `/api${trimmed}`;
-      if (trimmed.startsWith("uploads/")) return `/api/${trimmed}`;
-      if (trimmed.startsWith("/")) return trimmed;
-      return `/api/uploads/${trimmed}`;
-    };
 
-    return items
-      .map((item, idx) => {
-        const rawUrl = item.url || item.fileUrl || item.path || item.link || item.assetUrl || "";
-        const fileUrl = resolveUrl(rawUrl);
-        const fileName =
-          item.fileName ||
-          item.filename ||
-          item.savedName ||
-          item.originalName ||
-          (rawUrl ? rawUrl.split("/").pop()?.split("?")[0] : "") ||
-          `${item.docKey || "credential"}-${idx + 1}`;
-        const typeLabel = getDocTitle(item);
+      setLocalApplicant((prev: any) => {
+        if (!prev) return prev;
+        const creds = prev.credentialsJson || [];
+        let updatedCreds: any;
+        if (Array.isArray(creds)) {
+          let found = false;
+          updatedCreds = creds.map((c: any) => {
+            const k = (c.key || c.docType || c.type || "").toLowerCase();
+            if (k.includes(docKey.toLowerCase()) || docKey.toLowerCase().includes(k)) {
+              found = true;
+              return { ...c, verified: true, status: "VERIFIED" };
+            }
+            return c;
+          });
+          if (!found) {
+            updatedCreds.push({ key: docKey, type: docKey, verified: true, status: "VERIFIED" });
+          }
+        } else {
+          const docs = Array.isArray(creds.documents) ? [...creds.documents] : [];
+          let found = false;
+          const newDocs = docs.map((c: any) => {
+            const k = (c.key || c.docType || c.type || "").toLowerCase();
+            if (k.includes(docKey.toLowerCase()) || docKey.toLowerCase().includes(k)) {
+              found = true;
+              return { ...c, verified: true, status: "VERIFIED" };
+            }
+            return c;
+          });
+          if (!found) newDocs.push({ key: docKey, type: docKey, verified: true, status: "VERIFIED" });
+          updatedCreds = { ...creds, documents: newDocs };
+        }
+        return { ...prev, credentialsJson: updatedCreds };
+      });
 
-        return {
-          id: item.id || `doc-${idx}`,
-          typeLabel,
-          fileName,
-          fileUrl,
-          verified: Boolean(item.verified),
-          size: item.size || item.fileSize,
+      setToastMsg({ type: "success", text: `${docKey} marked as verified.` });
+    } catch (err: any) {
+      setToastMsg({ type: "error", text: err.message || "Failed to verify document" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleFileUpload = async (docKey: string, file?: File | null) => {
+    if (!file || !localApplicant) return;
+    try {
+      setIsProcessing(true);
+      const formData = new FormData();
+      formData.append("token", "admin-session");
+      formData.append(docKey, file);
+
+      const targetId = (localApplicant as any).leadId || localApplicant.id;
+      const res = await fetch(`/api/v1/admissions/upload/${targetId}?token=admin`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload file");
+      }
+
+      const newUrl = data.documents?.[docKey]?.url || data.documents?.[docKey]?.fileUrl;
+
+      // Immediately turn badge GREEN and update local applicant state
+      setLocalApplicant((prev: any) => {
+        if (!prev) return prev;
+        const creds = prev.credentialsJson || [];
+        let updatedCreds: any;
+        const docEntry = {
+          key: docKey,
+          type: docKey,
+          docType: docKey,
+          fileUrl: newUrl,
+          url: newUrl,
+          fileName: file.name,
+          verified: false,
         };
-      })
-      .filter((d) => Boolean(d.fileUrl));
-  }, [applicant?.credentialsJson]);
+        if (Array.isArray(creds)) {
+          const filtered = creds.filter(
+            (c: any) => !(c.key || c.type || "").toLowerCase().includes(docKey.toLowerCase())
+          );
+          updatedCreds = [...filtered, docEntry];
+        } else {
+          const docs = Array.isArray(creds.documents) ? [...creds.documents] : [];
+          const filtered = docs.filter(
+            (c: any) => !(c.key || c.type || "").toLowerCase().includes(docKey.toLowerCase())
+          );
+          updatedCreds = { ...creds, documents: [...filtered, docEntry] };
+        }
+        return { ...prev, credentialsJson: updatedCreds };
+      });
+
+      setToastMsg({ type: "success", text: `New document uploaded successfully!` });
+    } catch (err: any) {
+      setToastMsg({ type: "error", text: err.message || "Upload failed" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Extract status audit logs from credentialsJson.statusLogs
   const timelineLogs = useMemo<AdmissionStatusLog[]>(() => {
-    if (!applicant) return [];
+    if (!localApplicant) return [];
     let logs: AdmissionStatusLog[] = [];
 
-    if (typeof applicant.credentialsJson === "object" && applicant.credentialsJson !== null) {
-      if (Array.isArray(applicant.credentialsJson.statusLogs)) {
-        logs = [...applicant.credentialsJson.statusLogs];
+    if (typeof localApplicant.credentialsJson === "object" && localApplicant.credentialsJson !== null) {
+      if (Array.isArray(localApplicant.credentialsJson.statusLogs)) {
+        logs = [...localApplicant.credentialsJson.statusLogs];
       }
     }
 
@@ -188,15 +244,15 @@ export default function AdmissionRegisterDrawer({
     if (logs.length === 0) {
       logs.push({
         fromStatus: "INQUIRY",
-        toStatus: applicant.status,
-        changedById: applicant.verifiedBy || "Admissions State Machine",
+        toStatus: localApplicant.status,
+        changedById: localApplicant.verifiedBy || "Admissions State Machine",
         reason: "Initial profile created into Admission Register",
-        createdAt: applicant.createdAt,
+        createdAt: localApplicant.createdAt,
       });
     }
 
     return logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [applicant]);
+  }, [localApplicant]);
 
   const formFeePaid = Boolean(
     applicant?.formFeePaid ||
@@ -356,6 +412,33 @@ export default function AdmissionRegisterDrawer({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {activeTab === "dossier" ? (
             <>
+              {/* TOAST ALERT BANNER */}
+              {toastMsg && (
+                <div
+                  className={`p-3.5 rounded-2xl flex items-center justify-between text-xs font-bold transition ${
+                    toastMsg.type === "success"
+                      ? "bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 text-emerald-800 dark:text-emerald-300"
+                      : "bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-800 dark:text-rose-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {toastMsg.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{toastMsg.text}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setToastMsg(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               {/* ESSENTIAL CARDS GRID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 {/* Cohort */}
@@ -429,73 +512,158 @@ export default function AdmissionRegisterDrawer({
 
               {/* DOCUMENTS CHECKLIST */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                    Required KYC Documents Checklist ({normalizedDocs.length})
-                  </h4>
-                  <span className="text-xs text-indigo-600 font-bold">
-                    {normalizedDocs.filter((d) => d.verified).length}/{normalizedDocs.length} Verified
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 gap-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                      Required & Optional KYC Documents (5)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                      4 Mandatory documents • 1 Optional medical report
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {totalUploadedCount}/5 Uploaded
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {mandatoryVerifiedCount}/4 Mandatory
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                      {optionalUploadedCount}/1 Optional
+                    </span>
+                  </div>
                 </div>
 
-                {normalizedDocs.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {normalizedDocs.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-indigo-300 transition"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                              doc.verified
-                                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200"
-                                : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 border border-indigo-200"
-                            }`}
-                          >
-                            <FileCheck className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm truncate">
-                              {doc.typeLabel}
-                            </p>
-                            <p className="text-[11px] text-slate-400 font-mono truncate">
-                              {doc.fileName} {doc.size ? `• ${(doc.size / 1024).toFixed(1)} KB` : ""}
-                            </p>
-                          </div>
+                <div className="space-y-2.5">
+                  {canonicalDocs.map((doc) => (
+                    <div
+                      key={doc.key}
+                      className="p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-indigo-300 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            doc.verified
+                              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200"
+                              : doc.hasFile
+                              ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 border border-indigo-200"
+                              : doc.isMissing
+                              ? "bg-amber-50 dark:bg-amber-950/60 text-amber-600 border border-amber-200"
+                              : "bg-slate-100 dark:bg-zinc-800 text-slate-400 border border-slate-200 dark:border-zinc-700"
+                          }`}
+                        >
+                          <FileCheck className="w-4 h-4" />
                         </div>
-
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                          <a
-                            href={doc.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 transition flex items-center gap-1.5"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Preview</span>
-                          </a>
-
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                              doc.verified
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                            }`}
-                          >
-                            {doc.verified ? "Verified ✓" : "Uploaded"}
-                          </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm truncate">
+                              {doc.label}
+                            </p>
+                            {doc.isOptional ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                                Optional
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                Mandatory
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-mono truncate mt-0.5">
+                            {doc.fileName ? (
+                              <span className="text-slate-500 dark:text-zinc-400">
+                                {doc.fileName} {doc.size ? `• ${(doc.size / 1024).toFixed(1)} KB` : ""}
+                              </span>
+                            ) : doc.isMissing ? (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                File not found on server — please re-upload
+                              </span>
+                            ) : doc.isOptional ? (
+                              <span className="text-slate-400 dark:text-zinc-500 font-medium">
+                                Optional document — Not required for admission
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-zinc-500">
+                                Awaiting document upload
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center border border-dashed border-slate-200 dark:border-zinc-800 rounded-2xl text-xs text-slate-400 space-y-2">
-                    <FileCheck className="w-8 h-8 mx-auto text-slate-300 dark:text-zinc-600" />
-                    <p className="font-bold text-slate-600 dark:text-zinc-300">Awaiting Parent KYC Uploads</p>
-                    <p className="text-[11px]">No credential files uploaded to this dossier yet.</p>
-                  </div>
-                )}
+
+                      <div className="flex flex-wrap items-center gap-2 self-end sm:self-center shrink-0">
+                        {/* PREVIEW BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => handlePreview(doc)}
+                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                            doc.fileUrl
+                              ? "border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700"
+                              : "border-slate-200 dark:border-zinc-800 text-slate-400 hover:bg-slate-50"
+                          }`}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Preview</span>
+                        </button>
+
+                        {/* RE-UPLOAD / UPLOAD ACTION */}
+                        <label className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 transition flex items-center gap-1.5 cursor-pointer">
+                          <UploadCloud className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{doc.hasFile ? "Re-upload" : "Upload"}</span>
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) {
+                                handleFileUpload(doc.key, e.target.files[0]);
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {/* VERIFY BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyDoc(doc.key)}
+                          disabled={doc.verified || isProcessing}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition ${
+                            doc.verified
+                              ? "bg-emerald-600 text-white cursor-default"
+                              : !doc.fileUrl
+                              ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                          }`}
+                        >
+                          {doc.verified ? "Verified ✓" : "Mark Verified"}
+                        </button>
+
+                        {/* UPLOADED / VERIFIED STATUS BADGE */}
+                        {doc.verified ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200">
+                            Verified ✓
+                          </span>
+                        ) : doc.hasFile ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
+                            Uploaded
+                          </span>
+                        ) : doc.isMissing || doc.hasFileName ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200">
+                            Missing
+                          </span>
+                        ) : doc.isOptional ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                            Optional — Not Uploaded
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                            Not Uploaded
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           ) : (
