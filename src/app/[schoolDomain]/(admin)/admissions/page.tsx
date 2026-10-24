@@ -32,7 +32,7 @@ function PipelineSkeleton() {
 }
 
 import { getSession } from "@/lib/auth";
-import { checkRouteAuthorization } from "@/lib/admissions.service";
+import { checkRouteAuthorization, resolveCanonicalDocuments } from "@/lib/admissions.service";
 
 export default async function AdmissionsPage({
   params: paramsPromise,
@@ -284,14 +284,22 @@ export default async function AdmissionsPage({
       </div>
 
       <Suspense fallback={<PipelineSkeleton />}>
-        <AdmissionsPipeline
-          leads={leads as any}
-          schoolId={school.id}
-          schoolDomain={params.schoolDomain}
-          tiers={school.academicTiers}
-          schoolName={school.name}
-          canMutate={canMutate}
-        />
+        {(() => {
+          const enhancedLeads = leads.map((l) => ({
+            ...l,
+            resolvedDocuments: resolveCanonicalDocuments(l),
+          }));
+          return (
+            <AdmissionsPipeline
+              leads={enhancedLeads as any}
+              schoolId={school.id}
+              schoolDomain={params.schoolDomain}
+              tiers={school.academicTiers}
+              schoolName={school.name}
+              canMutate={canMutate}
+            />
+          );
+        })()}
       </Suspense>
     </div>
   );

@@ -480,3 +480,531 @@ export async function convertLeadToRegister(
     };
   });
 }
+
+/**
+ * Canonical 4 KYC Document Definitions
+ * ONE unified checklist across table, drawer, and dossier
+ */
+export const CANONICAL_KYC_DOCS = [
+  {
+    key: "passportPhoto",
+    label: "Passport Photograph",
+    aliases: [
+      "passportPhoto",
+      "passport_photo",
+      "passport",
+      "Recent Passport",
+      "passportPhotoUrl",
+      "passportphoto",
+      "photo",
+    ],
+    prefixes: ["passport-", "passportPhoto-", "passport"],
+    leadColumn: "passportPhotoUrl",
+  },
+  {
+    key: "academicResults",
+    label: "Previous Academic Results",
+    aliases: [
+      "academicResults",
+      "academic_results",
+      "lastResult",
+      "last_result",
+      "result",
+      "results",
+      "Previous Academic Results",
+      "academicResultsUrl",
+      "academic_report",
+      "academicRecords",
+    ],
+    prefixes: [
+      "academic-results-",
+      "lastResult-",
+      "results-",
+      "result-",
+      "academicResults-",
+    ],
+    leadColumn: "academicResultsUrl",
+  },
+  {
+    key: "birthCertificate",
+    label: "Birth Certificate / Age Declaration",
+    aliases: [
+      "birthCertificate",
+      "birth_certificate",
+      "birthCert",
+      "NPC Birth Cert",
+      "Birth Certificate / Age Declaration",
+      "birthCertificateUrl",
+      "birthcert",
+      "age_declaration",
+    ],
+    prefixes: [
+      "birthCertificate-",
+      "birth-certificate-",
+      "birthCert-",
+      "birth-",
+    ],
+    leadColumn: "birthCertificateUrl",
+  },
+  {
+    key: "medicalRecords",
+    label: "Medical Certificate of Fitness",
+    aliases: [
+      "medicalRecords",
+      "medical_records",
+      "medical_fitness",
+      "Medical Fitness",
+      "Medical Certificate of Fitness",
+      "medicalRecordsUrl",
+      "medical_report",
+      "nin",
+    ],
+    prefixes: [
+      "medical-records-",
+      "medical-fitness-",
+      "medicalRecords-",
+      "medical-",
+      "nin-",
+    ],
+    leadColumn: "medicalRecordsUrl",
+  },
+] as const;
+
+/**
+ * Resolves verified document preview URL across new credentialsJson and legacy storage paths.
+ * a) Try new path first (credentialsJson / AdmissionRegister)
+ * b) If null, fallback to legacy storage path / DB column where pre-v2.2 files live
+ * c) If file truly missing on disk, return null explicitly — do NOT fake success.
+ */
+export function getDocumentUrl(
+  applicant: any,
+  docTypeOrKey: string
+): string | null {
+  if (!applicant) return null;
+
+  const normKey = (docTypeOrKey || "").trim().toLowerCase();
+  const docDef = CANONICAL_KYC_DOCS.find(
+    (d) =>
+      d.key.toLowerCase() === normKey ||
+      d.label.toLowerCase() === normKey ||
+      d.aliases.some((a) => a.toLowerCase() === normKey)
+  );
+
+  const aliases = docDef ? docDef.aliases.map((a) => a.toLowerCase()) : [normKey];
+  const prefixes = docDef ? docDef.prefixes.map((p) => p.toLowerCase()) : [];
+  const leadCol = docDef?.leadColumn;
+
+  let candidateUrl: string | null = null;
+  let candidateFileName: string | null = null;
+
+  // a) Try new path first (credentialsJson / AdmissionRegister)
+  const rawCreds = applicant.credentialsJson;
+  if (rawCreds) {
+    let creds: any = rawCreds;
+    if (typeof creds === "string") {
+      try {
+        creds = JSON.parse(creds);
+      } catch {}
+    }
+
+    if (creds && typeof creds === "object") {
+      // Direct property in credentialsJson
+      for (const a of aliases) {
+        if (typeof creds[a] === "string" && creds[a].trim()) {
+          candidateUrl = creds[a].trim();
+          break;
+        } else if (creds[a] && typeof creds[a] === "object") {
+          const u = creds[a].fileUrl || creds[a].url || creds[a].path || creds[a].link;
+          if (u) {
+            candidateUrl = u;
+            candidateFileName = creds[a].fileName || creds[a].filename || creds[a].savedName;
+            break;
+          }
+        }
+      }
+
+      // Check documents array inside credentialsJson
+      if (!candidateUrl) {
+        const docsList: any[] = Array.isArray(creds)
+          ? creds
+          : Array.isArray(creds.documents)
+          ? creds.documents
+          : [];
+
+        for (const item of docsList) {
+          if (!item || typeof item !== "object") continue;
+          const itemKey = (item.key || item.docKey || item.docType || item.type || "").toLowerCase();
+          const itemFileName = (item.fileName || item.filename || item.savedName || "").toLowerCase();
+
+          const matchesAlias = aliases.some((a) => itemKey === a || itemKey.includes(a));
+          const matchesPrefix = prefixes.some((p) => itemFileName.startsWith(p));
+
+          if (matchesAlias || matchesPrefix) {
+            candidateUrl = item.fileUrl || item.url || item.path || item.link || null;
+            candidateFileName = item.fileName || item.filename || item.savedName || null;
+            if (candidateUrl) break;
+          }
+        }
+      }
+    }
+  }
+
+  // b) If null, fallback to legacy storage path / DB column where pre-v2.2 files live
+  if (!candidateUrl && leadCol && typeof applicant[leadCol] === "string" && applicant[leadCol].trim()) {
+    candidateUrl = applicant[leadCol].trim();
+  }
+
+  if (!candidateUrl && applicant.documents) {
+    let docs = applicant.documents;
+    if (typeof docs === "string") {
+      try {
+        docs = JSON.parse(docs);
+      } catch {}
+    }
+    if (docs && typeof docs === "object") {
+      for (const a of aliases) {
+        const entry = docs[a];
+        if (typeof entry === "string" && entry.trim()) {
+          candidateUrl = entry.trim();
+          break;
+        } else if (entry && typeof entry === "object") {
+          const u = entry.fileUrl || entry.url || entry.path || entry.link;
+          if (u) {
+            candidateUrl = u;
+            candidateFileName = entry.fileName || entry.filename || entry.savedName;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  const schoolId = applicant.tenantId || applicant.schoolId || "";
+  const applicantId = applicant.id || "";
+  const applicationNo = applicant.applicationNo || "";
+  const leadId =
+    applicant.leadId ||
+    (typeof applicant.credentialsJson === "object" ? applicant.credentialsJson?.leadId : null) ||
+    "";
+
+  // c) If file truly missing on disk, return null explicitly — do NOT fake success.
+  return resolveAndVerifyFileUrl({
+    candidateUrl,
+    candidateFileName,
+    schoolId,
+    applicantId,
+    applicationNo,
+    leadId,
+    prefixes,
+  });
+}
+
+/**
+ * Validates file existence on storage and formats clean public preview URL
+ */
+function resolveAndVerifyFileUrl(params: {
+  candidateUrl?: string | null;
+  candidateFileName?: string | null;
+  schoolId?: string;
+  applicantId?: string;
+  applicationNo?: string;
+  leadId?: string;
+  prefixes?: string[];
+}): string | null {
+  const { candidateUrl, candidateFileName, schoolId, applicantId, applicationNo, leadId, prefixes = [] } = params;
+
+  // External cloud storage (e.g. Uploadthing https://utfs.io or S3/CDN)
+  if (candidateUrl && (candidateUrl.startsWith("http://") || candidateUrl.startsWith("https://"))) {
+    return candidateUrl;
+  }
+
+  // Running on client-side: clean and format URL
+  if (typeof window !== "undefined") {
+    if (!candidateUrl && !candidateFileName) return null;
+    let url = candidateUrl || candidateFileName || "";
+    url = url.replace(/^\/+/, "");
+    if (url.startsWith("api/uploads/")) return `/${url}`;
+    if (url.startsWith("uploads/")) return `/api/${url}`;
+    return `/api/uploads/${url}`;
+  }
+
+  // Server-side: check filesystem directly
+  try {
+    const fs = require("fs");
+    const path = require("path");
+
+    const uploadsBase = path.resolve(process.cwd(), "public", "uploads");
+    if (!fs.existsSync(uploadsBase)) return null;
+
+    const checkFile = (relPath: string): string | null => {
+      const cleanRel = relPath.replace(/^(\/?api\/uploads\/|\/?uploads\/|\/+)/i, "");
+      const fullPath = path.resolve(uploadsBase, cleanRel);
+      if (fullPath.startsWith(uploadsBase) && fs.existsSync(fullPath)) {
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile() && stat.size > 0) {
+          const forwardRel = cleanRel.replace(/\\/g, "/");
+          return `/api/uploads/${forwardRel}`;
+        }
+      }
+      return null;
+    };
+
+    // 1. Direct candidateUrl check
+    if (candidateUrl) {
+      const verified = checkFile(candidateUrl);
+      if (verified) return verified;
+    }
+
+    // 2. Extract potential filename
+    const fileName =
+      candidateFileName ||
+      (candidateUrl ? candidateUrl.split("/").pop()?.split("?")[0] : null);
+
+    // 3. Known directory candidate paths
+    const candidateDirs: string[] = [];
+    if (schoolId) {
+      if (applicantId) candidateDirs.push(path.join("admissions", schoolId, applicantId));
+      if (leadId) candidateDirs.push(path.join("admissions", schoolId, leadId));
+      if (applicationNo) {
+        candidateDirs.push(path.join("admissions", schoolId, applicationNo));
+        candidateDirs.push(path.join("admissions", schoolId, applicationNo.replace(/[\/\\]/g, "_")));
+        candidateDirs.push(path.join("admissions", schoolId, applicationNo.replace(/[\/\\]/g, "-")));
+      }
+      candidateDirs.push(path.join("admissions", schoolId));
+    }
+    if (applicantId) candidateDirs.push(path.join("admissions", applicantId));
+    if (leadId) candidateDirs.push(path.join("admissions", leadId));
+
+    for (const dir of candidateDirs) {
+      const dirPath = path.resolve(uploadsBase, dir);
+      if (fs.existsSync(dirPath)) {
+        if (fileName) {
+          const directCheck = checkFile(path.join(dir, fileName));
+          if (directCheck) return directCheck;
+        }
+
+        // Check if any file matches required document prefix
+        if (prefixes.length > 0) {
+          try {
+            const files = fs.readdirSync(dirPath);
+            for (const f of files) {
+              const lowerF = f.toLowerCase();
+              if (prefixes.some((p) => lowerF.startsWith(p.toLowerCase()))) {
+                const prefixCheck = checkFile(path.join(dir, f));
+                if (prefixCheck) return prefixCheck;
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // 4. Fallback search by filename within school folder
+    if (fileName && schoolId) {
+      const schoolUploadsDir = path.resolve(uploadsBase, "admissions", schoolId);
+      if (fs.existsSync(schoolUploadsDir)) {
+        const found = searchFileRecursive(fs, path, schoolUploadsDir, fileName);
+        if (found) {
+          const rel = path.relative(uploadsBase, found).replace(/\\/g, "/");
+          return `/api/uploads/${rel}`;
+        }
+      }
+    }
+
+    // 5. Global search in public/uploads if filename is unique
+    if (fileName) {
+      const globalFound = searchFileRecursive(fs, path, uploadsBase, fileName);
+      if (globalFound) {
+        const rel = path.relative(uploadsBase, globalFound).replace(/\\/g, "/");
+        return `/api/uploads/${rel}`;
+      }
+    }
+
+    // File truly missing on disk: return null explicitly
+    return null;
+  } catch (err) {
+    console.error("[getDocumentUrl] Storage verification error:", err);
+    return null;
+  }
+}
+
+function searchFileRecursive(fs: any, path: any, dir: string, targetName: string, depth = 0): string | null {
+  if (depth > 6) return null;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name.toLowerCase() === targetName.toLowerCase()) {
+        return full;
+      } else if (entry.isDirectory()) {
+        const res = searchFileRecursive(fs, path, full, targetName, depth + 1);
+        if (res) return res;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Resolves the 4 canonical KYC documents for any applicant (register or lead record).
+ * Unifies document state, verified status, and verified file URLs.
+ */
+export function resolveCanonicalDocuments(applicant: any) {
+  if (!applicant) return [];
+
+  const verifiedMap: Record<string, boolean> = {};
+  const statusMap: Record<string, "VERIFIED" | "REJECTED" | "PENDING"> = {};
+
+  const checkDocStatus = (item: any) => {
+    if (!item || typeof item !== "object") return;
+    const key = (item.key || item.docKey || item.docType || item.type || "").toLowerCase();
+    const isV = Boolean(item.verified || item.status === "VERIFIED");
+    const isR = Boolean(item.rejected || item.status === "REJECTED");
+    if (isV) statusMap[key] = "VERIFIED";
+    else if (isR) statusMap[key] = "REJECTED";
+    else statusMap[key] = "PENDING";
+  };
+
+  const rawCreds = applicant.credentialsJson;
+  if (rawCreds) {
+    let c: any = rawCreds;
+    if (typeof c === "string") {
+      try {
+        c = JSON.parse(c);
+      } catch {}
+    }
+    const list = Array.isArray(c) ? c : Array.isArray(c?.documents) ? c.documents : [];
+    list.forEach(checkDocStatus);
+  }
+
+  if (applicant.documents) {
+    let d: any = applicant.documents;
+    if (typeof d === "string") {
+      try {
+        d = JSON.parse(d);
+      } catch {}
+    }
+    if (typeof d === "object" && d !== null) {
+      Object.entries(d).forEach(([k, v]: [string, any]) => {
+        if (v && typeof v === "object") {
+          checkDocStatus({ key: k, ...v });
+        }
+      });
+    }
+  }
+
+  return CANONICAL_KYC_DOCS.map((docDef) => {
+    const fileUrl = getDocumentUrl(applicant, docDef.key);
+
+    let fileName: string | null = null;
+    if (rawCreds) {
+      let c: any = rawCreds;
+      if (typeof c === "string") {
+        try {
+          c = JSON.parse(c);
+        } catch {}
+      }
+      const list = Array.isArray(c) ? c : Array.isArray(c?.documents) ? c.documents : [];
+      const item = list.find((it: any) => {
+        const k = (it?.key || it?.docKey || it?.docType || it?.type || "").toLowerCase();
+        return docDef.aliases.some((a) => a.toLowerCase() === k);
+      });
+      if (item) {
+        fileName = item.fileName || item.filename || item.savedName || null;
+      }
+    }
+
+    if (!fileName && applicant.documents) {
+      let d: any = applicant.documents;
+      if (typeof d === "string") {
+        try {
+          d = JSON.parse(d);
+        } catch {}
+      }
+      if (typeof d === "object" && d !== null) {
+        for (const a of docDef.aliases) {
+          const entry = d[a];
+          if (entry && typeof entry === "object") {
+            fileName = entry.fileName || entry.filename || entry.savedName || null;
+            if (fileName) break;
+          }
+        }
+      }
+    }
+
+    if (!fileName && fileUrl) {
+      fileName = fileUrl.split("/").pop()?.split("?")[0] || `${docDef.label}.pdf`;
+    }
+
+    let docStatus: "VERIFIED" | "REJECTED" | "PENDING" = "PENDING";
+    for (const a of docDef.aliases) {
+      const lowerA = a.toLowerCase();
+      if (statusMap[lowerA]) {
+        docStatus = statusMap[lowerA];
+        break;
+      }
+    }
+
+    const hasFile = Boolean(fileUrl);
+    const hasFileName = Boolean(fileName && fileName !== `${docDef.label}.pdf`);
+    const isMissing = Boolean(hasFileName && !hasFile);
+    const isVerified = docStatus === "VERIFIED";
+    const isRejected = docStatus === "REJECTED";
+
+    return {
+      key: docDef.key,
+      label: docDef.label,
+      fileUrl,
+      fileName,
+      status: docStatus,
+      isVerified,
+      isRejected,
+      hasFile,
+      hasFileName,
+      isMissing,
+    };
+  });
+}
+
+/**
+ * Canonical 4-doc summary calculator for AdmissionRegisterTable and headers.
+ * Unifies the count to 0/4 across all interfaces.
+ */
+export function getCanonicalDocsSummary(applicant: any): {
+  verifiedCount: number;
+  uploadedCount: number;
+  totalCount: number;
+  summaryLabel: string;
+  status: "verified" | "pending" | "empty";
+} {
+  const docs = resolveCanonicalDocuments(applicant);
+  const totalCount = 4;
+  const verifiedCount = docs.filter((d) => d.isVerified).length;
+  const uploadedCount = docs.filter((d) => d.hasFile).length;
+
+  let summaryLabel = `${uploadedCount}/4 Uploaded`;
+  let status: "verified" | "pending" | "empty" = "empty";
+
+  if (verifiedCount === 4) {
+    summaryLabel = "4/4 Verified";
+    status = "verified";
+  } else if (verifiedCount > 0) {
+    summaryLabel = `${verifiedCount}/4 Verified`;
+    status = "verified";
+  } else if (uploadedCount > 0) {
+    summaryLabel = `${uploadedCount}/4 Uploaded`;
+    status = "pending";
+  } else {
+    summaryLabel = "0/4 Uploaded";
+    status = "empty";
+  }
+
+  return {
+    verifiedCount,
+    uploadedCount,
+    totalCount,
+    summaryLabel,
+    status,
+  };
+}
+

@@ -506,7 +506,11 @@ export async function getAllApplications({
     orderBy: { createdAt: "desc" },
   });
 
-  return applications;
+  const { resolveCanonicalDocuments } = await import("@/lib/admissions.service");
+  return applications.map((app) => ({
+    ...app,
+    resolvedDocuments: resolveCanonicalDocuments(app),
+  }));
 }
 
 /**
@@ -528,7 +532,13 @@ export async function getApplicationById({
     },
   });
 
-  return applicant;
+  if (!applicant) return null;
+
+  const { resolveCanonicalDocuments } = await import("@/lib/admissions.service");
+  return {
+    ...applicant,
+    resolvedDocuments: resolveCanonicalDocuments(applicant),
+  };
 }
 
 /**
@@ -562,25 +572,32 @@ export async function verifyDocument({
     throw new Error("Applicant not found for tenant");
   }
 
-  const docs = (applicant.credentialsJson as any[]) || [];
+  let rawCreds: any = applicant.credentialsJson;
+  let isObj = false;
+  let docs: any[] = [];
+  if (Array.isArray(rawCreds)) {
+    docs = rawCreds;
+  } else if (rawCreds && typeof rawCreds === "object") {
+    isObj = true;
+    docs = Array.isArray(rawCreds.documents) ? rawCreds.documents : [];
+  }
+
   const updatedDocs = docs.map((doc: any) => {
-    if (
-      doc.type === docType ||
-      doc.docType === docType ||
-      doc.originalName === docType ||
-      doc.key === docType
-    ) {
+    const k = (doc.type || doc.docType || doc.originalName || doc.key || "").toLowerCase();
+    const target = (docType || "").toLowerCase();
+    if (k === target || k.includes(target) || target.includes(k)) {
       return { ...doc, verified };
     }
     return doc;
   });
 
   const allVerified = updatedDocs.length > 0 && updatedDocs.every((d) => d.verified);
+  const updatedCreds = isObj ? { ...rawCreds, documents: updatedDocs } : updatedDocs;
 
   const updated = await basePrisma.admissionRegister.update({
     where: { id: applicant.id },
     data: {
-      credentialsJson: updatedDocs as any,
+      credentialsJson: updatedCreds as any,
       verifiedBy: verifiedBy || applicant.verifiedBy || "Admissions Officer",
       verifiedAt: verified ? new Date() : applicant.verifiedAt,
       status: allVerified ? "under_review" : applicant.status,

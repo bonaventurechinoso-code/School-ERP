@@ -31,6 +31,7 @@ import {
   DuplicateCheckMatch,
   AdmissionStatus,
 } from "@/lib/admissions.types";
+import { getApplicantDocsSummary } from "@/lib/admissions-docs";
 
 export type { AdmissionRegisterRecord };
 
@@ -425,19 +426,9 @@ export default function AdmissionRegisterTable({
     );
   };
 
-  // Extract docs metadata
+  // Extract canonical 4 docs metadata
   const getDocsSummary = (r: AdmissionRegisterRecord) => {
-    let docs: any[] = [];
-    if (Array.isArray(r.credentialsJson)) {
-      docs = r.credentialsJson;
-    } else if (typeof r.credentialsJson === "object" && r.credentialsJson !== null) {
-      docs = Array.isArray(r.credentialsJson.documents) ? r.credentialsJson.documents : [];
-    }
-    const total = docs.length;
-    const verified = docs.filter((d: any) => d.verified).length;
-    if (total === 0) return { label: "No Uploads", status: "empty" };
-    if (verified === total) return { label: `${verified}/${total} Verified`, status: "verified" };
-    return { label: `${verified}/${total} Uploaded`, status: "pending" };
+    return getApplicantDocsSummary(r);
   };
 
   // Filtered Records
