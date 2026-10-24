@@ -6,6 +6,13 @@ import fs from "fs";
 import path from "path";
 import * as jose from "jose";
 
+export const config = {
+  api: {
+    bodyParser: false,
+    responseLimit: false,
+  },
+};
+
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 
 const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
@@ -53,7 +60,7 @@ function resolveRequestTenantContext(request: NextRequest, formData?: FormData):
       if (segments.length > 0 && !RESERVED_PREFIXES.includes(segments[0].toLowerCase())) {
         refererTenant = segments[0];
       }
-    } catch {}
+    } catch { }
   }
 
   // 5. Host / x-forwarded-host subdomain extraction (e.g., greenwood.schoolerp.com)
@@ -115,7 +122,7 @@ export async function GET(
         ) {
           sessionValid = true;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
@@ -210,7 +217,7 @@ export async function POST(
         ) {
           sessionValid = true;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
@@ -258,9 +265,8 @@ export async function POST(
         if (!item.allowedMimes.includes(fileObj.type.toLowerCase())) {
           return NextResponse.json(
             {
-              error: `Invalid file type for ${item.field}. Allowed types: ${
-                item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
-              }`,
+              error: `Invalid file type for ${item.field}. Allowed types: ${item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
+                }`,
             },
             { status: 400 }
           );
@@ -477,7 +483,7 @@ export async function POST(
       revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
       revalidatePath("/[schoolDomain]/(admin)/dashboard", "page");
       revalidatePath("/[schoolDomain]/admin/admissions", "page");
-    } catch {}
+    } catch { }
 
     return NextResponse.json({
       success: true,
