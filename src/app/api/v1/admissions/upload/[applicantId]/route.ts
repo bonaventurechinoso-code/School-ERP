@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier, invalidateTierConnection } from "@/lib/tenant-prisma";
+import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { revalidatePath } from "next/cache";
 import fs from "fs";
 import path from "path";
@@ -15,6 +16,68 @@ const ALLOWED_DOC_MIMES = [
   "image/webp",
   "image/jpg",
 ];
+
+/**
+ * Resolves the active multi-tenant context from incoming request headers, query, referer, or host.
+ */
+function resolveRequestTenantContext(request: NextRequest, formData?: FormData): {
+  subdomain: string | null;
+  tenantId: string | null;
+} {
+  // 1. Explicit tenant headers
+  const headerTenant =
+    request.headers.get("x-tenant-id") ||
+    request.headers.get("tenant-id") ||
+    request.headers.get("x-school-id") ||
+    request.headers.get("x-school-domain");
+
+  // 2. Query parameters
+  const queryTenant =
+    request.nextUrl.searchParams.get("schoolDomain") ||
+    request.nextUrl.searchParams.get("subdomain") ||
+    request.nextUrl.searchParams.get("tenantId");
+
+  // 3. Form data entries if present
+  const formTenant = formData
+    ? ((formData.get("schoolDomain") || formData.get("subdomain") || formData.get("tenantId")) as string | null)
+    : null;
+
+  // 4. Referer URL path segment: /{schoolDomain}/admissions/upload/...
+  let refererTenant: string | null = null;
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      const refUrl = new URL(referer);
+      const segments = refUrl.pathname.split("/").filter(Boolean);
+      const RESERVED_PREFIXES = ["api", "_next", "admin", "super-admin", "login", "register"];
+      if (segments.length > 0 && !RESERVED_PREFIXES.includes(segments[0].toLowerCase())) {
+        refererTenant = segments[0];
+      }
+    } catch {}
+  }
+
+  // 5. Host / x-forwarded-host subdomain extraction (e.g., greenwood.schoolerp.com)
+  let hostSubdomain: string | null = null;
+  const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+  const rawHost = hostHeader.split(":")[0].toLowerCase().trim();
+  const hostParts = rawHost.split(".");
+  if (
+    hostParts.length > 1 &&
+    hostParts[0] !== "www" &&
+    !["localhost", "127", "0"].includes(hostParts[0]) &&
+    !/^\d+$/.test(hostParts[0])
+  ) {
+    hostSubdomain = hostParts[0];
+  }
+
+  const rawCandidate = headerTenant || queryTenant || formTenant || refererTenant || hostSubdomain;
+  const sanitized = rawCandidate ? rawCandidate.toLowerCase().trim() : null;
+
+  return {
+    subdomain: sanitized,
+    tenantId: headerTenant || formTenant || queryTenant || null,
+  };
+}
 
 export async function GET(
   request: NextRequest,
@@ -97,6 +160,9 @@ export async function POST(
     const formData = await request.formData();
     const token = (formData.get("token") as string) || request.nextUrl.searchParams.get("token");
 
+    // Resolve incoming multi-tenant context from headers, referer, or host
+    const tenantCtx = resolveRequestTenantContext(request, formData);
+
     // 1. Verify Lead and Token
     const lead = await basePrisma.admissionLead.findUnique({
       where: { id: applicantId },
@@ -109,6 +175,24 @@ export async function POST(
     if (!lead) {
       return NextResponse.json({ error: "Applicant not found" }, { status: 404 });
     }
+
+    // Resolve school entity ensuring alignment with dynamic multi-tenant context
+    let resolvedSchool: any = lead.school;
+    if (!resolvedSchool && (tenantCtx.subdomain || tenantCtx.tenantId)) {
+      const candidate = (tenantCtx.subdomain || tenantCtx.tenantId)!;
+      resolvedSchool = await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { id: candidate },
+            { subdomain: candidate },
+            { slug: candidate },
+          ],
+        },
+      });
+    }
+
+    const schoolId = resolvedSchool?.id || lead.schoolId;
+    const subdomain = resolvedSchool?.subdomain || lead.school?.subdomain || tenantCtx.subdomain || "";
 
     const leadAny = lead as any;
     const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
@@ -138,7 +222,6 @@ export async function POST(
     }
 
     // 2. Prepare Storage Directory
-    const schoolId = lead.schoolId;
     const targetDir = path.join(process.cwd(), "public", "uploads", "admissions", schoolId, lead.id);
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -262,15 +345,17 @@ export async function POST(
 
     // 5. Dynamic Tier Database Synchronization
     try {
-      const targetTier = lead.tier?.name || lead.tierId;
+      const targetTier = lead.tier?.name || (lead as any).targetGrade || lead.tierId;
       const tierDb = await getPrismaClientForTier(schoolId, targetTier);
-      const tierLead = await tierDb.admissionLead.findUnique({ where: { id: lead.id } }).catch(() => null);
-      if (tierLead) {
+      await tierDb.admissionLead.updateMany({
+        where: { id: lead.id, schoolId },
+        data: updateData,
+      }).catch(async () => {
         await tierDb.admissionLead.update({
           where: { id: lead.id },
           data: updateData,
         }).catch(() => null);
-      }
+      });
     } catch (tierSyncErr) {
       console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
     }
@@ -278,10 +363,54 @@ export async function POST(
     // 5b. Update Global Admission Register audit record & document vault
     try {
       const credsList: any[] = [];
-      if (updateData.passportPhotoUrl) credsList.push({ type: "passport", path: updateData.passportPhotoUrl, verified: false });
-      if (updateData.academicResultsUrl) credsList.push({ type: "result", path: updateData.academicResultsUrl, verified: false });
-      if (updateData.birthCertificateUrl) credsList.push({ type: "birth_cert", path: updateData.birthCertificateUrl, verified: false });
-      if (updateData.medicalRecordsUrl) credsList.push({ type: "medical", path: updateData.medicalRecordsUrl, verified: false });
+      if (updateData.passportPhotoUrl) {
+        credsList.push({
+          type: "passport",
+          docType: "passportPhoto",
+          key: "passportPhoto",
+          name: "Applicant Passport Photograph",
+          path: updateData.passportPhotoUrl,
+          url: updateData.passportPhotoUrl,
+          fileUrl: updateData.passportPhotoUrl,
+          verified: false,
+        });
+      }
+      if (updateData.academicResultsUrl) {
+        credsList.push({
+          type: "result",
+          docType: "academicResults",
+          key: "academicResults",
+          name: "Previous Academic Results",
+          path: updateData.academicResultsUrl,
+          url: updateData.academicResultsUrl,
+          fileUrl: updateData.academicResultsUrl,
+          verified: false,
+        });
+      }
+      if (updateData.birthCertificateUrl) {
+        credsList.push({
+          type: "birth_cert",
+          docType: "birthCertificate",
+          key: "birthCertificate",
+          name: "Birth Certificate / Age Declaration",
+          path: updateData.birthCertificateUrl,
+          url: updateData.birthCertificateUrl,
+          fileUrl: updateData.birthCertificateUrl,
+          verified: false,
+        });
+      }
+      if (updateData.medicalRecordsUrl) {
+        credsList.push({
+          type: "medical",
+          docType: "medicalRecords",
+          key: "medicalRecords",
+          name: "Medical Certificate of Fitness",
+          path: updateData.medicalRecordsUrl,
+          url: updateData.medicalRecordsUrl,
+          fileUrl: updateData.medicalRecordsUrl,
+          verified: false,
+        });
+      }
 
       const nameParts = (lead.applicantName || "").trim().split(" ");
       const firstName = nameParts[0] || "Student";
@@ -327,15 +456,27 @@ export async function POST(
       console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
     }
 
-    // 6. Path Revalidation
+    // 6. Cache Invalidation & Multi-Tier Path Revalidation
     try {
-      const subdomain = lead.school?.subdomain;
+      invalidateTierConnection();
+      await Promise.all([
+        invalidateAdmissionsNamespace(schoolId),
+        invalidateStudentNamespace(schoolId, lead.tier?.name),
+      ]);
+      console.log(`[UPLOAD_ROUTE] Successfully invalidated cache namespaces for school: ${schoolId}`);
+    } catch (cacheErr) {
+      console.warn("[UPLOAD_ROUTE] Warning: Cache invalidation error:", cacheErr);
+    }
+
+    try {
       if (subdomain) {
         revalidatePath(`/${subdomain}/admissions`);
+        revalidatePath(`/${subdomain}/admin/admissions`);
         revalidatePath(`/${subdomain}/dashboard`);
       }
       revalidatePath("/[schoolDomain]/(admin)/admissions", "page");
       revalidatePath("/[schoolDomain]/(admin)/dashboard", "page");
+      revalidatePath("/[schoolDomain]/admin/admissions", "page");
     } catch {}
 
     return NextResponse.json({
@@ -353,3 +494,4 @@ export async function POST(
     );
   }
 }
+
