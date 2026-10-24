@@ -201,11 +201,25 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
       );
 
       if (existing) {
-        const hasFile = Boolean(existing.hasFile && existing.fileUrl);
-        const verified = Boolean(hasFile && (existing.isVerified ?? existing.verified));
+        const isApplicantVerified = !docDef.isOptional && Boolean(
+          applicant.status === "VERIFIED" ||
+          applicant.status === "APPROVED" ||
+          applicant.status === "ENROLLED"
+        );
+        const hasFile = Boolean(
+          (existing.hasFile && existing.fileUrl) ||
+          existing.fileUrl ||
+          existing.hasFile ||
+          existing.fileName ||
+          isApplicantVerified
+        );
+        const verified = Boolean(
+          (hasFile && (existing.isVerified ?? existing.verified)) ||
+          isApplicantVerified
+        );
         const rejected = Boolean(existing.isRejected ?? existing.rejected);
         const hasFileName = Boolean(existing.hasFileName || existing.fileName);
-        const isMissing = Boolean(existing.isMissing || (existing.fileName && !existing.fileUrl));
+        const isMissing = Boolean((existing.isMissing || (existing.fileName && !existing.fileUrl)) && !isApplicantVerified);
 
         let status: "VERIFIED" | "REJECTED" | "UPLOADED" | "MISSING" | "NOT_UPLOADED" = "NOT_UPLOADED";
         if (verified) status = "VERIFIED";
@@ -369,23 +383,25 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
 
     // If fileName or rawUrl contains a valid path or filename:
     const fileUrl = normalizeDocUrl(rawUrl);
-    const hasFile = Boolean(fileUrl);
+    const isApplicantVerified = !docDef.isOptional && Boolean(
+      applicant.status === "VERIFIED" ||
+      applicant.status === "APPROVED" ||
+      applicant.status === "ENROLLED"
+    );
+    const rawHasFile = Boolean(fileUrl || (fileName && fileName !== `${docDef.label}.pdf`));
+    const hasFile = Boolean(rawHasFile || isApplicantVerified);
     const hasFileName = Boolean(fileName);
-    const isMissing = hasFileName && !hasFile;
+    const isMissing = Boolean(hasFileName && !rawHasFile && !isApplicantVerified);
 
-    // Determine verified status - only if file actually exists
+    // Determine verified status
     const isVerified = Boolean(
-      hasFile && (
+      (rawHasFile && (
         match?.verified === true ||
         match?.status === "VERIFIED" ||
         leadDocEntry?.verified === true ||
-        leadDocEntry?.status === "VERIFIED" ||
-        (!docDef.isOptional && (
-          applicant.status === "VERIFIED" ||
-          applicant.status === "APPROVED" ||
-          applicant.status === "ENROLLED"
-        ))
-      )
+        leadDocEntry?.status === "VERIFIED"
+      )) ||
+      isApplicantVerified
     );
 
     const isRejected = Boolean(

@@ -22,9 +22,15 @@ import {
   ArrowRight,
   Layers,
   Check,
+  Trash2,
 } from "lucide-react";
 import AdmissionRegisterDrawer from "./AdmissionRegisterDrawer";
-import { requestApplicantDocsAction, checkDuplicateAction, mergeDuplicateAction } from "./actions";
+import {
+  requestApplicantDocsAction,
+  checkDuplicateAction,
+  mergeDuplicateAction,
+  deleteAdmissionRegisterAction,
+} from "./actions";
 import { isAdmissionsAuthorized } from "@/lib/admissions-rbac";
 import {
   AdmissionRegisterRecord,
@@ -286,6 +292,7 @@ export default function AdmissionRegisterTable({
         name: fullName,
         phone: record.parentPhone,
         email: record.email || undefined,
+        excludeRegisterId: record.id,
       });
 
       if (dupResult.isDuplicate && (dupResult.existingRegister || dupResult.existingLead)) {
@@ -306,22 +313,62 @@ export default function AdmissionRegisterTable({
   };
 
   const handleMergeData = async () => {
-    if (!pendingMergeApplicant || !activeDuplicateScan?.existingRegister) {
+    if (!pendingMergeApplicant) {
+      setIsDuplicateModalOpen(false);
+      return;
+    }
+
+    const existingReg = activeDuplicateScan?.existingRegister;
+    const existingLead = activeDuplicateScan?.existingLead;
+
+    if (!existingReg && !existingLead) {
       setIsDuplicateModalOpen(false);
       return;
     }
 
     setIsMerging(true);
     try {
+      // Determine primary record to keep (prefer VERIFIED/APPROVED over DOCS_PENDING)
+      let targetKeepId = existingReg?.id || pendingMergeApplicant.id;
+      let duplicateDeleteId: string | undefined = undefined;
+
+      if (existingReg && existingReg.id !== pendingMergeApplicant.id) {
+        const statusRank: Record<string, number> = {
+          enrolled: 5, ENROLLED: 5,
+          approved: 4, APPROVED: 4,
+          verified: 3, VERIFIED: 3,
+          under_review: 2, UNDER_REVIEW: 2,
+          docs_pending: 1, DOCS_PENDING: 1,
+          new: 0, NEW: 0, INQUIRY: 0, inquiry: 0,
+        };
+
+        const pendingRank = statusRank[pendingMergeApplicant.status] ?? 0;
+        const existingRank = statusRank[existingReg.status] ?? 0;
+
+        // If pending record is more verified/progressed than existing, keep pending and delete existing
+        if (pendingRank > existingRank) {
+          targetKeepId = pendingMergeApplicant.id;
+          duplicateDeleteId = existingReg.id;
+        } else {
+          targetKeepId = existingReg.id;
+          duplicateDeleteId = pendingMergeApplicant.id;
+        }
+      }
+
+      const incomingRecord = targetKeepId === pendingMergeApplicant.id ? existingReg : pendingMergeApplicant;
+
       const res = await mergeDuplicateAction({
-        existingRegisterId: activeDuplicateScan.existingRegister.id,
+        existingRegisterId: targetKeepId,
+        duplicateRegisterId: duplicateDeleteId,
+        duplicateLeadId: existingLead?.id,
         incomingData: {
-          firstName: pendingMergeApplicant.firstName,
-          lastName: pendingMergeApplicant.lastName,
-          classApplied: pendingMergeApplicant.classApplied,
-          parentPhone: pendingMergeApplicant.parentPhone,
-          email: pendingMergeApplicant.email || undefined,
-          formFeePaid: pendingMergeApplicant.formFeePaid,
+          firstName: incomingRecord?.firstName || pendingMergeApplicant.firstName,
+          lastName: incomingRecord?.lastName || pendingMergeApplicant.lastName,
+          classApplied: incomingRecord?.classApplied || pendingMergeApplicant.classApplied,
+          parentPhone: incomingRecord?.parentPhone || pendingMergeApplicant.parentPhone,
+          email: incomingRecord?.email || pendingMergeApplicant.email || undefined,
+          formFeePaid: pendingMergeApplicant.formFeePaid || (existingReg as any)?.credentialsJson?.formFeePaid,
+          status: pendingMergeApplicant.status,
         },
         schoolId,
         schoolDomain,
@@ -330,7 +377,7 @@ export default function AdmissionRegisterTable({
       if (res && res.success) {
         setActionMessage({
           type: "success",
-          text: `Successfully merged incoming data into active record ${activeDuplicateScan.existingRegister.applicationNo}. Zero data fracturing.`,
+          text: `Successfully merged duplicate records. Redundant duplicate record permanently deleted and active file updated.`,
         });
         await fetchRecords();
         setIsDuplicateModalOpen(false);
@@ -344,6 +391,51 @@ export default function AdmissionRegisterTable({
       setActionMessage({ type: "error", text: err.message || "Error merging data" });
     } finally {
       setIsMerging(false);
+    }
+  };
+
+  const handleDeleteRecord = async (record: AdmissionRegisterRecord) => {
+    if (!isAuthorized) {
+      setActionMessage({
+        type: "error",
+        text: "Access Denied: Only authorized Registrar or Superadmin can delete admission records.",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Permanently delete record ${record.applicationNo} (${record.firstName} ${record.lastName})? This will remove duplicate or cancelled files.`
+    );
+    if (!confirmed) return;
+
+    setActionLoadingId(record.id);
+    try {
+      const res = await deleteAdmissionRegisterAction({
+        id: record.id,
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res && res.success) {
+        setActionMessage({
+          type: "success",
+          text: `Successfully deleted admission record ${record.applicationNo}.`,
+        });
+        await fetchRecords();
+        if (selectedRecord?.id === record.id) {
+          setSelectedRecord(null);
+          setIsDrawerOpen(false);
+        }
+      } else {
+        setActionMessage({
+          type: "error",
+          text: res?.error || "Failed to delete record.",
+        });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message || "Error deleting record" });
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -743,6 +835,19 @@ export default function AdmissionRegisterTable({
                             >
                               <UserCheck className="w-3.5 h-3.5" />
                               <span>Convert to Student</span>
+                            </button>
+                          )}
+
+                          {/* Delete Record / Duplicate (Permission-Gated) */}
+                          {isAuthorized && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecord(r)}
+                              disabled={isActionLoading}
+                              className="p-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-xs transition flex items-center justify-center cursor-pointer shrink-0"
+                              title={`Delete duplicate or cancelled record ${r.applicationNo}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>

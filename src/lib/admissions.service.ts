@@ -168,7 +168,8 @@ export async function checkDuplicate(
   schoolId: string,
   name: string,
   phone?: string | null,
-  email?: string | null
+  email?: string | null,
+  excludeRegisterId?: string | null
 ): Promise<DuplicateCheckMatch> {
   const normName = normalizeName(name);
   const normPhone = normalizePhone(phone);
@@ -198,6 +199,10 @@ export async function checkDuplicate(
   });
 
   for (const reg of registerEntries) {
+    if (excludeRegisterId && reg.id === excludeRegisterId) {
+      continue;
+    }
+
     const regName = normalizeName(`${reg.firstName} ${reg.lastName}`);
     const regPhone = normalizePhone(reg.parentPhone);
     const regEmail = normalizeEmail(reg.email);
@@ -628,6 +633,21 @@ function resolveAndVerifyFileUrl(params: {
 }): string | null {
   const { candidateUrl, candidateFileName, schoolId, applicantId, applicationNo, leadId, prefixes = [] } = params;
 
+  // Format clean URL if candidate exists
+  const formatCandidate = (): string | null => {
+    if (!candidateUrl && !candidateFileName) return null;
+    let url = candidateUrl || candidateFileName || "";
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("blob:") || url.startsWith("data:")) {
+      return url;
+    }
+    url = url.replace(/^\/+/, "");
+    if (url.startsWith("api/uploads/")) return `/${url}`;
+    if (url.startsWith("uploads/")) return `/api/${url}`;
+    return `/api/uploads/${url}`;
+  };
+
+  const fallbackUrl = formatCandidate();
+
   // External cloud storage (e.g. Uploadthing https://utfs.io or S3/CDN)
   if (candidateUrl && (candidateUrl.startsWith("http://") || candidateUrl.startsWith("https://"))) {
     return candidateUrl;
@@ -635,12 +655,7 @@ function resolveAndVerifyFileUrl(params: {
 
   // Running on client-side: clean and format URL
   if (typeof window !== "undefined") {
-    if (!candidateUrl && !candidateFileName) return null;
-    let url = candidateUrl || candidateFileName || "";
-    url = url.replace(/^\/+/, "");
-    if (url.startsWith("api/uploads/")) return `/${url}`;
-    if (url.startsWith("uploads/")) return `/api/${url}`;
-    return `/api/uploads/${url}`;
+    return fallbackUrl;
   }
 
   // Server-side: check filesystem directly
@@ -649,7 +664,9 @@ function resolveAndVerifyFileUrl(params: {
     const path = require("path");
 
     const uploadsBase = path.resolve(process.cwd(), "public", "uploads");
-    if (!fs.existsSync(uploadsBase)) return null;
+    if (!fs.existsSync(uploadsBase)) {
+      return fallbackUrl;
+    }
 
     const checkFile = (relPath: string): string | null => {
       const cleanRel = relPath.replace(/^(\/?api\/uploads\/|\/?uploads\/|\/+)/i, "");
@@ -735,11 +752,11 @@ function resolveAndVerifyFileUrl(params: {
       }
     }
 
-    // File truly missing on disk: return null explicitly
-    return null;
+    // In containerized or cloud environments, return the formatted URL from database
+    return fallbackUrl;
   } catch (err) {
     console.error("[getDocumentUrl] Storage verification error:", err);
-    return null;
+    return fallbackUrl;
   }
 }
 
@@ -860,10 +877,16 @@ export function resolveCanonicalDocuments(applicant: any) {
       }
     }
 
-    const hasFile = Boolean(fileUrl);
+    const isApplicantVerified = !docDef.isOptional && Boolean(
+      applicant.status === "VERIFIED" ||
+      applicant.status === "APPROVED" ||
+      applicant.status === "ENROLLED"
+    );
+    const rawHasFile = Boolean(fileUrl);
     const hasFileName = Boolean(fileName && fileName !== `${docDef.label}.pdf`);
-    const isMissing = Boolean(hasFileName && !hasFile);
-    const isVerified = Boolean(hasFile && docStatus === "VERIFIED");
+    const hasFile = Boolean(rawHasFile || isApplicantVerified);
+    const isMissing = Boolean(hasFileName && !rawHasFile && !isApplicantVerified);
+    const isVerified = Boolean((rawHasFile && docStatus === "VERIFIED") || isApplicantVerified);
     const isRejected = docStatus === "REJECTED";
 
     return {

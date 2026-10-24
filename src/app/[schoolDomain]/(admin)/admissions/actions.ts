@@ -1141,10 +1141,17 @@ export async function checkDuplicateAction(payload: {
   name: string;
   phone?: string;
   email?: string;
+  excludeRegisterId?: string;
 }): Promise<DuplicateCheckMatch> {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
-    return await checkDuplicate(schoolId, payload.name, payload.phone, payload.email);
+    return await checkDuplicate(
+      schoolId,
+      payload.name,
+      payload.phone,
+      payload.email,
+      payload.excludeRegisterId
+    );
   } catch (error: any) {
     console.error("[checkDuplicateAction] Error:", error);
     return { isDuplicate: false };
@@ -1152,10 +1159,13 @@ export async function checkDuplicateAction(payload: {
 }
 
 /**
- * Merge incoming duplicate data directly into an existing active record
+ * Merge incoming duplicate data directly into an existing active record,
+ * and DELETE the duplicate record so only 1 consolidated record remains.
  */
 export async function mergeDuplicateAction(payload: {
   existingRegisterId: string;
+  duplicateRegisterId?: string;
+  duplicateLeadId?: string;
   incomingData: {
     firstName?: string;
     lastName?: string;
@@ -1164,6 +1174,7 @@ export async function mergeDuplicateAction(payload: {
     email?: string;
     documents?: any[];
     formFeePaid?: boolean;
+    status?: string;
   };
   schoolId: string;
   schoolDomain: string;
@@ -1185,49 +1196,246 @@ export async function mergeDuplicateAction(payload: {
     });
 
     if (!existing) {
-      return { success: false, error: "Existing register record not found." };
+      return { success: false, error: "Primary register record not found." };
     }
 
-    const existingCreds = typeof existing.credentialsJson === "object" && existing.credentialsJson !== null
-      ? (existing.credentialsJson as any)
-      : {};
+    let duplicateRecord: any = null;
+    if (payload.duplicateRegisterId && payload.duplicateRegisterId !== payload.existingRegisterId) {
+      duplicateRecord = await basePrisma.admissionRegister.findUnique({
+        where: { id: payload.duplicateRegisterId },
+      });
+    }
+
+    const existingCreds =
+      typeof existing.credentialsJson === "object" && existing.credentialsJson !== null
+        ? (existing.credentialsJson as any)
+        : {};
 
     const existingDocs = Array.isArray(existingCreds.documents)
       ? existingCreds.documents
       : [];
-    const mergedDocs = [...existingDocs, ...(payload.incomingData.documents || [])];
+
+    const dupCreds =
+      duplicateRecord && typeof duplicateRecord.credentialsJson === "object" && duplicateRecord.credentialsJson !== null
+        ? (duplicateRecord.credentialsJson as any)
+        : {};
+
+    const dupDocs = Array.isArray(dupCreds.documents) ? dupCreds.documents : [];
+    const incomingDocs = payload.incomingData.documents || [];
+
+    // Deduplicate merged documents by doc key
+    const docMap = new Map<string, any>();
+    [...existingDocs, ...dupDocs, ...incomingDocs].forEach((d) => {
+      const k = (d?.key || d?.docKey || d?.docType || d?.type || d?.label || "").toLowerCase();
+      if (k) {
+        if (!docMap.has(k) || d.verified || d.fileUrl) {
+          docMap.set(k, d);
+        }
+      }
+    });
+    const mergedDocs = Array.from(docMap.values());
+
+    // Elevate status if duplicate had higher verification status
+    const statusRank: Record<string, number> = {
+      enrolled: 5, ENROLLED: 5,
+      approved: 4, APPROVED: 4,
+      verified: 3, VERIFIED: 3,
+      under_review: 2, UNDER_REVIEW: 2,
+      docs_pending: 1, DOCS_PENDING: 1,
+      new: 0, NEW: 0, INQUIRY: 0, inquiry: 0,
+    };
+    const currentRank = statusRank[existing.status] ?? 0;
+    const dupRank = duplicateRecord ? (statusRank[duplicateRecord.status] ?? 0) : 0;
+    const incomingRank = payload.incomingData.status ? (statusRank[payload.incomingData.status] ?? 0) : 0;
+
+    let targetStatus = existing.status;
+    let verifiedBy = existing.verifiedBy;
+    let verifiedAt = existing.verifiedAt;
+
+    if (dupRank > currentRank && duplicateRecord) {
+      targetStatus = duplicateRecord.status;
+      verifiedBy = duplicateRecord.verifiedBy || session?.name || "Admissions Officer";
+      verifiedAt = duplicateRecord.verifiedAt || new Date();
+    } else if (incomingRank > currentRank && payload.incomingData.status) {
+      targetStatus = payload.incomingData.status;
+      verifiedBy = session?.name || "Admissions Officer";
+      verifiedAt = new Date();
+    }
+
+    const isFeePaid =
+      Boolean(payload.incomingData.formFeePaid) ||
+      Boolean(existingCreds.formFeePaid) ||
+      Boolean(dupCreds.formFeePaid);
 
     const statusLog = {
       fromStatus: existing.status,
-      toStatus: existing.status,
+      toStatus: targetStatus,
       changedById: session?.name || "Admissions Officer",
-      reason: "Duplicate records merged into active register file.",
+      reason: duplicateRecord
+        ? `Merged duplicate record ${duplicateRecord.applicationNo} into ${existing.applicationNo}. Redundant record deleted.`
+        : "Duplicate records merged into active register file.",
       createdAt: new Date().toISOString(),
     };
 
-    const updatedLogs = [...(existingCreds.statusLogs || []), statusLog];
+    const updatedLogs = [
+      ...(existingCreds.statusLogs || []),
+      ...(dupCreds.statusLogs || []),
+      statusLog,
+    ];
 
+    // 1. Update the primary record
     const updated = await basePrisma.admissionRegister.update({
       where: { id: existing.id },
       data: {
-        parentPhone: payload.incomingData.parentPhone || existing.parentPhone,
-        email: payload.incomingData.email || existing.email,
-        classApplied: payload.incomingData.classApplied || existing.classApplied,
+        parentPhone:
+          payload.incomingData.parentPhone ||
+          existing.parentPhone ||
+          duplicateRecord?.parentPhone,
+        email:
+          payload.incomingData.email ||
+          existing.email ||
+          duplicateRecord?.email,
+        classApplied:
+          payload.incomingData.classApplied ||
+          existing.classApplied ||
+          duplicateRecord?.classApplied,
+        status: targetStatus,
+        verifiedBy,
+        verifiedAt,
         credentialsJson: {
           ...existingCreds,
+          ...dupCreds,
           documents: mergedDocs,
           statusLogs: updatedLogs,
-          formFeePaid: payload.incomingData.formFeePaid ?? existingCreds.formFeePaid ?? false,
+          formFeePaid: isFeePaid,
         },
       },
     });
 
+    // 2. DELETE the duplicate record from database
+    if (payload.duplicateRegisterId && payload.duplicateRegisterId !== payload.existingRegisterId) {
+      try {
+        await basePrisma.admissionRegister.delete({
+          where: { id: payload.duplicateRegisterId },
+        });
+        console.log(`[mergeDuplicateAction] Deleted duplicate AdmissionRegister record: ${payload.duplicateRegisterId}`);
+      } catch (delErr) {
+        console.warn(`[mergeDuplicateAction] Warning deleting duplicate record ${payload.duplicateRegisterId}:`, delErr);
+      }
+    }
+
+    // 3. If there is an associated lead, mark it CONVERTED so it doesn't re-sync
+    if (payload.duplicateLeadId) {
+      try {
+        await basePrisma.admissionLead.update({
+          where: { id: payload.duplicateLeadId },
+          data: { status: "CONVERTED" },
+        });
+      } catch {}
+    }
+
+    // 4. Log central audit
+    try {
+      await basePrisma.auditLog.create({
+        data: {
+          schoolId,
+          tenantId: schoolId,
+          actorId: session?.userId || session?.name || "Admissions Officer",
+          action: "ADMISSION_DUPLICATE_MERGED",
+          target: existing.id,
+          metadata: {
+            primaryId: existing.id,
+            primaryAppNo: existing.applicationNo,
+            deletedDuplicateId: payload.duplicateRegisterId || null,
+            deletedDuplicateAppNo: duplicateRecord?.applicationNo || null,
+          },
+        },
+      });
+    } catch {}
+
     safeRevalidate(`/${payload.schoolDomain}/admissions`);
     safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
-    return { success: true, record: updated };
+    safeRevalidate("/api/v1/admissions");
+    return { success: true, record: updated, deletedId: payload.duplicateRegisterId };
   } catch (error: any) {
     console.error("[mergeDuplicateAction] Error:", error);
     return { success: false, error: error?.message || "Failed to merge duplicate records." };
+  }
+}
+
+/**
+ * Permanently delete a duplicate or cancelled admission register record
+ */
+export async function deleteAdmissionRegisterAction(payload: {
+  id: string;
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized to delete admissions records."),
+      };
+    }
+
+    const existing = await basePrisma.admissionRegister.findUnique({
+      where: { id: payload.id },
+    });
+
+    if (!existing) {
+      return { success: false, error: "Admission record not found or already deleted." };
+    }
+
+    // Delete record from admissionRegister
+    await basePrisma.admissionRegister.delete({
+      where: { id: payload.id },
+    });
+
+    // If an associated lead exists with this appNo, ensure it is set to CONVERTED
+    try {
+      const matchLeadId = existing.applicationNo.replace(/^APP-/, "").toLowerCase();
+      await basePrisma.admissionLead.updateMany({
+        where: {
+          schoolId,
+          OR: [
+            { id: { startsWith: matchLeadId } },
+            { applicantName: { equals: `${existing.firstName} ${existing.lastName}` } },
+          ],
+        },
+        data: { status: "CONVERTED" },
+      });
+    } catch {}
+
+    // Audit log
+    try {
+      await basePrisma.auditLog.create({
+        data: {
+          schoolId,
+          tenantId: schoolId,
+          actorId: session?.userId || session?.name || "Admissions Officer",
+          action: "ADMISSION_REGISTER_DELETED",
+          target: payload.id,
+          metadata: {
+            applicationNo: existing.applicationNo,
+            name: `${existing.firstName} ${existing.lastName}`,
+            status: existing.status,
+          },
+        },
+      });
+    } catch {}
+
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    safeRevalidate("/api/v1/admissions");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[deleteAdmissionRegisterAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to delete admission record." };
   }
 }
 
