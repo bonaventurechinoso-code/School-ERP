@@ -700,7 +700,12 @@ export default function ApplicantDossierDrawer({
           {/* TAB 2: STATUTORY KYC DOCUMENTS */}
           {activeTab === "documents" && (() => {
             const canonicalDocs = resolveApplicantDocs(localLead || lead);
-            const verifiedCount = canonicalDocs.filter((d) => d.verified).length;
+            const mandatoryDocs = canonicalDocs.filter((d) => !d.isOptional);
+            const optionalDocs = canonicalDocs.filter((d) => d.isOptional);
+
+            const totalUploaded = canonicalDocs.filter((d) => d.hasFile).length;
+            const mandatoryVerified = mandatoryDocs.filter((d) => d.verified).length;
+            const optionalUploaded = optionalDocs.filter((d) => d.hasFile).length;
 
             return (
               <div className="space-y-6">
@@ -724,13 +729,26 @@ export default function ApplicantDossierDrawer({
 
                 {/* DOCUMENT VERIFICATION CHECKLIST */}
                 <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h4 className="text-sm font-black uppercase tracking-wider text-slate-500">
-                      Required Admission Documents (4)
-                    </h4>
-                    <span className="text-xs font-bold text-indigo-600">
-                      {verifiedCount}/4 Verified
-                    </span>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wider text-slate-700">
+                        Required Admission Documents (5)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        4 Mandatory documents • 1 Optional medical report
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {totalUploaded}/5 Uploaded
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {mandatoryVerified}/4 Mandatory
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        {optionalUploaded}/1 Optional
+                      </span>
+                    </div>
                   </div>
 
                   <div className="divide-y divide-slate-100 text-sm">
@@ -754,7 +772,18 @@ export default function ApplicantDossierDrawer({
                               <FileCheck className="w-5 h-5" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="font-bold text-slate-900 text-base truncate">{doc.label}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-slate-900 text-base truncate">{doc.label}</p>
+                                {doc.isOptional ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    Optional
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    Mandatory
+                                  </span>
+                                )}
+                              </div>
                               {doc.hasFile ? (
                                 <p className="text-xs sm:text-sm text-slate-500 font-mono truncate max-w-full sm:max-w-md mt-0.5">
                                   {doc.fileName || `${doc.label}.pdf`} •{" "}
@@ -765,6 +794,10 @@ export default function ApplicantDossierDrawer({
                               ) : doc.isMissing ? (
                                 <span className="text-xs sm:text-sm text-amber-600 font-medium">
                                   File not found on server — please re-upload
+                                </span>
+                              ) : doc.isOptional ? (
+                                <span className="text-xs sm:text-sm text-slate-400 font-medium">
+                                  Optional document — Not required for admission
                                 </span>
                               ) : (
                                 <span className="text-xs sm:text-sm text-slate-400 font-medium">
@@ -854,6 +887,10 @@ export default function ApplicantDossierDrawer({
                             ) : doc.isMissing || doc.hasFileName ? (
                               <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                 Missing
+                              </span>
+                            ) : doc.isOptional ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                Optional — Not Uploaded
                               </span>
                             ) : (
                               <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-100 text-slate-500 border border-slate-200">

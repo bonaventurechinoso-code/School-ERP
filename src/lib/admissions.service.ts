@@ -7,6 +7,8 @@ import {
   DuplicateCheckMatch,
   AdmissionsAuthResult,
 } from "./admissions.types";
+import { CANONICAL_KYC_DOCS } from "@/lib/admissions-docs";
+export { CANONICAL_KYC_DOCS };
 
 /**
  * Normalization helpers according to v2.2 specification
@@ -481,94 +483,7 @@ export async function convertLeadToRegister(
   });
 }
 
-/**
- * Canonical 4 KYC Document Definitions
- * ONE unified checklist across table, drawer, and dossier
- */
-export const CANONICAL_KYC_DOCS = [
-  {
-    key: "passportPhoto",
-    label: "Passport Photograph",
-    aliases: [
-      "passportPhoto",
-      "passport_photo",
-      "passport",
-      "Recent Passport",
-      "passportPhotoUrl",
-      "passportphoto",
-      "photo",
-    ],
-    prefixes: ["passport-", "passportPhoto-", "passport"],
-    leadColumn: "passportPhotoUrl",
-  },
-  {
-    key: "academicResults",
-    label: "Previous Academic Results",
-    aliases: [
-      "academicResults",
-      "academic_results",
-      "lastResult",
-      "last_result",
-      "result",
-      "results",
-      "Previous Academic Results",
-      "academicResultsUrl",
-      "academic_report",
-      "academicRecords",
-    ],
-    prefixes: [
-      "academic-results-",
-      "lastResult-",
-      "results-",
-      "result-",
-      "academicResults-",
-    ],
-    leadColumn: "academicResultsUrl",
-  },
-  {
-    key: "birthCertificate",
-    label: "Birth Certificate / Age Declaration",
-    aliases: [
-      "birthCertificate",
-      "birth_certificate",
-      "birthCert",
-      "NPC Birth Cert",
-      "Birth Certificate / Age Declaration",
-      "birthCertificateUrl",
-      "birthcert",
-      "age_declaration",
-    ],
-    prefixes: [
-      "birthCertificate-",
-      "birth-certificate-",
-      "birthCert-",
-      "birth-",
-    ],
-    leadColumn: "birthCertificateUrl",
-  },
-  {
-    key: "medicalRecords",
-    label: "Medical Certificate of Fitness",
-    aliases: [
-      "medicalRecords",
-      "medical_records",
-      "medical_fitness",
-      "Medical Fitness",
-      "Medical Certificate of Fitness",
-      "medicalRecordsUrl",
-      "medical_report",
-      "nin",
-    ],
-    prefixes: [
-      "medical-records-",
-      "medical-fitness-",
-      "medicalRecords-",
-      "medical-",
-      "nin-",
-    ],
-    leadColumn: "medicalRecordsUrl",
-  },
-] as const;
+
 
 /**
  * Resolves verified document preview URL across new credentialsJson and legacy storage paths.
@@ -948,17 +863,20 @@ export function resolveCanonicalDocuments(applicant: any) {
     const hasFile = Boolean(fileUrl);
     const hasFileName = Boolean(fileName && fileName !== `${docDef.label}.pdf`);
     const isMissing = Boolean(hasFileName && !hasFile);
-    const isVerified = docStatus === "VERIFIED";
+    const isVerified = Boolean(hasFile && docStatus === "VERIFIED");
     const isRejected = docStatus === "REJECTED";
 
     return {
       key: docDef.key,
       label: docDef.label,
+      isOptional: Boolean(docDef.isOptional),
       fileUrl,
       fileName,
       status: docStatus,
       isVerified,
       isRejected,
+      verified: isVerified,
+      rejected: isRejected,
       hasFile,
       hasFileName,
       isMissing,
@@ -967,43 +885,61 @@ export function resolveCanonicalDocuments(applicant: any) {
 }
 
 /**
- * Canonical 4-doc summary calculator for AdmissionRegisterTable and headers.
- * Unifies the count to 0/4 across all interfaces.
+ * Canonical 5-doc summary calculator for AdmissionRegisterTable and headers.
+ * Total counter: X/5 Uploaded
+ * Mandatory counter: X/4 Verified
+ * Optional counter: X/1 Optional
  */
 export function getCanonicalDocsSummary(applicant: any): {
   verifiedCount: number;
   uploadedCount: number;
   totalCount: number;
+  mandatoryTotal: number;
+  optionalTotal: number;
+  mandatoryVerifiedCount: number;
+  mandatoryUploadedCount: number;
+  optionalUploadedCount: number;
   summaryLabel: string;
+  mandatorySummary: string;
+  optionalSummary: string;
   status: "verified" | "pending" | "empty";
 } {
   const docs = resolveCanonicalDocuments(applicant);
-  const totalCount = 4;
-  const verifiedCount = docs.filter((d) => d.isVerified).length;
-  const uploadedCount = docs.filter((d) => d.hasFile).length;
+  const totalCount = 5;
+  const mandatoryTotal = 4;
+  const optionalTotal = 1;
 
-  let summaryLabel = `${uploadedCount}/4 Uploaded`;
+  const mandatoryDocs = docs.filter((d: any) => !d.isOptional);
+  const optionalDocs = docs.filter((d: any) => d.isOptional);
+
+  const mandatoryVerifiedCount = mandatoryDocs.filter((d: any) => d.isVerified).length;
+  const mandatoryUploadedCount = mandatoryDocs.filter((d: any) => d.hasFile).length;
+  const optionalUploadedCount = optionalDocs.filter((d: any) => d.hasFile).length;
+  const uploadedCount = docs.filter((d: any) => d.hasFile).length;
+
+  let summaryLabel = `${uploadedCount}/5 Uploaded`;
   let status: "verified" | "pending" | "empty" = "empty";
 
-  if (verifiedCount === 4) {
-    summaryLabel = "4/4 Verified";
+  if (mandatoryVerifiedCount === 4) {
     status = "verified";
-  } else if (verifiedCount > 0) {
-    summaryLabel = `${verifiedCount}/4 Verified`;
-    status = "verified";
-  } else if (uploadedCount > 0) {
-    summaryLabel = `${uploadedCount}/4 Uploaded`;
+  } else if (uploadedCount > 0 || mandatoryVerifiedCount > 0) {
     status = "pending";
   } else {
-    summaryLabel = "0/4 Uploaded";
     status = "empty";
   }
 
   return {
-    verifiedCount,
+    verifiedCount: mandatoryVerifiedCount,
     uploadedCount,
     totalCount,
+    mandatoryTotal,
+    optionalTotal,
+    mandatoryVerifiedCount,
+    mandatoryUploadedCount,
+    optionalUploadedCount,
     summaryLabel,
+    mandatorySummary: `${mandatoryVerifiedCount}/4 Mandatory`,
+    optionalSummary: `${optionalUploadedCount}/1 Optional`,
     status,
   };
 }

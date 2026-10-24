@@ -1,14 +1,19 @@
 /**
  * Canonical KYC Documents Checklist & Resolver
  * Standardized across Admissions Register and Applicant Dossier
+ * 
+ * 5 Total Documents:
+ * - 4 Mandatory: Passport Photograph, Previous Academic Results, Birth Certificate / Age Declaration, Medical Certificate of Fitness
+ * - 1 Optional: Medical Report
  */
 
 export interface CanonicalDocDef {
   key: string;
   label: string;
-  leadColumn: string;
+  leadColumn?: string;
   aliases: string[];
   prefixes: string[];
+  isOptional: boolean;
 }
 
 export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
@@ -25,6 +30,7 @@ export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
       "passport_photograph",
     ],
     prefixes: ["passport", "passportphoto", "recent-passport"],
+    isOptional: false,
   },
   {
     key: "academicResults",
@@ -42,6 +48,7 @@ export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
       "transcript",
     ],
     prefixes: ["lastresult", "academic-results", "academic_results", "result"],
+    isOptional: false,
   },
   {
     key: "birthCertificate",
@@ -62,6 +69,7 @@ export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
       "birth_certificate",
       "birthcert",
     ],
+    isOptional: false,
   },
   {
     key: "medicalRecords",
@@ -72,6 +80,7 @@ export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
       "medical_records",
       "medical_fitness",
       "Medical Fitness",
+      "Medical Certificate of Fitness",
       "medicalRecordsUrl",
       "nin",
       "fitness",
@@ -83,13 +92,42 @@ export const CANONICAL_KYC_DOCS: CanonicalDocDef[] = [
       "medicalrecords",
       "nin",
       "medical_fitness",
+      "medical-fitness",
+      "fitness",
     ],
+    isOptional: false,
+  },
+  {
+    key: "medicalReport",
+    label: "Medical Report",
+    leadColumn: "medicalReportUrl",
+    aliases: [
+      "medicalReport",
+      "medical_report",
+      "medicalReportUrl",
+      "Medical Report",
+      "doctor_report",
+      "clinical_report",
+      "hospital_report",
+      "lab_report",
+      "report",
+    ],
+    prefixes: [
+      "medical-report",
+      "medical_report",
+      "medicalreport",
+      "doctor-report",
+      "lab-report",
+      "clinical-report",
+    ],
+    isOptional: true,
   },
 ];
 
 export interface CanonicalDocument {
   key: string;
   label: string;
+  isOptional: boolean;
   fileName: string | null;
   fileUrl: string | null;
   verified: boolean;
@@ -127,7 +165,8 @@ export function normalizeDocUrl(rawUrl?: string | null): string | null {
 }
 
 /**
- * Resolves the 4 canonical documents for any applicant (register or lead object)
+ * Resolves the 5 canonical documents for any applicant (register or lead object)
+ * 4 Mandatory, 1 Optional (Medical Report).
  * Works in both client and server environments.
  */
 export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
@@ -135,6 +174,7 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
     return CANONICAL_KYC_DOCS.map((docDef) => ({
       key: docDef.key,
       label: docDef.label,
+      isOptional: docDef.isOptional,
       fileName: null,
       fileUrl: null,
       verified: false,
@@ -149,30 +189,60 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
   // If server-verified resolvedDocuments already attached
   if (
     Array.isArray(applicant.resolvedDocuments) &&
-    applicant.resolvedDocuments.length === 4
+    applicant.resolvedDocuments.length >= 4
   ) {
-    return applicant.resolvedDocuments.map((d: any) => ({
-      key: d.key,
-      label: d.label,
-      fileName: d.fileName || null,
-      fileUrl: d.fileUrl || null,
-      verified: Boolean(d.isVerified ?? d.verified),
-      rejected: Boolean(d.isRejected ?? d.rejected),
-      status:
-        (d.isVerified ?? d.verified)
-          ? "VERIFIED"
-          : (d.isRejected ?? d.rejected)
-          ? "REJECTED"
-          : d.hasFile && d.fileUrl
-          ? "UPLOADED"
-          : d.isMissing
-          ? "MISSING"
-          : "NOT_UPLOADED",
-      hasFile: Boolean(d.hasFile && d.fileUrl),
-      hasFileName: Boolean(d.hasFileName || d.fileName),
-      isMissing: Boolean(d.isMissing || (d.fileName && !d.fileUrl)),
-      size: d.size,
-    }));
+    // Map existing or complement to 5 docs
+    return CANONICAL_KYC_DOCS.map((docDef) => {
+      const existing = applicant.resolvedDocuments.find(
+        (d: any) =>
+          d.key?.toLowerCase() === docDef.key.toLowerCase() ||
+          d.label?.toLowerCase() === docDef.label.toLowerCase() ||
+          docDef.aliases.some((a) => a.toLowerCase() === d.key?.toLowerCase())
+      );
+
+      if (existing) {
+        const hasFile = Boolean(existing.hasFile && existing.fileUrl);
+        const verified = Boolean(hasFile && (existing.isVerified ?? existing.verified));
+        const rejected = Boolean(existing.isRejected ?? existing.rejected);
+        const hasFileName = Boolean(existing.hasFileName || existing.fileName);
+        const isMissing = Boolean(existing.isMissing || (existing.fileName && !existing.fileUrl));
+
+        let status: "VERIFIED" | "REJECTED" | "UPLOADED" | "MISSING" | "NOT_UPLOADED" = "NOT_UPLOADED";
+        if (verified) status = "VERIFIED";
+        else if (rejected) status = "REJECTED";
+        else if (hasFile) status = "UPLOADED";
+        else if (isMissing) status = "MISSING";
+
+        return {
+          key: docDef.key,
+          label: docDef.label,
+          isOptional: docDef.isOptional,
+          fileName: existing.fileName || null,
+          fileUrl: existing.fileUrl || null,
+          verified,
+          rejected,
+          status,
+          hasFile,
+          hasFileName,
+          isMissing,
+          size: existing.size,
+        };
+      }
+
+      return {
+        key: docDef.key,
+        label: docDef.label,
+        isOptional: docDef.isOptional,
+        fileName: null,
+        fileUrl: null,
+        verified: false,
+        rejected: false,
+        status: "NOT_UPLOADED",
+        hasFile: false,
+        hasFileName: false,
+        isMissing: false,
+      };
+    });
   }
 
   // Parse credentialsJson if present
@@ -297,27 +367,31 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
       fileName = rawUrl.split("/").pop()?.split("?")[0] || null;
     }
 
-    // Determine verified status
+    // If fileName or rawUrl contains a valid path or filename:
+    const fileUrl = normalizeDocUrl(rawUrl);
+    const hasFile = Boolean(fileUrl);
+    const hasFileName = Boolean(fileName);
+    const isMissing = hasFileName && !hasFile;
+
+    // Determine verified status - only if file actually exists
     const isVerified = Boolean(
-      match?.verified === true ||
-      match?.status === "VERIFIED" ||
-      leadDocEntry?.verified === true ||
-      leadDocEntry?.status === "VERIFIED" ||
-      applicant.status === "VERIFIED" ||
-      applicant.status === "APPROVED" ||
-      applicant.status === "ENROLLED"
+      hasFile && (
+        match?.verified === true ||
+        match?.status === "VERIFIED" ||
+        leadDocEntry?.verified === true ||
+        leadDocEntry?.status === "VERIFIED" ||
+        (!docDef.isOptional && (
+          applicant.status === "VERIFIED" ||
+          applicant.status === "APPROVED" ||
+          applicant.status === "ENROLLED"
+        ))
+      )
     );
 
     const isRejected = Boolean(
       match?.status === "REJECTED" ||
       leadDocEntry?.status === "REJECTED"
     );
-
-    // If fileName or rawUrl contains a valid path or filename:
-    const fileUrl = normalizeDocUrl(rawUrl);
-    const hasFile = Boolean(fileUrl);
-    const hasFileName = Boolean(fileName);
-    const isMissing = hasFileName && !hasFile;
 
     let status: "VERIFIED" | "REJECTED" | "UPLOADED" | "MISSING" | "NOT_UPLOADED" =
       "NOT_UPLOADED";
@@ -334,6 +408,7 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
     return {
       key: docDef.key,
       label: docDef.label,
+      isOptional: docDef.isOptional,
       fileName,
       fileUrl,
       verified: isVerified,
@@ -348,49 +423,67 @@ export function resolveApplicantDocs(applicant: any): CanonicalDocument[] {
 }
 
 /**
- * Returns canonical count summary (e.g. "0/4 Uploaded", "1/4 Verified")
+ * Returns canonical count summary:
+ * - Total counter = X/5 Uploaded
+ * - Mandatory counter = X/4 Verified
+ * - Optional counter = X/1 Optional
  */
 export function getApplicantDocsSummary(applicant: any): {
   label: string;
+  verifiedLabel: string;
+  mandatorySummary: string;
+  optionalSummary: string;
   status: "verified" | "pending" | "empty";
-  verifiedCount: number;
   uploadedCount: number;
+  verifiedCount: number;
+  totalCount: number;
+  mandatoryTotal: number;
+  optionalTotal: number;
+  mandatoryVerifiedCount: number;
+  mandatoryUploadedCount: number;
+  optionalUploadedCount: number;
+  optionalVerifiedCount: number;
+  isMandatoryComplete: boolean;
 } {
   const docs = resolveApplicantDocs(applicant);
-  const verifiedCount = docs.filter((d) => d.verified).length;
-  const uploadedCount = docs.filter((d) => d.hasFile).length;
+  const mandatoryDocs = docs.filter((d) => !d.isOptional);
+  const optionalDocs = docs.filter((d) => d.isOptional);
 
-  if (verifiedCount === 4) {
-    return {
-      label: "4/4 Verified",
-      status: "verified",
-      verifiedCount,
-      uploadedCount,
-    };
-  }
+  const mandatoryVerifiedCount = mandatoryDocs.filter((d) => d.verified).length;
+  const mandatoryUploadedCount = mandatoryDocs.filter((d) => d.hasFile).length;
+  const optionalUploadedCount = optionalDocs.filter((d) => d.hasFile).length;
+  const optionalVerifiedCount = optionalDocs.filter((d) => d.verified).length;
 
-  if (verifiedCount > 0) {
-    return {
-      label: `${verifiedCount}/4 Verified`,
-      status: "verified",
-      verifiedCount,
-      uploadedCount,
-    };
-  }
+  const totalUploaded = docs.filter((d) => d.hasFile).length;
+  const isMandatoryComplete = mandatoryVerifiedCount === 4;
 
-  if (uploadedCount > 0) {
-    return {
-      label: `${uploadedCount}/4 Uploaded`,
-      status: "pending",
-      verifiedCount,
-      uploadedCount,
-    };
+  let label = `${totalUploaded}/5 Uploaded`;
+  let verifiedLabel = `${mandatoryVerifiedCount}/4 Verified`;
+  let status: "verified" | "pending" | "empty" = "empty";
+
+  if (isMandatoryComplete) {
+    status = "verified";
+  } else if (totalUploaded > 0 || mandatoryVerifiedCount > 0) {
+    status = "pending";
+  } else {
+    status = "empty";
   }
 
   return {
-    label: "0/4 Uploaded",
-    status: "empty",
-    verifiedCount: 0,
-    uploadedCount: 0,
+    label,
+    verifiedLabel,
+    mandatorySummary: `${mandatoryVerifiedCount}/4 Mandatory`,
+    optionalSummary: `${optionalUploadedCount}/1 Optional`,
+    status,
+    uploadedCount: totalUploaded,
+    verifiedCount: mandatoryVerifiedCount,
+    totalCount: 5,
+    mandatoryTotal: 4,
+    optionalTotal: 1,
+    mandatoryVerifiedCount,
+    mandatoryUploadedCount,
+    optionalUploadedCount,
+    optionalVerifiedCount,
+    isMandatoryComplete,
   };
 }

@@ -81,13 +81,18 @@ export default function AdmissionRegisterDrawer({
   const userRole = (session?.role || session?.staffRole || (session as any)?.userRole || (session?.user as any)?.role || "").toUpperCase();
   const isAuthorized = canMutate || isAdmissionsAuthorized(userRole, session?.staffRole);
 
-  // Canonical 4 KYC Documents Resolution
+  // Canonical KYC Documents Resolution (5 docs: 4 Mandatory, 1 Optional)
   const canonicalDocs = useMemo<CanonicalDocument[]>(() => {
     return resolveApplicantDocs(localApplicant);
   }, [localApplicant]);
 
-  const verifiedCount = canonicalDocs.filter((d) => d.verified).length;
-  const uploadedCount = canonicalDocs.filter((d) => d.hasFile).length;
+  const mandatoryDocs = useMemo(() => canonicalDocs.filter((d) => !d.isOptional), [canonicalDocs]);
+  const optionalDocs = useMemo(() => canonicalDocs.filter((d) => d.isOptional), [canonicalDocs]);
+
+  const mandatoryVerifiedCount = mandatoryDocs.filter((d) => d.verified).length;
+  const mandatoryUploadedCount = mandatoryDocs.filter((d) => d.hasFile).length;
+  const optionalUploadedCount = optionalDocs.filter((d) => d.hasFile).length;
+  const totalUploadedCount = canonicalDocs.filter((d) => d.hasFile).length;
 
   const handlePreview = (doc: CanonicalDocument) => {
     if (doc.fileUrl) {
@@ -507,13 +512,26 @@ export default function AdmissionRegisterDrawer({
 
               {/* DOCUMENTS CHECKLIST */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                    Required KYC Documents Checklist (4)
-                  </h4>
-                  <span className="text-xs text-indigo-600 font-bold">
-                    {verifiedCount}/4 Verified
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 gap-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                      Required & Optional KYC Documents (5)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                      4 Mandatory documents • 1 Optional medical report
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {totalUploadedCount}/5 Uploaded
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {mandatoryVerifiedCount}/4 Mandatory
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                      {optionalUploadedCount}/1 Optional
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5">
@@ -537,10 +555,21 @@ export default function AdmissionRegisterDrawer({
                           <FileCheck className="w-4 h-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm truncate">
-                            {doc.label}
-                          </p>
-                          <p className="text-[11px] font-mono truncate">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm truncate">
+                              {doc.label}
+                            </p>
+                            {doc.isOptional ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                                Optional
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                Mandatory
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-mono truncate mt-0.5">
                             {doc.fileName ? (
                               <span className="text-slate-500 dark:text-zinc-400">
                                 {doc.fileName} {doc.size ? `• ${(doc.size / 1024).toFixed(1)} KB` : ""}
@@ -548,6 +577,10 @@ export default function AdmissionRegisterDrawer({
                             ) : doc.isMissing ? (
                               <span className="text-amber-600 dark:text-amber-400 font-medium">
                                 File not found on server — please re-upload
+                              </span>
+                            ) : doc.isOptional ? (
+                              <span className="text-slate-400 dark:text-zinc-500 font-medium">
+                                Optional document — Not required for admission
                               </span>
                             ) : (
                               <span className="text-slate-400 dark:text-zinc-500">
@@ -617,6 +650,10 @@ export default function AdmissionRegisterDrawer({
                         ) : doc.isMissing || doc.hasFileName ? (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200">
                             Missing
+                          </span>
+                        ) : doc.isOptional ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                            Optional — Not Uploaded
                           </span>
                         ) : (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">

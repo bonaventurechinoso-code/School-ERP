@@ -591,7 +591,8 @@ export async function verifyDocument({
     return doc;
   });
 
-  const allVerified = updatedDocs.length > 0 && updatedDocs.every((d) => d.verified);
+  const mandatoryUpdatedDocs = updatedDocs.filter((d: any) => !d.isOptional && d.key !== "medicalReport" && d.type !== "medicalReport" && d.docType !== "medicalReport");
+  const allVerified = mandatoryUpdatedDocs.length > 0 && mandatoryUpdatedDocs.every((d) => d.verified);
   const updatedCreds = isObj ? { ...rawCreds, documents: updatedDocs } : updatedDocs;
 
   const updated = await basePrisma.admissionRegister.update({
@@ -636,8 +637,14 @@ export async function admitApplicant({
     throw new Error("Applicant not found for tenant");
   }
 
-  const creds = Array.isArray(applicant.credentialsJson) ? applicant.credentialsJson : [];
-  if (creds.length === 0) {
+  const rawCreds = applicant.credentialsJson;
+  let creds: any[] = [];
+  if (Array.isArray(rawCreds)) {
+    creds = rawCreds;
+  } else if (rawCreds && typeof rawCreds === "object") {
+    creds = Array.isArray((rawCreds as any).documents) ? (rawCreds as any).documents : Object.values(rawCreds);
+  }
+  if (creds.length === 0 && !applicant.resolvedDocuments?.some((d: any) => d.hasFile)) {
     throw new Error("Documents not uploaded yet. Complete credential verification before admission.");
   }
 
