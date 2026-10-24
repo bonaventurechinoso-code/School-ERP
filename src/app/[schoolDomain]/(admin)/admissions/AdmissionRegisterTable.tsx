@@ -67,8 +67,7 @@ export default function AdmissionRegisterTable({
     setError(null);
     try {
       const tenantId = getEffectiveTenantId();
-      const statusParam = "new,docs_pending,admitted";
-      const url = `/api/v1/admissions?status=${statusParam}`;
+      const url = `/api/v1/admissions`;
 
       const res = await fetch(url, {
         method: "GET",
@@ -91,8 +90,8 @@ export default function AdmissionRegisterTable({
         onStatsUpdate({
           total: data.length,
           newCount: data.filter((r) => r.status === "new").length,
-          docsPendingCount: data.filter((r) => r.status === "docs_pending" || r.status === "under_review").length,
-          admittedCount: data.filter((r) => r.status === "admitted").length,
+          docsPendingCount: data.filter((r) => r.status === "docs_pending" || r.status === "under_review" || r.status === "docs_submitted").length,
+          admittedCount: data.filter((r) => r.status === "admitted" || r.status === "approved").length,
         });
       }
     } catch (err: any) {

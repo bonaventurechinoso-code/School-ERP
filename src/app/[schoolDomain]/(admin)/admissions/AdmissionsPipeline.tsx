@@ -82,7 +82,7 @@ export default function AdmissionsPipeline({
 }) {
   const router = useRouter();
   const [localLeads, setLocalLeads] = useState<LeadWithTier[]>(leads);
-  const [mainTab, setMainTab] = useState<"register" | "leads">("register");
+  const [mainTab, setMainTab] = useState<"register" | "leads">("leads");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -99,9 +99,33 @@ export default function AdmissionsPipeline({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
 
-  // Filtered Leads
+  // Workflow Segregation: Early prospective inquiries map strictly to 'Admission Leads'.
+  // Active applicant profiles (those containing KYC documents, exams, and offers) bypass the legacy leads array.
+  const prospectiveInquiryLeads = useMemo(() => {
+    return localLeads.filter((lead) => {
+      const hasUploadedKyc =
+        Boolean(lead.passportPhotoUrl) ||
+        Boolean(lead.academicResultsUrl) ||
+        Boolean(lead.birthCertificateUrl) ||
+        Boolean(lead.medicalRecordsUrl) ||
+        (lead.documents &&
+          typeof lead.documents === "object" &&
+          Object.keys(lead.documents).some((k) =>
+            ["passportPhoto", "academicResults", "birthCertificate", "medicalRecords"].includes(k)
+          ));
+      const hasExamOrOffer =
+        Boolean(lead.offerToken) ||
+        lead.status === "INTERVIEW" ||
+        lead.status === "APPROVED" ||
+        lead.status === "ENROLLED";
+
+      return lead.status === "INQUIRY" && !hasUploadedKyc && !hasExamOrOffer;
+    });
+  }, [localLeads]);
+
+  // Filtered Leads strictly for prospective inquiries
   const filteredLeads = useMemo(() => {
-    return localLeads.filter((l) => {
+    return prospectiveInquiryLeads.filter((l) => {
       const matchesSearch =
         !searchQuery.trim() ||
         l.applicantName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -113,7 +137,7 @@ export default function AdmissionsPipeline({
 
       return matchesSearch && matchesStage;
     });
-  }, [localLeads, searchQuery, filterStage]);
+  }, [prospectiveInquiryLeads, searchQuery, filterStage]);
 
   const handleStageAdvance = (leadId: string, currentStage: string) => {
     const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
@@ -367,8 +391,30 @@ export default function AdmissionsPipeline({
 
   return (
     <div className="space-y-6">
-      {/* TABS SWITCHER: ADMISSION REGISTER (LIVE) vs ADMISSION LEADS (LEGACY) */}
+      {/* TABS SWITCHER: ADMISSION LEADS (LEGACY) [LEFT] vs ADMISSION REGISTER (LIVE) [RIGHT] */}
       <div className="flex items-center gap-3 border-b border-slate-200 dark:border-zinc-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setMainTab("leads")}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs ${
+            mainTab === "leads"
+              ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
+              : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Admission Leads (Legacy)</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              mainTab === "leads"
+                ? "bg-white/20 text-white"
+                : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+            }`}
+          >
+            {prospectiveInquiryLeads.length}
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={() => setMainTab("register")}
@@ -390,28 +436,6 @@ export default function AdmissionsPipeline({
             Live
           </span>
         </button>
-
-        <button
-          type="button"
-          onClick={() => setMainTab("leads")}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs ${
-            mainTab === "leads"
-              ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
-              : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Admission Leads (Legacy)</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-              mainTab === "leads"
-                ? "bg-white/20 text-white"
-                : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
-            }`}
-          >
-            {leads.length}
-          </span>
-        </button>
       </div>
 
       {mainTab === "register" ? (
@@ -431,7 +455,7 @@ export default function AdmissionsPipeline({
           <div>
             <h3 className="text-lg font-bold text-slate-800">Admissions Pipeline</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Managing {filteredLeads.length} active applicant prospects
+              Managing {filteredLeads.length} prospective inquiry leads
             </p>
           </div>
         </div>

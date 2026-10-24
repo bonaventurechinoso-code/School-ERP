@@ -123,6 +123,71 @@ export async function getAllApplications({
 
   const effectiveTenantId = school?.id || tenantId;
 
+  // Auto-sync active applicant profiles from admissionLead into admissionRegister
+  try {
+    const activeLeads = await basePrisma.admissionLead.findMany({
+      where: {
+        schoolId: effectiveTenantId,
+        OR: [
+          { status: { in: ["APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"] } },
+          { passportPhotoUrl: { not: null } },
+          { academicResultsUrl: { not: null } },
+          { birthCertificateUrl: { not: null } },
+          { medicalRecordsUrl: { not: null } },
+          { offerToken: { not: null } },
+        ],
+      },
+    });
+
+    for (const lead of activeLeads) {
+      const appNo = `APP-${lead.id.slice(0, 8).toUpperCase()}`;
+      const nameParts = (lead.applicantName || "Applicant").trim().split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+      let regStatus = "docs_pending";
+      if (lead.status === "ENROLLED") regStatus = "admitted";
+      else if (lead.status === "APPROVED") regStatus = "approved";
+      else if (lead.status === "INTERVIEW") regStatus = "under_review";
+      else if (lead.status === "APPLIED") regStatus = "docs_pending";
+
+      const creds: any[] = [];
+      if (lead.passportPhotoUrl) creds.push({ type: "passport", docType: "passportPhoto", path: lead.passportPhotoUrl, verified: lead.status === "ENROLLED" });
+      if (lead.academicResultsUrl) creds.push({ type: "result", docType: "academicResults", path: lead.academicResultsUrl, verified: lead.status === "ENROLLED" });
+      if (lead.birthCertificateUrl) creds.push({ type: "birth_cert", docType: "birthCertificate", path: lead.birthCertificateUrl, verified: lead.status === "ENROLLED" });
+      if (lead.medicalRecordsUrl) creds.push({ type: "medical", docType: "medicalRecords", path: lead.medicalRecordsUrl, verified: lead.status === "ENROLLED" });
+
+      await basePrisma.admissionRegister.upsert({
+        where: { applicationNo: appNo },
+        create: {
+          tenantId: effectiveTenantId,
+          applicationNo: appNo,
+          firstName,
+          lastName,
+          classApplied: lead.targetGrade || "N/A",
+          parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+          email: lead.studentEmail || lead.parentEmail || null,
+          status: regStatus,
+          credentialsJson: creds.length > 0 ? (creds as any) : null,
+          admittedAt: lead.status === "ENROLLED" ? lead.updatedAt : null,
+          verifiedAt: ["ENROLLED", "APPROVED"].includes(lead.status) ? lead.updatedAt : null,
+          verifiedBy: ["ENROLLED", "APPROVED"].includes(lead.status) ? "Admissions Officer" : null,
+          createdAt: lead.createdAt,
+          updatedAt: lead.updatedAt,
+        },
+        update: {
+          status: regStatus,
+          classApplied: lead.targetGrade || "N/A",
+          parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+          email: lead.studentEmail || lead.parentEmail || null,
+          credentialsJson: creds.length > 0 ? (creds as any) : undefined,
+        },
+      });
+    }
+  } catch (syncErr) {
+    console.warn("[ENROLLMENT_CONTROLLER] Auto-sync active leads to admission_registers:", syncErr);
+  }
+
   const where: any = { tenantId: effectiveTenantId };
   if (status && status !== "ALL") {
     if (status.includes(",")) {
