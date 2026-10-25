@@ -20,10 +20,22 @@ const MIME_TYPES: Record<string, string> = {
 
 export async function GET(
   req: Request,
-  { params: paramsPromise }: { params: Promise<{ path: string[] }> }
+  props?: { params?: Promise<{ path?: string[] }> | { path?: string[] } }
 ) {
   try {
-    const { path: pathSegments } = await paramsPromise;
+    let pathSegments: string[] | undefined;
+    if (props?.params) {
+      try {
+        const resolved = await props.params;
+        pathSegments = resolved?.path;
+      } catch {}
+    }
+    if (!pathSegments || pathSegments.length === 0) {
+      const parsedUrl = new URL(req.url);
+      const cleanPath = parsedUrl.pathname.replace(/^\/?api\/uploads\/?/i, "");
+      pathSegments = cleanPath.split("/").filter(Boolean);
+    }
+
     if (!pathSegments || pathSegments.length === 0) {
       return new NextResponse("File not found", { status: 404 });
     }

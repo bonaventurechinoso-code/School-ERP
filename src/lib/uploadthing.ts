@@ -7,13 +7,23 @@ let cachedUTApi: UTApi | null = null;
  * Returns null if the token is not configured in environment variables.
  */
 export function getUploadthingApi(): UTApi | null {
-  const token = process.env.UPLOADTHING_TOKEN;
-  if (!token || !token.trim()) {
+  let token = (process.env.UPLOADTHING_TOKEN || "").trim();
+  if (!token) {
+    return null;
+  }
+  // Strip surrounding quotes if configured with quotes in env
+  if (
+    (token.startsWith("'") && token.endsWith("'")) ||
+    (token.startsWith('"') && token.endsWith('"'))
+  ) {
+    token = token.slice(1, -1).trim();
+  }
+  if (!token) {
     return null;
   }
   if (!cachedUTApi) {
     try {
-      cachedUTApi = new UTApi({ token: token.trim() });
+      cachedUTApi = new UTApi({ token });
     } catch (err) {
       console.error("[UPLOADTHING_INIT_ERROR]:", err);
       return null;
