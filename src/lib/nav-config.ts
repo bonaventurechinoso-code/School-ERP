@@ -173,8 +173,17 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
           {
             id: "payment-verifications",
             label: "Payment Verifications",
-            href: (domain) => `/${domain}/finance/verifications`,
+            href: (domain) => `/${domain}/finance/receipts`,
             icon: FileCheck2,
+            matchPaths: ["/finance/verifications", "/finance/receipts", "/dashboard/finance/receipts"],
+          },
+          {
+            id: "payment-settings-tenant",
+            label: "Payment Settings (Tenant)",
+            href: (domain) => `/${domain}/settings/payments`,
+            icon: Settings,
+            badge: "NEW",
+            matchPaths: ["/settings/payments", "/dashboard/settings/payments"],
           },
           {
             id: "bank-account-configs",
@@ -204,6 +213,13 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Communications Desk",
             href: (domain) => `/${domain}/communications`,
             icon: MessageSquare,
+          },
+          {
+            id: "system-payment-settings",
+            label: "Payment Settings",
+            href: (domain) => `/${domain}/settings/payments`,
+            icon: Settings,
+            matchPaths: ["/settings/payments", "/dashboard/settings/payments"],
           },
           {
             id: "public-portal-settings",
@@ -474,8 +490,17 @@ export function getTenantNavigation(
           {
             id: "bursar-verifications",
             label: "Payment Verifications",
-            href: (d) => `/${d}/finance/verifications`,
+            href: (d) => `/${d}/finance/receipts`,
             icon: FileCheck2,
+            matchPaths: ["/finance/verifications", "/finance/receipts", "/dashboard/finance/receipts"],
+          },
+          {
+            id: "bursar-payment-settings",
+            label: "Payment Settings (Tenant)",
+            href: (d) => `/${d}/settings/payments`,
+            icon: Settings,
+            badge: "NEW",
+            matchPaths: ["/settings/payments", "/dashboard/settings/payments"],
           },
           {
             id: "bursar-bank",

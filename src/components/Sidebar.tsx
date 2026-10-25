@@ -367,7 +367,13 @@ export default function Sidebar({
                                 <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left">
                                   {child.label}
                                 </span>
+                                {child.badge && (
+                                  <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    {child.badge}
+                                  </span>
+                                )}
                               </Link>
+
                             );
                           })}
                         </div>
