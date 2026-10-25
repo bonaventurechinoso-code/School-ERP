@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useMemo } from "react";
 import { X, UserPlus, CheckCircle2, AlertCircle, Phone, User, GraduationCap } from "lucide-react";
 import { createAdmissionLeadAction } from "./actions";
+import { getAllowedLevelsByTier } from "@/lib/school-tiers";
 
 export interface NewInquiryModalProps {
   isOpen: boolean;
@@ -12,24 +13,6 @@ export interface NewInquiryModalProps {
   tiers: any[];
   onLeadCreated?: () => void;
 }
-
-const COMMON_GRADES = [
-  "Daycare / Creche",
-  "Nursery 1",
-  "Nursery 2",
-  "Primary 1",
-  "Primary 2",
-  "Primary 3",
-  "Primary 4",
-  "Primary 5",
-  "Primary 6",
-  "JSS 1",
-  "JSS 2",
-  "JSS 3",
-  "SSS 1",
-  "SSS 2",
-  "SSS 3",
-];
 
 export default function NewInquiryModal({
   isOpen,
@@ -42,15 +25,26 @@ export default function NewInquiryModal({
   const [isPending, startTransition] = useTransition();
   const [alertMsg, setAlertMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Compute allowed grades from the active/initial tier
+  const initialTier = tiers[0];
+  const initialAllowedGrades = useMemo(() => {
+    return getAllowedLevelsByTier(initialTier?.name || "PRIMARY");
+  }, [initialTier?.name]);
+
   const [formData, setFormData] = useState({
     applicantName: "",
-    targetGrade: "JSS 1",
-    tierId: tiers[0]?.id || "",
+    targetGrade: initialAllowedGrades[0] || "Primary 1",
+    tierId: initialTier?.id || "",
     parentName: "",
     parentContact: "",
     parentEmail: "",
     source: "Walk-In Parent",
   });
+
+  const selectedTier = tiers.find((t) => t.id === formData.tierId) || initialTier;
+  const allowedGrades = useMemo(() => {
+    return getAllowedLevelsByTier(selectedTier?.name || "PRIMARY");
+  }, [selectedTier?.name]);
 
   if (!isOpen) return null;
 
@@ -74,8 +68,8 @@ export default function NewInquiryModal({
           setAlertMsg({ type: "success", text: `Inquiry logged for ${formData.applicantName}!` });
           setFormData({
             applicantName: "",
-            targetGrade: "JSS 1",
-            tierId: tiers[0]?.id || "",
+            targetGrade: initialAllowedGrades[0] || "Primary 1",
+            tierId: initialTier?.id || "",
             parentName: "",
             parentContact: "",
             parentEmail: "",
@@ -148,7 +142,7 @@ export default function NewInquiryModal({
                 onChange={(e) => setFormData({ ...formData, targetGrade: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white"
               >
-                {COMMON_GRADES.map((g) => (
+                {allowedGrades.map((g) => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>
@@ -158,7 +152,16 @@ export default function NewInquiryModal({
               <label className="block font-bold text-slate-700 mb-1">Educational Tier *</label>
               <select
                 value={formData.tierId}
-                onChange={(e) => setFormData({ ...formData, tierId: e.target.value })}
+                onChange={(e) => {
+                  const newTierId = e.target.value;
+                  const newSelectedTier = tiers.find((t) => t.id === newTierId);
+                  const newGrades = getAllowedLevelsByTier(newSelectedTier?.name || "PRIMARY");
+                  setFormData({
+                    ...formData,
+                    tierId: newTierId,
+                    targetGrade: newGrades.includes(formData.targetGrade) ? formData.targetGrade : (newGrades[0] || "Primary 1"),
+                  });
+                }}
                 className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white"
                 required
               >

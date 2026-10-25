@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { updatePlanParameters } from "./actions";
 import {
@@ -82,6 +83,31 @@ export default async function SettingsPage() {
             Active & Auto-Routing
           </span>
         </div>
+      </div>
+
+      {/* Payment Activations Template Card */}
+      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/50 via-white to-indigo-50/30 dark:from-indigo-950/20 dark:via-zinc-900 dark:to-indigo-950/10 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1 max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+              PAYMENT ACTIVATIONS TEMPLATE
+            </span>
+            <span className="text-xs font-bold text-slate-500">13 Global Fee Modules</span>
+          </div>
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-zinc-100 tracking-tight">
+            Institutional Payment &amp; Fee Activations Template
+          </h2>
+          <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+            Configure global fee defaults (Application, Tuition, Result Checking, Platform Subscription) — tenants inherit but can override.
+          </p>
+        </div>
+        <Link
+          href="/super-admin/settings/payments"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm hover:shadow transition shrink-0"
+        >
+          <CreditCard className="w-4 h-4" />
+          <span>Manage Payment Modules &rarr;</span>
+        </Link>
       </div>
 
       {/* Plan Parameters Configuration */}

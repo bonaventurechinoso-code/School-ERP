@@ -36,6 +36,9 @@ const SYSTEM_PREFIXES = new Set([
   "_next",
   "admin",
   "super-admin",
+  "super_admin",
+  "platform",
+  "console",
   "dashboard",
   "teacher",
   "bursar",
@@ -223,6 +226,14 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  // Legacy /admin/_ redirect: redirect 301 to /super-admin/_
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    const newPath = pathname === "/admin" ? "/super-admin" : pathname.replace(/^\/admin/, "/super-admin");
+    const targetUrl = new URL(newPath, req.url);
+    targetUrl.search = req.nextUrl.search;
+    return NextResponse.redirect(targetUrl, 301);
+  }
 
   // 1. Allow unauthenticated access to public routes
   if (isPublicRoute(pathname)) {

@@ -40,13 +40,13 @@ export interface PaymentSettingItem {
 }
 
 interface PaymentSettingsManagerProps {
-  tenantId: string;
+  tenantId?: string;
   schoolName?: string;
   isSuperAdmin?: boolean;
 }
 
 export default function PaymentSettingsManager({
-  tenantId,
+  tenantId = "super-admin",
   schoolName,
   isSuperAdmin = false,
 }: PaymentSettingsManagerProps) {

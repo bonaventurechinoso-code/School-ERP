@@ -12,28 +12,33 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/super-admin',
-        destination: '/admin',
+        source: '/admin',
+        destination: '/super-admin',
+        permanent: false,
+      },
+      {
+        source: '/admin/:path*',
+        destination: '/super-admin/:path*',
         permanent: false,
       },
       {
         source: '/superadmin',
-        destination: '/admin',
-        permanent: false,
-      },
-      {
-        source: '/super-admin/:path*',
-        destination: '/admin/:path*',
+        destination: '/super-admin',
         permanent: false,
       },
       {
         source: '/superadmin/:path*',
-        destination: '/admin/:path*',
+        destination: '/super-admin/:path*',
         permanent: false,
       },
       {
         source: '/admin/login',
-        destination: '/login?callbackUrl=/admin',
+        destination: '/login?callbackUrl=/super-admin',
+        permanent: false,
+      },
+      {
+        source: '/super-admin/login',
+        destination: '/login?callbackUrl=/super-admin',
         permanent: false,
       },
       {

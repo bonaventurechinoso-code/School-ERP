@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
@@ -18,36 +18,23 @@ export default async function TenantLayout({
   params: Promise<{ schoolDomain: string }>;
 }) {
   const { schoolDomain } = await params;
-  const reservedKeywords = ["choice", "register", "admin", "api", "www", "app"];
+  const reservedKeywords = [
+    "admin",
+    "super-admin",
+    "super_admin",
+    "api",
+    "_next",
+    "platform",
+    "console",
+    "register",
+    "www",
+    "app",
+    "dashboard",
+    "portal",
+  ];
 
   if (reservedKeywords.includes(schoolDomain.toLowerCase())) {
-    if (schoolDomain.toLowerCase() === "choice") {
-      return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
-          <div className="w-full max-w-md p-8 text-center bg-white rounded-2xl shadow-xl border border-slate-200">
-            <h2 className="text-2xl font-extrabold text-slate-800 mb-2">Select Your Workspace</h2>
-            <p className="text-slate-500 mb-6">Choose an institutional tenant to continue.</p>
-            {/* Mock global selection list */}
-            <div className="space-y-3">
-              <a href="/admin" className="block w-full p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all font-semibold text-slate-700">
-                Platform Administration
-              </a>
-              <a href="/" className="block w-full p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all font-semibold text-slate-700">
-                Back to Home
-              </a>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="p-8 text-center text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">System Route</h2>
-          <p>This is a reserved system path.</p>
-        </div>
-      </div>
-    );
+    notFound();
   }
 
   let school = null;

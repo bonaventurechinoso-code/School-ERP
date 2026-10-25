@@ -54,7 +54,7 @@ export function getClassesForTier(tier: string): string[] {
     return TIER_CLASSES.secondary;
   }
   if (normalized === "primary" || normalized.includes("primary")) {
-    return TIER_CLASSES.primary;
+    return PRIMARY_ALLOWED_CLASSES;
   }
   if (
     normalized === "daycare" ||
@@ -84,3 +84,88 @@ export function getClassesForTier(tier: string): string[] {
 
   return TIER_CLASSES.secondary;
 }
+
+export const PRIMARY_ALLOWED_CLASSES = [
+  "Nursery 1",
+  "Nursery 2",
+  "Primary 1",
+  "Primary 2",
+  "Primary 3",
+  "Primary 4",
+  "Primary 5",
+  "Primary 6",
+];
+
+export const SECONDARY_ALLOWED_CLASSES = [
+  "JSS 1",
+  "JSS 2",
+  "JSS 3",
+  "SSS 1",
+  "SSS 2",
+  "SSS 3",
+];
+
+export const DAYCARE_ALLOWED_CLASSES = [
+  "Daycare / Creche",
+];
+
+export const COMBINED_ALLOWED_CLASSES = [
+  "Daycare / Creche",
+  "Nursery 1",
+  "Nursery 2",
+  "Primary 1",
+  "Primary 2",
+  "Primary 3",
+  "Primary 4",
+  "Primary 5",
+  "Primary 6",
+  "JSS 1",
+  "JSS 2",
+  "JSS 3",
+  "SSS 1",
+  "SSS 2",
+  "SSS 3",
+];
+
+/**
+ * Returns the authoritative class levels allowed for a school tier.
+ * Primary tier school = Nursery 1, Nursery 2, Primary 1-6 (8 items max).
+ * Secondary tier = JSS 1-3, SSS 1-3 (6 items).
+ * Daycare tier = Daycare / Creche.
+ * Combined / All = All grades.
+ */
+export function getAllowedLevelsByTier(tier?: string | null): string[] {
+  if (!tier) return PRIMARY_ALLOWED_CLASSES;
+  const normalized = tier.toUpperCase().trim();
+
+  if (
+    normalized === "SECONDARY" ||
+    normalized.includes("SECONDARY") ||
+    normalized.includes("HIGH") ||
+    normalized.includes("JSS") ||
+    normalized.includes("SSS")
+  ) {
+    return SECONDARY_ALLOWED_CLASSES;
+  }
+
+  if (
+    normalized === "DAYCARE" ||
+    normalized.includes("CRECHE") ||
+    normalized.includes("CRÈCHE")
+  ) {
+    return DAYCARE_ALLOWED_CLASSES;
+  }
+
+  if (
+    normalized === "COMBINED" ||
+    normalized === "ALL" ||
+    normalized.includes("K12") ||
+    (normalized.includes("PRIMARY") && normalized.includes("SECONDARY"))
+  ) {
+    return COMBINED_ALLOWED_CLASSES;
+  }
+
+  // Default: PRIMARY tier school = allowed class levels = NURSERY + PRIMARY (8 items max)
+  return PRIMARY_ALLOWED_CLASSES;
+}
+

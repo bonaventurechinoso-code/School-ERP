@@ -18,51 +18,80 @@ import {
   ShieldCheck,
   Landmark,
   UserCircle,
+  DollarSign,
 } from "lucide-react";
+
+interface NavChild {
+  name: string;
+  href: string;
+  icon?: any;
+  badge?: string;
+}
 
 interface NavItem {
   name: string;
   href: string;
-  icon: typeof LayoutDashboard;
+  icon: any;
   badge?: string;
   exact?: boolean;
+  children?: NavChild[];
 }
 
 const NAV_ITEMS: NavItem[] = [
   {
     name: "Platform Dashboard",
-    href: "/admin",
+    href: "/super-admin",
     icon: LayoutDashboard,
     exact: true,
   },
   {
     name: "Tenants / Schools",
-    href: "/admin/tenants",
+    href: "/super-admin/tenants",
     icon: Building2,
   },
   {
     name: "Subscriptions & Plans",
-    href: "/admin/billings",
+    href: "/super-admin/billings",
     icon: CreditCard,
   },
   {
     name: "Platform Finance",
-    href: "/admin/bank",
+    href: "/super-admin/finance/bank-account",
     icon: Landmark,
+    children: [
+      {
+        name: "Payment Modules",
+        href: "/super-admin/settings/payments",
+        icon: DollarSign,
+      },
+      {
+        name: "Bank Account Configurations",
+        href: "/super-admin/finance/bank-account",
+        icon: Landmark,
+      },
+    ],
   },
   {
     name: "Platform Users & Roles",
-    href: "/admin/audit-logs",
+    href: "/super-admin/audit-logs",
     icon: ShieldCheck,
   },
   {
     name: "Platform Settings",
-    href: "/admin/settings",
+    href: "/super-admin/settings",
     icon: Settings,
+    children: [
+      {
+        name: "Global Payment Settings",
+        href: "/super-admin/settings/payments",
+        icon: DollarSign,
+        badge: "NEW",
+      },
+    ],
   },
   {
     name: "Support / Communications",
-    href: "/admin/support",
+    href: "/super-admin/support",
     icon: LifeBuoy,
   },
 ];
@@ -75,14 +104,14 @@ export default function SuperAdminSidebar() {
     if (item.exact) {
       return pathname === item.href;
     }
-    return pathname.startsWith(item.href);
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
   };
 
   const navContent = (
     <div className="flex flex-col h-full bg-[#0D1117] dark:bg-zinc-950 text-slate-300 select-none">
       {/* Brand Header */}
       <div className="p-4 sm:p-5 border-b border-slate-800/80 dark:border-zinc-800/80 flex items-center justify-between">
-        <Link href="/admin" className="flex items-center gap-3 group">
+        <Link href="/super-admin" className="flex items-center gap-3 group">
           <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-slate-900 dark:bg-zinc-900 border border-slate-700/80 dark:border-zinc-800 flex items-center justify-center p-1.5 shadow-xs group-hover:border-indigo-500/60 transition-colors">
             <Image
               src="/img/business-logo.png"
@@ -126,46 +155,80 @@ export default function SuperAdminSidebar() {
         {NAV_ITEMS.map((item) => {
           const active = isActive(item);
           const Icon = item.icon;
+          const hasChildren = item.children && item.children.length > 0;
+          const isChildActive = hasChildren && item.children!.some(c => pathname === c.href);
 
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setIsOpen(false)}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group relative ${
-                active
-                  ? "bg-indigo-600/15 text-white font-semibold border border-indigo-500/25 shadow-xs"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 dark:hover:bg-zinc-900/60"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Icon
-                  className={`w-4 h-4 shrink-0 transition-colors ${
-                    active
-                      ? "text-indigo-400"
-                      : "text-slate-500 group-hover:text-slate-300"
-                  }`}
-                />
-                <span className="tracking-tight">{item.name}</span>
-              </div>
+            <div key={item.href} className="space-y-1">
+              <Link
+                href={item.href}
+                onClick={() => setIsOpen(false)}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group relative ${
+                  active || isChildActive
+                    ? "bg-indigo-600/15 text-white font-semibold border border-indigo-500/25 shadow-xs"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 dark:hover:bg-zinc-900/60"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon
+                    className={`w-4 h-4 shrink-0 transition-colors ${
+                      active || isChildActive
+                        ? "text-indigo-400"
+                        : "text-slate-500 group-hover:text-slate-300"
+                    }`}
+                  />
+                  <span className="tracking-tight">{item.name}</span>
+                </div>
 
-              {item.badge && (
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                    active
-                      ? "bg-indigo-500/30 text-indigo-200"
-                      : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  }`}
-                >
-                  {item.badge}
-                </span>
-              )}
+                {item.badge && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      active
+                        ? "bg-indigo-500/30 text-indigo-200"
+                        : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
 
-              {/* Active left indicator indicator bar */}
-              {active && (
-                <span className="absolute left-0 top-2 bottom-2 w-1 bg-indigo-500 rounded-r-full shadow-sm" />
+                {/* Active left indicator bar */}
+                {(active || isChildActive) && (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 bg-indigo-500 rounded-r-full shadow-sm" />
+                )}
+              </Link>
+
+              {hasChildren && (
+                <div className="pl-6 pr-1 space-y-1 pt-0.5">
+                  {item.children!.map((child) => {
+                    const childActive = pathname === child.href;
+                    const ChildIcon = child.icon || Icon;
+                    return (
+                      <Link
+                        key={child.href + child.name}
+                        href={child.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          childActive
+                            ? "bg-indigo-600/20 text-white font-bold border-l-2 border-indigo-500"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChildIcon className={`w-3.5 h-3.5 ${childActive ? "text-indigo-400" : "text-slate-500"}`} />
+                          <span>{child.name}</span>
+                        </div>
+                        {child.badge && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            {child.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            </Link>
+            </div>
           );
         })}
       </nav>
@@ -174,9 +237,9 @@ export default function SuperAdminSidebar() {
       <div className="p-3.5 border-t border-slate-800/80 dark:border-zinc-800/80 space-y-2">
         {/* Super-Admin User Slot */}
         <Link
-          href="/admin/profile"
+          href="/super-admin/profile"
           className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all ${
-            pathname === "/admin/profile"
+            pathname === "/super-admin/profile"
               ? "bg-indigo-600/15 border-indigo-500/30 text-white"
               : "bg-slate-900/40 hover:bg-slate-800/60 border-slate-800/80 text-slate-300 hover:text-white"
           }`}
