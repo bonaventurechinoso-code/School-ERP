@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Landmark,
   UserCircle,
-  DollarSign,
   ChevronDown,
   ChevronRight,
   Menu,
@@ -150,10 +149,10 @@ export default function SuperAdminSidebar() {
 
               {/* Subscriptions & Plans */}
               <Link
-                href="/super-admin/subscriptions"
+                href="/super-admin/settings/payments"
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
-                  isActive("/super-admin/subscriptions", false, ["/super-admin/billings"])
+                  isActive("/super-admin/settings/payments")
                     ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
@@ -164,7 +163,7 @@ export default function SuperAdminSidebar() {
                 </div>
               </Link>
 
-              {/* Platform Finance (parent) -> accordion nested */}
+              {/* Platform Billing (parent) -> accordion nested */}
               <div className="space-y-1">
                 <div
                   onClick={() => toggleGroup("finance")}
@@ -172,7 +171,7 @@ export default function SuperAdminSidebar() {
                 >
                   <div className="flex items-center gap-2.5">
                     <Landmark className="w-4 h-4 shrink-0" />
-                    <span>Platform Finance</span>
+                    <span>Platform Billing</span>
                   </div>
                   <ChevronDown
                     className={`w-3.5 h-3.5 transition-transform duration-200 ${
@@ -188,25 +187,10 @@ export default function SuperAdminSidebar() {
                 >
                   <div className="ml-4 border-l border-white/10 pl-3 py-1 space-y-1">
                     <Link
-                      href="/super-admin/finance/payments"
+                      href="/super-admin/finance/bank-account"
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
-                        isActive("/super-admin/finance/payments", false, ["/super-admin/settings/payments"])
-                          ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                        <span>Payment Modules</span>
-                      </div>
-                    </Link>
-
-                    <Link
-                      href="/super-admin/finance/bank"
-                      onClick={() => setIsOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
-                        isActive("/super-admin/finance/bank", false, ["/super-admin/finance/bank-account"])
+                        isActive("/super-admin/finance/bank-account")
                           ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
                           : "text-slate-400 hover:text-white hover:bg-white/5"
                       }`}
@@ -214,6 +198,21 @@ export default function SuperAdminSidebar() {
                       <div className="flex items-center gap-2">
                         <Landmark className="w-3.5 h-3.5 shrink-0" />
                         <span>Bank Account Configs</span>
+                      </div>
+                    </Link>
+
+                    <Link
+                      href="/super-admin/billings"
+                      onClick={() => setIsOpen(false)}
+                      className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
+                        isActive("/super-admin/billings")
+                          ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                        <span>Platform Ledger</span>
                       </div>
                     </Link>
                   </div>
