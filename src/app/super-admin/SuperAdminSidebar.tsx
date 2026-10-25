@@ -277,25 +277,6 @@ export default function SuperAdminSidebar() {
                   <span>General Settings</span>
                 </div>
               </Link>
-
-              {/* Global Payment Activations */}
-              <Link
-                href="/super-admin/settings/payments"
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
-                  isActive("/super-admin/settings/payments")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <DollarSign className="w-4 h-4 shrink-0" />
-                  <span>Global Payment Activations</span>
-                </div>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  NEW
-                </span>
-              </Link>
             </div>
           </div>
         </div>

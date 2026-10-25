@@ -80,14 +80,6 @@ const NAV_ITEMS: NavItem[] = [
     name: "Platform Settings",
     href: "/super-admin/settings",
     icon: Settings,
-    children: [
-      {
-        name: "Global Payment Settings",
-        href: "/super-admin/settings/payments",
-        icon: DollarSign,
-        badge: "NEW",
-      },
-    ],
   },
   {
     name: "Support / Communications",
