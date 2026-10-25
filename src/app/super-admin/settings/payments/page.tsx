@@ -1,8 +1,146 @@
-"use client";
+import React from "react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { basePrisma } from "@/lib/tenant-prisma";
+import SuperAdminPaymentsClient, {
+  SubscriptionSettingItem,
+} from "./SuperAdminPaymentsClient";
 
-import PaymentSettingsManager from "@/components/payments/PaymentSettingsManager";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
-  return <PaymentSettingsManager isSuperAdmin={true} />;
+export const metadata = {
+  title: "Platform Subscription Management | Super Admin",
+  description: "Configure SaaS subscription plans. Schools manage their own fees independently.",
+};
+
+// Default platform SaaS subscription plan definitions
+const DEFAULT_SUBSCRIPTION_PLANS: SubscriptionSettingItem[] = [
+  {
+    moduleType: "PLATFORM_SUBSCRIPTION_MONTHLY",
+    title: "Monthly SaaS Subscription Plan",
+    amount: 15000,
+    currency: "NGN",
+    isEnabled: true,
+    isActive: true,
+    category: "SUBSCRIPTION",
+    isPlatformFee: true,
+    isPlatformOnly: true,
+    description: "Monthly multi-tenant SaaS cloud license, maintenance, and automated server infrastructure.",
+    customWriteup: "Monthly subscription fee for access to SchoolERP platform. Due on the 1st of every month.",
+    bankName: "Wema Bank",
+    accountNumber: "0123456789",
+    accountName: "SchoolERP Platform Central",
+  },
+  {
+    moduleType: "PLATFORM_SUBSCRIPTION_TERMLY",
+    title: "Termly SaaS Subscription Plan",
+    amount: 40000,
+    currency: "NGN",
+    isEnabled: true,
+    isActive: true,
+    category: "SUBSCRIPTION",
+    isPlatformFee: true,
+    isPlatformOnly: true,
+    description: "Termly institution software license covering academic term portal operations (3 terms per academic session).",
+    customWriteup: "Termly platform subscription fee. Grants complete portal access for 1 academic term.",
+    bankName: "Wema Bank",
+    accountNumber: "0123456789",
+    accountName: "SchoolERP Platform Central",
+  },
+  {
+    moduleType: "PLATFORM_SUBSCRIPTION",
+    title: "Annual Enterprise Subscription Plan",
+    amount: 100000,
+    currency: "NGN",
+    isEnabled: true,
+    isActive: true,
+    category: "SUBSCRIPTION",
+    isPlatformFee: true,
+    isPlatformOnly: true,
+    description: "Full academic session software license, unlimited database tier storage, broadsheet engine, and VIP support.",
+    customWriteup: "Annual platform enterprise license. Unlocks complete institutional access for 365 days.",
+    bankName: "Wema Bank",
+    accountNumber: "0123456789",
+    accountName: "SchoolERP Platform Central",
+  },
+];
+
+export default async function SuperAdminPaymentsPage() {
+  // 3. Access Control: Ensure SUBSCRIPTION module isPlatformOnly = true and can only be queried when session.user.role === 'SUPER_ADMIN'
+  const session = await getServerSession(authOptions);
+  const user = session?.user as any;
+  const rawRole = (user?.role || user?.userRole || "").toUpperCase();
+  const isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
+
+  if (!session || !isSuperAdmin) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/50 p-8 rounded-3xl shadow-2xl text-center space-y-4">
+          <div className="w-14 h-14 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto font-black text-2xl border border-rose-200 dark:border-rose-800">
+            403
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">
+              Access Denied (403 Forbidden)
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+              Platform Subscription Management is strictly restricted to Central Platform Super-Administrators. Tenant accounts and school administrators cannot access or modify platform subscription parameters.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 1. Filter Query: In super-admin payments page, change prisma query from findMany to FILTER ONLY SUBSCRIPTION
+  const existingSettings = await basePrisma.paymentSetting.findMany({
+    where: {
+      tenantId: "super-admin",
+      moduleType: {
+        in: [
+          "PLATFORM_SUBSCRIPTION",
+          "PLATFORM_SUBSCRIPTION_MONTHLY",
+          "PLATFORM_SUBSCRIPTION_TERMLY",
+          "PLATFORM_SUBSCRIPTION_ANNUAL",
+          "SUBSCRIPTION",
+        ],
+      },
+    },
+  });
+
+  const dbMap = new Map<string, any>();
+  for (const s of existingSettings) {
+    dbMap.set(s.moduleType, s);
+  }
+
+  // Merge database records with default SaaS subscription definitions
+  const initialPlans: SubscriptionSettingItem[] = DEFAULT_SUBSCRIPTION_PLANS.map((plan) => {
+    const dbRecord = dbMap.get(plan.moduleType);
+    if (dbRecord) {
+      return {
+        id: dbRecord.id,
+        moduleType: dbRecord.moduleType,
+        title: dbRecord.title || plan.title,
+        amount: Number(dbRecord.amount) || plan.amount,
+        currency: dbRecord.currency || plan.currency,
+        isEnabled: dbRecord.isEnabled,
+        isActive: dbRecord.isActive,
+        category: "SUBSCRIPTION",
+        isPlatformFee: true,
+        isPlatformOnly: true,
+        description: plan.description,
+        customWriteup: dbRecord.customWriteup ?? plan.customWriteup,
+        accountName: dbRecord.accountName ?? plan.accountName,
+        accountNumber: dbRecord.accountNumber ?? plan.accountNumber,
+        bankName: dbRecord.bankName ?? plan.bankName,
+      };
+    }
+    return plan;
+  });
+
+  return (
+    <div className="py-4 max-w-7xl mx-auto space-y-6">
+      <SuperAdminPaymentsClient initialPlans={initialPlans} />
+    </div>
+  );
 }
-
