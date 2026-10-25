@@ -18,7 +18,7 @@ export default async function TenantLayout({
   params: Promise<{ schoolDomain: string }>;
 }) {
   const { schoolDomain } = await params;
-  const reservedKeywords = [
+  const RESERVED = [
     "admin",
     "super-admin",
     "super_admin",
@@ -26,6 +26,8 @@ export default async function TenantLayout({
     "_next",
     "platform",
     "console",
+    "_vercel",
+    "favicon.ico",
     "register",
     "www",
     "app",
@@ -33,8 +35,8 @@ export default async function TenantLayout({
     "portal",
   ];
 
-  if (reservedKeywords.includes(schoolDomain.toLowerCase())) {
-    notFound();
+  if (!schoolDomain || RESERVED.includes(schoolDomain?.toLowerCase())) {
+    return notFound();
   }
 
   let school = null;
