@@ -235,6 +235,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(targetUrl, 301);
   }
 
+  // Super-admin login route: rewrite cleanly to /login?type=super-admin
+  if (pathname === '/super-admin/login') {
+    const loginUrl = new URL('/login?type=super-admin', req.url);
+    loginUrl.search = req.nextUrl.search;
+    loginUrl.searchParams.set('type', 'super-admin');
+    return NextResponse.rewrite(loginUrl);
+  }
+
+  // Super-admin bypass: bypass tenant schoolDomain lookup entirely
+  if (pathname.startsWith('/super-admin')) {
+    // Only check super-admin JWT/session
+    return NextResponse.next();
+  }
+
   // 1. Allow unauthenticated access to public routes
   if (isPublicRoute(pathname)) {
     return NextResponse.next();

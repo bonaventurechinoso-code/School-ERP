@@ -91,11 +91,7 @@ export const authOptions: NextAuthOptions = {
           normalizedEmail === "admin@bonaveeict.com.ng" ||
           (isDev && normalizedEmail === "superadmin@platform.com");
 
-        if (!effectiveDomain || effectiveDomain.trim() === "") {
-          if (!isSuperAdminEmail) {
-            throw new Error("INVALID_CREDENTIALS: School code is required for institution login.");
-          }
-
+        if (!effectiveDomain || effectiveDomain.trim() === "" || isSuperAdminEmail) {
           const superAdmin = await basePrisma.superAdmin.findFirst({
             where: {
               email: normalizedEmail,
@@ -112,7 +108,6 @@ export const authOptions: NextAuthOptions = {
             where: {
               email: { equals: normalizedEmail, mode: "insensitive" },
               role: "SUPER_ADMIN",
-              schoolId: null,
             },
           });
 
@@ -145,6 +140,7 @@ export const authOptions: NextAuthOptions = {
                 role: "SUPER_ADMIN",
                 staffRole: "Platform Super-Admin",
                 tenantId: null,
+                schoolId: null,
                 schoolDomain: "admin",
                 tenantName: "Global Platform Administration",
                 activeTiers: ["Central Platform"],
@@ -152,6 +148,10 @@ export const authOptions: NextAuthOptions = {
                 mustChangePassword,
               };
             }
+          }
+
+          if (!effectiveDomain || effectiveDomain.trim() === "") {
+            throw new Error("INVALID_CREDENTIALS: School code is required for institution login.");
           }
         }
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   Lock,
@@ -44,10 +44,18 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
+  const pathname = usePathname() || "";
   const routeSchool = (params?.schoolDomain as string) || "";
   const callbackUrl = searchParams.get("callbackUrl") || "";
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
+
+  // Detect super-admin context
+  const isSuperAdmin =
+    pathname.startsWith("/super-admin") ||
+    searchParams.get("type") === "super-admin" ||
+    callbackUrl.startsWith("/super-admin") ||
+    callbackUrl.startsWith("/admin");
 
   // Form input states
   const [schoolCode, setSchoolCode] = useState("");
@@ -359,20 +367,23 @@ function LoginPageContent() {
 
     const emailToUse = customEmail !== undefined ? customEmail : email;
     const passwordToUse = customPassword !== undefined ? customPassword : password;
-    const schoolCodeToUse = customSchoolCode !== undefined ? customSchoolCode : schoolCode;
+    const schoolCodeToUse = isSuperAdmin ? "" : (customSchoolCode !== undefined ? customSchoolCode : schoolCode);
 
     const normalizedEmail = emailToUse.trim().toLowerCase();
-    const effectiveSchoolCode = (schoolCodeToUse.trim() || resolvedSubdomain || "").trim().toLowerCase();
+    const effectiveSchoolCode = isSuperAdmin
+      ? ""
+      : (schoolCodeToUse.trim() || resolvedSubdomain || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
 
     // Check if authenticating without a school code as super admin
     const isKnownSuperAdmin =
+      isSuperAdmin ||
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
       normalizedEmail === "superadmin@platform.com";
 
     // Immediate client-side validation guard: School code is mandatory for institutional workspace access
-    if (!effectiveSchoolCode && !isKnownSuperAdmin) {
+    if (!isSuperAdmin && !effectiveSchoolCode && !isKnownSuperAdmin) {
       const errorMsg = "School Code is required to access your workspace.";
       setSchoolCodeError(errorMsg);
       showToast(errorMsg, "error");
@@ -384,8 +395,10 @@ function LoginPageContent() {
     const loginPayload: Record<string, any> = {
       email: normalizedEmail,
       password: passwordToUse,
-      schoolCode: effectiveSchoolCode || undefined,
-      schoolDomain: effectiveSchoolCode || undefined,
+      schoolCode: isSuperAdmin ? undefined : (effectiveSchoolCode || undefined),
+      schoolDomain: isSuperAdmin ? undefined : (effectiveSchoolCode || undefined),
+      isAdminLogin: isSuperAdmin,
+      isPlatformAdmin: isSuperAdmin,
     };
 
     // Session isolation: drop any stored session that belongs to a different
@@ -419,11 +432,11 @@ function LoginPageContent() {
           setAuthToken(null);
           const errorMsg =
             resData?.error ||
-            (!effectiveSchoolCode
+            (!effectiveSchoolCode && !isSuperAdmin
               ? "School Code is required to access your workspace."
               : "Invalid credentials. Please verify your email and password.");
 
-          if (!effectiveSchoolCode || resData?.error?.toLowerCase().includes("school code")) {
+          if (!isSuperAdmin && (!effectiveSchoolCode || resData?.error?.toLowerCase().includes("school code"))) {
             setSchoolCodeError(errorMsg);
           }
           showToast(errorMsg, "error");
@@ -445,10 +458,10 @@ function LoginPageContent() {
       } catch (signInErr: any) {
         setIsSubmitting(false);
         setAuthToken(null);
-        const errMsg = !effectiveSchoolCode
+        const errMsg = !effectiveSchoolCode && !isSuperAdmin
           ? "School Code is required to access your workspace."
           : (signInErr?.message || "Invalid credentials. Please verify your email and password.");
-        if (!effectiveSchoolCode) {
+        if (!effectiveSchoolCode && !isSuperAdmin) {
           setSchoolCodeError(errMsg);
         }
         showToast(errMsg, "error");
@@ -460,9 +473,10 @@ function LoginPageContent() {
         setIsSubmitting(false);
         const rawErr = typeof res.error === "string" ? res.error : "";
         const isSchoolCodeErr =
-          !effectiveSchoolCode ||
+          !isSuperAdmin &&
+          (!effectiveSchoolCode ||
           rawErr.toLowerCase().includes("school code") ||
-          rawErr.toLowerCase().includes("tenant");
+          rawErr.toLowerCase().includes("tenant"));
 
         const displayErr = isSchoolCodeErr
           ? "School Code is required to access your workspace."
@@ -573,12 +587,13 @@ function LoginPageContent() {
       // Super Admin is determined solely by the server-verified role, and only
       // for platform logins (no school code). Never inferred from the typed email.
       const isSuperAdminUser =
-        !effectiveSchoolCode &&
-        (rawRole === "SUPER_ADMIN" || Boolean(sessionPayload?.isSuperAdmin));
+        isSuperAdmin ||
+        (!effectiveSchoolCode &&
+        (rawRole === "SUPER_ADMIN" || Boolean(sessionPayload?.isSuperAdmin)));
 
-      // Super Admin Golden Key: Always forward directly to /admin
-      if (isSuperAdminUser || rawRole === "SUPER_ADMIN") {
-        router.push("/admin");
+      // Super Admin Golden Key: Always forward directly to /super-admin
+      if (isSuperAdmin || isSuperAdminUser || rawRole === "SUPER_ADMIN") {
+        router.push("/super-admin");
         return;
       }
 
@@ -602,7 +617,7 @@ function LoginPageContent() {
       // student -> /[tenant]/student
       // parent -> /[tenant]/parent
       const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
-      if (!targetCode) {
+      if (!isSuperAdmin && !targetCode) {
         const missingSchoolMsg = "School Code is required to access your workspace.";
         setSchoolCodeError(missingSchoolMsg);
         showToast(missingSchoolMsg, "error");
@@ -640,7 +655,7 @@ function LoginPageContent() {
       setIsSubmitting(false);
       setAuthToken(null);
       const errMsg = err?.message || "An unexpected error occurred during authentication.";
-      if (!effectiveSchoolCode) {
+      if (!isSuperAdmin && !effectiveSchoolCode) {
         setSchoolCodeError("School Code is required to access your workspace.");
       }
       showToast(errMsg, "error");
@@ -763,10 +778,24 @@ function LoginPageContent() {
 
           {/* Header & Dynamic Branding Extraction */}
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Sign in to access your workspace
-            </h1>
-            {visualTenantName && visualTenantName.toLowerCase() !== "admin" ? (
+            {isSuperAdmin ? (
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Super Admin Login
+              </h1>
+            ) : tenantBranding?.name ? (
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                {tenantBranding.name}
+              </h1>
+            ) : (
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Sign in to access your workspace
+              </h1>
+            )}
+            {isSuperAdmin ? (
+              <p className="text-xs text-slate-500">
+                Enter your platform master credentials to continue
+              </p>
+            ) : visualTenantName && visualTenantName.toLowerCase() !== "admin" ? (
               <p className="text-xs font-medium text-slate-500">
                 {visualTenantName}
               </p>
@@ -780,55 +809,57 @@ function LoginPageContent() {
           {/* Core Tabless Unified Form */}
           <form onSubmit={handleSignIn} className="space-y-5" noValidate autoComplete="off">
             
-            {/* 1. School Code Input */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="school-code"
-                className="block text-xs font-semibold text-slate-700"
-              >
-                School Code <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  id="school-code"
-                  type="text"
-                  name="schoolCode"
-                  value={schoolCode}
-                  onChange={(e) => {
-                    if (!resolvedSubdomain) {
-                      setSchoolCode(e.target.value);
-                      if (schoolCodeError) {
-                        setSchoolCodeError(null);
+            {/* 1. School Code Input (Hidden in super-admin context) */}
+            {!isSuperAdmin && (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="school-code"
+                  className="block text-xs font-semibold text-slate-700"
+                >
+                  School Code <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="school-code"
+                    type="text"
+                    name="schoolCode"
+                    value={schoolCode}
+                    onChange={(e) => {
+                      if (!resolvedSubdomain) {
+                        setSchoolCode(e.target.value);
+                        if (schoolCodeError) {
+                          setSchoolCodeError(null);
+                        }
                       }
-                    }
-                  }}
-                  readOnly={Boolean(resolvedSubdomain)}
-                  placeholder="e.g. greenspring"
-                  autoComplete="off"
-                  disabled={isSubmitting}
-                  className={`block w-full rounded-xl border px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10 ${
-                    schoolCodeError
-                      ? "border-rose-300 focus:border-rose-500 focus:ring-rose-100 bg-white text-slate-900"
-                      : resolvedSubdomain
-                        ? "border-slate-200 bg-slate-100/90 text-slate-700 font-medium cursor-not-allowed select-none focus:border-indigo-600 focus:ring-indigo-100"
-                        : "border-slate-200 bg-white text-slate-900 focus:border-indigo-600 focus:ring-indigo-100"
-                  }`}
-                />
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                  {resolvedSubdomain ? (
-                    <Lock className="w-4 h-4 text-slate-500" />
-                  ) : (
-                    <Building2 className={`w-4 h-4 ${schoolCodeError ? "text-rose-500" : ""}`} />
-                  )}
+                    }}
+                    readOnly={Boolean(resolvedSubdomain)}
+                    placeholder="e.g. greenspring"
+                    autoComplete="off"
+                    disabled={isSubmitting}
+                    className={`block w-full rounded-xl border px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all duration-200 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed shadow-xs pr-10 ${
+                      schoolCodeError
+                        ? "border-rose-300 focus:border-rose-500 focus:ring-rose-100 bg-white text-slate-900"
+                        : resolvedSubdomain
+                          ? "border-slate-200 bg-slate-100/90 text-slate-700 font-medium cursor-not-allowed select-none focus:border-indigo-600 focus:ring-indigo-100"
+                          : "border-slate-200 bg-white text-slate-900 focus:border-indigo-600 focus:ring-indigo-100"
+                    }`}
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    {resolvedSubdomain ? (
+                      <Lock className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <Building2 className={`w-4 h-4 ${schoolCodeError ? "text-rose-500" : ""}`} />
+                    )}
+                  </div>
                 </div>
+                {schoolCodeError && (
+                  <p className="text-xs text-rose-600 font-medium flex items-center gap-1.5 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{schoolCodeError}</span>
+                  </p>
+                )}
               </div>
-              {schoolCodeError && (
-                <p className="text-xs text-rose-600 font-medium flex items-center gap-1.5 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-                  <span>{schoolCodeError}</span>
-                </p>
-              )}
-            </div>
+            )}
 
             {/* 2. Modern Floating Label Email Input (Pure White Backdrop, Crisp Slate Border) */}
             <div className="relative group">
