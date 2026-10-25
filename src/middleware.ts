@@ -58,8 +58,9 @@ function isPublicRoute(pathname: string): boolean {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/img") ||
     pathname.startsWith("/uploads") ||
+    pathname.startsWith("/api/uploads") ||
     pathname.startsWith("/favicon.ico") ||
-    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2)$/i.test(pathname)
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2|pdf)$/i.test(pathname)
   ) {
     return true;
   }
@@ -82,6 +83,7 @@ function isPublicRoute(pathname: string): boolean {
   if (firstSegment === "api") {
     const apiPath = "/" + segments.join("/");
     if (
+      apiPath.startsWith("/api/uploads") ||
       apiPath.startsWith("/api/auth") ||
       apiPath.startsWith("/api/v1/auth/login") ||
       apiPath.startsWith("/api/v1/auth/forgot-password") ||
