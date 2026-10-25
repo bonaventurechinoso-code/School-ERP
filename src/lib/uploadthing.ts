@@ -87,6 +87,9 @@ export interface UploadthingFileInfo {
   size: number;
 }
 
+export let lastUploadthingError: string | null = null;
+export let lastUploadthingFileCount: number = 0;
+
 let cachedFileList: { files: UploadthingFileInfo[]; timestamp: number } | null = null;
 const CACHE_TTL_MS = 60000; // 60s cache
 
@@ -98,13 +101,17 @@ export async function findFileInUploadthing(
   fileNameOrPattern: string
 ): Promise<UploadthingFileInfo | null> {
   const utapi = getUploadthingApi();
-  if (!utapi) return null;
+  if (!utapi) {
+    lastUploadthingError = "getUploadthingApi returned null";
+    return null;
+  }
 
   const now = Date.now();
   if (!cachedFileList || now - cachedFileList.timestamp > CACHE_TTL_MS) {
     try {
       const res = await utapi.listFiles({ limit: 500 });
       if (res && Array.isArray(res.files)) {
+        lastUploadthingFileCount = res.files.length;
         cachedFileList = {
           files: res.files.map((f: any) => ({
             key: f.key,
@@ -114,8 +121,11 @@ export async function findFileInUploadthing(
           })),
           timestamp: now,
         };
+      } else {
+        lastUploadthingError = "res.files is not an array: " + JSON.stringify(res);
       }
-    } catch (err) {
+    } catch (err: any) {
+      lastUploadthingError = err?.message || String(err);
       console.error("[UPLOADTHING_LIST_FILES_ERROR]:", err);
     }
   }
