@@ -179,7 +179,7 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
           },
           {
             id: "payment-settings-tenant",
-            label: "Payment Settings (Tenant)",
+            label: "Payment Settings",
             href: (domain) => `/${domain}/settings/payments`,
             icon: Settings,
             badge: "NEW",
@@ -219,6 +219,7 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Payment Settings",
             href: (domain) => `/${domain}/settings/payments`,
             icon: Settings,
+            badge: "NEW",
             matchPaths: ["/settings/payments", "/dashboard/settings/payments"],
           },
           {
@@ -496,7 +497,7 @@ export function getTenantNavigation(
           },
           {
             id: "bursar-payment-settings",
-            label: "Payment Settings (Tenant)",
+            label: "Payment Settings",
             href: (d) => `/${d}/settings/payments`,
             icon: Settings,
             badge: "NEW",

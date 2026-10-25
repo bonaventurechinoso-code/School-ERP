@@ -10,7 +10,6 @@ import {
   Building2,
   DollarSign,
   FileText,
-  ShieldCheck,
   ToggleLeft,
   ToggleRight,
   HelpCircle,
@@ -131,7 +130,20 @@ export default function PaymentSettingsManager({
     }
   };
 
-  const filteredSettings = settings.filter((s) => {
+  const isTenant = !isSuperAdmin;
+
+  const visibleSettings = isTenant
+    ? settings.filter(
+        (s) =>
+          s.moduleType !== "PLATFORM_SUBSCRIPTION" &&
+          (s as any).type !== "PLATFORM_SUBSCRIPTION" &&
+          s.moduleType !== "SUBSCRIPTION" &&
+          (s as any).type !== "SUBSCRIPTION" &&
+          s.category !== "SUBSCRIPTION"
+      )
+    : settings;
+
+  const filteredSettings = visibleSettings.filter((s) => {
     const matchesSearch =
       s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.moduleType.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -140,8 +152,12 @@ export default function PaymentSettingsManager({
     return matchesSearch && matchesCategory;
   });
 
-  const enabledCount = settings.filter((s) => s.isEnabled).length;
-  const disabledCount = settings.filter((s) => !s.isEnabled).length;
+  const enabledCount = visibleSettings.filter((s) => s.isEnabled).length;
+  const disabledCount = visibleSettings.filter((s) => !s.isEnabled).length;
+
+  const categories = isSuperAdmin
+    ? ["ALL", "ACADEMICS", "ADMISSIONS", "FEES", "SERVICES", "SUBSCRIPTION"]
+    : ["ALL", "ACADEMICS", "ADMISSIONS", "FEES", "SERVICES"];
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
@@ -171,10 +187,6 @@ export default function PaymentSettingsManager({
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 border border-slate-800 p-6 sm:p-8 text-white shadow-2xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-black uppercase tracking-wider">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              {isSuperAdmin ? "Global Baseline Defaults" : "Institution Financial Gateways"}
-            </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
               {isSuperAdmin
                 ? "Platform Payment Activation Defaults"
@@ -219,7 +231,7 @@ export default function PaymentSettingsManager({
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {["ALL", "ACADEMICS", "ADMISSIONS", "FEES", "SERVICES", "SUBSCRIPTION"].map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
