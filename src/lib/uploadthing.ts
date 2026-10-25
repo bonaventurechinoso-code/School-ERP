@@ -11,12 +11,19 @@ export function getUploadthingApi(): UTApi | null {
   if (!token) {
     return null;
   }
+  // Strip accidental variable name prefix if pasted as KEY=VALUE
+  if (token.startsWith("UPLOADTHING_TOKEN=")) {
+    token = token.slice("UPLOADTHING_TOKEN=".length).trim();
+  }
   // Strip surrounding quotes if configured with quotes in env
   if (
     (token.startsWith("'") && token.endsWith("'")) ||
     (token.startsWith('"') && token.endsWith('"'))
   ) {
     token = token.slice(1, -1).trim();
+  }
+  if (token.startsWith("UPLOADTHING_TOKEN=")) {
+    token = token.slice("UPLOADTHING_TOKEN=".length).trim();
   }
   if (!token) {
     return null;
