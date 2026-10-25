@@ -37,6 +37,8 @@ import {
   AdmissionStatus,
 } from "@/lib/admissions.types";
 import { resolveApplicantDocs, CanonicalDocument } from "@/lib/admissions-docs";
+import PaymentReceiptVerify from "@/components/payments/PaymentReceiptVerify";
+import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
 
 export type { AdmissionRegisterRecord };
 
@@ -71,10 +73,25 @@ export default function AdmissionRegisterDrawer({
 
   const [localApplicant, setLocalApplicant] = useState<AdmissionRegisterRecord | null>(applicant);
   const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [applicantReceipt, setApplicantReceipt] = useState<any | null>(null);
+  const [showReceiptUpload, setShowReceiptUpload] = useState(false);
 
   React.useEffect(() => {
     setLocalApplicant(applicant);
     setToastMsg(null);
+    setApplicantReceipt(null);
+    setShowReceiptUpload(false);
+
+    if (applicant?.applicationNo) {
+      fetch(`/api/v1/payments/receipt/list?referenceNo=${applicant.applicationNo}&moduleType=ADMISSION_FORM_FEE&limit=1`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && d.receipts?.length > 0) {
+            setApplicantReceipt(d.receipts[0]);
+          }
+        })
+        .catch(() => {});
+    }
   }, [applicant]);
 
   // RBAC Permission Profile
@@ -664,6 +681,80 @@ export default function AdmissionRegisterDrawer({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* UNIVERSAL BURSAR FORM FEE RECEIPT SECTION */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                      Bursar Form Fee Payment Receipt
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                      Central Finance Clearance & Verification
+                    </p>
+                  </div>
+                  {formFeePaid ? (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Form Fee Paid
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> Form Fee Pending
+                    </span>
+                  )}
+                </div>
+
+                {applicantReceipt ? (
+                  <PaymentReceiptVerify
+                    receipt={applicantReceipt}
+                    compact={true}
+                    canVerify={isAuthorized}
+                    onVerifySuccess={(updated) => {
+                      setApplicantReceipt(updated);
+                      setLocalApplicant((prev: any) => ({
+                        ...prev,
+                        formFeePaid: true,
+                        credentialsJson: {
+                          ...(typeof prev?.credentialsJson === "object" ? prev.credentialsJson : {}),
+                          formFeePaid: true,
+                        },
+                      }));
+                      setToastMsg({ type: "success", text: "Form fee verified successfully! Form Fee set to Paid." });
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 py-1">
+                    <span>No bank payment slip attached yet for {applicant.applicationNo}.</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowReceiptUpload((v) => !v)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 transition self-start sm:self-auto cursor-pointer"
+                    >
+                      {showReceiptUpload ? "Close Upload" : "+ Record / Attach Receipt"}
+                    </button>
+                  </div>
+                )}
+
+                {showReceiptUpload && (
+                  <div className="pt-2">
+                    <PaymentReceiptUpload
+                      moduleType="ADMISSION_FORM_FEE"
+                      payerType="APPLICANT"
+                      payerId={applicant.id}
+                      payerName={`${applicant.firstName} ${applicant.lastName}`}
+                      payerEmail={applicant.email || undefined}
+                      referenceNo={applicant.applicationNo}
+                      tenantId={applicant.tenantId}
+                      schoolId={applicant.tenantId}
+                      onUploadSuccess={(newR) => {
+                        setApplicantReceipt(newR);
+                        setShowReceiptUpload(false);
+                        setToastMsg({ type: "success", text: "Receipt uploaded successfully for Bursar verification." });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </>
           ) : (

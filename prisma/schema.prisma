@@ -1244,3 +1244,63 @@ model AdmissionRegister {
   @@index([tenantId, status])
   @@map("admission_registers")
 }
+
+model PaymentReceipt {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  schoolId        String?   @map("school_id")
+  moduleType      String    @map("module_type") // ADMISSION_FORM_FEE | PLATFORM_SUBSCRIPTION | TUITION | PTA | EXAM | UNIFORM | BOOKS | TRANSPORT | HOSTEL | TRANSCRIPT_FEE | RESULT_CHECKING_FEE | REPORT_CARD_CHECKING_FEE | OTHER
+  payerType       String    @map("payer_type")  // APPLICANT | STUDENT | PARENT | SCHOOL
+  payerId         String?   @map("payer_id")
+  payerName       String    @map("payer_name")
+  referenceNo     String    @map("reference_no")
+  amount          Float     @default(0)
+  paymentDate     DateTime  @default(now()) @map("payment_date")
+  paymentMethod   String    @default("BANK_TRANSFER") @map("payment_method") // BANK_TRANSFER | CASH | POS | ONLINE
+  txnRef          String?   @map("txn_ref")
+  bankName        String?   @map("bank_name")
+  fileUrl         String    @map("file_url")
+  fileKey         String?   @map("file_key")
+  fileName        String?   @map("file_name")
+  status          String    @default("PENDING") // PENDING | VERIFIED | REJECTED | FLAGGED
+  verifiedBy      String?   @map("verified_by")
+  verifiedAt      DateTime? @map("verified_at")
+  rejectionReason String?   @map("rejection_reason")
+  linkedInvoiceId String?   @map("linked_invoice_id")
+  term            String?
+  session         String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([moduleType, status])
+  @@index([referenceNo])
+  @@map("payment_receipts")
+}
+
+model PaymentSetting {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  schoolId        String?   @map("school_id")
+  moduleType      String    @map("module_type") // ADMISSION_FORM_FEE | PLATFORM_SUBSCRIPTION | TUITION | PTA | EXAM | UNIFORM | BOOKS | TRANSPORT | HOSTEL | TRANSCRIPT_FEE | RESULT_CHECKING_FEE | REPORT_CARD_CHECKING_FEE | OTHER
+  isEnabled       Boolean   @default(false) @map("is_enabled") // Institution activation toggle
+  isActive        Boolean   @default(true) @map("is_active")   // Management on/off toggle
+  title           String
+  amount          Float     @default(0)
+  currency        String    @default("NGN")
+  customWriteup   String?   @map("custom_writeup") @db.Text
+  accountName     String?   @map("account_name")
+  accountNumber   String?   @map("account_number")
+  bankName        String?   @map("bank_name")
+  classId         String?   @map("class_id")
+  term            String?
+  session         String?
+  updatedBy       String?   @map("updated_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, moduleType, classId, term])
+  @@index([tenantId, isEnabled])
+  @@map("payment_settings")
+}
+

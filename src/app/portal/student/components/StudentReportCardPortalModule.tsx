@@ -15,9 +15,13 @@ import {
   TrendingUp,
   FileText,
   FileDown,
+  Lock,
+  ShieldAlert,
 } from "lucide-react";
 import { StudentProfileData, TierPresentationConfig } from "../types";
 import { calculateBonaVeeResult, getGradeRemark } from "@/lib/assessmentEngine";
+import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
+
 
 interface StudentReportCardPortalModuleProps {
   student: StudentProfileData;
@@ -122,12 +126,125 @@ export function StudentReportCardPortalModule({
 
   const positionDisplay = student.academicRank?.classPosition || "1st of 28";
 
+  // Academic fee clearance gatekeeper
+  const [accessCheck, setAccessCheck] = useState<{
+    checked: boolean;
+    allowed: boolean;
+    feeRequired: boolean;
+    status?: string;
+    setting?: any;
+    receipt?: any;
+  }>({
+    checked: false,
+    allowed: true,
+    feeRequired: false,
+  });
+
+  const checkAccess = React.useCallback(async () => {
+    try {
+      const tenant = subdomain || "default";
+      const ref = student.admissionNumber || student.id;
+      const res = await fetch(
+        `/api/v1/payments/access-check?tenantId=${encodeURIComponent(tenant)}&moduleType=REPORT_CARD_CHECKING_FEE&referenceNo=${encodeURIComponent(ref)}&studentId=${encodeURIComponent(student.id)}`
+      );
+      const data = await res.json();
+      if (data.success) {
+        setAccessCheck({
+          checked: true,
+          allowed: data.allowed,
+          feeRequired: data.feeRequired,
+          status: data.status,
+          setting: data.setting,
+          receipt: data.receipt,
+        });
+      } else {
+        setAccessCheck({ checked: true, allowed: true, feeRequired: false });
+      }
+    } catch {
+      setAccessCheck({ checked: true, allowed: true, feeRequired: false });
+    }
+  }, [subdomain, student.admissionNumber, student.id]);
+
+  React.useEffect(() => {
+    checkAccess();
+  }, [checkAccess]);
+
   const handlePrint = () => {
     window.print();
   };
 
+  // If institution has enabled report card fee and student has not yet been verified:
+  if (accessCheck.checked && !accessCheck.allowed) {
+    return (
+      <div className="space-y-6 max-w-2xl mx-auto py-6 animate-in fade-in duration-300">
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-6 sm:p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-zinc-100 tracking-tight">
+              {accessCheck.setting?.title || "Report Card & Result Clearance Required"}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 max-w-lg mx-auto">
+              {schoolName} requires an official bursary clearance fee to unlock terminal broadsheets and report cards for the current session.
+            </p>
+          </div>
+
+          {accessCheck.setting?.customWriteup && (
+            <div className="p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900/50 text-left text-xs text-slate-700 dark:text-zinc-300">
+              <span className="font-bold text-amber-800 dark:text-amber-400 block mb-1">
+                Official Bursary Directive:
+              </span>
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {accessCheck.setting.customWriteup}
+              </p>
+            </div>
+          )}
+
+          {accessCheck.status === "PAYMENT_PENDING" ? (
+            <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-left space-y-2">
+              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                <Clock className="w-4 h-4 text-emerald-600" />
+                <span>Payment Slip Submitted — Verification in Progress</span>
+              </div>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                Your payment receipt is queued with the School Bursar. Once verified, your full report card and downloadable PDF sheet will automatically unlock.
+              </p>
+              <button
+                type="button"
+                onClick={() => checkAccess()}
+                className="mt-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer"
+              >
+                Check Verification Status
+              </button>
+            </div>
+          ) : (
+            <div className="text-left pt-2">
+              <PaymentReceiptUpload
+                moduleType="REPORT_CARD_CHECKING_FEE"
+                payerType="STUDENT"
+                payerId={student.id}
+                payerName={`${student.firstName} ${student.lastName}`}
+                payerEmail={student.email || undefined}
+                referenceNo={student.admissionNumber || student.id}
+                tenantId={subdomain || "default"}
+                amount={accessCheck.setting?.amount || 2000}
+                title={accessCheck.setting?.title || "Report Card Clearance Fee"}
+                customWriteup={accessCheck.setting?.customWriteup}
+                onUploadSuccess={() => {
+                  checkAccess();
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+
       
       {/* 1. Portal Controls Bar (Hidden on Print) */}
       <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">

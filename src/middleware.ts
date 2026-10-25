@@ -90,6 +90,9 @@ function isPublicRoute(pathname: string): boolean {
       apiPath.startsWith("/api/v1/auth/reset-password") ||
       apiPath.startsWith("/api/v1/auth/verify-reset-token") ||
       apiPath.startsWith("/api/v1/admissions/public-submit") ||
+      apiPath.startsWith("/api/v1/payments/receipt/upload") ||
+      apiPath.startsWith("/api/v1/payments/settings") ||
+      apiPath.startsWith("/api/v1/payments/access-check") ||
       apiPath.startsWith("/api/schools") ||
       apiPath.startsWith("/api/tenants/register") ||
       apiPath.startsWith("/api/ssl") ||

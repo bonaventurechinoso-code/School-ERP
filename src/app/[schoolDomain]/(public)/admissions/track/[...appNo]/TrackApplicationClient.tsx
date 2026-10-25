@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { uploadApplicantDocsAction } from "./actions";
 import DocumentViewer from "./components/DocumentViewer";
+import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
 
 interface TrackClientProps {
   schoolDomain: string;
@@ -766,6 +767,20 @@ export default function TrackApplicationClient({
             </div>
           </form>
         </div>
+
+        {/* UNIVERSAL BURSARY FORM FEE PAYMENT RECEIPT UPLOAD */}
+        <PaymentReceiptUpload
+          moduleType="ADMISSION_FORM_FEE"
+          payerType="APPLICANT"
+          payerId={applicant.id}
+          payerName={`${applicant.firstName} ${applicant.lastName}`}
+          payerEmail={applicant.email || undefined}
+          referenceNo={applicant.applicationNo}
+          tenantId={schoolId || schoolDomain}
+          schoolId={schoolId}
+          title="Application Form Fee Payment Receipt"
+          subtitle={`Submit official bank transfer proof for ${applicant.firstName} ${applicant.lastName} (${applicant.applicationNo})`}
+        />
       </main>
 
       {/* FOOTER */}
