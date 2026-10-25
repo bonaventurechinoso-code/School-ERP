@@ -7,7 +7,9 @@ let cachedUTApi: UTApi | null = null;
  * Returns null if the token is not configured in environment variables.
  */
 export function getUploadthingApi(): UTApi | null {
-  const token = process.env.UPLOADTHING_TOKEN;
+  const token =
+    process.env.UPLOADTHING_TOKEN ||
+    "eyJhcGlLZXkiOiJza19saXZlXzZkYTJmNDY2N2UxOTQ1Njk3NGFmOGEzOTkyMzY3MWUzZWVhNGY3OTczMTNmYWU5M2ZkNWI4ZWQzZjY5ODVmMTEiLCJhcHBJZCI6IjQ2ZnQ4Zm51YXMiLCJyZWdpb25zIjpbInNlYTEiXX0=";
   if (!token || !token.trim()) {
     return null;
   }
