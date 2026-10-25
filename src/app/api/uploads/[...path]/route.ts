@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { findFileInUploadthing } from "@/lib/uploadthing";
 
 export const dynamic = "force-dynamic";
+
+const MIME_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
 
 export async function GET(
   req: Request,
@@ -58,10 +72,47 @@ export async function GET(
           if (globalFoundPath && globalFoundPath.startsWith(uploadsBase) && fs.existsSync(globalFoundPath)) {
             targetFilePath = globalFoundPath;
           } else {
+            // 3. Persistent Cloud Storage Proxy (Uploadthing)
+            const cloudFile = await findFileInUploadthing(fileName || decodedSegments.join("/"));
+            if (cloudFile) {
+              try {
+                const cloudRes = await fetch(cloudFile.url);
+                if (cloudRes.ok) {
+                  const arrayBuf = await cloudRes.arrayBuffer();
+                  const buffer = Buffer.from(arrayBuf);
+
+                  // Cache to local ephemeral disk
+                  try {
+                    fs.mkdirSync(path.dirname(targetFilePath), { recursive: true });
+                    fs.writeFileSync(targetFilePath, buffer);
+                  } catch {}
+
+                  const cloudExt = path.extname(cloudFile.name).toLowerCase();
+                  const cType = MIME_TYPES[cloudExt] || cloudRes.headers.get("content-type") || "application/octet-stream";
+
+                  return new NextResponse(new Uint8Array(buffer), {
+                    headers: {
+                      "Content-Type": cType,
+                      "Content-Length": buffer.length.toString(),
+                      "Cache-Control": "public, max-age=31536000, immutable",
+                    },
+                  });
+                }
+              } catch (proxyErr) {
+                console.error("[CLOUD_STORAGE_PROXY_ERROR]:", proxyErr);
+              }
+
+              return NextResponse.redirect(cloudFile.url, { status: 307 });
+            }
+
             return new NextResponse("File not found", { status: 404 });
           }
         }
       } else {
+        const cloudFile = await findFileInUploadthing(decodedSegments.join("/"));
+        if (cloudFile) {
+          return NextResponse.redirect(cloudFile.url, { status: 307 });
+        }
         return new NextResponse("File not found", { status: 404 });
       }
     }
@@ -71,25 +122,19 @@ export async function GET(
       return new NextResponse("Invalid file request", { status: 400 });
     }
 
+    if (stat.size === 0) {
+      const rawFileName = decodedSegments[decodedSegments.length - 1];
+      const cloudFile = await findFileInUploadthing(rawFileName || decodedSegments.join("/"));
+      if (cloudFile) {
+        return NextResponse.redirect(cloudFile.url, { status: 307 });
+      }
+    }
+
     const fileBuffer = fs.readFileSync(targetFilePath);
     const ext = path.extname(targetFilePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
 
-    const mimeTypes: Record<string, string> = {
-      ".pdf": "application/pdf",
-      ".png": "image/png",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".gif": "image/gif",
-      ".webp": "image/webp",
-      ".svg": "image/svg+xml",
-      ".txt": "text/plain",
-      ".doc": "application/msword",
-      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    };
-
-    const contentType = mimeTypes[ext] || "application/octet-stream";
-
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
         "Content-Type": contentType,
         "Content-Length": stat.size.toString(),
@@ -118,7 +163,7 @@ function searchFileInDirectory(dir: string, targetName: string, depth = 0): stri
         if (found) return found;
       }
     }
-  } catch {}
+  } catch { }
   return null;
 }
 

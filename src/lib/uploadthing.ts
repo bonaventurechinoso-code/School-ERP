@@ -69,3 +69,76 @@ export async function uploadToUploadthing(
     return null;
   }
 }
+
+export interface UploadthingFileInfo {
+  key: string;
+  name: string;
+  url: string;
+  size: number;
+}
+
+let cachedFileList: { files: UploadthingFileInfo[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60000; // 60s cache
+
+/**
+ * Searches for a file on Uploadthing by exact name, suffix, or KYC category.
+ * Prevents continuous API spam using an in-memory cache.
+ */
+export async function findFileInUploadthing(
+  fileNameOrPattern: string
+): Promise<UploadthingFileInfo | null> {
+  const utapi = getUploadthingApi();
+  if (!utapi) return null;
+
+  const now = Date.now();
+  if (!cachedFileList || now - cachedFileList.timestamp > CACHE_TTL_MS) {
+    try {
+      const res = await utapi.listFiles({ limit: 500 });
+      if (res && Array.isArray(res.files)) {
+        cachedFileList = {
+          files: res.files.map((f: any) => ({
+            key: f.key,
+            name: f.name,
+            url: `https://utfs.io/f/${f.key}`,
+            size: f.size,
+          })),
+          timestamp: now,
+        };
+      }
+    } catch (err) {
+      console.error("[UPLOADTHING_LIST_FILES_ERROR]:", err);
+    }
+  }
+
+  if (!cachedFileList || cachedFileList.files.length === 0) return null;
+
+  const target = fileNameOrPattern.toLowerCase();
+
+  // 1. Exact name match
+  const exact = cachedFileList.files.find((f) => f.name.toLowerCase() === target);
+  if (exact) return exact;
+
+  // 2. Trailing or substring match
+  const bySub = cachedFileList.files.find(
+    (f) => target.endsWith(f.name.toLowerCase()) || target.includes(f.name.toLowerCase()) || f.name.toLowerCase().includes(target)
+  );
+  if (bySub) return bySub;
+
+  // 3. Category match for standard admissions KYC documents
+  const categories = [
+    { key: "passport", test: (n: string) => n.includes("passport") },
+    { key: "academic", test: (n: string) => n.includes("academic") || n.includes("result") || n.includes("transcript") },
+    { key: "birth", test: (n: string) => n.includes("birth") || n.includes("age") },
+    { key: "medical", test: (n: string) => n.includes("medical") || n.includes("fitness") },
+  ];
+
+  for (const cat of categories) {
+    if (cat.test(target)) {
+      const match = cachedFileList.files.find((f) => cat.test(f.name.toLowerCase()));
+      if (match) return match;
+    }
+  }
+
+  return null;
+}
+
