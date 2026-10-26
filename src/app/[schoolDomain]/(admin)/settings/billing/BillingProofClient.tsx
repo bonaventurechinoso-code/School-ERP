@@ -86,12 +86,15 @@ export default function BillingProofClient({
   const tenant = useTenant();
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [formState, setFormState] = useState<FormState>("idle");
-  const [errorMsg, setErrorMsg] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const bankName = platformBankName || tenant?.platformBank?.bankName || "Wema Bank";
+  const bankName = platformBankName || (tenant?.platformBank as any)?.bankName || "Wema Bank";
   const accountNumber =
-    platformAccountNumber || tenant?.platformBank?.accountNumber || "0123456789";
+    platformAccountNumber || (tenant?.platformBank as any)?.accountNumber || "0123456789";
+  const accountName =
+    platformAccountName || (tenant?.platformBank as any)?.accountName || "SchoolERP Platform Central";
 
   const expiresAt = subscriptionExpiresAt ? new Date(subscriptionExpiresAt) : null;
   const daysLeft = expiresAt
@@ -125,6 +128,32 @@ export default function BillingProofClient({
     setFormState("submitting");
 
     try {
+      let fileUrl = "";
+      if (selectedFile) {
+        try {
+          const fd = new FormData();
+          fd.append("file", selectedFile);
+          fd.append("moduleType", "PLATFORM_SUBSCRIPTION");
+          fd.append("payerType", "SCHOOL");
+          fd.append("payerName", form.payerName.trim() || schoolDomain);
+          fd.append("referenceNo", form.reference.trim());
+          fd.append("amount", form.amount);
+          fd.append("bankName", form.bankName);
+          fd.append("tenantId", schoolDomain);
+
+          const upRes = await fetch("/api/v1/payments/receipt/upload", {
+            method: "POST",
+            body: fd,
+          });
+          const upData = await upRes.json();
+          if (upData.success && upData.receipt?.fileUrl) {
+            fileUrl = upData.receipt.fileUrl;
+          }
+        } catch (uploadErr) {
+          console.warn("[BILLING_PROOF] Upload non-fatal error:", uploadErr);
+        }
+      }
+
       const res = await fetch("/api/tenant/submit-subscription-proof", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,6 +164,7 @@ export default function BillingProofClient({
           bankName: form.bankName,
           payerName: form.payerName.trim(),
           note: form.note.trim(),
+          fileUrl,
         }),
       });
 
@@ -148,6 +178,7 @@ export default function BillingProofClient({
 
       setFormState("success");
       setForm(INITIAL_FORM);
+      setSelectedFile(null);
     } catch {
       setErrorMsg("Network error. Please check your connection and try again.");
       setFormState("error");
@@ -300,30 +331,28 @@ export default function BillingProofClient({
           </div>
 
           {/* Account Name */}
-          {platformAccountName && (
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700/60 gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500 mb-0.5">
-                  Account Name
-                </p>
-                <p className="text-sm font-bold text-slate-900 dark:text-white">
-                  {platformAccountName}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(platformAccountName, "name")}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shrink-0"
-                aria-label="Copy account name"
-              >
-                {copiedField === "name" ? (
-                  <CheckCircle className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700/60 gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500 mb-0.5">
+                Account Name
+              </p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">
+                {accountName}
+              </p>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => handleCopy(accountName, "name")}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shrink-0"
+              aria-label="Copy account name"
+            >
+              {copiedField === "name" ? (
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40">
@@ -478,6 +507,28 @@ export default function BillingProofClient({
                 placeholder="e.g. GREEN VALLEY SCHOOLS LTD"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 dark:focus:border-indigo-600 transition-all"
               />
+            </div>
+
+            {/* Receipt File Upload */}
+            <div>
+              <label
+                htmlFor="billing-file"
+                className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5"
+              >
+                Payment Receipt Proof (Image or PDF){" "}
+                <span className="text-slate-400 dark:text-zinc-500 font-normal">(recommended)</span>
+              </label>
+              <input
+                id="billing-file"
+                name="file"
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs text-slate-900 dark:text-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
+              />
+              <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                Attach proof of bank transfer or deposit teller.
+              </p>
             </div>
 
             {/* Note (optional) */}

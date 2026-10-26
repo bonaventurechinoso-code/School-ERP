@@ -122,6 +122,22 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // ── Record PaymentReceipt for Super-Admin clearance ────────────────────
+    await basePrisma.paymentReceipt.create({
+      data: {
+        tenantId: cleanDomain,
+        schoolId: school.id,
+        moduleType: "PLATFORM_SUBSCRIPTION",
+        payerType: "SCHOOL",
+        payerName: payerName?.trim() || school.name,
+        referenceNo: reference.trim(),
+        amount: Number(amount),
+        bankName: bankName.trim(),
+        fileUrl: body.fileUrl || "",
+        status: "PENDING",
+      },
+    });
+
     // ── Sync School record — keep portal live during review ───────────────
     await basePrisma.school.update({
       where: { id: school.id },

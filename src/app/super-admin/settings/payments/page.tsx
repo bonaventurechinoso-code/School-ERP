@@ -1,6 +1,6 @@
 import React from "react";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/lib/nextauth-config";
 import { basePrisma } from "@/lib/tenant-prisma";
 import SuperAdminPaymentsClient, {
   SubscriptionSettingItem,
@@ -66,11 +66,17 @@ const DEFAULT_SUBSCRIPTION_PLANS: SubscriptionSettingItem[] = [
 ];
 
 export default async function SuperAdminPaymentsPage() {
-  // 3. Access Control: Ensure SUBSCRIPTION module isPlatformOnly = true and can only be queried when session.user.role === 'SUPER_ADMIN'
-  const session = await getServerSession(authOptions);
-  const user = session?.user as any;
-  const rawRole = (user?.role || user?.userRole || "").toUpperCase();
-  const isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
+  let isSuperAdmin = false;
+  let session = null;
+
+  try {
+    session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    const rawRole = (user?.role || user?.userRole || "").toUpperCase();
+    isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
+  } catch (authErr) {
+    console.error("[SuperAdminPaymentsPage] Error fetching server session:", authErr);
+  }
 
   if (!session || !isSuperAdmin) {
     return (
@@ -92,39 +98,61 @@ export default async function SuperAdminPaymentsPage() {
     );
   }
 
-  // 1. Filter Query: In super-admin payments page, change prisma query from findMany to FILTER ONLY SUBSCRIPTION
-  const existingSettings = await basePrisma.paymentSetting.findMany({
-    where: {
-      tenantId: "super-admin",
-      moduleType: {
-        in: [
-          "PLATFORM_SUBSCRIPTION",
-          "PLATFORM_SUBSCRIPTION_MONTHLY",
-          "PLATFORM_SUBSCRIPTION_TERMLY",
-          "PLATFORM_SUBSCRIPTION_ANNUAL",
-          "SUBSCRIPTION",
-        ],
+  // Defensively query subscription settings without crashing if model or records differ
+  let existingSettings: any[] = [];
+  try {
+    if (typeof (basePrisma as any)?.paymentSetting?.findMany === "function") {
+      existingSettings = await (basePrisma as any).paymentSetting.findMany({
+        where: {
+          moduleType: {
+            in: [
+              "PLATFORM_SUBSCRIPTION",
+              "PLATFORM_SUBSCRIPTION_MONTHLY",
+              "PLATFORM_SUBSCRIPTION_TERMLY",
+              "PLATFORM_SUBSCRIPTION_ANNUAL",
+              "SUBSCRIPTION",
+            ],
+          },
+        },
+      });
+    }
+  } catch (queryErr) {
+    console.error("[SuperAdminPaymentsPage] Warning querying subscription settings from database:", queryErr);
+  }
+
+  // Count pending platform subscription receipts for verification badge
+  let pendingReceiptsCount = 0;
+  try {
+    pendingReceiptsCount = await basePrisma.paymentReceipt.count({
+      where: {
+        moduleType: { contains: "SUBSCRIPTION" },
+        status: "PENDING",
       },
-    },
-  });
+    });
+  } catch (countErr) {
+    console.error("[SuperAdminPaymentsPage] Error counting pending receipts:", countErr);
+  }
 
   const dbMap = new Map<string, any>();
   for (const s of existingSettings) {
-    dbMap.set(s.moduleType, s);
+    if (s?.moduleType) {
+      dbMap.set(s.moduleType, s);
+    }
   }
 
   // Merge database records with default SaaS subscription definitions
   const initialPlans: SubscriptionSettingItem[] = DEFAULT_SUBSCRIPTION_PLANS.map((plan) => {
     const dbRecord = dbMap.get(plan.moduleType);
     if (dbRecord) {
+      const parsedAmount = Number(dbRecord.amount?.toString() || 0);
       return {
         id: dbRecord.id,
         moduleType: dbRecord.moduleType,
         title: dbRecord.title || plan.title,
-        amount: Number(dbRecord.amount) || plan.amount,
+        amount: parsedAmount > 0 ? parsedAmount : plan.amount,
         currency: dbRecord.currency || plan.currency,
-        isEnabled: dbRecord.isEnabled,
-        isActive: dbRecord.isActive,
+        isEnabled: dbRecord.isEnabled !== undefined ? Boolean(dbRecord.isEnabled) : plan.isEnabled,
+        isActive: dbRecord.isActive !== undefined ? Boolean(dbRecord.isActive) : plan.isActive,
         category: "SUBSCRIPTION",
         isPlatformFee: true,
         isPlatformOnly: true,
@@ -140,7 +168,10 @@ export default async function SuperAdminPaymentsPage() {
 
   return (
     <div className="py-4 max-w-7xl mx-auto space-y-6">
-      <SuperAdminPaymentsClient initialPlans={initialPlans} />
+      <SuperAdminPaymentsClient
+        initialPlans={initialPlans}
+        pendingReceiptsCount={pendingReceiptsCount}
+      />
     </div>
   );
 }

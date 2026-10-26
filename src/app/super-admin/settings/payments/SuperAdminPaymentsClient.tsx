@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   CreditCard,
   CheckCircle2,
@@ -41,10 +42,12 @@ export interface SubscriptionSettingItem {
 
 interface SuperAdminPaymentsClientProps {
   initialPlans: SubscriptionSettingItem[];
+  pendingReceiptsCount?: number;
 }
 
 export default function SuperAdminPaymentsClient({
   initialPlans,
+  pendingReceiptsCount = 0,
 }: SuperAdminPaymentsClientProps) {
   const [plans, setPlans] = useState<SubscriptionSettingItem[]>(initialPlans);
   const [searchTerm, setSearchTerm] = useState("");
@@ -197,6 +200,18 @@ export default function SuperAdminPaymentsClient({
                 Free / Inactive
               </span>
             </div>
+
+            <Link
+              href="/super-admin/finance/receipts"
+              className="bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-2xl p-4 text-center min-w-[130px] transition-all group"
+            >
+              <span className="block text-2xl font-black text-amber-400">
+                {pendingReceiptsCount}
+              </span>
+              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-center gap-1 group-hover:underline">
+                Pending Receipts &rarr;
+              </span>
+            </Link>
           </div>
         </div>
       </div>

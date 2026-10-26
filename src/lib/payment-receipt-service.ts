@@ -449,7 +449,7 @@ async function markAdmissionFormFeePaid(applicationNo: string, verifiedBy: strin
 /**
  * Automates School Platform Subscription Activation
  */
-async function activatePlatformSubscription(tenantId: string, schoolId?: string | null) {
+export async function activatePlatformSubscription(tenantId: string, schoolId?: string | null) {
   try {
     const targetId = schoolId || tenantId;
     const expiresAt = new Date();
@@ -463,7 +463,34 @@ async function activatePlatformSubscription(tenantId: string, schoolId?: string 
         subscriptionStatus: "ACTIVE",
         subscriptionExpiresAt: expiresAt,
         status: "ACTIVE",
+        isActive: true,
         updatedAt: new Date(),
+      },
+    });
+
+    await basePrisma.subscription.updateMany({
+      where: {
+        school: {
+          OR: [{ id: targetId }, { subdomain: tenantId }, { slug: tenantId }],
+        },
+      },
+      data: {
+        status: "ACTIVE",
+        verifiedByAdmin: true,
+        expiresAt,
+      },
+    });
+
+    await basePrisma.schoolPayment.updateMany({
+      where: {
+        school: {
+          OR: [{ id: targetId }, { subdomain: tenantId }, { slug: tenantId }],
+        },
+        type: "SUBSCRIPTION",
+        status: "PENDING_VERIFICATION",
+      },
+      data: {
+        status: "VERIFIED",
       },
     });
   } catch (err: any) {
