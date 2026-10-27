@@ -1550,3 +1550,88 @@ export async function sendBankDetailsEmailAction(payload: {
   }
 }
 
+/**
+ * Mark applicant form fee as PAID via manual bank transfer and append timeline audit log
+ */
+export async function markFormFeePaidAction(payload: {
+  registerId: string;
+  schoolDomain?: string;
+  userRole?: string;
+}) {
+  try {
+    const session = await getSession();
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [{ id: payload.registerId }, { applicationNo: payload.registerId }],
+      },
+    });
+
+    if (!registerRecord) {
+      return { success: false, error: "Applicant record not found" };
+    }
+
+    let rawCreds: any = registerRecord.credentialsJson || {};
+    let isArrayCreds = Array.isArray(rawCreds);
+    let credsObj = isArrayCreds ? { documents: rawCreds } : { ...(rawCreds || {}) };
+
+    credsObj.formFeePaid = true;
+    const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+    const newLog = {
+      fromStatus: registerRecord.status,
+      toStatus: registerRecord.status,
+      action: "FORM_FEE_PAID",
+      changedById: payload.userRole || session?.userId || session?.name || "Admissions Officer",
+      reason: "Form fee marked as PAID via manual bank transfer",
+      createdAt: new Date().toISOString(),
+    };
+    credsObj.statusLogs = [...existingLogs, newLog];
+
+    const updated = await basePrisma.admissionRegister.update({
+      where: { id: registerRecord.id },
+      data: {
+        credentialsJson: credsObj,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Also sync log to linked AdmissionLead if present
+    try {
+      const lead = await basePrisma.admissionLead.findFirst({
+        where: {
+          OR: [
+            { id: payload.registerId },
+            ...(registerRecord.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+            ...(registerRecord.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+          ],
+        },
+      });
+      if (lead) {
+        const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
+        leadLogs.push({
+          timestamp: new Date().toISOString(),
+          action: "FORM_FEE_PAID",
+          note: "Form fee marked as PAID via manual mobile transfer.",
+          operator: payload.userRole || session?.userId || session?.name || "Admissions Officer",
+        });
+        await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: { logs: leadLogs as any },
+        });
+      }
+    } catch (leadErr) {
+      console.warn("[markFormFeePaidAction_leadLogWarn]:", leadErr);
+    }
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    }
+
+    return { success: true, applicant: updated };
+  } catch (error: any) {
+    console.error("[markFormFeePaidAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to mark form fee as paid" };
+  }
+}
+
+
