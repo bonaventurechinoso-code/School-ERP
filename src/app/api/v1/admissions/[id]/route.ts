@@ -102,6 +102,63 @@ export async function PATCH(
       return NextResponse.json({ success: true, data: updated });
     }
 
+    // If formFeeStatus is provided (e.g. formFeeStatus === "PAID")
+    if (body.formFeeStatus === "PAID" || body.form_fee_status === "PAID") {
+      let rawCreds: any = registerRecord?.credentialsJson || {};
+      let isArrayCreds = Array.isArray(rawCreds);
+      let credsObj = isArrayCreds ? { documents: rawCreds } : { ...(rawCreds || {}) };
+
+      credsObj.formFeePaid = true;
+      const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+      const newLog = {
+        fromStatus: registerRecord?.status || "VERIFIED",
+        toStatus: registerRecord?.status || "VERIFIED",
+        action: "FORM_FEE_PAID",
+        changedById: userRole || "Admissions Officer",
+        reason: "Form fee marked as PAID via manual bank transfer",
+        createdAt: new Date().toISOString(),
+      };
+      credsObj.statusLogs = [...existingLogs, newLog];
+
+      const updated = await basePrisma.admissionRegister.update({
+        where: { id: targetId },
+        data: {
+          credentialsJson: credsObj,
+          updatedAt: new Date(),
+        },
+      });
+
+      // Also sync log to linked AdmissionLead if present
+      try {
+        const lead = await basePrisma.admissionLead.findFirst({
+          where: {
+            OR: [
+              { id: targetId },
+              ...(registerRecord?.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+              ...(registerRecord?.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+            ],
+          },
+        });
+        if (lead) {
+          const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
+          leadLogs.push({
+            timestamp: new Date().toISOString(),
+            action: "FORM_FEE_PAID",
+            note: "Form fee marked as PAID via manual mobile transfer.",
+            operator: userRole || "Admissions Officer",
+          });
+          await basePrisma.admissionLead.update({
+            where: { id: lead.id },
+            data: { logs: leadLogs as any },
+          });
+        }
+      } catch (leadLogErr) {
+        console.warn("[PATCH_ADMISSION_FORM_FEE_LEAD_LOG_WARN]:", leadLogErr);
+      }
+
+      return NextResponse.json({ success: true, data: updated, message: "Form fee marked as PAID" });
+    }
+
     return NextResponse.json({ error: "No valid update operation provided" }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Failed to update applicant" }, { status: 500 });

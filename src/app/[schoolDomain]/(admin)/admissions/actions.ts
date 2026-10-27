@@ -8,6 +8,7 @@ import {
   sendDocsRequestEmail,
   sendExamAdmitSlipEmail,
 } from "@/lib/mail";
+import { sendPaymentInstructionEmail } from "@/lib/email";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber, getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
@@ -1436,6 +1437,116 @@ export async function deleteAdmissionRegisterAction(payload: {
   } catch (error: any) {
     console.error("[deleteAdmissionRegisterAction] Error:", error);
     return { success: false, error: error?.message || "Failed to delete admission record." };
+  }
+}
+
+export async function sendBankDetailsEmailAction(payload: {
+  registerId: string;
+  schoolDomain: string;
+  guardianEmail?: string;
+  applicantName: string;
+  applicationNo: string;
+  amount: number;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}) {
+  try {
+    const session = await getSession();
+    const resolvedSchoolId = await resolveSchoolId(payload.schoolDomain);
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { id: resolvedSchoolId },
+          { subdomain: payload.schoolDomain.toLowerCase() },
+          { slug: payload.schoolDomain.toLowerCase() },
+        ],
+      },
+    });
+
+    const targetEmail = payload.guardianEmail?.trim() || "bonaveeict@gmail.com";
+
+    // 1. Call existing email function in src/lib/email.ts
+    await sendPaymentInstructionEmail({
+      to: targetEmail,
+      applicantName: payload.applicantName,
+      applicationNo: payload.applicationNo,
+      amount: payload.amount,
+      bankName: payload.bankName,
+      accountNumber: payload.accountNumber,
+      accountName: payload.accountName,
+      narration: `FORM FEE ${payload.applicationNo}`,
+      uploadUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng"}/${payload.schoolDomain}/admissions/upload/${payload.registerId}`,
+      schoolName: school?.name || "Institution Admissions Desk",
+      schoolId: school?.id || resolvedSchoolId,
+    });
+
+    // 2. Log in Audit Timeline in AdmissionRegister credentialsJson.statusLogs
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [{ id: payload.registerId }, { applicationNo: payload.registerId }],
+      },
+    });
+
+    if (registerRecord) {
+      let rawCreds: any = registerRecord.credentialsJson || {};
+      let isArrayCreds = Array.isArray(rawCreds);
+      let credsObj = isArrayCreds ? { documents: rawCreds } : { ...(rawCreds || {}) };
+
+      const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+      const newLog = {
+        fromStatus: registerRecord.status,
+        toStatus: registerRecord.status,
+        action: "BANK_DETAILS_SENT",
+        changedById: session?.userId || session?.name || "Admissions Officer",
+        reason: `Bank details sent to ${targetEmail} for ref ${payload.applicationNo} (₦${Number(payload.amount).toLocaleString()})`,
+        createdAt: new Date().toISOString(),
+      };
+      credsObj.statusLogs = [...existingLogs, newLog];
+
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          credentialsJson: credsObj,
+          updatedAt: new Date(),
+        },
+      });
+
+      // Also sync log to linked AdmissionLead if present
+      try {
+        const lead = await basePrisma.admissionLead.findFirst({
+          where: {
+            OR: [
+              { id: payload.registerId },
+              ...(registerRecord.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+              ...(registerRecord.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+            ],
+          },
+        });
+        if (lead) {
+          const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
+          leadLogs.push({
+            timestamp: new Date().toISOString(),
+            action: "BANK_DETAILS_SENT",
+            note: `Bank details sent to ${targetEmail} for ref ${payload.applicationNo} (₦${Number(payload.amount).toLocaleString()})`,
+            operator: session?.userId || session?.name || "Admissions Officer",
+          });
+          await basePrisma.admissionLead.update({
+            where: { id: lead.id },
+            data: { logs: leadLogs as any },
+          });
+        }
+      } catch (leadErr) {
+        console.warn("[sendBankDetailsEmailAction_leadLogWarn]:", leadErr);
+      }
+    }
+
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    return { success: true, message: `Bank details sent to ${targetEmail}` };
+  } catch (error: any) {
+    console.error("[sendBankDetailsEmailAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to send bank details email." };
   }
 }
 

@@ -27,8 +27,11 @@ import {
   ChevronRight,
   UploadCloud,
   Loader2,
+  CreditCard,
+  Edit2,
+  Send,
 } from "lucide-react";
-import { requestApplicantDocsAction } from "./actions";
+import { requestApplicantDocsAction, sendBankDetailsEmailAction } from "./actions";
 import { useSession } from "@/lib/session-context";
 import { isAdmissionsAuthorized } from "@/lib/admissions-rbac";
 import {
@@ -76,6 +79,16 @@ export default function AdmissionRegisterDrawer({
   const [applicantReceipt, setApplicantReceipt] = useState<any | null>(null);
   const [showReceiptUpload, setShowReceiptUpload] = useState(false);
 
+  const [bankDetails, setBankDetails] = useState({
+    bankName: "Zenith Bank",
+    accountNumber: "1012345678",
+    accountName: `${schoolName} Admissions`,
+    formFeeAmount: 5000,
+  });
+  const [isEditingBankDetails, setIsEditingBankDetails] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+
   React.useEffect(() => {
     setLocalApplicant(applicant);
     setToastMsg(null);
@@ -92,7 +105,23 @@ export default function AdmissionRegisterDrawer({
         })
         .catch(() => {});
     }
-  }, [applicant]);
+
+    if (applicant?.tenantId) {
+      fetch(`/api/v1/payments/settings?tenantId=${applicant.tenantId}&moduleType=ADMISSION_FORM_FEE`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && d.setting) {
+            setBankDetails((prev) => ({
+              bankName: d.setting.bankName || prev.bankName,
+              accountNumber: d.setting.accountNumber || prev.accountNumber,
+              accountName: d.setting.accountName || prev.accountName,
+              formFeeAmount: d.setting.amount ?? prev.formFeeAmount,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [applicant, schoolName]);
 
   // RBAC Permission Profile
   const userRole = (session?.role || session?.staffRole || (session as any)?.userRole || (session?.user as any)?.role || "").toUpperCase();
@@ -272,9 +301,110 @@ export default function AdmissionRegisterDrawer({
   }, [localApplicant]);
 
   const formFeePaid = Boolean(
+    localApplicant?.formFeePaid ||
     applicant?.formFeePaid ||
+    (typeof localApplicant?.credentialsJson === "object" && (localApplicant?.credentialsJson as any)?.formFeePaid) ||
     (typeof applicant?.credentialsJson === "object" && applicant?.credentialsJson?.formFeePaid)
   );
+
+  const handleSendBankDetailsEmail = async () => {
+    if (!localApplicant) return;
+    try {
+      setIsSendingEmail(true);
+      const targetEmail = localApplicant.email || "bonaveeict@gmail.com";
+      const res = await sendBankDetailsEmailAction({
+        registerId: localApplicant.id,
+        schoolDomain: schoolDomain || "",
+        guardianEmail: targetEmail,
+        applicantName: `${localApplicant.firstName} ${localApplicant.lastName}`,
+        applicationNo: localApplicant.applicationNo,
+        amount: Number(bankDetails.formFeeAmount) || 5000,
+        bankName: bankDetails.bankName,
+        accountNumber: bankDetails.accountNumber,
+        accountName: bankDetails.accountName,
+      });
+
+      if (res && res.success) {
+        setToastMsg({ type: "success", text: `Bank details sent successfully to ${targetEmail}!` });
+        setLocalApplicant((prev: any) => {
+          if (!prev) return prev;
+          const rawCreds = prev.credentialsJson || {};
+          const credsObj = Array.isArray(rawCreds) ? { documents: rawCreds } : { ...rawCreds };
+          const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+          credsObj.statusLogs = [
+            ...existingLogs,
+            {
+              fromStatus: prev.status,
+              toStatus: prev.status,
+              action: "BANK_DETAILS_SENT",
+              changedById: userRole || "Admissions Desk",
+              reason: `Bank details sent to ${targetEmail} for ref ${prev.applicationNo}`,
+              createdAt: new Date().toISOString(),
+            },
+          ];
+          return { ...prev, credentialsJson: credsObj };
+        });
+      } else {
+        setToastMsg({ type: "error", text: res?.error || "Failed to send bank details email." });
+      }
+    } catch (err: any) {
+      setToastMsg({ type: "error", text: err.message || "Failed to send bank details email." });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!localApplicant) return;
+    try {
+      setIsMarkingPaid(true);
+      const tenantId = (session as any)?.schoolId || localApplicant.tenantId;
+      const res = await fetch(`/api/v1/admissions/${localApplicant.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+          "x-user-role": userRole,
+          ...(session?.staffRole ? { "x-staff-role": session.staffRole } : {}),
+        },
+        body: JSON.stringify({
+          formFeeStatus: "PAID",
+          tenantId,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to mark form fee as paid");
+      }
+
+      setLocalApplicant((prev: any) => {
+        if (!prev) return prev;
+        const rawCreds = prev.credentialsJson || {};
+        const credsObj = Array.isArray(rawCreds) ? { documents: rawCreds } : { ...rawCreds };
+        credsObj.formFeePaid = true;
+        const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+        credsObj.statusLogs = [
+          ...existingLogs,
+          {
+            fromStatus: prev.status,
+            toStatus: prev.status,
+            action: "FORM_FEE_PAID",
+            changedById: userRole || "Admissions Officer",
+            reason: "Form fee marked as PAID via manual bank transfer",
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        return { ...prev, formFeePaid: true, credentialsJson: credsObj };
+      });
+
+      setToastMsg({ type: "success", text: "Form fee marked as PAID successfully!" });
+    } catch (err: any) {
+      setToastMsg({ type: "error", text: err.message || "Failed to mark form fee as paid" });
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  };
 
   const leadSource =
     applicant?.leadSource ||
@@ -705,6 +835,120 @@ export default function AdmissionRegisterDrawer({
                   )}
                 </div>
 
+                {/* FORM FEE STATUS BOX - MANUAL MOBILE TRANSFER */}
+                {!formFeePaid ? (
+                  <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/90 dark:border-amber-900/50 space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <span>Manual Mobile Transfer Bank Details</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingBankDetails((v) => !v)}
+                        className="inline-flex items-center gap-1 text-[11px] text-amber-700 hover:text-amber-900 dark:text-amber-300 font-semibold hover:underline cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        {isEditingBankDetails ? "Done Editing" : "Edit Bank Details"}
+                      </button>
+                    </div>
+
+                    {isEditingBankDetails ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase">Bank Name</label>
+                          <input
+                            type="text"
+                            value={bankDetails.bankName}
+                            onChange={(e) => setBankDetails((p) => ({ ...p, bankName: e.target.value }))}
+                            className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                            placeholder="e.g. Zenith Bank"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase">Account Number</label>
+                          <input
+                            type="text"
+                            value={bankDetails.accountNumber}
+                            onChange={(e) => setBankDetails((p) => ({ ...p, accountNumber: e.target.value }))}
+                            className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                            placeholder="e.g. 1012345678"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase">Account Name</label>
+                          <input
+                            type="text"
+                            value={bankDetails.accountName}
+                            onChange={(e) => setBankDetails((p) => ({ ...p, accountName: e.target.value }))}
+                            className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                            placeholder="e.g. School Admissions"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase">Form Fee Amount (₦)</label>
+                          <input
+                            type="number"
+                            value={bankDetails.formFeeAmount}
+                            onChange={(e) => setBankDetails((p) => ({ ...p, formFeeAmount: Number(e.target.value) }))}
+                            className="w-full mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                            placeholder="5000"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-white/80 dark:bg-zinc-900/60 p-2.5 rounded-lg border border-amber-200/60">
+                        <div>
+                          <span className="block text-[10px] text-slate-500 uppercase font-medium">Bank</span>
+                          <span className="font-semibold text-slate-800 dark:text-zinc-200">{bankDetails.bankName || "Not set"}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] text-slate-500 uppercase font-medium">Account No</span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-zinc-100">{bankDetails.accountNumber || "Not set"}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] text-slate-500 uppercase font-medium">Account Name</span>
+                          <span className="font-medium text-slate-800 dark:text-zinc-200 truncate block">{bankDetails.accountName || "Not set"}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] text-slate-500 uppercase font-medium">Amount</span>
+                          <span className="font-bold text-emerald-700 dark:text-emerald-400">₦{Number(bankDetails.formFeeAmount || 5000).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ONLY 2 BUTTONS: Send Bank Details to Email & Mark as Paid */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-1 border-t border-amber-200/60 dark:border-amber-900/30">
+                      <button
+                        type="button"
+                        onClick={handleSendBankDetailsEmail}
+                        disabled={isSendingEmail || isProcessing}
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-amber-950 bg-amber-200/90 hover:bg-amber-300 border border-amber-300/80 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {isSendingEmail ? "Sending Email..." : "Send Bank Details to Email"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleMarkAsPaid}
+                        disabled={isMarkingPaid || isProcessing}
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        {isMarkingPaid ? "Marking as Paid..." : "Mark as Paid"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/80 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      Form fee has been verified and marked as PAID via manual bank transfer.
+                    </span>
+                    <span className="font-semibold text-emerald-700">₦{Number(bankDetails.formFeeAmount || 5000).toLocaleString()}</span>
+                  </div>
+                )}
+
                 {applicantReceipt ? (
                   <PaymentReceiptVerify
                     receipt={applicantReceipt}
@@ -725,13 +969,13 @@ export default function AdmissionRegisterDrawer({
                   />
                 ) : (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 py-1">
-                    <span>No bank payment slip attached yet for {applicant.applicationNo}.</span>
+                    <span>Payment slip / paper teller receipt (optional):</span>
                     <button
                       type="button"
                       onClick={() => setShowReceiptUpload((v) => !v)}
                       className="px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 transition self-start sm:self-auto cursor-pointer"
                     >
-                      {showReceiptUpload ? "Close Upload" : "+ Record / Attach Receipt"}
+                      {showReceiptUpload ? "Close Upload" : "+ Record / Attach Receipt Slip"}
                     </button>
                   </div>
                 )}
