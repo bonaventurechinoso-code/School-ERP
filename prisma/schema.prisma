@@ -1241,7 +1241,16 @@ model AdmissionRegister {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  // Enterprise Tiering Additions
+  tier            InstitutionTier?
+  cycleId         String?          @map("cycle_id")
+  personalData    Json?            @map("personal_data")
+  academicHistory Json?            @map("academic_history")
+  olevelResults   Json?            @map("olevel_results")
+  jambDetails     Json?            @map("jamb_details")
+
   @@index([tenantId, status])
+  @@index([tenantId, cycleId])
   @@map("admission_registers")
 }
 
@@ -1303,4 +1312,159 @@ model PaymentSetting {
   @@index([tenantId, isEnabled])
   @@map("payment_settings")
 }
+
+// ------------------------------------------------------
+// ENTERPRISE NIGERIAN ADMISSIONS ARCHITECTURE
+// ------------------------------------------------------
+
+enum InstitutionTier {
+  CRECHE
+  NURSERY
+  PRIMARY
+  SECONDARY
+  POLYTECHNIC
+  COLLEGE_OF_ED
+  UNIVERSITY
+}
+
+enum ApplicationDocumentType {
+  BIRTH_CERT
+  JAMB_SLIP
+  WAEC_RESULT
+  NECO_RESULT
+  NABTEB_RESULT
+  TRANSCRIPT
+  NPC_CERT
+  IMMUNIZATION
+  PASSPORT_PHOTO
+  MEDICAL_REPORT
+  OTHER
+}
+
+enum DocumentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AdmissionOfferType {
+  PROVISIONAL
+  CONDITIONAL
+  DIRECT
+}
+
+enum OfferPaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  WAIVED
+}
+
+model AdmissionCycle {
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  schoolId       String          @map("school_id")
+  session        String          // e.g. 2026/2027
+  tier           InstitutionTier
+  name           String
+  startDate      DateTime        @map("start_date")
+  endDate        DateTime        @map("end_date")
+  applicationFee Int             @default(5000) @map("application_fee")
+  capacity       Int?
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([schoolId])
+  @@index([tenantId, schoolId, tier])
+  @@map("admission_cycles")
+}
+
+model ApplicationFormTemplate {
+  id        String          @id @default(cuid())
+  tenantId  String          @map("tenant_id")
+  tier      InstitutionTier
+  schema    Json            // JSONB dynamic steps/fields
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([tenantId, tier])
+  @@map("application_form_templates")
+}
+
+model ApplicationDocument {
+  id                 String                     @id @default(cuid())
+  tenantId           String                     @map("tenant_id")
+  registerId         String                     @map("register_id")
+  type               ApplicationDocumentType
+  fileUrl            String                     @map("file_url")
+  verificationStatus DocumentVerificationStatus @default(PENDING) @map("verification_status")
+  reviewerNotes      String?                    @map("reviewer_notes")
+  uploadedAt         DateTime                   @default(now()) @map("uploaded_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([registerId])
+  @@index([tenantId, registerId])
+  @@map("application_documents")
+}
+
+model AdmissionScreening {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  registerId     String   @map("register_id")
+  examScore      Float?   @map("exam_score")
+  interviewScore Float?   @map("interview_score")
+  rubric         Json?
+  interviewerId  String?  @map("interviewer_id")
+  recommendation String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([registerId])
+  @@index([tenantId, registerId])
+  @@map("admission_screenings")
+}
+
+model AdmissionOffer {
+  id             String             @id @default(cuid())
+  tenantId       String             @map("tenant_id")
+  registerId     String             @map("register_id")
+  offerType      AdmissionOfferType @default(PROVISIONAL) @map("offer_type")
+  classOrDept    String             @map("class_or_dept")
+  tuitionDeposit Int                @default(0) @map("tuition_deposit")
+  acceptanceFee  Int                @default(0) @map("acceptance_fee")
+  paymentStatus  OfferPaymentStatus @default(PENDING) @map("payment_status")
+  expiresAt      DateTime?          @map("expires_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([registerId])
+  @@index([tenantId, registerId])
+  @@map("admission_offers")
+}
+
+model AdmissionAuditTrail {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  registerId String   @map("register_id")
+  actorId    String   @map("actor_id")
+  action     String   // e.g. CREATED, DOCS_UPLOADED, VERIFIED, SCREENED, OFFERED, ACCEPTANCE_PAID, ENROLLED
+  fromStage  String?  @map("from_stage")
+  toStage    String?  @map("to_stage")
+  ip         String?
+  metadata   Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([registerId])
+  @@index([tenantId, registerId])
+  @@map("admission_audit_trails")
+}
+
 

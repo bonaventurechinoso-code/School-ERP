@@ -27,6 +27,7 @@ import {
   findDuplicateAdmissionEntry,
   executeLeadToRegisterTransition,
 } from "@/modules/enrollment/enrollment.controller";
+import { executeEnrollmentHandshake } from "@/modules/admissions/enrollment-handshake";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -747,6 +748,28 @@ export async function enrollApplicantAction(payload: {
       console.warn("[enrollApplicantAction] Warning: Could not mirror audit to admission_registers:", auditErr);
     }
 
+    // Record immutable AdmissionAuditTrail entry
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: schoolId,
+          registerId: lead.id,
+          actorId: session?.userId || session?.name || "Admissions Officer",
+          action: "ENROLLED",
+          fromStage: lead.status,
+          toStage: "ENROLLED",
+          metadata: {
+            studentId: newStudent.id,
+            admissionNumber,
+            tier: targetTier,
+            source: "enrollApplicantAction",
+          },
+        },
+      });
+    } catch (auditTrailErr) {
+      console.warn("[enrollApplicantAction] Warning logging admissionAuditTrail:", auditTrailErr);
+    }
+
     // 5. ROSTER DYNAMIC SYNC REFRESH & CACHE PURGE
     invalidateTierConnection();
     await Promise.all([
@@ -805,6 +828,69 @@ export async function enrollApplicantAction(payload: {
       };
     }
     return { success: false, error: error?.message || "Failed to finalize enrollment." };
+  }
+}
+
+/**
+ * Enterprise Atomic Enrollment Handshake Action for Admission Register Records
+ * Performs atomic enrollment:
+ * 1. Updates register stage to ENROLLED
+ * 2. Generates matriculation number ([TENANT]-[YEAR]-[SEQ])
+ * 3. Creates Student in SIS with ENROLLED status
+ * 4. Creates Parent/Guardian and links StudentParent
+ * 5. Generates initial tuition billing Invoice in Bursary sub-ledger
+ * 6. Records immutable AdmissionAuditTrail entry
+ */
+export async function enrollApplicantFromRegisterAction(payload: {
+  registerId: string;
+  schoolId: string;
+  schoolDomain: string;
+  tuitionFeeAmount?: number;
+  feeDescription?: string;
+}): Promise<AdmissionActionResult> {
+  const { registerId, schoolDomain } = payload;
+  try {
+    if (!registerId) {
+      return { success: false, error: "registerId is required." };
+    }
+    const schoolId = await resolveSchoolId(payload.schoolId);
+
+    // Permissions check
+    const session = await getSession(undefined, schoolDomain);
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return {
+        success: false,
+        error: "403: " + (auth.reason || "Unauthorized: Student matriculation is strictly restricted to Registrar, Admissions Officer, or Superadmin roles."),
+      };
+    }
+
+    const handshakeResult = await executeEnrollmentHandshake({
+      registerId,
+      tenantId: schoolId,
+      schoolDomain,
+      actorId: session?.userId || session?.name || "Admissions Officer",
+      tuitionFeeAmount: payload.tuitionFeeAmount,
+      feeDescription: payload.feeDescription,
+    });
+
+    if (!handshakeResult.success) {
+      return { success: false, error: handshakeResult.error };
+    }
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${schoolDomain}/admissions`);
+    safeRevalidate(`/${schoolDomain}/students`);
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+
+    return {
+      success: true,
+      student: handshakeResult.student,
+      lead: handshakeResult.register,
+    };
+  } catch (error: any) {
+    console.error("[enrollApplicantFromRegisterAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to finalize register enrollment." };
   }
 }
 

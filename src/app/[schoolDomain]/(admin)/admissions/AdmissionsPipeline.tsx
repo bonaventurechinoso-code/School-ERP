@@ -7,82 +7,69 @@ import {
   Users,
   Search,
   Plus,
-  Printer,
-  FileText,
-  CheckCircle2,
-  Clock,
   Phone,
   ArrowRight,
   UserCheck,
-  ShieldCheck,
-  FileCheck,
+  CheckCircle2,
+  Clock,
   GraduationCap,
-  Sparkles,
+  Calendar,
+  CreditCard,
+  Send,
+  Check,
+  Copy,
+  X,
+  Lock,
+  FileCheck,
 } from "lucide-react";
-import { updateLeadStatusAction, enrollApplicantAction } from "./actions";
+import {
+  updateLeadStatusAction,
+  sendBankDetailsEmailAction,
+  markFormFeePaidAction,
+} from "./actions";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import NewInquiryModal from "./NewInquiryModal";
 import AdmissionRegisterTable from "./AdmissionRegisterTable";
 
-const STAGES = [
-  { id: "INQUIRY", label: "Inquiry", color: "border-t-slate-500", bg: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
-  { id: "DOCS_PENDING", label: "Docs Pending", color: "border-t-amber-500", bg: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
-  { id: "VERIFIED", label: "Verified", color: "border-t-blue-500", bg: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" },
-  { id: "APPROVED", label: "Approved", color: "border-t-emerald-500", bg: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" },
-  { id: "REJECTED", label: "Rejected", color: "border-t-rose-500", bg: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200" },
-  { id: "CONVERTED", label: "Converted to Student", color: "border-t-violet-500", bg: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" },
+export const STAGES = [
+  { id: "INQUIRY", label: "Inquiry", dotColor: "bg-slate-400", borderColor: "border-t-slate-400" },
+  { id: "DOCS_PENDING", label: "Docs Pending", dotColor: "bg-amber-500", borderColor: "border-t-amber-500" },
+  { id: "VERIFIED", label: "Screened & Verified", dotColor: "bg-blue-500", borderColor: "border-t-blue-500" },
+  { id: "APPROVED", label: "Provisional Offer", dotColor: "bg-purple-500", borderColor: "border-t-purple-500" },
+  { id: "REJECTED", label: "Rejected", dotColor: "bg-rose-500", borderColor: "border-t-rose-500" },
+  { id: "ENROLLED", label: "Matriculated", dotColor: "bg-emerald-500", borderColor: "border-t-emerald-500" },
 ];
-
-function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
-  if (!cls) return fallbackTier || "Secondary School";
-  const c = cls.toLowerCase().trim();
-  if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
-    return "Daycare / Nursery";
-  }
-  if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
-    return "Primary School";
-  }
-  if (
-    c.includes("jss") ||
-    c.includes("sss") ||
-    c.includes("ss1") ||
-    c.includes("ss 1") ||
-    c.includes("ss2") ||
-    c.includes("ss 2") ||
-    c.includes("ss3") ||
-    c.includes("ss 3") ||
-    c.includes("secondary") ||
-    c.includes("high")
-  ) {
-    return "Secondary School";
-  }
-  if (
-    ["nd", "hnd", "100 level", "200", "300", "400", "university", "polytechnic", "college of education"].some((k) =>
-      c.includes(k)
-    )
-  ) {
-    return "Higher Institution / University";
-  }
-  return fallbackTier || "Secondary School";
-}
 
 function leadMatchesStage(leadStatus: string | null | undefined, stageId: string): boolean {
   const norm = (leadStatus || "INQUIRY").toUpperCase();
   if (norm === stageId) return true;
   if (stageId === "DOCS_PENDING" && norm === "APPLIED") return true;
   if (stageId === "VERIFIED" && norm === "INTERVIEW") return true;
-  if (stageId === "CONVERTED" && norm === "ENROLLED") return true;
+  if (stageId === "ENROLLED" && norm === "CONVERTED") return true;
   return false;
 }
 
-type LeadWithTier = AdmissionLead & { tier?: AcademicTier | null; notes?: any[]; targetClass?: string; academicTier?: string; targetClassCohort?: string };
+function getInitials(name?: string): string {
+  if (!name) return "ST";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+type LeadWithTier = AdmissionLead & {
+  tier?: AcademicTier | null;
+  notes?: any[];
+  targetClass?: string;
+  academicTier?: string;
+  targetClassCohort?: string;
+};
 
 export default function AdmissionsPipeline({
   leads,
   schoolId,
   schoolDomain,
   tiers,
-  schoolName = "Greenwood Academy",
+  schoolName = "Institution Admissions Desk",
   canMutate = false,
 }: {
   leads: LeadWithTier[];
@@ -94,48 +81,63 @@ export default function AdmissionsPipeline({
 }) {
   const router = useRouter();
   const [localLeads, setLocalLeads] = useState<LeadWithTier[]>(leads);
-  const [mainTab, setMainTab] = useState<"register" | "leads">("leads");
-  const [isPending, startTransition] = useTransition();
+  const [mainTab, setMainTab] = useState<"leads" | "register">("leads");
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     setLocalLeads(leads);
   }, [leads]);
 
-  // View Mode & Filters
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  // Search & Stage Filter
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStage, setFilterStage] = useState<string>("ALL");
+  const [selectedStage, setSelectedStage] = useState<string>("ALL");
 
-  // Drawers & Modals
+  // Modals & Drawers
   const [selectedLead, setSelectedLead] = useState<LeadWithTier | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
 
-  // Workflow Segregation: Early prospective inquiries badge count
-  const prospectiveInquiryLeads = useMemo(() => {
-    return localLeads.filter((lead) => (lead.status || "").toUpperCase() === "INQUIRY");
-  }, [localLeads]);
+  // Form Fee Dialog State (for manual mobile bank transfer)
+  const [feeModalLead, setFeeModalLead] = useState<LeadWithTier | null>(null);
+  const [isSendingBankEmail, setIsSendingBankEmail] = useState(false);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [feeModalToast, setFeeModalToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Filtered Leads across all stages for the Kanban Board and Table view
-  const allStageLeads = useMemo(() => {
+  // Central Bursar Bank Details (Read-only)
+  const bankDetails = {
+    bankName: "Zenith Bank",
+    accountNumber: "1012345678",
+    accountName: `${schoolName} Admissions`,
+    formFeeAmount: 5000,
+  };
+
+  const handleCopy = (text: string, fieldId: string) => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(text);
+      setCopiedField(fieldId);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  };
+
+  // Filtered Leads
+  const filteredLeads = useMemo(() => {
     return localLeads.filter((l) => {
+      const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
-        !searchQuery.trim() ||
-        (l.applicantName && l.applicantName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (l.targetGrade && l.targetGrade.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (l.parentContact && l.parentContact.includes(searchQuery)) ||
-        (l.parentPhone && l.parentPhone.includes(searchQuery)) ||
-        (l.parentName && l.parentName.toLowerCase().includes(searchQuery.toLowerCase()));
+        !q ||
+        (l.applicantName && l.applicantName.toLowerCase().includes(q)) ||
+        (l.targetGrade && l.targetGrade.toLowerCase().includes(q)) ||
+        (l.parentContact && l.parentContact.includes(q)) ||
+        (l.parentPhone && l.parentPhone.includes(q)) ||
+        (l.id && l.id.toLowerCase().includes(q));
 
-      const matchesStage = filterStage === "ALL" || leadMatchesStage(l.status, filterStage);
-
+      const matchesStage = selectedStage === "ALL" || leadMatchesStage(l.status, selectedStage);
       return matchesSearch && matchesStage;
     });
-  }, [localLeads, searchQuery, filterStage]);
+  }, [localLeads, searchQuery, selectedStage]);
 
-  // Backward-compatibility alias for filtered leads
-  const filteredLeads = allStageLeads;
-
+  // Stage advance handler
   const handleStageAdvance = (leadId: string, currentStage: string) => {
     const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
     if (currentIndex >= STAGES.length - 1) return;
@@ -161,280 +163,123 @@ export default function AdmissionsPipeline({
     });
   };
 
-  const openDossier = (lead: LeadWithTier) => {
-    setSelectedLead(lead);
-    setIsDrawerOpen(true);
+  // Send Bank Details to Email action
+  const handleSendBankDetailsEmail = async () => {
+    if (!feeModalLead) return;
+    setIsSendingBankEmail(true);
+    setFeeModalToast(null);
+
+    const targetEmail =
+      feeModalLead.studentEmail ||
+      feeModalLead.parentEmail ||
+      (feeModalLead.parentContact?.includes("@") ? feeModalLead.parentContact : null) ||
+      "bonaveeict@gmail.com";
+
+    const appNo = `APP-${feeModalLead.id.slice(0, 6).toUpperCase()}`;
+
+    try {
+      const res = await sendBankDetailsEmailAction({
+        registerId: feeModalLead.id,
+        schoolDomain: schoolDomain || "egede",
+        guardianEmail: targetEmail,
+        applicantName: feeModalLead.applicantName,
+        applicationNo: appNo,
+        amount: bankDetails.formFeeAmount,
+        bankName: bankDetails.bankName,
+        accountNumber: bankDetails.accountNumber,
+        accountName: bankDetails.accountName,
+      });
+
+      if (res && res.success) {
+        setFeeModalToast({ type: "success", text: `Bank details sent successfully to ${targetEmail}` });
+      } else {
+        setFeeModalToast({ type: "error", text: res?.error || "Failed to dispatch email." });
+      }
+    } catch (err: any) {
+      setFeeModalToast({ type: "error", text: err.message || "Failed to dispatch email." });
+    } finally {
+      setIsSendingBankEmail(false);
+    }
   };
 
-  // -------------------------------------------------------------
-  // PRINTABLE PROVISIONAL ADMISSION OFFER LETTER
-  // -------------------------------------------------------------
-  const printAdmissionOfferLetter = (lead: LeadWithTier) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+  // Mark Form Fee Paid action
+  const handleMarkAsPaid = async () => {
+    if (!feeModalLead) return;
+    setIsMarkingPaid(true);
+    setFeeModalToast(null);
 
-    const offerRef = `ADM-OFFER/${(schoolDomain || "GW").toUpperCase()}/${new Date().getFullYear()}/${lead.id.substring(0, 6).toUpperCase()}`;
-    const dateStr = new Date().toLocaleDateString("en-NG", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    try {
+      const res = await markFormFeePaidAction({
+        registerId: feeModalLead.id,
+        schoolDomain: schoolDomain || "egede",
+      });
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Provisional Admission Offer Letter - ${lead.applicantName}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            body { 
-              font-family: Georgia, Cambria, "Times New Roman", Times, serif; 
-              padding: 48px; 
-              color: #0f172a; 
-              max-width: 860px; 
-              margin: 0 auto; 
-              line-height: 1.6; 
-              background-color: #ffffff;
+      if (res && res.success) {
+        // Update local state
+        setLocalLeads((prev) =>
+          prev.map((l) => {
+            if (l.id === feeModalLead.id) {
+              const docs = (l.documents as any) || {};
+              docs.formFeePaid = true;
+              return { ...l, documents: docs };
             }
-            @media print { 
-              .print\\:hidden, [class*="print:hidden"] { display: none !important; }
-              body { padding: 0 !important; max-width: 100% !important; } 
-            }
-          </style>
-        </head>
-        <body>
-          <div class="print:hidden mb-8 flex items-center justify-between border-b pb-4">
-            <button onclick="window.close()" class="px-4 py-2 bg-slate-100 text-slate-700 font-sans font-bold rounded-xl text-sm cursor-pointer">
-              Back to CRM
-            </button>
-            <button onclick="window.print()" class="px-5 py-2.5 bg-slate-900 text-white font-sans font-bold rounded-xl text-sm shadow-md cursor-pointer">
-              Print Official Offer Letter
-            </button>
-          </div>
-
-          <!-- INSTITUTION LETTERHEAD -->
-          <div class="text-center border-b-2 border-slate-900 pb-6 mb-8">
-            <div class="inline-block w-16 h-16 rounded-2xl bg-indigo-900 text-white font-sans font-black text-2xl flex items-center justify-center mb-3 border-2 border-amber-400 shadow-sm mx-auto">
-              ${schoolName ? schoolName.slice(0, 2).toUpperCase() : "GW"}
-            </div>
-            <h1 class="text-3xl font-black uppercase tracking-tight text-slate-900">${schoolName}</h1>
-            <p class="text-sm uppercase tracking-widest text-slate-600 font-sans mt-1">
-              Office of the Admissions Director & Academic Board
-            </p>
-            <p class="text-xs text-slate-500 font-sans mt-1.5">
-              Official Offer Ref: <strong class="font-mono text-slate-800">${offerRef}</strong> • Date: ${dateStr}
-            </p>
-          </div>
-
-          <!-- RECIPIENT -->
-          <div class="mb-6 font-sans text-sm sm:text-base space-y-1.5">
-            <p class="font-bold text-base md:text-lg text-slate-900">To the Parents / Guardians of: ${lead.applicantName}</p>
-            <p class="text-slate-600">Telephone: <span class="font-mono text-slate-800 font-semibold">${lead.parentPhone || lead.parentContact}</span></p>
-            <p class="text-slate-600">Offered Placement: <strong class="text-slate-900">${lead.targetGrade}</strong> (${lead.tier?.name || "Academic Tier"})</p>
-          </div>
-
-          <h2 class="text-lg md:text-xl font-bold underline mb-6 text-center font-sans uppercase tracking-wide text-slate-900">
-            OFFER OF PROVISIONAL ADMISSION FOR THE 2026/2027 ACADEMIC SESSION
-          </h2>
-
-          <div class="text-base md:text-lg space-y-4 leading-relaxed tracking-normal text-slate-800">
-            <p>
-              Following successful review of the admission application, entrance assessment, and screening credentials, the Academic Admissions Board of <strong>${schoolName}</strong> is pleased to extend an offer of <strong>Provisional Admission</strong> to:
-            </p>
-
-            <div class="p-5 bg-slate-50 border border-slate-200 rounded-xl my-4 font-sans text-center">
-              <span class="text-xs uppercase tracking-wider text-slate-500 block font-bold">Candidate Name</span>
-              <p class="text-xl font-black text-slate-900 mt-1">${lead.applicantName}</p>
-              <span class="inline-block mt-2 px-3.5 py-1 rounded-full text-sm font-bold bg-indigo-100 text-indigo-800">
-                Admitted Cohort: ${lead.targetGrade} (${lead.tier?.name || "General Tier"})
-              </span>
-            </div>
-
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-5 mb-1">1. Acceptance of Placement & Enrollment Fee</h3>
-            <p class="text-sm md:text-base leading-relaxed text-slate-700">
-              To secure this placement, a non-refundable Acceptance Fee of <strong>₦25,000.00</strong> must be lodged into the school bursary bank account within fourteen (14) calendar days of the date of this letter.
-            </p>
-
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-4 mb-1">2. Statutory Verification Requirements</h3>
-            <p class="text-sm md:text-base leading-relaxed text-slate-700">
-              This provisional placement is contingent upon satisfactory submission of the original National Population Commission (NPC) Birth Certificate, NIMC National Identification Number (NIN) slip, and Medical Certificate of Fitness prior to orientation.
-            </p>
-
-            <h3 class="font-bold font-sans uppercase text-slate-900 text-base mt-4 mb-1">3. Matriculation</h3>
-            <p class="text-sm md:text-base leading-relaxed text-slate-700">
-              Upon payment confirmation, the candidate will be assigned an official institutional Admission Number and granted access to the Student Portal.
-            </p>
-          </div>
-
-          <!-- SIGNATURE BLOCK -->
-          <div class="mt-14 pt-8 border-t border-slate-300 grid grid-cols-2 gap-8 font-sans text-sm">
-            <div>
-              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-base text-slate-800">
-                Mrs. O. A. Babatunde
-              </div>
-              <p class="font-bold text-slate-900">Director of Admissions & Enrollment</p>
-              <p class="text-xs text-slate-500">${schoolName}</p>
-            </div>
-
-            <div class="text-right">
-              <div class="border-b border-slate-900 pb-1 mb-1 font-serif italic text-base text-slate-800">
-                Dr. A. B. Adeleke
-              </div>
-              <p class="font-bold text-slate-900">Registrar & Head of School</p>
-              <p class="text-xs text-slate-500">Seal of Academic Board</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
-
-  // -------------------------------------------------------------
-  // PRINTABLE ENTRANCE EXAMINATION SLIP
-  // -------------------------------------------------------------
-  const printExamAdmitSlip = (lead: LeadWithTier) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    const examNo = `EXM-${(schoolDomain || "GW").toUpperCase()}-2026-${lead.id.substring(0, 5).toUpperCase()}`;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Entrance Examination Admit Card - ${lead.applicantName}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            body { 
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              padding: 32px; 
-              background-color: #f8fafc; 
-              color: #0f172a; 
-            }
-            @media print { 
-              .print\\:hidden, [class*="print:hidden"] { display: none !important; }
-              body { padding: 0 !important; background: transparent !important; }
-            }
-          </style>
-        </head>
-        <body class="flex flex-col items-center justify-center min-h-screen">
-          <div class="print:hidden mb-6 flex items-center gap-3">
-            <button onclick="window.close()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs sm:text-sm cursor-pointer">
-              Close
-            </button>
-            <button onclick="window.print()" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md cursor-pointer">
-              Print Examination Slip
-            </button>
-          </div>
-
-          <div class="w-full max-w-2xl bg-white border-2 border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
-            <!-- Header -->
-            <div class="text-center border-b-2 border-slate-800 pb-4">
-              <h2 class="text-2xl font-black uppercase text-slate-900">${schoolName}</h2>
-              <p class="text-xs uppercase tracking-widest font-bold text-slate-500 mt-1">Entrance Screening & Examination Admit Card</p>
-              <span class="inline-block mt-3 font-mono font-bold text-sm bg-slate-900 text-white px-4 py-1.5 rounded-lg shadow-sm">
-                Roll No: ${examNo}
-              </span>
-            </div>
-
-            <!-- Candidate Details -->
-            <div class="flex items-center gap-6 p-5 bg-slate-50 rounded-2xl border border-slate-200">
-              <div class="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 text-xs font-bold text-center shrink-0">
-                <span>Affix Recent</span>
-                <span>Passport Photo</span>
-              </div>
-              <div class="text-sm space-y-2 min-w-0">
-                <p><span class="text-xs text-slate-500 block uppercase font-bold tracking-wider">Candidate Name</span> <strong class="text-slate-900 text-base md:text-lg block">${lead.applicantName}</strong></p>
-                <p><span class="text-xs text-slate-500 uppercase font-bold tracking-wider">Target Grade:</span> <strong class="text-slate-800 ml-1.5">${lead.targetGrade}</strong> (${lead.tier?.name || "General"})</p>
-                <p><span class="text-xs text-slate-500 uppercase font-bold tracking-wider">Parent Telephone:</span> <strong class="text-slate-800 font-mono ml-1.5">${lead.parentPhone || lead.parentContact}</strong></p>
-              </div>
-            </div>
-
-            <!-- Exam Schedule -->
-            <div class="border border-slate-200 rounded-2xl p-5 text-sm space-y-3">
-              <h4 class="font-bold text-slate-800 uppercase tracking-wider text-xs border-b border-slate-100 pb-2">Screening Schedule & Venue</h4>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <span class="text-slate-500 block text-xs font-medium">Test Date</span>
-                  <strong class="text-slate-900 text-sm sm:text-base">Saturday, 27th September 2026</strong>
-                </div>
-                <div>
-                  <span class="text-slate-500 block text-xs font-medium">Arrival & Accreditation</span>
-                  <strong class="text-slate-900 text-sm sm:text-base">08:30 AM Prompt</strong>
-                </div>
-                <div>
-                  <span class="text-slate-500 block text-xs font-medium">Examination Hall</span>
-                  <strong class="text-slate-900 text-sm sm:text-base">Main ICT Complex / Hall A</strong>
-                </div>
-                <div>
-                  <span class="text-slate-500 block text-xs font-medium">Test Subjects</span>
-                  <strong class="text-slate-900 text-sm sm:text-base">Maths, English, General Paper</strong>
-                </div>
-              </div>
-            </div>
-
-            <!-- Instructions -->
-            <div class="text-xs text-slate-600 border-t border-slate-200 pt-4 space-y-1.5 leading-relaxed">
-              <p>• Candidates must arrive in neat mufti or previous school uniform with this printed slip.</p>
-              <p>• Writing materials (HB Pencils, Erasers, Pens) are required. Calculators and mobile phones are strictly prohibited.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+            return l;
+          })
+        );
+        setFeeModalToast({ type: "success", text: "Form fee marked as PAID successfully." });
+        setTimeout(() => {
+          setFeeModalLead(null);
+          router.refresh();
+        }, 1200);
+      } else {
+        setFeeModalToast({ type: "error", text: res?.error || "Failed to update payment status." });
+      }
+    } catch (err: any) {
+      setFeeModalToast({ type: "error", text: err.message || "Failed to update payment status." });
+    } finally {
+      setIsMarkingPaid(false);
+    }
   };
 
   return (
-    <div className="space-y-6 w-full">
-      {/* TABS SWITCHER: ADMISSION LEADS (LEGACY) [LEFT] vs ADMISSION REGISTER (LIVE) [RIGHT] */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4 mb-2 w-full">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setMainTab("leads")}
-            className={`w-full sm:w-auto justify-center px-4 sm:px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
-              mainTab === "leads"
-                ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
-                : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-            }`}
-          >
-            <Users className="w-4 h-4 shrink-0" />
-            <span className="truncate">Admission Leads (Legacy)</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                mainTab === "leads"
-                  ? "bg-white/20 text-white"
-                  : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
-              }`}
-            >
-              {prospectiveInquiryLeads.length}
-            </span>
-          </button>
+    <div className="space-y-4 w-full">
+      {/* 1. TABS: Clean pill with blue active underline */}
+      <div className="flex items-center gap-6 border-b border-slate-200 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={() => setMainTab("leads")}
+          className={`pb-3 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
+            mainTab === "leads"
+              ? "text-blue-600 dark:text-blue-400 font-extrabold"
+              : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <span>Admission Leads (Kanban)</span>
+          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+            • {localLeads.length}
+          </span>
+          {mainTab === "leads" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+          )}
+        </button>
 
-          <button
-            type="button"
-            onClick={() => setMainTab("register")}
-            className={`w-full sm:w-auto justify-center px-4 sm:px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shadow-2xs shrink-0 ${
-              mainTab === "register"
-                ? "bg-indigo-600 text-white shadow-indigo-600/20 shadow-md"
-                : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 shrink-0" />
-            <span className="truncate">Admission Register (Live)</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                mainTab === "register"
-                  ? "bg-white/20 text-white"
-                  : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
-              }`}
-            >
-              Live
-            </span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setMainTab("register")}
+          className={`pb-3 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
+            mainTab === "register"
+              ? "text-blue-600 dark:text-blue-400 font-extrabold"
+              : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <span>Admissions Register (Live)</span>
+          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+            Live
+          </span>
+          {mainTab === "register" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+          )}
+        </button>
       </div>
 
       {mainTab === "register" ? (
@@ -446,300 +291,391 @@ export default function AdmissionsPipeline({
         />
       ) : (
         <>
-          {/* TOOLBAR & CONTROLS: Stacks cleanly on mobile viewports */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-                <Users className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Admissions Pipeline</h3>
-                <p className="text-xs text-slate-400 mt-0.5 truncate">
-                  Managing {allStageLeads.length} leads in admissions pipeline
-                </p>
-              </div>
-            </div>
-
-            {/* CONTROLS */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
-              {/* SEARCH */}
-              <div className="relative w-full sm:w-64 md:w-72">
+          {/* 2. TOOLBAR: ONE row flex - Search + Select All Stages + + Log Walk-in Inquiry button */}
+          <div className="bg-white dark:bg-zinc-900 p-3 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
+            <div className="flex flex-1 items-center gap-3 w-full">
+              {/* Search input with icon */}
+              <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search by student or parent..."
+                  placeholder="Search by candidate name, app no, or contact..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/50"
+                  className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-800 dark:text-zinc-100"
                 />
               </div>
 
-              {/* FILTER STAGE */}
+              {/* Select All Stages dropdown */}
               <select
-                value={filterStage}
-                onChange={(e) => setFilterStage(e.target.value)}
-                className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:outline-indigo-500 bg-white shadow-2xs"
+                value={selectedStage}
+                onChange={(e) => setSelectedStage(e.target.value)}
+                className="px-3 py-2 text-xs sm:text-sm font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-zinc-200 shadow-2xs shrink-0"
               >
-                <option value="ALL">All Stages (5)</option>
+                <option value="ALL">All Stages ({STAGES.length})</option>
                 {STAGES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
                 ))}
               </select>
-
-              {/* LOG INQUIRY BUTTON */}
-              <button
-                onClick={() => setIsInquiryModalOpen(true)}
-                className="w-full sm:w-auto justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs sm:text-sm transition shadow-sm flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4 shrink-0" />
-                <span className="whitespace-nowrap">Log Walk-In Inquiry</span>
-              </button>
             </div>
+
+            {/* + Log Walk-in Inquiry blue button */}
+            <button
+              type="button"
+              onClick={() => setIsInquiryModalOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs sm:text-sm transition shadow-sm cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Log Walk-in Inquiry</span>
+            </button>
           </div>
 
-          {/* KANBAN BOARD VIEW */}
-          {viewMode === "kanban" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start w-full">
-              {STAGES.map((stage, sIdx) => {
-                const stageLeads = allStageLeads.filter((l) => leadMatchesStage(l.status, stage.id));
+          {/* 3. PIPELINE KANBAN: flex gap-4 overflow-x-auto, min-w-[320px] per column, FULL NAME */}
+          <div className="flex gap-4 overflow-x-auto pb-6 pt-1 w-full items-start">
+            {STAGES.map((stage, sIdx) => {
+              const stageLeads = filteredLeads.filter((l) => leadMatchesStage(l.status, stage.id));
 
-                return (
-                  <div
-                    key={stage.id}
-                    className="bg-slate-50/80 rounded-2xl p-3.5 sm:p-4 border border-slate-200/70 flex flex-col gap-3 min-h-[350px] md:min-h-[500px] w-full"
-                  >
-                    {/* COLUMN HEADER */}
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-black tracking-tight text-slate-800 uppercase truncate">
-                          {stage.label}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-700 shadow-2xs shrink-0">
-                          {stageLeads.length}
-                        </span>
-                      </div>
+              return (
+                <div
+                  key={stage.id}
+                  className="min-w-[320px] max-w-[320px] bg-gray-50 dark:bg-zinc-800/40 rounded-xl p-3 border border-slate-200/80 dark:border-zinc-800 flex flex-col gap-3 shrink-0"
+                >
+                  {/* Column Header with count badge + color dot */}
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-700">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`w-2.5 h-2.5 rounded-full ${stage.dotColor} shrink-0`}></span>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate">
+                        {stage.label}
+                      </h3>
                     </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-black bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 shadow-2xs shrink-0">
+                      {stageLeads.length}
+                    </span>
+                  </div>
 
-                    {/* CARDS LIST */}
-                    <div className="space-y-3 flex-1 w-full">
-                      {stageLeads.length > 0 ? (
-                        stageLeads.map((lead) => {
-                          const docCount = Object.keys(lead.documents || {}).length;
+                  {/* Cards inside column */}
+                  <div className="space-y-3 min-h-[350px]">
+                    {stageLeads.length > 0 ? (
+                      stageLeads.map((lead) => {
+                        const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
+                        const leadDocs = (lead.documents as any) || {};
+                        const isFeePaid = Boolean(leadDocs.formFeePaid);
+                        const initials = getInitials(lead.applicantName);
+                        const docCount = Object.keys(leadDocs).filter((k) => k !== "formFeePaid" && k !== "passwordHash").length;
+                        const dateFormatted = new Date(lead.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        });
 
-                          return (
-                            <div
-                              key={lead.id}
-                              onClick={() => openDossier(lead)}
-                              className={`bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200 shadow-xs hover:shadow-md transition cursor-pointer border-t-4 ${stage.color} space-y-2.5 sm:space-y-3 w-full`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="font-black text-slate-800 text-xs sm:text-sm leading-tight hover:text-indigo-600 transition truncate break-words">
-                                    {lead.applicantName}
-                                  </h4>
-                                  <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
-                                    {lead.targetGrade || (lead as any).targetClass} • <span className="text-indigo-600 font-semibold">{lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}</span>
-                                  </p>
-                                </div>
-                                <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                                  {lead.id.slice(0, 4).toUpperCase()}
-                                </span>
+                        return (
+                          <div
+                            key={lead.id}
+                            onClick={() => {
+                              setSelectedLead(lead);
+                              setIsDossierOpen(true);
+                            }}
+                            className="p-4 bg-white dark:bg-zinc-900 shadow-sm rounded-lg border border-slate-200/90 dark:border-zinc-800 hover:shadow-md transition cursor-pointer space-y-3"
+                          >
+                            {/* Card Top: Avatar + FULL NAME + App No */}
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs flex items-center justify-center shrink-0">
+                                {initials}
                               </div>
+                              <div className="min-w-0 flex-1">
+                                {/* FULL NAME - NO TRUNCATION */}
+                                <h4 className="font-extrabold text-slate-900 dark:text-zinc-50 text-sm leading-snug break-words">
+                                  {lead.applicantName}
+                                </h4>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-zinc-400">
+                                    {appNo}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
 
-                              {/* PARENT CONTACT */}
-                              <div className="text-[11px] text-slate-600 flex items-center gap-1.5 font-mono min-w-0">
+                            {/* Class + Date Info */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800/80 pt-2.5">
+                              <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-zinc-200">
+                                <GraduationCap className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                <span className="truncate">{lead.targetGrade || "Class Pending"}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                <span>{dateFormatted}</span>
+                              </div>
+                            </div>
+
+                            {/* Parent Phone */}
+                            {(lead.parentPhone || lead.parentContact) && (
+                              <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
                                 <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span className="truncate">{lead.parentPhone || lead.parentContact}</span>
                               </div>
+                            )}
 
-                              {/* FOOTER BADGES & ADVANCE */}
-                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] gap-2">
-                                <div className="flex items-center gap-1.5">
+                            {/* Bottom Row: Fee Badge + Actions */}
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
+                              {/* Fee Badge */}
+                              <div>
+                                {isFeePaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                    <Check className="w-3 h-3" />
+                                    <span>Paid ✓</span>
+                                  </span>
+                                ) : (
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      openDossier(lead);
+                                      setFeeModalLead(lead);
+                                      setFeeModalToast(null);
                                     }}
-                                    className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-md transition"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition cursor-pointer"
+                                    title="Click to view bank details and payment action"
                                   >
-                                    Dossier
+                                    <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                                    <span>⏳ Pending</span>
                                   </button>
-                                  <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
-                                    <FileCheck className="w-3 h-3 text-emerald-500" />
-                                    <span>{docCount}</span>
-                                  </span>
-                                </div>
+                                )}
+                              </div>
 
-                                {canMutate && sIdx < STAGES.length - 1 ? (
+                              {/* Dossier & Advance action buttons */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                                  <FileCheck className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>{docCount}</span>
+                                </span>
+
+                                {canMutate && sIdx < STAGES.length - 1 && (
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleStageAdvance(lead.id, lead.status);
                                     }}
-                                    className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 font-bold rounded-lg transition flex items-center gap-1 shrink-0"
+                                    className="px-2 py-1 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 text-slate-700 dark:text-zinc-300 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
                                     title={`Advance to ${STAGES[sIdx + 1].label}`}
                                   >
                                     <span>Advance</span>
                                     <ArrowRight className="w-3 h-3" />
                                   </button>
-                                ) : sIdx >= STAGES.length - 1 ? (
-                                  <span className="text-violet-600 font-bold text-[10px] flex items-center gap-1 shrink-0">
-                                    <CheckCircle2 className="w-3 h-3" /> Converted
+                                )}
+
+                                {sIdx >= STAGES.length - 1 && (
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Enrolled</span>
                                   </span>
-                                ) : null}
+                                )}
                               </div>
                             </div>
-                          );
-                        })
-                      ) : (
-                        <div className="h-32 sm:h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400">
-                          No applicants in this stage
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* TABULAR ROSTER LIST VIEW: Stacked Cards on Mobile Viewports */
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden w-full">
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm block md:table">
-                  <thead className="hidden md:table-header-group">
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
-                      <th className="p-4">Candidate &amp; Ref</th>
-                      <th className="p-4">Target Cohort</th>
-                      <th className="p-4">Parent / Contact</th>
-                      <th className="p-4">Current Stage</th>
-                      <th className="p-4">KYC Documents</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="block md:table-row-group p-3 sm:p-4 md:p-0 space-y-4 md:space-y-0 divide-y-0 md:divide-y divide-slate-100">
-                    {filteredLeads.length > 0 ? (
-                      filteredLeads.map((lead) => {
-                        const docCount = Object.keys(lead.documents || {}).length;
-                        const stageObj = STAGES.find((s) => leadMatchesStage(lead.status, s.id)) || STAGES[0];
-
-                        return (
-                          <tr
-                            key={lead.id}
-                            className="block md:table-row bg-white rounded-2xl md:rounded-none p-4 md:p-4 border border-slate-200 md:border-0 shadow-xs md:shadow-none space-y-3 md:space-y-0 hover:bg-slate-50/70 transition"
-                          >
-                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 min-w-0">
-                              <div className="flex items-center justify-between md:justify-start gap-2">
-                                <button
-                                  onClick={() => openDossier(lead)}
-                                  className="font-bold text-slate-800 hover:text-indigo-600 transition text-left cursor-pointer truncate break-words text-xs sm:text-sm"
-                                >
-                                  {lead.applicantName}
-                                </button>
-                                <span className="md:hidden">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${stageObj.bg}`}>
-                                    {stageObj.label}
-                                  </span>
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
-                                ADM-{lead.id.slice(0, 6).toUpperCase()}
-                              </span>
-                            </td>
-
-                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 font-semibold text-slate-700 min-w-0">
-                              <div className="truncate">
-                                {lead.targetGrade || (lead as any).targetClass}
-                              </div>
-                              <span className="text-[10px] text-indigo-600 font-medium block truncate">
-                                {lead.tier?.name || (lead as any).academicTier || deriveTierFromClass(lead.targetGrade || (lead as any).targetClass)}
-                              </span>
-                            </td>
-
-                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4 text-slate-600 font-mono min-w-0">
-                              <span className="font-sans font-bold text-slate-800 block truncate">
-                                {lead.parentName || "Parent / Guardian"}
-                              </span>
-                              <span className="truncate block">{lead.parentPhone || lead.parentContact}</span>
-                            </td>
-
-                            <td className="hidden md:table-cell py-4 px-4 whitespace-nowrap">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${stageObj.bg}`}>
-                                {stageObj.label}
-                              </span>
-                            </td>
-
-                            <td className="block md:table-cell py-1 md:py-4 px-0 md:px-4">
-                              <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                                <FileCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                <span>{docCount} verified</span>
-                              </span>
-                            </td>
-
-                            <td className="block md:table-cell pt-3 md:py-4 px-0 md:px-4 text-right border-t border-slate-100 md:border-0">
-                              <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-                                <button
-                                  onClick={() => openDossier(lead)}
-                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[11px] sm:text-xs transition"
-                                >
-                                  Dossier
-                                </button>
-                                <button
-                                  onClick={() => printAdmissionOfferLetter(lead)}
-                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                                  title="Print Offer Letter"
-                                >
-                                  <Printer className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => printExamAdmitSlip(lead)}
-                                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
-                                  title="Print Exam Admit Slip"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                          </div>
                         );
                       })
                     ) : (
-                      <tr className="block md:table-row">
-                        <td colSpan={6} className="p-8 text-center text-slate-400 text-xs block md:table-cell">
-                          No applicants found matching filter criteria.
-                        </td>
-                      </tr>
+                      <div className="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-zinc-700 rounded-lg text-xs text-slate-400 dark:text-zinc-500">
+                        No candidates in this stage
+                      </div>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* FORM FEE PAYMENT MODAL: Zenith Bank Read-only + Send to Email + Mark Paid */}
+      {feeModalLead && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 max-w-lg w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                    Form Fee Payment Action
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Manual Mobile Transfer Bank Instructions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFeeModalLead(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Notification alert */}
+            {feeModalToast && (
+              <div
+                className={`p-3 rounded-xl text-xs font-bold ${
+                  feeModalToast.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {feeModalToast.text}
+              </div>
+            )}
+
+            {/* Read-Only Central Bursar Account Banner */}
+            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/40 text-[11px] font-bold text-amber-900 dark:text-amber-300">
+              <span className="flex items-center gap-1.5">
+                <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                Central Bursar Account - Configured by Tenant Admin Only
+              </span>
+              <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono">READ-ONLY</span>
+            </div>
+
+            {/* Bank Details Grid */}
+            <div className="bg-slate-50 dark:bg-zinc-800/50 rounded-xl p-4 border border-slate-200/80 dark:border-zinc-800 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Bank
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-zinc-100">
+                    {bankDetails.bankName}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Account Number
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-black text-slate-900 dark:text-zinc-50 text-sm">
+                      {bankDetails.accountNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bankDetails.accountNumber, "acc")}
+                      className="text-slate-400 hover:text-blue-600 transition p-0.5 cursor-pointer"
+                      title="Copy account number"
+                    >
+                      {copiedField === "acc" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-200/60 dark:border-zinc-700/60 pt-2.5">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Account Name
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate block">
+                    {bankDetails.accountName}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Form Fee Amount
+                  </span>
+                  <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                    ₦{Number(bankDetails.formFeeAmount).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-200/60 dark:border-zinc-700/60 pt-2.5">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Payment Reference / Ref
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-slate-800 dark:text-zinc-200 text-xs">
+                      {`APP-${feeModalLead.id.slice(0, 6).toUpperCase()}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(`APP-${feeModalLead.id.slice(0, 6).toUpperCase()}`, "ref")}
+                      className="text-slate-400 hover:text-blue-600 transition p-0.5 cursor-pointer"
+                      title="Copy reference"
+                    >
+                      {copiedField === "ref" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Candidate Name
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-zinc-50 truncate block text-xs">
+                    {feeModalLead.applicantName}
+                  </span>
+                </div>
               </div>
             </div>
-          )}
-        </>
+
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+              Admissions officers cannot edit central bank settings. Tenant administrators configure official accounts in Finance Settings.
+            </p>
+
+            {/* Action Buttons: Close + Send Bank Details to Email + Mark as Paid */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setFeeModalLead(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleSendBankDetailsEmail}
+                disabled={isSendingBankEmail || isMarkingPaid}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-amber-950 bg-amber-200 hover:bg-amber-300 border border-amber-300/80 transition cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSendingBankEmail ? "Sending..." : "Send Bank Details to Email"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleMarkAsPaid}
+                disabled={isMarkingPaid || isSendingBankEmail}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{isMarkingPaid ? "Updating..." : "Mark as Paid"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* APPLICANT DOSSIER DRAWER */}
       <ApplicantDossierDrawer
         lead={selectedLead}
-        isOpen={isDrawerOpen}
+        isOpen={isDossierOpen}
         onClose={() => {
-          setIsDrawerOpen(false);
+          setIsDossierOpen(false);
           setSelectedLead(null);
         }}
         schoolId={schoolId}
-        schoolDomain={schoolDomain || "greenwood"}
+        schoolDomain={schoolDomain || ""}
         schoolName={schoolName}
         canMutate={canMutate}
         onLeadUpdated={() => router.refresh()}
-        onPrintOfferLetter={printAdmissionOfferLetter}
-        onPrintExamSlip={printExamAdmitSlip}
       />
 
-      {/* DIRECT INQUIRY MODAL */}
+      {/* LOG WALK-IN INQUIRY MODAL */}
       <NewInquiryModal
         isOpen={isInquiryModalOpen}
         onClose={() => setIsInquiryModalOpen(false)}
         schoolId={schoolId}
-        schoolDomain={schoolDomain || "greenwood"}
+        schoolDomain={schoolDomain || ""}
         tiers={tiers}
         onLeadCreated={() => router.refresh()}
       />
