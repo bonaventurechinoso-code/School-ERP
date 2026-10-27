@@ -32,20 +32,22 @@ import NewInquiryModal from "./NewInquiryModal";
 import AdmissionRegisterTable from "./AdmissionRegisterTable";
 
 export const STAGES = [
-  { id: "INQUIRY", label: "Inquiry", dotColor: "bg-slate-400", borderColor: "border-t-slate-400" },
-  { id: "DOCS_PENDING", label: "Docs Pending", dotColor: "bg-amber-500", borderColor: "border-t-amber-500" },
-  { id: "VERIFIED", label: "Screened & Verified", dotColor: "bg-blue-500", borderColor: "border-t-blue-500" },
-  { id: "APPROVED", label: "Provisional Offer", dotColor: "bg-purple-500", borderColor: "border-t-purple-500" },
-  { id: "REJECTED", label: "Rejected", dotColor: "bg-rose-500", borderColor: "border-t-rose-500" },
-  { id: "ENROLLED", label: "Matriculated", dotColor: "bg-emerald-500", borderColor: "border-t-emerald-500" },
+  { id: "INQUIRY", label: "INQUIRY", dotColor: "bg-slate-400" },
+  { id: "DOCS_PENDING", label: "DOCS PENDING", dotColor: "bg-amber-500" },
+  { id: "VERIFIED", label: "SCREENED & VERIFIED", dotColor: "bg-blue-500" },
+  { id: "INTERVIEW", label: "EXAM/INTERVIEW", dotColor: "bg-purple-500" },
+  { id: "APPROVED", label: "PROVISIONAL OFFER", dotColor: "bg-indigo-500" },
+  { id: "ENROLLED", label: "MATRICULATED", dotColor: "bg-emerald-500" },
 ];
 
 function leadMatchesStage(leadStatus: string | null | undefined, stageId: string): boolean {
   const norm = (leadStatus || "INQUIRY").toUpperCase();
   if (norm === stageId) return true;
   if (stageId === "DOCS_PENDING" && norm === "APPLIED") return true;
-  if (stageId === "VERIFIED" && norm === "INTERVIEW") return true;
-  if (stageId === "ENROLLED" && norm === "CONVERTED") return true;
+  if (stageId === "VERIFIED" && (norm === "SCREENED" || norm === "DOCS_VERIFIED")) return true;
+  if (stageId === "INTERVIEW" && (norm === "EXAM" || norm === "SCREENING")) return true;
+  if (stageId === "APPROVED" && (norm === "OFFER" || norm === "OFFERED")) return true;
+  if (stageId === "ENROLLED" && (norm === "CONVERTED" || norm === "ADMITTED")) return true;
   return false;
 }
 
@@ -340,17 +342,17 @@ export default function AdmissionsPipeline({
               return (
                 <div
                   key={stage.id}
-                  className="min-w-[320px] max-w-[320px] bg-gray-50 dark:bg-zinc-800/40 rounded-xl p-3 border border-slate-200/80 dark:border-zinc-800 flex flex-col gap-3 shrink-0"
+                  className="min-w-[320px] max-w-[320px] bg-[#f8f9fa] dark:bg-zinc-800/50 rounded-xl p-3 border border-slate-200/90 dark:border-zinc-800 flex flex-col gap-3 shrink-0"
                 >
                   {/* Column Header with count badge + color dot */}
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-700">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`w-2.5 h-2.5 rounded-full ${stage.dotColor} shrink-0`}></span>
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-zinc-200 whitespace-nowrap">
                         {stage.label}
                       </h3>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-black bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 shadow-2xs shrink-0">
+                    <span className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 px-2 py-0.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-300 shadow-2xs shrink-0">
                       {stageLeads.length}
                     </span>
                   </div>

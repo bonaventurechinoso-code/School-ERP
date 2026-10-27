@@ -198,71 +198,106 @@ export default async function AdmissionsPage({
         </div>
       </header>
 
-      {/* 2. STATS: 5 cards rounded-xl p-4 shadow-sm - INQUIRIES 2, SCREENING 0 etc - NOT squeezed */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 w-full">
-        {/* Card 1: Inquiries */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-slate-200/80 dark:border-zinc-800 flex flex-col justify-between">
+      {/* 2. STATS: Top Analytics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 w-full">
+        {/* Card 1: INQUIRY */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              Inquiries
+              INQUIRY
             </span>
-            <Users className="w-4 h-4 text-amber-500 shrink-0" />
+            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-zinc-50">
-            {inquiryCount}
-          </p>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
+              {inquiryCount}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              New leads
+            </p>
+          </div>
         </div>
 
-        {/* Card 2: Screening */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-slate-200/80 dark:border-zinc-800 flex flex-col justify-between">
+        {/* Card 2: DOCS PENDING */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              Screening
+              DOCS PENDING
             </span>
-            <FileCheck className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Clock className="w-4 h-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-zinc-50">
-            {appliedCount}
-          </p>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
+              {appliedCount}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Awaiting docs
+            </p>
+          </div>
         </div>
 
-        {/* Card 3: Exams & Interview */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-slate-200/80 dark:border-zinc-800 flex flex-col justify-between">
+        {/* Card 3: SCREENED */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              Exams &amp; Interview
+              SCREENED
             </span>
-            <Clock className="w-4 h-4 text-purple-500 shrink-0" />
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <FileCheck className="w-4 h-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-zinc-50">
-            {interviewCount}
-          </p>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
+              {interviewCount}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Verified
+            </p>
+          </div>
         </div>
 
-        {/* Card 4: Provisional Offers */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-slate-200/80 dark:border-zinc-800 flex flex-col justify-between">
+        {/* Card 4: OFFERS */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              Provisional Offers
+              OFFERS
             </span>
-            <Award className="w-4 h-4 text-indigo-500 shrink-0" />
+            <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Award className="w-4 h-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-zinc-50">
-            {approvedCount}
-          </p>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
+              {approvedCount}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Provisional
+            </p>
+          </div>
         </div>
 
-        {/* Card 5: Matriculated */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-slate-200/80 dark:border-zinc-800 flex flex-col justify-between col-span-2 md:col-span-1">
+        {/* Card 5: MATRICULATED */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between col-span-2 md:col-span-1">
           <div className="flex items-center justify-between gap-1 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              Matriculated
+              MATRICULATED
             </span>
-            <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-zinc-50">
-            {enrolledCount}
-          </p>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
+              {enrolledCount}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Enrolled - SIS
+            </p>
+          </div>
         </div>
       </div>
 
