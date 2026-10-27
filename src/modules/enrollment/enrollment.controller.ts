@@ -34,21 +34,33 @@ export {
  * Resolves effective school identifier and record for tenant isolation
  */
 export async function resolveTenantSchool(tenantId: string) {
-  const school = await basePrisma.school.findFirst({
-    where: {
-      OR: [
-        { id: tenantId },
-        { subdomain: tenantId.toLowerCase().trim() },
-        { slug: tenantId.toLowerCase().trim() },
-      ],
-    },
-    include: { academicTiers: true },
-  });
+  try {
+    const trimmed = (tenantId || "").trim();
+    if (!trimmed) {
+      return { effectiveTenantId: "", school: null };
+    }
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { id: trimmed },
+          { subdomain: trimmed.toLowerCase() },
+          { slug: trimmed.toLowerCase() },
+        ],
+      },
+      include: { academicTiers: true },
+    });
 
-  return {
-    effectiveTenantId: school?.id || tenantId,
-    school,
-  };
+    return {
+      effectiveTenantId: school?.id || trimmed,
+      school,
+    };
+  } catch (err) {
+    console.error("[resolveTenantSchool] Error resolving school:", err);
+    return {
+      effectiveTenantId: tenantId,
+      school: null,
+    };
+  }
 }
 
 /**
@@ -416,101 +428,120 @@ export async function getAllApplications({
   tenantId: string;
   status?: string;
 }) {
-  const { effectiveTenantId } = await resolveTenantSchool(tenantId);
-
-  // Auto-sync active applicant profiles from admissionLead into live admissionRegister
   try {
-    const activeLeads = await basePrisma.admissionLead.findMany({
-      where: {
-        schoolId: effectiveTenantId,
-        status: { notIn: ["CONVERTED"] },
-        OR: [
-          { status: { in: ["APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"] } },
-          { passportPhotoUrl: { not: null } },
-          { academicResultsUrl: { not: null } },
-          { birthCertificateUrl: { not: null } },
-          { medicalRecordsUrl: { not: null } },
-          { offerToken: { not: null } },
-        ],
-      },
+    const { effectiveTenantId, school } = await resolveTenantSchool(tenantId);
+
+    const tenantIdsToMatch = Array.from(
+      new Set(
+        [
+          effectiveTenantId,
+          school?.id,
+          school?.subdomain,
+          school?.slug,
+          tenantId,
+        ].filter(Boolean) as string[]
+      )
+    );
+
+    // Auto-sync active applicant profiles from admissionLead into live admissionRegister
+    try {
+      const activeLeads = await basePrisma.admissionLead.findMany({
+        where: {
+          schoolId: { in: tenantIdsToMatch },
+          status: { notIn: ["CONVERTED"] },
+          OR: [
+            { status: { in: ["APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"] } },
+            { passportPhotoUrl: { not: null } },
+            { academicResultsUrl: { not: null } },
+            { birthCertificateUrl: { not: null } },
+            { medicalRecordsUrl: { not: null } },
+            { offerToken: { not: null } },
+          ],
+        },
+      });
+
+      for (const lead of activeLeads) {
+        const appNo = `APP-${lead.id.slice(0, 8).toUpperCase()}`;
+        const nameParts = (lead.applicantName || "Applicant").trim().split(" ");
+        const firstName = nameParts[0] || "Student";
+        const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+        let regStatus = "docs_pending";
+        if (lead.status === "ENROLLED") regStatus = "admitted";
+        else if (lead.status === "APPROVED") regStatus = "approved";
+        else if (lead.status === "INTERVIEW") regStatus = "under_review";
+        else if (lead.status === "APPLIED") regStatus = "docs_pending";
+
+        const creds: any[] = [];
+        if (lead.passportPhotoUrl) creds.push({ type: "passport", docType: "passportPhoto", path: lead.passportPhotoUrl, url: lead.passportPhotoUrl, verified: lead.status === "ENROLLED" });
+        if (lead.academicResultsUrl) creds.push({ type: "result", docType: "academicResults", path: lead.academicResultsUrl, url: lead.academicResultsUrl, verified: lead.status === "ENROLLED" });
+        if (lead.birthCertificateUrl) creds.push({ type: "birth_cert", docType: "birthCertificate", path: lead.birthCertificateUrl, url: lead.birthCertificateUrl, verified: lead.status === "ENROLLED" });
+        if (lead.medicalRecordsUrl) creds.push({ type: "medical", docType: "medicalRecords", path: lead.medicalRecordsUrl, url: lead.medicalRecordsUrl, verified: lead.status === "ENROLLED" });
+
+        await basePrisma.$transaction([
+          basePrisma.admissionRegister.upsert({
+            where: { applicationNo: appNo },
+            create: {
+              tenantId: effectiveTenantId,
+              applicationNo: appNo,
+              firstName,
+              lastName,
+              classApplied: lead.targetGrade || "N/A",
+              parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+              email: lead.studentEmail || lead.parentEmail || null,
+              status: regStatus,
+              credentialsJson: creds.length > 0 ? (creds as any) : null,
+              admittedAt: lead.status === "ENROLLED" ? lead.updatedAt : null,
+              verifiedAt: ["ENROLLED", "APPROVED"].includes(lead.status) ? lead.updatedAt : null,
+              verifiedBy: ["ENROLLED", "APPROVED"].includes(lead.status) ? "Admissions Officer" : null,
+              createdAt: lead.createdAt,
+              updatedAt: lead.updatedAt,
+            },
+            update: {
+              status: regStatus,
+              classApplied: lead.targetGrade || "N/A",
+              parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+              email: lead.studentEmail || lead.parentEmail || null,
+              credentialsJson: creds.length > 0 ? (creds as any) : undefined,
+            },
+          }),
+          basePrisma.admissionLead.update({
+            where: { id: lead.id },
+            data: {
+              status: "CONVERTED",
+            },
+          }),
+        ]);
+      }
+    } catch (syncErr) {
+      console.warn("[ENROLLMENT_CONTROLLER] Auto-sync active leads to admission_registers:", syncErr);
+    }
+
+    const where: any = {
+      tenantId: tenantIdsToMatch.length === 1 ? tenantIdsToMatch[0] : { in: tenantIdsToMatch },
+    };
+    if (status && status !== "ALL") {
+      if (status.includes(",")) {
+        where.status = { in: status.split(",").map((s) => s.trim()) };
+      } else {
+        where.status = status;
+      }
+    }
+
+    const applications = await basePrisma.admissionRegister.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
     });
 
-    for (const lead of activeLeads) {
-      const appNo = `APP-${lead.id.slice(0, 8).toUpperCase()}`;
-      const nameParts = (lead.applicantName || "Applicant").trim().split(" ");
-      const firstName = nameParts[0] || "Student";
-      const lastName = nameParts.slice(1).join(" ") || "Applicant";
-
-      let regStatus = "docs_pending";
-      if (lead.status === "ENROLLED") regStatus = "admitted";
-      else if (lead.status === "APPROVED") regStatus = "approved";
-      else if (lead.status === "INTERVIEW") regStatus = "under_review";
-      else if (lead.status === "APPLIED") regStatus = "docs_pending";
-
-      const creds: any[] = [];
-      if (lead.passportPhotoUrl) creds.push({ type: "passport", docType: "passportPhoto", path: lead.passportPhotoUrl, url: lead.passportPhotoUrl, verified: lead.status === "ENROLLED" });
-      if (lead.academicResultsUrl) creds.push({ type: "result", docType: "academicResults", path: lead.academicResultsUrl, url: lead.academicResultsUrl, verified: lead.status === "ENROLLED" });
-      if (lead.birthCertificateUrl) creds.push({ type: "birth_cert", docType: "birthCertificate", path: lead.birthCertificateUrl, url: lead.birthCertificateUrl, verified: lead.status === "ENROLLED" });
-      if (lead.medicalRecordsUrl) creds.push({ type: "medical", docType: "medicalRecords", path: lead.medicalRecordsUrl, url: lead.medicalRecordsUrl, verified: lead.status === "ENROLLED" });
-
-      await basePrisma.$transaction([
-        basePrisma.admissionRegister.upsert({
-          where: { applicationNo: appNo },
-          create: {
-            tenantId: effectiveTenantId,
-            applicationNo: appNo,
-            firstName,
-            lastName,
-            classApplied: lead.targetGrade || "N/A",
-            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
-            email: lead.studentEmail || lead.parentEmail || null,
-            status: regStatus,
-            credentialsJson: creds.length > 0 ? (creds as any) : null,
-            admittedAt: lead.status === "ENROLLED" ? lead.updatedAt : null,
-            verifiedAt: ["ENROLLED", "APPROVED"].includes(lead.status) ? lead.updatedAt : null,
-            verifiedBy: ["ENROLLED", "APPROVED"].includes(lead.status) ? "Admissions Officer" : null,
-            createdAt: lead.createdAt,
-            updatedAt: lead.updatedAt,
-          },
-          update: {
-            status: regStatus,
-            classApplied: lead.targetGrade || "N/A",
-            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
-            email: lead.studentEmail || lead.parentEmail || null,
-            credentialsJson: creds.length > 0 ? (creds as any) : undefined,
-          },
-        }),
-        basePrisma.admissionLead.update({
-          where: { id: lead.id },
-          data: {
-            status: "CONVERTED",
-          },
-        }),
-      ]);
-    }
-  } catch (syncErr) {
-    console.warn("[ENROLLMENT_CONTROLLER] Auto-sync active leads to admission_registers:", syncErr);
+    const { resolveCanonicalDocuments } = await import("@/lib/admissions.service");
+    return applications.map((app) => ({
+      ...app,
+      resolvedDocuments: resolveCanonicalDocuments(app),
+    }));
+  } catch (err) {
+    console.error("[ENROLLMENT_CONTROLLER] getAllApplications error:", err);
+    return [];
   }
-
-  const where: any = { tenantId: effectiveTenantId };
-  if (status && status !== "ALL") {
-    if (status.includes(",")) {
-      where.status = { in: status.split(",").map((s) => s.trim()) };
-    } else {
-      where.status = status;
-    }
-  }
-
-  const applications = await basePrisma.admissionRegister.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-  });
-
-  const { resolveCanonicalDocuments } = await import("@/lib/admissions.service");
-  return applications.map((app) => ({
-    ...app,
-    resolvedDocuments: resolveCanonicalDocuments(app),
-  }));
 }
 
 /**

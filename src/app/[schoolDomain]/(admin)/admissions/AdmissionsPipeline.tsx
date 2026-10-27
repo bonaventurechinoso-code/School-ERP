@@ -66,6 +66,15 @@ function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
   return fallbackTier || "Secondary School";
 }
 
+function leadMatchesStage(leadStatus: string | null | undefined, stageId: string): boolean {
+  const norm = (leadStatus || "INQUIRY").toUpperCase();
+  if (norm === stageId) return true;
+  if (stageId === "DOCS_PENDING" && norm === "APPLIED") return true;
+  if (stageId === "VERIFIED" && norm === "INTERVIEW") return true;
+  if (stageId === "CONVERTED" && norm === "ENROLLED") return true;
+  return false;
+}
+
 type LeadWithTier = AdmissionLead & { tier?: AcademicTier | null; notes?: any[]; targetClass?: string; academicTier?: string; targetClassCohort?: string };
 
 export default function AdmissionsPipeline({
@@ -102,45 +111,30 @@ export default function AdmissionsPipeline({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
 
-  // Workflow Segregation: Early prospective inquiries map strictly to 'Admission Leads'.
-  // Active applicant profiles (those containing KYC documents, exams, and offers) bypass the legacy leads array.
+  // Workflow Segregation: Early prospective inquiries badge count
   const prospectiveInquiryLeads = useMemo(() => {
-    return localLeads.filter((lead) => {
-      const hasUploadedKyc =
-        Boolean(lead.passportPhotoUrl) ||
-        Boolean(lead.academicResultsUrl) ||
-        Boolean(lead.birthCertificateUrl) ||
-        Boolean(lead.medicalRecordsUrl) ||
-        (lead.documents &&
-          typeof lead.documents === "object" &&
-          Object.keys(lead.documents).some((k) =>
-            ["passportPhoto", "academicResults", "birthCertificate", "medicalRecords"].includes(k)
-          ));
-      const hasExamOrOffer =
-        Boolean(lead.offerToken) ||
-        lead.status === "INTERVIEW" ||
-        lead.status === "APPROVED" ||
-        lead.status === "ENROLLED";
-
-      return lead.status === "INQUIRY" && !hasUploadedKyc && !hasExamOrOffer;
-    });
+    return localLeads.filter((lead) => (lead.status || "").toUpperCase() === "INQUIRY");
   }, [localLeads]);
 
-  // Filtered Leads strictly for prospective inquiries
-  const filteredLeads = useMemo(() => {
-    return prospectiveInquiryLeads.filter((l) => {
+  // Filtered Leads across all stages for the Kanban Board and Table view
+  const allStageLeads = useMemo(() => {
+    return localLeads.filter((l) => {
       const matchesSearch =
         !searchQuery.trim() ||
-        l.applicantName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.targetGrade.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (l.applicantName && l.applicantName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (l.targetGrade && l.targetGrade.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (l.parentContact && l.parentContact.includes(searchQuery)) ||
+        (l.parentPhone && l.parentPhone.includes(searchQuery)) ||
         (l.parentName && l.parentName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchesStage = filterStage === "ALL" || l.status === filterStage;
+      const matchesStage = filterStage === "ALL" || leadMatchesStage(l.status, filterStage);
 
       return matchesSearch && matchesStage;
     });
-  }, [prospectiveInquiryLeads, searchQuery, filterStage]);
+  }, [localLeads, searchQuery, filterStage]);
+
+  // Backward-compatibility alias for filtered leads
+  const filteredLeads = allStageLeads;
 
   const handleStageAdvance = (leadId: string, currentStage: string) => {
     const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
@@ -461,7 +455,7 @@ export default function AdmissionsPipeline({
               <div className="min-w-0 flex-1">
                 <h3 className="text-base sm:text-lg font-bold text-slate-800 truncate">Admissions Pipeline</h3>
                 <p className="text-xs text-slate-400 mt-0.5 truncate">
-                  Managing {filteredLeads.length} prospective inquiry leads
+                  Managing {allStageLeads.length} leads in admissions pipeline
                 </p>
               </div>
             </div>
@@ -507,7 +501,7 @@ export default function AdmissionsPipeline({
           {viewMode === "kanban" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start w-full">
               {STAGES.map((stage, sIdx) => {
-                const stageLeads = filteredLeads.filter((l) => l.status === stage.id);
+                const stageLeads = allStageLeads.filter((l) => leadMatchesStage(l.status, stage.id));
 
                 return (
                   <div
@@ -626,7 +620,7 @@ export default function AdmissionsPipeline({
                     {filteredLeads.length > 0 ? (
                       filteredLeads.map((lead) => {
                         const docCount = Object.keys(lead.documents || {}).length;
-                        const stageObj = STAGES.find((s) => s.id === lead.status) || STAGES[0];
+                        const stageObj = STAGES.find((s) => leadMatchesStage(lead.status, s.id)) || STAGES[0];
 
                         return (
                           <tr
