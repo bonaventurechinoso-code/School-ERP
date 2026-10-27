@@ -52,8 +52,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <SuperAdminSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Top Header Bar */}
-        <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800/80 px-4 py-3 sm:px-6 flex items-center justify-between sticky top-0 z-20">
+        {/* Top Header Bar (Desktop Only) */}
+        <header className="hidden lg:flex bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800/80 px-4 py-3 sm:px-6 items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
               Platform Administration
