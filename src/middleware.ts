@@ -15,6 +15,7 @@ const PUBLIC_ROOT_PATHS = new Set([
   "forgot-password",
   "reset-password",
   "access-denied",
+  "unauthorized",
   "trial-expired",
   "onboarding",
   "admit-slip",
@@ -30,13 +31,16 @@ const PUBLIC_TENANT_ACTIONS = new Set([
   "reset-password",
 ]);
 
-// Reserved system subdomains / prefixes that are not tenant codes
+// Reserved system subdomains / prefixes that are not tenant codes (including common typos)
 const SYSTEM_PREFIXES = new Set([
   "api",
   "_next",
   "admin",
   "super-admin",
   "super_admin",
+  "superadmin",
+  "supper-admin",
+  "supper_admin",
   "platform",
   "console",
   "dashboard",
@@ -46,7 +50,17 @@ const SYSTEM_PREFIXES = new Set([
   "school-admin",
   "tenant-admin",
   "change-password",
+  "unauthorized",
 ]);
+
+const AUTH_COOKIES_TO_CLEAR = [
+  "session",
+  "accessToken",
+  "refreshToken",
+  "auth_token",
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+];
 
 // Mandatory response headers to prevent any intermediate caching of authenticated views
 const NO_CACHE_HEADERS: Record<string, string> = {
@@ -55,20 +69,47 @@ const NO_CACHE_HEADERS: Record<string, string> = {
   Expires: "0",
 };
 
+function isSuperAdminPath(lowerPath: string): boolean {
+  return (
+    lowerPath === "/super-admin" ||
+    lowerPath.startsWith("/super-admin/") ||
+    lowerPath === "/super_admin" ||
+    lowerPath.startsWith("/super_admin/") ||
+    lowerPath === "/superadmin" ||
+    lowerPath.startsWith("/superadmin/") ||
+    lowerPath === "/supper-admin" ||
+    lowerPath.startsWith("/supper-admin/") ||
+    lowerPath === "/supper_admin" ||
+    lowerPath.startsWith("/supper_admin/") ||
+    lowerPath === "/admin" ||
+    lowerPath.startsWith("/admin/") ||
+    lowerPath.startsWith("/dashboard/super-admin") ||
+    lowerPath.startsWith("/api/super-admin") ||
+    lowerPath.startsWith("/api/admin")
+  );
+}
+
 function isPublicRoute(pathname: string): boolean {
+  const lowerPath = pathname.toLowerCase();
+
+  // Never allow super-admin or admin paths to be treated as public
+  if (isSuperAdminPath(lowerPath)) {
+    return false;
+  }
+
   // 1. Static assets and Next.js internals
   if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/img") ||
-    pathname.startsWith("/uploads") ||
-    pathname.startsWith("/api/uploads") ||
-    pathname.startsWith("/favicon.ico") ||
-    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2|pdf)$/i.test(pathname)
+    lowerPath.startsWith("/_next") ||
+    lowerPath.startsWith("/img") ||
+    lowerPath.startsWith("/uploads") ||
+    lowerPath.startsWith("/api/uploads") ||
+    lowerPath.startsWith("/favicon.ico") ||
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2|pdf)$/i.test(lowerPath)
   ) {
     return true;
   }
 
-  const cleanPath = pathname.replace(/^\/+/, "");
+  const cleanPath = lowerPath.replace(/^\/+/, "");
   const segments = cleanPath.split("/").filter(Boolean);
 
   // 2. Root path (landing page)
@@ -167,31 +208,30 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
   if (token) {
     try {
       const { payload } = await jose.jwtVerify(token, SECRET_KEY);
-      const role = ((payload.role || payload.userRole || "") as string).trim().toUpperCase();
-      const isSuperAdmin =
-        role === "SUPER_ADMIN" ||
-        Boolean(payload.isSuperAdmin) ||
-        payload.email === "bonaventure.chinoso@gmail.com" ||
-        payload.email === "admin@bonaveeict.com.ng";
+      const userId = (payload.userId as string) || (payload.id as string) || (payload.sub as string);
+      if (userId) {
+        const role = ((payload.role || payload.userRole || "") as string).trim().toUpperCase();
+        const isSuperAdmin = role === "SUPER_ADMIN" || Boolean(payload.isSuperAdmin);
 
-      const sessionTokenId =
-        (payload.sessionToken as string) ||
-        (payload.sessionId as string) ||
-        (payload.jti as string) ||
-        (payload.token as string) ||
-        (payload.id as string) ||
-        token;
+        const sessionTokenId =
+          (payload.sessionToken as string) ||
+          (payload.sessionId as string) ||
+          (payload.jti as string) ||
+          (payload.token as string) ||
+          (payload.id as string) ||
+          token;
 
-      return {
-        userId: (payload.userId as string) || (payload.id as string) || (payload.sub as string),
-        role,
-        tenantId: (payload.tenantId as string) || (payload.schoolId as string) || null,
-        schoolDomain: (payload.schoolDomain as string) || (payload.tenantSlug as string) || null,
-        isSuperAdmin,
-        sessionToken: sessionTokenId,
-      };
+        return {
+          userId,
+          role,
+          tenantId: (payload.tenantId as string) || (payload.schoolId as string) || null,
+          schoolDomain: (payload.schoolDomain as string) || (payload.tenantSlug as string) || null,
+          isSuperAdmin,
+          sessionToken: sessionTokenId,
+        };
+      }
     } catch {
-      // Token might be a NextAuth JWE token or invalid
+      // Token might be a NextAuth JWE token or invalid/expired
     }
   }
 
@@ -203,21 +243,20 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
     });
 
     if (nextAuthToken) {
-      const role = ((nextAuthToken.role || nextAuthToken.userRole || "") as string).trim().toUpperCase();
-      const isSuperAdmin =
-        role === "SUPER_ADMIN" ||
-        Boolean(nextAuthToken.isSuperAdmin) ||
-        nextAuthToken.email === "bonaventure.chinoso@gmail.com" ||
-        nextAuthToken.email === "admin@bonaveeict.com.ng";
+      const userId = (nextAuthToken.userId as string) || (nextAuthToken.id as string) || (nextAuthToken.sub as string);
+      if (userId) {
+        const role = ((nextAuthToken.role || nextAuthToken.userRole || "") as string).trim().toUpperCase();
+        const isSuperAdmin = role === "SUPER_ADMIN" || Boolean(nextAuthToken.isSuperAdmin);
 
-      return {
-        userId: (nextAuthToken.userId as string) || (nextAuthToken.id as string) || (nextAuthToken.sub as string),
-        role,
-        tenantId: (nextAuthToken.tenantId as string) || null,
-        schoolDomain: (nextAuthToken.schoolDomain as string) || null,
-        isSuperAdmin,
-        sessionToken: (nextAuthToken.sessionToken as string) || undefined,
-      };
+        return {
+          userId,
+          role,
+          tenantId: (nextAuthToken.tenantId as string) || null,
+          schoolDomain: (nextAuthToken.schoolDomain as string) || null,
+          isSuperAdmin,
+          sessionToken: (nextAuthToken.sessionToken as string) || undefined,
+        };
+      }
     }
   } catch {}
 
@@ -226,39 +265,26 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
-
-  // Legacy /admin/_ redirect: redirect 301 to /super-admin/_
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    const newPath = pathname === "/admin" ? "/super-admin" : pathname.replace(/^\/admin/, "/super-admin");
-    const targetUrl = new URL(newPath, req.url);
-    targetUrl.search = req.nextUrl.search;
-    return NextResponse.redirect(targetUrl, 301);
-  }
+  const lowerPath = pathname.toLowerCase();
 
   // Super-admin login route: rewrite cleanly to /login?type=super-admin
-  if (pathname === '/super-admin/login') {
-    const loginUrl = new URL('/login?type=super-admin', req.url);
+  if (lowerPath === "/super-admin/login" || lowerPath === "/admin/login") {
+    const loginUrl = new URL("/login?type=super-admin", req.url);
     loginUrl.search = req.nextUrl.search;
-    loginUrl.searchParams.set('type', 'super-admin');
+    loginUrl.searchParams.set("type", "super-admin");
     return NextResponse.rewrite(loginUrl);
   }
 
-  // Super-admin bypass: bypass tenant schoolDomain lookup entirely
-  if (pathname.startsWith('/super-admin')) {
-    // Only check super-admin JWT/session
-    return NextResponse.next();
-  }
-
-  // 1. Allow unauthenticated access to public routes
+  // 1. Allow unauthenticated access ONLY to explicitly public routes
   if (isPublicRoute(pathname)) {
     return NextResponse.next();
   }
 
-  // 2. Strict request-scoped token verification
+  // 2. Strict request-scoped token verification (runs for ALL protected routes including /super-admin/*)
   const claims = await extractAndVerifyToken(req);
 
   // Parse path for tenant scoping
-  const segments = pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+  const segments = lowerPath.replace(/^\/+/, "").split("/").filter(Boolean);
   const firstSegment = segments[0]?.toLowerCase() || "";
   const isTenantRoute = segments.length >= 2 && !SYSTEM_PREFIXES.has(firstSegment);
   const requestedTenant = isTenantRoute ? firstSegment : null;
@@ -266,7 +292,7 @@ export async function middleware(req: NextRequest) {
   // 3. UNAUTHENTICATED ACCESS ATTEMPT
   if (!claims || !claims.userId) {
     // API endpoints return 401 with strict no-cache headers
-    if (pathname.startsWith("/api/")) {
+    if (lowerPath.startsWith("/api/")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Active authentication session required." },
         { status: 401, headers: NO_CACHE_HEADERS }
@@ -277,7 +303,12 @@ export async function middleware(req: NextRequest) {
     const loginUrl = requestedTenant
       ? new URL(`/${requestedTenant}/login`, req.url)
       : new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
+    const normalizedCallback = isSuperAdminPath(lowerPath)
+      ? lowerPath
+          .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
+          .replace(/\/tenats(?=\/|$)/, "/tenants")
+      : pathname;
+    loginUrl.searchParams.set("callbackUrl", normalizedCallback);
 
     const redirectResponse = NextResponse.redirect(loginUrl);
     for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
@@ -285,20 +316,16 @@ export async function middleware(req: NextRequest) {
     }
 
     // Immediately expire invalid or stale cookies
-    redirectResponse.cookies.delete("session");
-    redirectResponse.cookies.delete("accessToken");
-    redirectResponse.cookies.delete("auth_token");
+    for (const cookieName of AUTH_COOKIES_TO_CLEAR) {
+      redirectResponse.cookies.delete(cookieName);
+    }
     return redirectResponse;
   }
 
-  // 4. SUPER ADMIN AUTHORIZATION
-  if (
-    pathname.startsWith("/super-admin") ||
-    pathname.startsWith("/dashboard/super-admin") ||
-    pathname.startsWith("/api/super-admin")
-  ) {
+  // 4. SUPER ADMIN AUTHORIZATION (includes /super-admin, /admin, and case/typo variants)
+  if (isSuperAdminPath(lowerPath)) {
     if (!claims.isSuperAdmin && claims.role !== "SUPER_ADMIN") {
-      if (pathname.startsWith("/api/")) {
+      if (lowerPath.startsWith("/api/")) {
         return NextResponse.json(
           { success: false, error: "Forbidden: Super Admin privileges required." },
           { status: 403, headers: NO_CACHE_HEADERS }
@@ -311,6 +338,18 @@ export async function middleware(req: NextRequest) {
       }
       return redirectResponse;
     }
+
+    // Canonicalize legacy /admin/* or uppercase/typo /Supper-admin/* paths for authenticated Super Admins
+    if (!lowerPath.startsWith("/api/") && !lowerPath.startsWith("/dashboard/")) {
+      const canonicalPath = lowerPath
+        .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
+        .replace(/\/tenats(?=\/|$)/, "/tenants");
+      if (pathname !== canonicalPath) {
+        const targetUrl = new URL(canonicalPath, req.url);
+        targetUrl.search = req.nextUrl.search;
+        return NextResponse.redirect(targetUrl, 307);
+      }
+    }
   }
 
   // 5. TENANT ISOLATION CHECK:
@@ -320,7 +359,7 @@ export async function middleware(req: NextRequest) {
     const userTenantId = (claims.tenantId || "").trim();
 
     if (userDomain !== requestedTenant && userTenantId !== requestedTenant) {
-      if (pathname.startsWith("/api/")) {
+      if (lowerPath.startsWith("/api/")) {
         return NextResponse.json(
           { success: false, error: "Forbidden: Cross-tenant access violation." },
           { status: 403, headers: NO_CACHE_HEADERS }
@@ -358,6 +397,11 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/super-admin/:path*",
+    "/admin/:path*",
+    "/dashboard/:path*",
+    "/api/super-admin/:path*",
+    "/api/admin/:path*",
     "/((?!_next/static|_next/image|favicon.ico|img/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)",
   ],
 };

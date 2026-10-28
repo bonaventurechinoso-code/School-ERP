@@ -118,11 +118,27 @@ export function getDefaultPermissionsForRole(role: Role | UserRole | string): st
 }
 
 import { validateDatabaseSession, requireServerAuth } from "./session-manager";
-import { getDevMockRoleConfig } from "./permissions";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./nextauth-config";
 
 export { requireServerAuth, authOptions };
+
+export async function clearAuthCookies(): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    const names = [
+      "next-auth.session-token",
+      "__Secure-next-auth.session-token",
+      "session",
+      "accessToken",
+      "refreshToken",
+      "auth_token",
+    ];
+    for (const name of names) {
+      cookieStore.delete(name);
+    }
+  } catch {}
+}
 
 export function isSuperAdminUser(userOrRole: any): boolean {
   if (!userOrRole) return false;
@@ -184,99 +200,58 @@ export async function getSession(
     resolvedSession = dbSession;
   }
 
-  // 2. Flexible Local Dev Mode Mocking (via NEXT_PUBLIC_DEV_MOCK_ROLE)
-  if (!resolvedSession) {
-    const isDev = process.env.NODE_ENV === "development";
-    const devMockRoleSetting = isDev ? process.env.NEXT_PUBLIC_DEV_MOCK_ROLE : null;
-    if (isDev && devMockRoleSetting && !tokenOverride) {
-      const mock = getDevMockRoleConfig(devMockRoleSetting);
-      if (mock) {
-        resolvedSession = {
-          userId: "dev-mock-user-id",
-          email: `mock-${mock.staffRole.toLowerCase().replace(/[^a-z0-9]/g, "")}@school.edu`,
-          tenantId: "mock-dev-tenant",
-          schoolDomain: "greenwood",
-          tenantName: "Greenwood Academy",
-          role: mock.role,
-          staffRole: mock.staffRole,
-          activeTiers: ["Primary School", "Secondary School"],
-          permissions: getDefaultPermissionsForRole(mock.role as any),
-          sessionToken: "mock-dev-session-token",
-          sessionId: "mock-dev-session-token",
-        };
-      }
-    }
-  }
-
-  // 3. NextAuth.js active session resolution (Credentials & Google OAuth)
+  // 2. NextAuth.js active session resolution (Credentials & Google OAuth)
   if (!resolvedSession && !tokenOverride) {
     try {
       const nextAuthSession = await getServerSession(authOptions);
       if (nextAuthSession?.user) {
         const u = nextAuthSession.user as any;
         const sToken = u.sessionToken || u.jti || u.id || u.userId;
-        resolvedSession = {
-          userId: u.userId || u.id,
-          email: u.email || undefined,
-          tenantId: u.tenantId || null,
-          schoolDomain: u.schoolDomain || "admin",
-          tenantName: u.tenantName || undefined,
-          role: (u.role as UserRole) || "STAFF",
-          staffRole: u.staffRole || undefined,
-          activeTiers: u.activeTiers || [],
-          permissions: u.permissions || getDefaultPermissionsForRole((u.role as UserRole) || "STAFF"),
-          sessionToken: sToken,
-          sessionId: sToken,
-          dbSessionId: u.dbSessionId,
-        };
+        const userId = u.userId || u.id;
+        if (userId) {
+          resolvedSession = {
+            userId,
+            email: u.email || undefined,
+            tenantId: u.tenantId || null,
+            schoolDomain: u.schoolDomain || "admin",
+            tenantName: u.tenantName || undefined,
+            role: (u.role as UserRole) || "STAFF",
+            staffRole: u.staffRole || undefined,
+            activeTiers: u.activeTiers || [],
+            permissions: u.permissions || getDefaultPermissionsForRole((u.role as UserRole) || "STAFF"),
+            sessionToken: sToken,
+            sessionId: sToken,
+            dbSessionId: u.dbSessionId,
+          };
+        }
       }
     } catch {
       // Graceful fallback if invoked in environment without NextAuth headers
     }
   }
 
-  // 4. Fallback stateless token verification (for dev tests or transient tokens)
-  if (!resolvedSession) {
-    let rawToken = tokenOverride;
-    if (!rawToken) {
-      try {
-        const cookieStore = await cookies();
-        rawToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
-      } catch {}
-    }
-
-    if (!rawToken) {
-      try {
-        const headerList = await headers();
-        const authHeader = headerList.get("authorization");
-        if (authHeader && authHeader.startsWith("Bearer ")) {
-          rawToken = authHeader.substring(7);
-        }
-        if (!rawToken) {
-          rawToken = headerList.get("x-session-token");
-        }
-      } catch {}
-    }
-
-    if (rawToken) {
-      try {
-        const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
-        const secret = new TextEncoder().encode(jwtSecret);
-        const { payload } = await jose.jwtVerify(rawToken, secret);
+  // 3. Fallback stateless token verification ONLY when explicit tokenOverride or Bearer header is passed
+  if (!resolvedSession && tokenOverride) {
+    try {
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const { payload } = await jose.jwtVerify(tokenOverride, secret);
+      const userId = (payload.userId as string) || (payload.id as string);
+      if (userId) {
         const sessionToken =
           (payload.sessionToken as string) ||
           (payload.sessionId as string) ||
           (payload.jti as string) ||
           (payload.token as string) ||
           (payload.id as string) ||
-          rawToken;
+          tokenOverride;
 
         const anyPayload = payload as any;
         resolvedSession = {
           ...anyPayload,
           sessionToken,
           sessionId: sessionToken,
-          userId: (anyPayload.userId as string) || (anyPayload.id as string) || "stateless-user",
+          userId,
           role: (anyPayload.role as UserRole) || (anyPayload.userRole as UserRole) || "STAFF",
           userRole: (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF",
           assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
@@ -285,10 +260,10 @@ export async function getSession(
           activeTiers: (anyPayload.activeTiers as string[]) || [],
           permissions: (anyPayload.permissions as string[]) || [],
         } as SessionPayload;
-      } catch (error) {
-        console.error("Failed to decode session token:", error);
-        return null;
       }
+    } catch (error) {
+      console.error("Failed to decode session token:", error);
+      return null;
     }
   }
 
@@ -324,4 +299,3 @@ export async function getSession(
 
   return resolvedSession;
 }
-

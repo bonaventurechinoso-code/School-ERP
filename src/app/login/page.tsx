@@ -114,6 +114,10 @@ function LoginPageContent() {
 
     // B. Sanitize the active address bar: Clear out any plaintext error or leaked query strings
     const currentParams = new URLSearchParams(window.location.search);
+    if (currentParams.get("logout") === "1") {
+      clearStoredSession();
+      fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+    }
     const leakedError = currentParams.get("error");
     const isSuperAdminAccessBlocked =
       systemStatus === "403_SUPER_ADMIN_FORBIDDEN" ||
