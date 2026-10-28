@@ -174,7 +174,10 @@ export default function SuperAdminTenantsPage() {
               isActive: !isSusp,
               students_count: r.students_count ?? r.studentsCount ?? 0,
               staff_count: r.staff_count ?? 0,
-              academic_tiers: Array.isArray(r.academic_tiers) ? r.academic_tiers : [],
+              academic_tiers:
+                Array.isArray(r.academic_tiers) && r.academic_tiers.length > 0
+                  ? r.academic_tiers
+                  : [{ id: "default-primary", name: "Primary School" }],
             };
           });
         setTenants(normalized);
@@ -652,21 +655,20 @@ export default function SuperAdminTenantsPage() {
                       {/* ACADEMIC TIERS */}
                       <td className="py-4 px-4">
                         <div className="flex flex-wrap gap-1.5 max-w-xs">
-                          {tenant.academic_tiers && tenant.academic_tiers.length > 0 ? (
-                            tenant.academic_tiers.map((tier) => {
-                              const badge = getTierBadgeConfig(tier.name);
-                              return (
-                                <span
-                                  key={tier.id || tier.name}
-                                  className={`${badge.style} text-[11px] px-2.5 py-0.5 rounded-full font-medium border shadow-2xs`}
-                                >
-                                  {badge.label}
-                                </span>
-                              );
-                            })
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">No tiers configured</span>
-                          )}
+                          {(tenant.academic_tiers && tenant.academic_tiers.length > 0
+                            ? tenant.academic_tiers
+                            : [{ id: "default-primary", name: "Primary School" }]
+                          ).map((tier) => {
+                            const badge = getTierBadgeConfig(tier.name);
+                            return (
+                              <span
+                                key={tier.id || tier.name}
+                                className={`${badge.style} text-[11px] px-2.5 py-0.5 rounded-full font-medium border shadow-2xs`}
+                              >
+                                {badge.label}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
 
@@ -703,6 +705,13 @@ export default function SuperAdminTenantsPage() {
                         <div className="flex items-center justify-end gap-2">
                           <Link
                             href={`/${tenant.subdomain}/dashboard`}
+                            onClick={() => {
+                              fetch(`/api/super-admin/tenants/${tenant.id}/status`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "IMPERSONATE" }),
+                              }).catch(() => null);
+                            }}
                             className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
                             title={`Switch to ${tenant.name} tenant context`}
                           >

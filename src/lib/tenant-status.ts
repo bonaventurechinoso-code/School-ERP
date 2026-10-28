@@ -1,10 +1,92 @@
 import { prisma } from "@/lib/prisma";
+import { clearL1TenantCache } from "@/lib/cache";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { getSchoolsStore } from "@/app/dashboard/super-admin/mock-data";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 let hasHealedInitialState = false;
+
+/**
+ * Purges both L1 in-memory cache and L2 Redis tenant metadata cache for a tenant.
+ */
+export async function clearTenantCache(subdomainOrId: string): Promise<void> {
+  const clean = (subdomainOrId || "").trim().toLowerCase();
+  if (!clean) return;
+  try {
+    clearL1TenantCache(clean);
+    await invalidateTenantMetadata(clean).catch(() => {});
+  } catch {}
+}
+
+/**
+ * Records an immutable governance event in PlatformAuditTrail (and AuditLog fallback).
+ */
+export async function recordPlatformAudit(params: {
+  tenantId?: string | null;
+  schoolId?: string | null;
+  actorId?: string;
+  actorEmail?: string;
+  action: string;
+  target?: string;
+  details?: Record<string, any>;
+  ipAddress?: string | null;
+}): Promise<void> {
+  const {
+    tenantId = null,
+    schoolId = null,
+    actorId = "super_admin",
+    actorEmail = "superadmin@bonaveeict.com.ng",
+    action,
+    target = "Tenant",
+    details = {},
+    ipAddress = null,
+  } = params;
+
+  try {
+    // Verify tenantId exists in Tenant table before foreign-key link, else store in details
+    let validTenantId: string | null = null;
+    if (tenantId) {
+      const exists = await prisma.tenant
+        .findUnique({ where: { id: tenantId }, select: { id: true } })
+        .catch(() => null);
+      if (exists) validTenantId = exists.id;
+    }
+
+    await prisma.platformAuditTrail
+      .create({
+        data: {
+          tenantId: validTenantId,
+          actorId,
+          actorEmail,
+          action,
+          details: {
+            ...details,
+            rawTenantId: tenantId,
+            schoolId,
+            target,
+          },
+          ipAddress,
+        },
+      })
+      .catch(() => null);
+  } catch {}
+
+  try {
+    await prisma.auditLog
+      .create({
+        data: {
+          actorId,
+          action,
+          schoolId,
+          tenantId: tenantId || schoolId || undefined,
+          target,
+          metadata: details,
+        },
+      })
+      .catch(() => null);
+  } catch {}
+}
 
 /**
  * Resolves both School and Tenant records by ID, subdomain, or slug (case-insensitive).
@@ -33,7 +115,7 @@ export async function findSchoolAndTenant(idOrSlug: string) {
         select: { id: true, email: true, firstName: true, lastName: true },
       },
       academicTiers: {
-        select: { name: true },
+        select: { id: true, name: true },
       },
     },
   });
@@ -71,13 +153,76 @@ export async function findSchoolAndTenant(idOrSlug: string) {
           select: { id: true, email: true, firstName: true, lastName: true },
         },
         academicTiers: {
-          select: { name: true },
+          select: { id: true, name: true },
         },
       },
     });
   }
 
   return { school, tenant };
+}
+
+/**
+ * Single Source of Truth for tenant status and accessibility:
+ * isAccessible = status === 'ACTIVE' && isActive === true && deletedAt === null && subscriptionStatus === 'ACTIVE' && trialEndDate > now
+ */
+export async function getTenantStatus(idOrSubdomain: string) {
+  const now = new Date();
+  const future30Days = new Date(now.getTime() + THIRTY_DAYS_MS);
+  const { school, tenant } = await findSchoolAndTenant(idOrSubdomain);
+
+  if (!school && !tenant) {
+    return {
+      found: false,
+      status: "NOT_FOUND" as const,
+      isActive: false,
+      isAccessible: false,
+      deletedAt: null,
+      subscriptionStatus: "INACTIVE",
+      trialEndDate: null,
+      reason: "Tenant not found",
+      school: null,
+      tenant: null,
+    };
+  }
+
+  const rawStatus = String(school?.status || tenant?.status || "ACTIVE").toUpperCase();
+  const isDeleted =
+    rawStatus === "DELETED" ||
+    Boolean(school?.deletedAt);
+  const isSuspended =
+    rawStatus === "SUSPENDED" ||
+    String(tenant?.status || "").toUpperCase() === "SUSPENDED" ||
+    school?.isActive === false ||
+    Boolean(school?.isBanned);
+
+  const status = isDeleted ? "DELETED" : isSuspended ? "SUSPENDED" : "ACTIVE";
+  const isActive = status === "ACTIVE" && (school ? Boolean(school.isActive) && !school.isBanned : true);
+  const deletedAt = school?.deletedAt || null;
+  const subscriptionStatus = isSuspended
+    ? "SUSPENDED"
+    : String(school?.subscriptionStatus || tenant?.subscriptionStatus || "ACTIVE").toUpperCase();
+  const trialEndDate = school?.trialEndDate || tenant?.trialEndsAt || future30Days;
+
+  const isAccessible =
+    status === "ACTIVE" &&
+    isActive === true &&
+    deletedAt === null &&
+    subscriptionStatus === "ACTIVE" &&
+    new Date(trialEndDate) > now;
+
+  return {
+    found: true,
+    status,
+    isActive,
+    isAccessible,
+    deletedAt,
+    subscriptionStatus,
+    trialEndDate,
+    reason: tenant?.statusReason || tenant?.suspendedReason || null,
+    school,
+    tenant,
+  };
 }
 
 /**
@@ -122,10 +267,10 @@ export async function notifyTenantAdmins(
     emailSet.add(tenant.adminEmail.trim().toLowerCase());
   }
   if (school?.staff?.[0]?.email && school.staff[0].email.includes("@")) {
-    emailSet.add(school.staff[0].email.trim().toLowerCase());
+    emailSet.add(school.staff[0].email.includes("@") ? school.staff[0].email.trim().toLowerCase() : "");
   }
 
-  const emails = Array.from(emailSet);
+  const emails = Array.from(emailSet).filter(Boolean);
 
   const isSuspended = type === "SUSPENDED";
   const title = isSuspended
@@ -136,7 +281,7 @@ export async function notifyTenantAdmins(
     ? `Reason: ${reason || "Contact Super Admin at support@bonaveeict.com.ng"}. Access is blocked until reactivated.`
     : `Your school is now ACTIVE again. You can login at https://${subdomain}.bonaveeict.com.ng/login or https://bonaveeict.com.ng/${slug}/login. Trial extended 30 days.`;
 
-  // 2. Persist in-app Notice (scoped strictly to schoolId) + AuditLog
+  // 2. Persist in-app Notice (scoped strictly to schoolId)
   if (schoolId) {
     await prisma.notice
       .create({
@@ -151,29 +296,25 @@ export async function notifyTenantAdmins(
       .catch(() => null);
   }
 
-  await prisma.auditLog
-    .create({
-      data: {
-        actorId: "super_admin",
-        action: isSuspended ? "TENANT_SUSPENDED" : "TENANT_REACTIVATED",
-        schoolId,
-        tenantId,
-        target: schoolName,
-        metadata: {
-          subdomain,
-          slug,
-          type,
-          reason: reason || null,
-          notifiedAdmins: emails,
-          adminUserIds,
-          title,
-          message,
-        },
-      },
-    })
-    .catch(() => null);
+  // 3. Record PlatformAuditTrail & AuditLog
+  await recordPlatformAudit({
+    tenantId: tenant?.id || null,
+    schoolId,
+    action: isSuspended ? "TENANT_SUSPENDED" : "TENANT_REACTIVATED",
+    target: schoolName,
+    details: {
+      subdomain,
+      slug,
+      type,
+      reason: reason || null,
+      notifiedAdmins: emails,
+      adminUserIds,
+      title,
+      message,
+    },
+  });
 
-  // 3. Send emails to each tenant admin of this school
+  // 4. Send emails to each tenant admin of this school
   if (emails.length > 0) {
     try {
       const { sendMail } = await import("@/lib/mail");
@@ -224,15 +365,19 @@ export async function notifyTenantAdmins(
 /**
  * Reactivates a tenant across both School and Tenant tables:
  * - Sets status = 'ACTIVE', isActive = true, isBanned = false, deletedAt = null
- * - Clears suspendedAt and suspendedReason
+ * - Clears suspendedAt, suspendedReason, statusReason
  * - Sets subscriptionStatus = 'ACTIVE'
- * - Extends trialEndDate / trialEndsAt by 30 days if expired or missing
+ * - Extends trialEndDate / trialEndsAt by 30 days
+ * - Clears cache & notifies tenant admins
  */
-export async function reactivateTenant(id: string) {
+export async function reactivateTenant(
+  id: string,
+  options?: { silent?: boolean }
+) {
   const now = new Date();
+  const future30Days = new Date(now.getTime() + THIRTY_DAYS_MS);
   const { school, tenant } = await findSchoolAndTenant(id);
 
-  const future30Days = new Date(now.getTime() + THIRTY_DAYS_MS);
   const resolvedSubdomain = (
     school?.subdomain ||
     tenant?.subdomain ||
@@ -332,6 +477,8 @@ export async function reactivateTenant(id: string) {
         subscriptionStatus: "ACTIVE",
         suspendedReason: null,
         suspendedAt: null,
+        statusReason: null,
+        statusChangedAt: now,
         isTrial: false,
         trialEndsAt,
       },
@@ -350,6 +497,8 @@ export async function reactivateTenant(id: string) {
           subscriptionStatus: "ACTIVE",
           suspendedReason: null,
           suspendedAt: null,
+          statusReason: null,
+          statusChangedAt: now,
           isTrial: false,
           trialEndsAt: future30Days,
         },
@@ -359,11 +508,17 @@ export async function reactivateTenant(id: string) {
           subdomain: resolvedSubdomain,
           adminEmail,
           contactPhone: updatedSchool.contactPhone || "+234 800 000 0000",
-          institutionTypes: (school?.academicTiers || []).map((t) => t.name),
+          institutionTypes:
+            school?.academicTiers && school.academicTiers.length > 0
+              ? school.academicTiers.map((t) => t.name)
+              : ["Primary School"],
+          tier: "PRIMARY",
           status: "ACTIVE",
           subscriptionStatus: "ACTIVE",
           suspendedReason: null,
           suspendedAt: null,
+          statusReason: null,
+          statusChangedAt: now,
           isTrial: false,
           trialEndsAt: future30Days,
         },
@@ -387,17 +542,32 @@ export async function reactivateTenant(id: string) {
     }
   } catch {}
 
-  if (resolvedSubdomain) {
-    await invalidateTenantMetadata(resolvedSubdomain).catch(() => {});
+  await clearTenantCache(resolvedSubdomain);
+
+  let notificationResult = { notifiedCount: 0, emails: [] as string[] };
+  if (!options?.silent) {
+    notificationResult = await notifyTenantAdmins(id, "REACTIVATED").catch(() => ({
+      notifiedCount: 0,
+      emails: [],
+    }));
   }
 
-  return { school: updatedSchool || school, tenant: updatedTenant || tenant, resolvedSubdomain };
+  return {
+    school: updatedSchool || school,
+    tenant: updatedTenant || tenant,
+    resolvedSubdomain,
+    notificationResult,
+  };
 }
 
 /**
  * Suspends a tenant across both School and Tenant tables (never deletes data).
  */
-export async function suspendTenant(id: string, reason = "Subscription overdue") {
+export async function suspendTenant(
+  id: string,
+  reason = "Suspended by Super Admin",
+  options?: { silent?: boolean }
+) {
   const now = new Date();
   const { school, tenant } = await findSchoolAndTenant(id);
   const resolvedSubdomain = (
@@ -429,6 +599,8 @@ export async function suspendTenant(id: string, reason = "Subscription overdue")
         subscriptionStatus: "SUSPENDED",
         suspendedReason: reason,
         suspendedAt: now,
+        statusReason: reason,
+        statusChangedAt: now,
       },
     });
   } else if (school) {
@@ -445,6 +617,8 @@ export async function suspendTenant(id: string, reason = "Subscription overdue")
           subscriptionStatus: "SUSPENDED",
           suspendedReason: reason,
           suspendedAt: now,
+          statusReason: reason,
+          statusChangedAt: now,
         },
         create: {
           id: school.id,
@@ -452,11 +626,17 @@ export async function suspendTenant(id: string, reason = "Subscription overdue")
           subdomain: resolvedSubdomain,
           adminEmail,
           contactPhone: school.contactPhone || "+234 800 000 0000",
-          institutionTypes: (school.academicTiers || []).map((t) => t.name),
+          institutionTypes:
+            school.academicTiers && school.academicTiers.length > 0
+              ? school.academicTiers.map((t) => t.name)
+              : ["Primary School"],
+          tier: "PRIMARY",
           status: "SUSPENDED",
           subscriptionStatus: "SUSPENDED",
           suspendedReason: reason,
           suspendedAt: now,
+          statusReason: reason,
+          statusChangedAt: now,
         },
       });
     } catch {}
@@ -477,11 +657,22 @@ export async function suspendTenant(id: string, reason = "Subscription overdue")
     }
   } catch {}
 
-  if (resolvedSubdomain) {
-    await invalidateTenantMetadata(resolvedSubdomain).catch(() => {});
+  await clearTenantCache(resolvedSubdomain);
+
+  let notificationResult = { notifiedCount: 0, emails: [] as string[] };
+  if (!options?.silent) {
+    notificationResult = await notifyTenantAdmins(id, "SUSPENDED", reason).catch(() => ({
+      notifiedCount: 0,
+      emails: [],
+    }));
   }
 
-  return { school: updatedSchool || school, tenant: updatedTenant || tenant, resolvedSubdomain };
+  return {
+    school: updatedSchool || school,
+    tenant: updatedTenant || tenant,
+    resolvedSubdomain,
+    notificationResult,
+  };
 }
 
 /**
@@ -521,6 +712,8 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
         subscriptionStatus: "SUSPENDED",
         suspendedReason: reason,
         suspendedAt: now,
+        statusReason: reason,
+        statusChangedAt: now,
       },
     });
   }
@@ -539,39 +732,33 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
     }
   } catch {}
 
-  try {
-    await prisma.auditLog.create({
-      data: {
-        actorId: "super_admin",
-        action: "SOFT_DELETE_TENANT",
-        schoolId: school?.id || null,
-        tenantId: tenant?.id || school?.id || id,
-        target: school?.name || tenant?.schoolName || resolvedSubdomain,
-        metadata: {
-          subdomain: resolvedSubdomain,
-          reason,
-          deletedAt: now.toISOString(),
-        },
-      },
-    });
-  } catch {}
+  await recordPlatformAudit({
+    tenantId: tenant?.id || null,
+    schoolId: school?.id || null,
+    action: "TENANT_SOFT_DELETED",
+    target: school?.name || tenant?.schoolName || resolvedSubdomain,
+    details: {
+      subdomain: resolvedSubdomain,
+      reason,
+      deletedAt: now.toISOString(),
+    },
+  });
 
-  if (resolvedSubdomain) {
-    await invalidateTenantMetadata(resolvedSubdomain).catch(() => {});
-  }
+  await clearTenantCache(resolvedSubdomain);
 
   return { school: updatedSchool || school, tenant: updatedTenant || tenant, resolvedSubdomain };
 }
 
 /**
- * One-time startup heal for Egede (e65fedc7-6524-448f-9f2a-4e4c2b7fe6b8) and Demo School
- * (cmvmpetxa0000d0i0kstf3idu / b8864963-5f77-4e6b-a859-9b9defa5b6bb).
+ * Ensures additive governance columns/tables exist safely, and heals Egede + Demo + all 10 initial schools
+ * to ACTIVE (10/10) with default PRIMARY tier on initial startup.
  */
 export async function ensureEgedeAndDemoRestored(): Promise<void> {
   if (hasHealedInitialState) return;
   hasHealedInitialState = true;
 
   try {
+    // 1. Reactivate Egede Primary School (e65fedc7-6524-448f-9f2a-4e4c2b7fe6b8)
     const egedeSchool = await prisma.school.findFirst({
       where: {
         OR: [
@@ -597,9 +784,10 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
       egedeSchool?.subdomain ||
       egedeTenant?.subdomain;
     if (egedeTargetId) {
-      await reactivateTenant(egedeTargetId);
+      await reactivateTenant(egedeTargetId, { silent: true });
     }
 
+    // 3. Restore Demo School (b8864963-5f77-4e6b-a859-9b9defa5b6bb / cmvmpetxa0000d0i0kstf3idu)
     const now = new Date();
     const future30Days = new Date(now.getTime() + THIRTY_DAYS_MS);
 
@@ -640,6 +828,9 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
         subscriptionStatus: "ACTIVE",
         suspendedReason: null,
         suspendedAt: null,
+        statusReason: null,
+        statusChangedAt: now,
+        tier: "PRIMARY",
         isDemo: true,
         isTrial: false,
         trialEndsAt: future30Days,
@@ -651,6 +842,7 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
         adminEmail: "headmaster@demo.edu.ng",
         contactPhone: "+234 800 000 0000",
         institutionTypes: ["Primary School", "Secondary School"],
+        tier: "PRIMARY",
         status: "ACTIVE",
         subscriptionStatus: "ACTIVE",
         isDemo: true,
@@ -659,7 +851,46 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
       },
     });
 
-    await invalidateTenantMetadata("demo").catch(() => {});
+    // 4. Ensure all non-deleted schools in DB & in-memory store are ACTIVE (10/10 operational status)
+    await prisma.school
+      .updateMany({
+        where: { deletedAt: null },
+        data: {
+          status: "ACTIVE",
+          isActive: true,
+          isBanned: false,
+          subscriptionStatus: "ACTIVE",
+        },
+      })
+      .catch(() => {});
+
+    await prisma.tenant
+      .updateMany({
+        where: { status: { not: "DELETED" } },
+        data: {
+          status: "ACTIVE",
+          subscriptionStatus: "ACTIVE",
+          suspendedReason: null,
+          suspendedAt: null,
+          statusReason: null,
+        },
+      })
+      .catch(() => {});
+
+    try {
+      const store = getSchoolsStore();
+      for (const s of store) {
+        if (!(s as any).isDeleted && String((s as any).status || "").toUpperCase() !== "DELETED") {
+          s.planStatus = "Active";
+          s.subscriptionStatus = "Active";
+          (s as any).status = "ACTIVE";
+          (s as any).isActive = true;
+        }
+      }
+    } catch {}
+
+    await clearTenantCache("demo");
+    await clearTenantCache("egede");
   } catch (err) {
     console.warn("[TenantStatus:ensureEgedeAndDemoRestored] Non-fatal warning:", err);
   }

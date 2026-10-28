@@ -5,7 +5,7 @@ import {
   reactivateTenant,
   suspendTenant,
   softDeleteTenant,
-  notifyTenantAdmins,
+  recordPlatformAudit,
 } from "@/lib/tenant-status";
 
 export async function PUT(
@@ -15,15 +15,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { status, reason, isDeleted } = body;
-
-    const normalizedStatus = (status || "").toUpperCase();
-    if (!["ACTIVE", "SUSPENDED", "PENDING", "INACTIVE", "DELETED"].includes(normalizedStatus)) {
-      return NextResponse.json(
-        { error: "Invalid status. Must be ACTIVE, SUSPENDED, PENDING, INACTIVE, or DELETED" },
-        { status: 400 }
-      );
-    }
+    const { status, action, reason, isDeleted } = body;
 
     const { school: existingSchool, tenant: existingTenant } = await findSchoolAndTenant(id);
 
@@ -38,6 +30,35 @@ export async function PUT(
       existingSchool?.users?.[0]?.email ||
       existingSchool?.staff?.[0]?.email ||
       "";
+
+    // Impersonation audit event (View as Tenant)
+    if (String(action || status || "").toUpperCase() === "IMPERSONATE") {
+      await recordPlatformAudit({
+        tenantId: existingTenant?.id || null,
+        schoolId: existingSchool?.id || null,
+        action: "IMPERSONATION_STARTED",
+        target: resolvedName,
+        details: {
+          subdomain: resolvedSubdomain,
+          redirectUrl: `/${resolvedSubdomain}/dashboard`,
+        },
+        ipAddress: req.headers.get("x-forwarded-for") || null,
+      });
+
+      return NextResponse.json({
+        success: true,
+        action: "IMPERSONATION_STARTED",
+        redirectUrl: `/${resolvedSubdomain}/dashboard`,
+      });
+    }
+
+    const normalizedStatus = (status || "").toUpperCase();
+    if (!["ACTIVE", "SUSPENDED", "PENDING", "INACTIVE", "DELETED"].includes(normalizedStatus)) {
+      return NextResponse.json(
+        { error: "Invalid status. Must be ACTIVE, SUSPENDED, PENDING, INACTIVE, or DELETED" },
+        { status: 400 }
+      );
+    }
 
     // Soft-delete request
     if (isDeleted || normalizedStatus === "DELETED" || normalizedStatus === "INACTIVE") {
@@ -62,16 +83,6 @@ export async function PUT(
     const mutationResult = isSuspending
       ? await suspendTenant(id, reason || "Subscription overdue")
       : await reactivateTenant(id);
-
-    // Notify all Tenant Admins of this school (DB Notice + AuditLog + Email) BEFORE returning response
-    const notificationResult = await notifyTenantAdmins(
-      id,
-      isSuspending ? "SUSPENDED" : "REACTIVATED",
-      reason
-    ).catch((err) => {
-      console.error("[SuperAdmin:TenantStatus] notifyTenantAdmins error:", err);
-      return { notifiedCount: 0, emails: [] };
-    });
 
     try {
       if (isSuspending) {
@@ -102,7 +113,7 @@ export async function PUT(
       isActive: !isSuspending,
       suspensionReason: isSuspending ? reason || "Subscription overdue" : null,
       suspendedAt: isSuspending ? new Date() : null,
-      notifiedAdmins: notificationResult.emails,
+      notifiedAdmins: mutationResult.notificationResult?.emails || [],
       adminsNotified: true,
     };
 
@@ -121,4 +132,5 @@ export async function PUT(
   }
 }
 
+export const POST = PUT;
 export const PATCH = PUT;

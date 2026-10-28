@@ -54,6 +54,20 @@ export function buildCacheKey(options: CacheKeyOptions): string {
 const l1MemoryCache = new Map<string, { data: any; expiresAt: number }>();
 
 /**
+ * Purges L1 in-memory cache entries matching a tenant subdomain or ID.
+ */
+export function clearL1TenantCache(subdomainOrId: string): void {
+  const clean = (subdomainOrId || "").trim().toLowerCase();
+  if (!clean) return;
+  l1MemoryCache.delete(`cache:tenant:meta:${clean}`);
+  for (const key of l1MemoryCache.keys()) {
+    if (key.toLowerCase().includes(clean)) {
+      l1MemoryCache.delete(key);
+    }
+  }
+}
+
+/**
  * Two-Tier Cache-Aside Pattern Implementation:
  * 1. Checks L1 in-memory cache (< 0.05ms)
  * 2. Checks L2 Redis cache using structured namespace key (< 2ms)

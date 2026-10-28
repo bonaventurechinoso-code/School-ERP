@@ -1084,12 +1084,21 @@ model Tenant {
   settlementAccountNumber String?
   settlementAccountName   String?
   collectionMode          String?   @default("MANUAL_BANK_TRANSFER")
-  isImpersonationAllowed  Boolean   @default(true)
+  isImpersonationAllowed  Boolean              @default(true)
   suspendedReason         String?
   suspendedAt             DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  tier                    InstitutionTier      @default(PRIMARY)
+  statusReason            String?
+  statusChangedAt         DateTime?
+  storageUsedBytes        BigInt               @default(0)
+  maxStorageBytes         BigInt               @default(53687091200)
+  maxStudents             Int                  @default(500)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
   wallets                 Wallet[]
+  campuses                TenantCampus[]
+  featureFlags            TenantFeatureFlag[]
+  auditTrails             PlatformAuditTrail[]
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -1527,5 +1536,62 @@ model AdmissionAuditTrail {
   @@index([tenantId, registerId])
   @@map("admission_audit_trails")
 }
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+  PENDING_VERIFICATION
+  GRACE_PERIOD
+  PENDING_PURGE
+}
+
+model TenantCampus {
+  id       String  @id @default(cuid())
+  tenantId String
+  name     String
+  code     String
+  state    String?
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model PlatformAuditTrail {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  actorId    String
+  actorEmail String
+  action     String
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([tenantId])
+}
+
+model GlobalFeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TenantFeatureFlag {
+  id        String  @id @default(cuid())
+  tenantId  String
+  flagKey   String
+  isEnabled Boolean @default(true)
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, flagKey])
+  @@index([tenantId])
+}
+
 
 

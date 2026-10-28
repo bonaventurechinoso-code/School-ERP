@@ -5,6 +5,38 @@ import { ensureEgedeAndDemoRestored } from "@/lib/tenant-status";
 
 export const dynamic = "force-dynamic";
 
+const TIER_LABEL_MAP: Record<string, string> = {
+  CRECHE: "Creche / Daycare",
+  NURSERY: "Nursery / Kindergarten",
+  PRIMARY: "Primary School",
+  SECONDARY: "Senior Secondary School",
+  POLYTECHNIC: "Polytechnic",
+  COLLEGE_OF_ED: "College of Education",
+  UNIVERSITY: "University",
+};
+
+function buildDefaultTiers(
+  rawTiers?: Array<{ id?: string; name: string }> | null,
+  institutionTypes?: any,
+  tierEnum?: string | null
+): Array<{ id: string; name: string }> {
+  if (Array.isArray(rawTiers) && rawTiers.length > 0) {
+    return rawTiers.map((t, idx) => ({
+      id: t.id || `tier-${idx}`,
+      name: t.name,
+    }));
+  }
+  if (Array.isArray(institutionTypes) && institutionTypes.length > 0) {
+    return institutionTypes.map((name, idx) => ({
+      id: `inst-${idx}`,
+      name: String(name),
+    }));
+  }
+  const resolvedLabel =
+    (tierEnum && TIER_LABEL_MAP[tierEnum.toUpperCase()]) || "Primary School";
+  return [{ id: "default-primary", name: resolvedLabel }];
+}
+
 export async function GET(req: NextRequest) {
   try {
     await ensureEgedeAndDemoRestored();
@@ -82,13 +114,11 @@ export async function GET(req: NextRequest) {
         status: normalizedStatus,
         isActive: !isSuspended,
         tier: (isDemo || isTrial ? "Free" : "Basic") as any,
+        institutionTier: "PRIMARY",
         studentsCount: isDemo ? Math.max(120, school.students?.length || 0) : (school.students?.length || 0),
         students_count: isDemo ? Math.max(120, school.students?.length || 0) : (school.students?.length || 0),
         staff_count: school.staff?.length || 0,
-        academic_tiers: (school.academicTiers || []).map((t: any) => ({
-          id: t.id,
-          name: t.name,
-        })),
+        academic_tiers: buildDefaultTiers(school.academicTiers, null, "PRIMARY"),
         planStatus: (isSuspended ? "Suspended" : isTrial ? "Trial" : "Active") as any,
         subscriptionStatus: (isSuspended
           ? "Suspended"
@@ -125,6 +155,7 @@ export async function GET(req: NextRequest) {
         slug: s.subdomain,
         status: isSusp ? "SUSPENDED" : "ACTIVE",
         isActive: !isSusp,
+        academic_tiers: buildDefaultTiers((s as any).academic_tiers, null, "PRIMARY"),
       });
     }
 
@@ -144,7 +175,11 @@ export async function GET(req: NextRequest) {
           subdomain: true,
           adminEmail: true,
           contactPhone: true,
+          institutionTypes: true,
+          tier: true,
           status: true,
+          statusReason: true,
+          statusChangedAt: true,
           subscriptionStatus: true,
           suspendedReason: true,
           suspendedAt: true,
@@ -163,6 +198,10 @@ export async function GET(req: NextRequest) {
         if (existing) {
           existing.isDemo = Boolean(t.isDemo);
           existing.isTrial = Boolean(t.isTrial);
+          existing.institutionTier = t.tier || "PRIMARY";
+          if (!existing.academic_tiers || existing.academic_tiers.length === 0) {
+            existing.academic_tiers = buildDefaultTiers(null, t.institutionTypes, t.tier);
+          }
           if (t.trialEndsAt) existing.trialEndsAt = new Date(t.trialEndsAt).toISOString();
           if (t.adminEmail) {
             existing.contactEmail = t.adminEmail;
@@ -173,7 +212,7 @@ export async function GET(req: NextRequest) {
             existing.isActive = false;
             existing.planStatus = "Suspended";
             existing.subscriptionStatus = "Suspended";
-            existing.suspensionReason = t.suspendedReason || "Subscription overdue";
+            existing.suspensionReason = t.statusReason || t.suspendedReason || "Subscription overdue";
             existing.suspendedAt = t.suspendedAt ? new Date(t.suspendedAt).toISOString() : undefined;
           } else {
             existing.status = "ACTIVE";
@@ -188,13 +227,14 @@ export async function GET(req: NextRequest) {
             slug: t.subdomain,
             status: isTenantSuspended ? "SUSPENDED" : "ACTIVE",
             isActive: !isTenantSuspended,
-            suspensionReason: t.suspendedReason || null,
+            suspensionReason: t.statusReason || t.suspendedReason || null,
             suspendedAt: t.suspendedAt ? new Date(t.suspendedAt).toISOString() : undefined,
             tier: t.isDemo || t.isTrial ? "Free" : "Basic",
+            institutionTier: t.tier || "PRIMARY",
             studentsCount: t.isDemo ? 120 : 0,
             students_count: t.isDemo ? 120 : 0,
             staff_count: 0,
-            academic_tiers: [],
+            academic_tiers: buildDefaultTiers(null, t.institutionTypes, t.tier),
             planStatus: isTenantSuspended ? "Suspended" : t.isTrial ? "Trial" : "Active",
             subscriptionStatus: (isTenantSuspended
               ? "Suspended"
