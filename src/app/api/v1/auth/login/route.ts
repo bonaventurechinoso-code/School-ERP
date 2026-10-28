@@ -418,11 +418,43 @@ export async function POST(req: Request) {
     }
 
     // Tenant must be active before any credential check.
-    const tenantStatus = String(tenant.status || "").toUpperCase();
+    const tenantStatus =
+      !tenant.isActive || String(tenant.status || "").toUpperCase() === "SUSPENDED"
+        ? "SUSPENDED"
+        : String(tenant.status || "").toUpperCase();
     if (!tenant.isActive || tenantStatus === "SUSPENDED" || tenantStatus === "INACTIVE") {
+      let tenantMeta: any = null;
+      try {
+        tenantMeta = await basePrisma.tenant.findFirst({
+          where: {
+            OR: [
+              { id: tenant.id },
+              { subdomain: { equals: tenant.subdomain, mode: "insensitive" } },
+            ],
+          },
+          select: { suspendedReason: true, suspendedAt: true },
+        });
+      } catch {}
+
+      tenant.status = tenantStatus;
+      tenant.slug = tenant.slug || tenant.subdomain || targetSchoolCode;
+      tenant.suspensionReason = tenant.suspensionReason || tenantMeta?.suspendedReason || "Subscription overdue";
+      tenant.suspendedAt = tenant.suspendedAt
+        ? new Date(tenant.suspendedAt)
+        : tenantMeta?.suspendedAt
+        ? new Date(tenantMeta.suspendedAt)
+        : tenant.updatedAt
+        ? new Date(tenant.updatedAt)
+        : new Date();
+
+      let errorMsg = "This institution is currently inactive or suspended. Please contact platform administration.";
+      if (tenant.status === "SUSPENDED") {
+        errorMsg = `Institution ${tenant.slug} is SUSPENDED: ${tenant.suspensionReason || "Subscription overdue"}. Suspended on ${tenant.suspendedAt?.toLocaleDateString()}. To reactivate, pay at /admin/billing and contact Platform Admin.`;
+      }
+
       return NextResponse.json(
         {
-          error: "This institution is currently inactive or suspended. Please contact platform administration.",
+          error: errorMsg,
           code: "TENANT_INACTIVE",
         },
         { status: 403 }
