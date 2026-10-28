@@ -1,24 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { getSchoolsStore, SchoolTenant } from "@/app/dashboard/super-admin/mock-data";
+import { getSchoolsStore } from "@/app/dashboard/super-admin/mock-data";
+import { ensureEgedeAndDemoRestored } from "@/lib/tenant-status";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
+    await ensureEgedeAndDemoRestored();
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || "ALL";
     const search = searchParams.get("search")?.trim().toLowerCase() || "";
 
-    // 1. Retrieve in-memory synced store
-    const storeSchools = [...getSchoolsStore()];
+    // 1. Retrieve in-memory synced store (excluding soft-deleted rows)
+    const storeSchools = [...getSchoolsStore()].filter(
+      (s: any) =>
+        !s.isDeleted &&
+        String(s.status || "").toUpperCase() !== "DELETED" &&
+        s.subdomain?.toLowerCase() !== "greenfield"
+    );
 
-    // 2. Query ALL real database schools from PostgreSQL (ACTIVE, SUSPENDED, INACTIVE)
+    // 2. Query ALL real database schools from PostgreSQL (where deletedAt IS NULL AND status != 'DELETED')
     let dbSchools: any[] = [];
     try {
       dbSchools = await basePrisma.school.findMany({
         where: {
           deletedAt: null,
+          status: { not: "DELETED" },
         },
         include: {
           academicTiers: true,
@@ -44,9 +53,10 @@ export async function GET(req: NextRequest) {
       console.warn("[SuperAdmin:Tenants GET] DB query failed or offline:", dbErr);
     }
 
-    // 3. Map database schools to SchoolTenant format (preserving ACTIVE and SUSPENDED)
+    // 3. Map database schools to SchoolTenant format (preserving ACTIVE and SUSPENDED, including Demo)
     const mappedDbSchools: any[] = dbSchools.map((school) => {
-      const isDemo = school.subdomain === "demo" || school.slug === "demo";
+      const subLower = (school.subdomain || "").toLowerCase();
+      const isDemo = subLower === "demo" || (school.slug || "").toLowerCase() === "demo";
       const isSuspended =
         !school.isActive ||
         Boolean(school.isBanned) ||
@@ -72,8 +82,8 @@ export async function GET(req: NextRequest) {
         status: normalizedStatus,
         isActive: !isSuspended,
         tier: (isDemo || isTrial ? "Free" : "Basic") as any,
-        studentsCount: isDemo ? 120 : (school.students?.length || 0),
-        students_count: isDemo ? 120 : (school.students?.length || 0),
+        studentsCount: isDemo ? Math.max(120, school.students?.length || 0) : (school.students?.length || 0),
+        students_count: isDemo ? Math.max(120, school.students?.length || 0) : (school.students?.length || 0),
         staff_count: school.staff?.length || 0,
         academic_tiers: (school.academicTiers || []).map((t: any) => ({
           id: t.id,
@@ -101,13 +111,16 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 4. Merge DB schools and in-memory store schools (UNION, avoiding duplicate demo)
+    // 4. Merge DB schools and in-memory store schools (UNION, including Demo School)
     const combinedMap = new Map<string, any>();
 
-    // First populate from in-memory store
     for (const s of storeSchools) {
-      const isSusp = s.subscriptionStatus === "Suspended" || s.planStatus === "Suspended";
-      combinedMap.set(s.subdomain.toLowerCase(), {
+      const subKey = s.subdomain.toLowerCase();
+      const isSusp =
+        s.subscriptionStatus === "Suspended" ||
+        s.planStatus === "Suspended" ||
+        (s as any).status === "SUSPENDED";
+      combinedMap.set(subKey, {
         ...s,
         slug: s.subdomain,
         status: isSusp ? "SUSPENDED" : "ACTIVE",
@@ -115,12 +128,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Then overwrite/augment with real database records (DB records take priority)
     for (const s of mappedDbSchools) {
       combinedMap.set(s.subdomain.toLowerCase(), s);
     }
 
-    // 5. Query and augment with Tenant table records across all statuses
+    // 5. Query and augment with Tenant table records (excluding DELETED)
     try {
       const dbTenants = await basePrisma.tenant.findMany({
         where: {
@@ -163,6 +175,9 @@ export async function GET(req: NextRequest) {
             existing.subscriptionStatus = "Suspended";
             existing.suspensionReason = t.suspendedReason || "Subscription overdue";
             existing.suspendedAt = t.suspendedAt ? new Date(t.suspendedAt).toISOString() : undefined;
+          } else {
+            existing.status = "ACTIVE";
+            existing.isActive = true;
           }
         } else {
           combinedMap.set(sub, {
@@ -204,14 +219,8 @@ export async function GET(req: NextRequest) {
       console.warn("[SuperAdmin:Tenants GET] Tenant DB query warning:", tErr);
     }
 
-    // Sort to place real institutions first, keeping suspended tenants visible
-    let result = Array.from(combinedMap.values()).sort((a, b) => {
-      if (a.isDemo && !b.isDemo) return 1;
-      if (!a.isDemo && b.isDemo) return -1;
-      return 0;
-    });
+    let result = Array.from(combinedMap.values());
 
-    // Filter by search if provided
     if (search) {
       result = result.filter(
         (s) =>
@@ -222,7 +231,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Filter by status if explicitly requested (ALL shows ACTIVE, SUSPENDED, INACTIVE)
     if (status !== "ALL") {
       const upperStatus = status.toUpperCase();
       result = result.filter(

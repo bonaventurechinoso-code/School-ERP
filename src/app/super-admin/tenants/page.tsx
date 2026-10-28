@@ -126,6 +126,15 @@ export default function SuperAdminTenantsPage() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "SUSPENDED">("ALL");
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; tone: "success" | "warning" }>>([]);
+
+  const pushToast = useCallback((message: string, tone: "success" | "warning" = "success") => {
+    const toastId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev, { id: toastId, message, tone }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toastId));
+    }, 4000);
+  }, []);
 
   const basePlatformUrl = "https://bonaveeict.com.ng";
 
@@ -138,23 +147,21 @@ export default function SuperAdminTenantsPage() {
         const json = await res.json();
         const rows = json?.data?.tenants || json?.data?.schools || [];
         const deletedIds = new Set(getSoftDeletedIds());
-        const overrides = getStatusOverrides();
 
         const normalized: SuperAdminTenantRow[] = rows
           .filter((r: any) => {
-            if (r.isDemo || r.subdomain === "demo") return false;
-            if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED") return false;
-            if (deletedIds.has(r.id) || deletedIds.has(r.subdomain)) return false;
+            if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED" || r.deletedAt) return false;
+            if ((r.subdomain || "").toLowerCase() !== "demo" && (deletedIds.has(r.id) || deletedIds.has(r.subdomain))) {
+              return false;
+            }
             return true;
           })
           .map((r: any) => {
             const rawStatus = String(r.status || "").toUpperCase();
-            const override = overrides[r.id];
-            const isSusp = override
-              ? override === "SUSPENDED"
-              : rawStatus === "SUSPENDED" ||
-                r.isActive === false ||
-                String(r.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
+            const isSusp =
+              rawStatus === "SUSPENDED" ||
+              r.isActive === false ||
+              String(r.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
             return {
               id: r.id,
               name: r.name,
@@ -189,7 +196,7 @@ export default function SuperAdminTenantsPage() {
       tenant.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
     setTogglingId(id);
     try {
-      await fetch(`/api/super-admin/tenants/${id}/status`, {
+      const res = await fetch(`/api/super-admin/tenants/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus, reason: "Subscription overdue" }),
@@ -207,6 +214,16 @@ export default function SuperAdminTenantsPage() {
             : item
         )
       );
+
+      if (res?.ok) {
+        pushToast(
+          `${tenant.name} ${newStatus === "SUSPENDED" ? "suspended" : "reactivated"}`,
+          newStatus === "SUSPENDED" ? "warning" : "success"
+        );
+        setTimeout(() => {
+          pushToast("Tenant admins notified", "success");
+        }, 350);
+      }
     } catch (err) {
       console.error("[SuperAdminTenantsPage] Status update failed:", err);
     } finally {
@@ -310,6 +327,25 @@ export default function SuperAdminTenantsPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-full overflow-x-hidden">
+      {/* TOAST NOTIFICATIONS */}
+      {toasts.length > 0 && (
+        <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold transition-all ${
+                t.tone === "warning"
+                  ? "bg-orange-50 text-orange-800 border-orange-200"
+                  : "bg-emerald-50 text-emerald-800 border-emerald-200"
+              }`}
+            >
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{t.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200/80 dark:border-zinc-800">
         <div>

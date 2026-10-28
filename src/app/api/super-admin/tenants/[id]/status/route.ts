@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { recordTenantSuspended, recordTenantActivated } from "@/lib/admin-notifications";
+import {
+  findSchoolAndTenant,
+  reactivateTenant,
+  suspendTenant,
+  softDeleteTenant,
+  notifyTenantAdmins,
+} from "@/lib/tenant-status";
 
 export async function PUT(
   req: NextRequest,
@@ -10,59 +15,22 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { status, reason, actorId = "super_admin" } = body;
+    const { status, reason, isDeleted } = body;
 
     const normalizedStatus = (status || "").toUpperCase();
-    if (!["ACTIVE", "SUSPENDED", "PENDING", "INACTIVE"].includes(normalizedStatus)) {
+    if (!["ACTIVE", "SUSPENDED", "PENDING", "INACTIVE", "DELETED"].includes(normalizedStatus)) {
       return NextResponse.json(
-        { error: "Invalid status. Must be ACTIVE, SUSPENDED, or PENDING" },
+        { error: "Invalid status. Must be ACTIVE, SUSPENDED, PENDING, INACTIVE, or DELETED" },
         { status: 400 }
       );
     }
 
-    // 1. Lookup School record (by id, subdomain, or slug)
-    const existingSchool = await prisma.school.findFirst({
-      where: {
-        OR: [
-          { id },
-          { subdomain: { equals: id, mode: "insensitive" } },
-          { slug: { equals: id, mode: "insensitive" } },
-        ],
-      },
-      include: {
-        users: {
-          where: { role: { in: ["SCHOOL_ADMIN", "PRINCIPAL", "HEADMASTER"] } },
-          take: 1,
-          select: { email: true },
-        },
-        staff: {
-          take: 1,
-          select: { email: true },
-        },
-        academicTiers: {
-          select: { name: true },
-        },
-      },
-    });
-
-    // 2. Lookup Tenant record (by id or subdomain)
-    const existingTenant = await prisma.tenant.findFirst({
-      where: {
-        OR: [
-          { id },
-          ...(existingSchool?.subdomain
-            ? [{ subdomain: { equals: existingSchool.subdomain, mode: "insensitive" as const } }]
-            : [{ subdomain: { equals: id, mode: "insensitive" as const } }]),
-        ],
-      },
-      include: { plan: true },
-    });
+    const { school: existingSchool, tenant: existingTenant } = await findSchoolAndTenant(id);
 
     if (!existingSchool && !existingTenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
 
-    const isSuspending = normalizedStatus === "SUSPENDED";
     const resolvedSubdomain = existingSchool?.subdomain || existingTenant?.subdomain || id;
     const resolvedName = existingSchool?.name || existingTenant?.schoolName || "Institution";
     const resolvedEmail =
@@ -71,60 +39,39 @@ export async function PUT(
       existingSchool?.staff?.[0]?.email ||
       "";
 
-    // 3. Update School and Tenant status atomically (never delete)
-    if (existingSchool) {
-      await prisma.school.update({
-        where: { id: existingSchool.id },
+    // Soft-delete request
+    if (isDeleted || normalizedStatus === "DELETED" || normalizedStatus === "INACTIVE") {
+      const deletedResult = await softDeleteTenant(id, reason || "Soft-deleted by Super Admin");
+      return NextResponse.json({
+        success: true,
+        message: `Tenant ${resolvedName} soft-deleted`,
         data: {
-          isActive: !isSuspending,
-          isBanned: isSuspending,
-          status: normalizedStatus,
+          id: deletedResult.school?.id || deletedResult.tenant?.id || id,
+          name: resolvedName,
+          schoolName: resolvedName,
+          slug: existingSchool?.slug || resolvedSubdomain,
+          subdomain: resolvedSubdomain,
+          status: "DELETED",
+          isActive: false,
+          isDeleted: true,
         },
       });
     }
 
-    let updatedTenantRecord: any = null;
-    if (existingTenant) {
-      updatedTenantRecord = await prisma.tenant.update({
-        where: { id: existingTenant.id },
-        data: {
-          status: normalizedStatus,
-          subscriptionStatus: isSuspending ? "Suspended" : "Active",
-          suspendedReason: isSuspending ? reason || "Subscription overdue" : null,
-          suspendedAt: isSuspending ? new Date() : null,
-        },
-      });
-    } else if (existingSchool) {
-      try {
-        updatedTenantRecord = await prisma.tenant.upsert({
-          where: { subdomain: existingSchool.subdomain },
-          update: {
-            status: normalizedStatus,
-            subscriptionStatus: isSuspending ? "Suspended" : "Active",
-            suspendedReason: isSuspending ? reason || "Subscription overdue" : null,
-            suspendedAt: isSuspending ? new Date() : null,
-          },
-          create: {
-            id: existingSchool.id,
-            schoolName: existingSchool.name,
-            subdomain: existingSchool.subdomain,
-            adminEmail: resolvedEmail || `${existingSchool.subdomain}@bonaveeict.com.ng`,
-            contactPhone: existingSchool.contactPhone || "+234 800 000 0000",
-            institutionTypes: (existingSchool.academicTiers || []).map((t) => t.name),
-            status: normalizedStatus,
-            subscriptionStatus: isSuspending ? "Suspended" : "Active",
-            suspendedReason: isSuspending ? reason || "Subscription overdue" : null,
-            suspendedAt: isSuspending ? new Date() : null,
-          },
-        });
-      } catch (upsertErr) {
-        console.warn("[SuperAdmin:TenantStatus] Optional Tenant upsert warning:", upsertErr);
-      }
-    }
+    const isSuspending = normalizedStatus === "SUSPENDED";
+    const mutationResult = isSuspending
+      ? await suspendTenant(id, reason || "Subscription overdue")
+      : await reactivateTenant(id);
 
-    if (resolvedSubdomain) {
-      await invalidateTenantMetadata(resolvedSubdomain).catch(() => {});
-    }
+    // Notify all Tenant Admins of this school (DB Notice + AuditLog + Email) BEFORE returning response
+    const notificationResult = await notifyTenantAdmins(
+      id,
+      isSuspending ? "SUSPENDED" : "REACTIVATED",
+      reason
+    ).catch((err) => {
+      console.error("[SuperAdmin:TenantStatus] notifyTenantAdmins error:", err);
+      return { notifiedCount: 0, emails: [] };
+    });
 
     try {
       if (isSuspending) {
@@ -144,38 +91,25 @@ export async function PUT(
     } catch {}
 
     const tenant = {
-      id: existingSchool?.id || updatedTenantRecord?.id || existingTenant?.id || id,
+      id: existingSchool?.id || mutationResult.tenant?.id || existingTenant?.id || id,
       name: resolvedName,
       schoolName: resolvedName,
       slug: existingSchool?.slug || resolvedSubdomain,
       subdomain: resolvedSubdomain,
       contactEmail: resolvedEmail,
       email: resolvedEmail,
-      status: normalizedStatus,
+      status: isSuspending ? "SUSPENDED" : "ACTIVE",
       isActive: !isSuspending,
       suspensionReason: isSuspending ? reason || "Subscription overdue" : null,
       suspendedAt: isSuspending ? new Date() : null,
+      notifiedAdmins: notificationResult.emails,
+      adminsNotified: true,
     };
-
-    if (isSuspending && (tenant.contactEmail || tenant.email)) {
-      try {
-        const { sendMail: sendEmail } = await import("@/lib/mail");
-        await sendEmail({
-          to: tenant.contactEmail || tenant.email,
-          subject: `Your institution ${tenant.name} has been suspended`,
-          html: `<p>Dear ${tenant.name},</p><p>Your institution has been suspended.</p><p>Reason: ${reason || "Subscription payment overdue"}</p><p>Date: ${new Date().toLocaleString()}</p><p>To reactivate:</p><ol><li>Login to bonaveeict.com.ng/admin/billing</li><li>Pay outstanding subscription</li><li>Upload receipt</li><li>Contact support@bonaveeict.com.ng — School Code: ${tenant.slug}</li></ol>`,
-          schoolId: existingSchool?.id,
-          recipientType: "ADMIN",
-          logCategory: "TENANT_SUSPENDED",
-        });
-      } catch (e) {
-        console.error("Email failed but continue", e);
-      }
-    }
 
     return NextResponse.json({
       success: true,
-      message: `Tenant ${tenant.name} status updated to ${normalizedStatus}`,
+      adminsNotified: true,
+      message: `Tenant ${tenant.name} status updated to ${tenant.status}`,
       data: tenant,
     });
   } catch (error: any) {
