@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
+import { PaymentSettingsController } from "@/lib/payment-settings-controller";
 
 export async function GET(
   req: NextRequest,
@@ -11,7 +12,7 @@ export async function GET(
 
     const school = await basePrisma.school.findFirst({
       where: {
-        OR: [{ subdomain: cleanSubdomain }, { id: subdomain }],
+        OR: [{ subdomain: cleanSubdomain }, { id: subdomain }, { slug: cleanSubdomain }],
       },
       select: {
         id: true,
@@ -33,17 +34,41 @@ export async function GET(
       );
     }
 
+    const effectiveSettings = await PaymentSettingsController.getTenantSettings(school.id);
+    const primaryBank = effectiveSettings.bank_accounts[0] || {
+      bank_name: school.settlementBankName || "",
+      account_number: school.settlementAccountNumber || "",
+      account_name: school.settlementAccountName || "",
+      branch_code: school.settlementBankCode || "",
+      currency: "NGN",
+      swift_bic: "",
+    };
+
+    const isManualEnabled = effectiveSettings.effective_is_manual_transfer_enabled;
+
     return NextResponse.json({
       success: true,
       school: {
         id: school.id,
         name: school.name,
         subdomain: school.subdomain,
-        bankName: school.settlementBankName,
-        accountNumber: school.settlementAccountNumber,
-        accountName: school.settlementAccountName,
-        instruction: school.paymentInstruction || "Use Student Admission No as transfer narration",
-        isConfigured: Boolean(school.settlementAccountNumber && school.settlementBankName),
+        bankName: primaryBank.bank_name || school.settlementBankName,
+        accountNumber: primaryBank.account_number || school.settlementAccountNumber,
+        accountName: primaryBank.account_name || school.settlementAccountName,
+        instruction:
+          effectiveSettings.manual_transfer_instructions ||
+          school.paymentInstruction ||
+          "Use Student Admission No as transfer narration",
+        isConfigured:
+          isManualEnabled &&
+          Boolean(
+            (primaryBank.account_number && primaryBank.bank_name) ||
+              (school.settlementAccountNumber && school.settlementBankName)
+          ),
+        isManualTransferEnabled: isManualEnabled,
+        bankAccounts: effectiveSettings.bank_accounts,
+        supportedOnlineGateways: effectiveSettings.effective_supported_online_gateways,
+        platformGovernance: effectiveSettings.platform_governance,
       },
     });
   } catch (error: any) {

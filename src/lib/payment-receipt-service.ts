@@ -4,6 +4,13 @@ import {
   sendReceiptVerifiedEmail,
   sendReceiptRejectedEmail,
 } from "@/lib/email";
+import { logAuditEvent } from "@/lib/audit-logger";
+import {
+  PaymentSettingsController,
+  PaymentTransactionMode,
+  PaymentTransactionState,
+} from "@/lib/payment-settings-controller";
+import crypto from "crypto";
 
 export type ModuleType =
   | "ADMISSION_FORM_FEE"
@@ -153,21 +160,46 @@ export interface CreateReceiptParams {
   amount: number;
   paymentDate?: Date | string;
   paymentMethod?: PaymentMethod;
+  paymentMode?: PaymentTransactionMode;
+  depositorName?: string;
+  transferReference?: string;
   txnRef?: string;
   bankName?: string;
   fileUrl: string;
+  proofOfPaymentUrl?: string;
   fileKey?: string;
   fileName?: string;
   linkedInvoiceId?: string;
   term?: string;
   session?: string;
+  ip?: string;
 }
 
 export interface VerifyReceiptParams {
   receiptId: string;
   action: "VERIFY" | "REJECT" | "FLAG";
   verifiedBy: string;
+  verifiedByUserId?: string;
   rejectionReason?: string;
+  ip?: string;
+}
+
+/**
+ * Generates a tamper-proof fiscal receipt number for settled transactions.
+ */
+export function generateFiscalReceiptCode(
+  tenantId: string,
+  receiptId: string,
+  amount: number
+): string {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${tenantId}:${receiptId}:${amount}:${Date.now()}`)
+    .digest("hex")
+    .slice(0, 8)
+    .toUpperCase();
+  const year = new Date().getFullYear();
+  return `FISCAL-${year}-${digest}`;
 }
 
 /**
@@ -175,6 +207,34 @@ export interface VerifyReceiptParams {
  */
 export async function createPaymentReceipt(params: CreateReceiptParams) {
   const paymentDate = params.paymentDate ? new Date(params.paymentDate) : new Date();
+  const effectiveMode: PaymentTransactionMode =
+    params.paymentMode ||
+    (params.paymentMethod === "ONLINE" ? "DIRECT_GATEWAY" : "MANUAL_TRANSFER");
+
+  // Enforce Hierarchical Payment Governance (Super Admin & Tenant Admin)
+  if (
+    effectiveMode === "MANUAL_TRANSFER" &&
+    params.moduleType !== "PLATFORM_SUBSCRIPTION" &&
+    params.tenantId !== "super-admin"
+  ) {
+    const tenantGov = await PaymentSettingsController.getTenantSettings(
+      params.tenantId
+    ).catch(() => null);
+    if (tenantGov && !tenantGov.effective_is_manual_transfer_enabled) {
+      throw new Error(
+        "Manual Bank Transfer is currently disabled for this institution by payment governance policy."
+      );
+    }
+  }
+
+  const effectiveTransferRef = (
+    params.transferReference ||
+    params.txnRef ||
+    params.referenceNo ||
+    ""
+  ).trim();
+  const effectiveDepositorName = (params.depositorName || params.payerName || "").trim();
+  const effectiveProofUrl = params.proofOfPaymentUrl || params.fileUrl;
 
   // If there's an existing receipt for this referenceNo + moduleType, update or create
   const existing = await basePrisma.paymentReceipt.findFirst({
@@ -198,14 +258,20 @@ export async function createPaymentReceipt(params: CreateReceiptParams) {
         amount: params.amount || existing.amount,
         paymentDate,
         paymentMethod: params.paymentMethod || existing.paymentMethod,
-        txnRef: params.txnRef || existing.txnRef,
+        paymentMode: effectiveMode,
+        state: "PENDING_VERIFICATION",
+        proofOfPaymentUrl: effectiveProofUrl,
+        depositorName: effectiveDepositorName || existing.depositorName,
+        transferReference: effectiveTransferRef || existing.transferReference,
+        txnRef: effectiveTransferRef || existing.txnRef,
         bankName: params.bankName || existing.bankName,
-        fileUrl: params.fileUrl,
+        fileUrl: effectiveProofUrl,
         fileKey: params.fileKey || existing.fileKey,
         fileName: params.fileName || existing.fileName,
         status: "PENDING",
         rejectionReason: null,
         verifiedBy: null,
+        verifiedByUserId: null,
         verifiedAt: null,
         linkedInvoiceId: params.linkedInvoiceId || existing.linkedInvoiceId,
         term: params.term || existing.term,
@@ -226,9 +292,14 @@ export async function createPaymentReceipt(params: CreateReceiptParams) {
         amount: params.amount,
         paymentDate,
         paymentMethod: params.paymentMethod || "BANK_TRANSFER",
-        txnRef: params.txnRef,
+        paymentMode: effectiveMode,
+        state: "PENDING_VERIFICATION",
+        proofOfPaymentUrl: effectiveProofUrl,
+        depositorName: effectiveDepositorName,
+        transferReference: effectiveTransferRef,
+        txnRef: effectiveTransferRef,
         bankName: params.bankName,
-        fileUrl: params.fileUrl,
+        fileUrl: effectiveProofUrl,
         fileKey: params.fileKey,
         fileName: params.fileName,
         status: "PENDING",
@@ -239,14 +310,33 @@ export async function createPaymentReceipt(params: CreateReceiptParams) {
     });
   }
 
-  // Audit event / log
+  // Transition application state to PAYMENT_PENDING_REVIEW without granting final admission clearance yet
   if (params.moduleType === "ADMISSION_FORM_FEE") {
+    await markApplicationPendingVerification(params.referenceNo, effectiveTransferRef);
     await logAdmissionAuditTimeline(
       params.referenceNo,
-      "Payment Receipt Uploaded",
-      `Proof of payment for Form Fee (₦${Number(params.amount).toLocaleString()}) uploaded. Status: PENDING VERIFICATION.`
+      "Payment Receipt Uploaded (PENDING_VERIFICATION)",
+      `Proof of payment for Form Fee (₦${Number(params.amount).toLocaleString()}, Ref: ${effectiveTransferRef}, Depositor: ${effectiveDepositorName}) uploaded. Status: PAYMENT_PENDING_REVIEW.`
     );
   }
+
+  await logAuditEvent({
+    actorId: params.payerId || params.payerName,
+    action: "PAYMENT_TRANSACTION_SUBMITTED",
+    target: `payment_receipt:${receipt.id}`,
+    schoolId: params.schoolId || params.tenantId,
+    ip: params.ip || "client",
+    metadata: {
+      receiptId: receipt.id,
+      moduleType: params.moduleType,
+      paymentMode: effectiveMode,
+      state: "PENDING_VERIFICATION",
+      amount: params.amount,
+      depositorName: effectiveDepositorName,
+      transferReference: effectiveTransferRef,
+      referenceNo: params.referenceNo,
+    },
+  });
 
   // Optional email dispatch to payer if email provided
   if (params.payerEmail) {
@@ -265,9 +355,57 @@ export async function createPaymentReceipt(params: CreateReceiptParams) {
 }
 
 /**
- * Verifies, rejects, or flags a payment receipt and triggers domain automation.
+ * Transitions an application to PAYMENT_PENDING_REVIEW upon manual proof upload
+ * without granting final admission/enrollment clearance until verified by an officer.
+ */
+async function markApplicationPendingVerification(
+  applicationNo: string,
+  transferReference: string
+) {
+  try {
+    const register = await basePrisma.admissionRegister.findFirst({
+      where: { applicationNo },
+    });
+    if (register) {
+      let creds: any = register.credentialsJson || {};
+      if (typeof creds === "string") {
+        try {
+          creds = JSON.parse(creds);
+        } catch {
+          creds = {};
+        }
+      }
+      creds.formFeeStatus = "PENDING_VERIFICATION";
+      creds.paymentState = "PAYMENT_PENDING_REVIEW";
+      creds.transferReference = transferReference;
+      // Do NOT set formFeePaid = true until officer verifies
+      const nextStatus =
+        register.status === "new" || register.status === "INQUIRY"
+          ? "PAYMENT_PENDING_REVIEW"
+          : register.status;
+
+      await basePrisma.admissionRegister.update({
+        where: { id: register.id },
+        data: {
+          status: nextStatus,
+          credentialsJson: creds,
+          updatedAt: new Date(),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[MARK_APPLICATION_PENDING_VERIFICATION_WARN]:", err);
+  }
+}
+
+/**
+ * Verifies, rejects, or flags a payment receipt and triggers atomic domain automation.
  */
 export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
+  if (params.action === "REJECT" && (!params.rejectionReason || !params.rejectionReason.trim())) {
+    throw new Error("A structured rejection reason is mandatory when rejecting a payment.");
+  }
+
   const receipt = await basePrisma.paymentReceipt.findUnique({
     where: { id: params.receiptId },
   });
@@ -283,14 +421,56 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
       ? "REJECTED"
       : "FLAGGED";
 
+  const newState: PaymentTransactionState =
+    params.action === "VERIFY"
+      ? "SETTLED"
+      : params.action === "REJECT"
+      ? "REJECTED"
+      : "PENDING_VERIFICATION";
+
+  const fiscalReceiptCode =
+    params.action === "VERIFY"
+      ? generateFiscalReceiptCode(receipt.tenantId, receipt.id, receipt.amount)
+      : null;
+
   const updatedReceipt = await basePrisma.paymentReceipt.update({
     where: { id: params.receiptId },
     data: {
       status: newStatus,
+      state: newState,
       verifiedBy: params.verifiedBy || "Finance Desk",
+      verifiedByUserId: params.verifiedByUserId || params.verifiedBy || "Finance Desk",
       verifiedAt: params.action === "VERIFY" ? new Date() : null,
-      rejectionReason: params.action === "REJECT" ? params.rejectionReason || "Payment proof invalid" : null,
+      rejectionReason:
+        params.action === "REJECT"
+          ? params.rejectionReason?.trim() || "Payment proof invalid"
+          : null,
       updatedAt: new Date(),
+    },
+  });
+
+  await logAuditEvent({
+    actorId: params.verifiedByUserId || params.verifiedBy || "FINANCE_OFFICER",
+    action:
+      params.action === "VERIFY"
+        ? "PAYMENT_TRANSACTION_VERIFIED"
+        : params.action === "REJECT"
+        ? "PAYMENT_TRANSACTION_REJECTED"
+        : "PAYMENT_TRANSACTION_FLAGGED",
+    target: `payment_receipt:${receipt.id}`,
+    schoolId: receipt.schoolId || receipt.tenantId,
+    ip: params.ip || "finance-desk",
+    metadata: {
+      receiptId: receipt.id,
+      referenceNo: receipt.referenceNo,
+      transferReference: receipt.transferReference || receipt.txnRef,
+      depositorName: receipt.depositorName || receipt.payerName,
+      amount: receipt.amount,
+      old_state: receipt.state || receipt.status,
+      new_state: newState,
+      fiscalReceiptCode,
+      rejectionReason: params.rejectionReason || null,
+      verifiedBy: params.verifiedBy,
     },
   });
 
@@ -311,7 +491,14 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
 
     // 3. Tuition / Other Invoices: Settle linked invoice
     if (receipt.linkedInvoiceId) {
-      await settleLinkedInvoice(receipt.linkedInvoiceId, receipt.amount);
+      await settleLinkedInvoice(receipt.linkedInvoiceId, receipt.amount, {
+        paymentMode: (receipt as any).paymentMode || "MANUAL_TRANSFER",
+        proofOfPaymentUrl: (receipt as any).proofOfPaymentUrl || receipt.fileUrl,
+        depositorName: (receipt as any).depositorName || receipt.payerName,
+        transferReference: (receipt as any).transferReference || receipt.txnRef || receipt.referenceNo,
+        verifiedByUserId: params.verifiedByUserId || params.verifiedBy || "FINANCE_OFFICER",
+        fiscalReceiptCode: fiscalReceiptCode || "TRANSFER",
+      });
     }
 
     // 4. Academic Access Clearance (TRANSCRIPT_FEE, RESULT_CHECKING_FEE, REPORT_CARD_CHECKING_FEE)
@@ -382,7 +569,10 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
     });
   }
 
-  return updatedReceipt;
+  return {
+    ...updatedReceipt,
+    fiscalReceiptCode,
+  };
 }
 
 
@@ -501,7 +691,18 @@ export async function activatePlatformSubscription(tenantId: string, schoolId?: 
 /**
  * Automates settling linked invoices for Tuition and other fees
  */
-async function settleLinkedInvoice(invoiceId: string, paidAmount: number) {
+async function settleLinkedInvoice(
+  invoiceId: string,
+  paidAmount: number,
+  meta?: {
+    paymentMode?: string;
+    proofOfPaymentUrl?: string | null;
+    depositorName?: string | null;
+    transferReference?: string | null;
+    verifiedByUserId?: string | null;
+    fiscalReceiptCode?: string;
+  }
+) {
   try {
     const invoice = await basePrisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -516,6 +717,24 @@ async function settleLinkedInvoice(invoiceId: string, paidAmount: number) {
           paidAt: isPaid ? new Date() : invoice.paidAt,
           status: isPaid ? "PAID" : "PARTIALLY_PAID",
           updatedAt: new Date(),
+        },
+      });
+
+      await basePrisma.payment.create({
+        data: {
+          schoolId: invoice.schoolId,
+          studentId: invoice.studentId,
+          invoiceId: invoice.id,
+          amountPaid: paidAmount,
+          paymentDate: new Date(),
+          method: meta?.fiscalReceiptCode || "TRANSFER",
+          paymentMode: meta?.paymentMode || "MANUAL_TRANSFER",
+          state: "SETTLED",
+          proofOfPaymentUrl: meta?.proofOfPaymentUrl || null,
+          depositorName: meta?.depositorName || null,
+          transferReference: meta?.transferReference || null,
+          verifiedByUserId: meta?.verifiedByUserId || null,
+          verifiedAt: new Date(),
         },
       });
     }
@@ -607,8 +826,10 @@ export async function getPaymentReceipts(params: {
     const s = params.search.trim();
     where.OR = [
       { payerName: { contains: s, mode: "insensitive" } },
+      { depositorName: { contains: s, mode: "insensitive" } },
       { referenceNo: { contains: s, mode: "insensitive" } },
       { txnRef: { contains: s, mode: "insensitive" } },
+      { transferReference: { contains: s, mode: "insensitive" } },
       { bankName: { contains: s, mode: "insensitive" } },
     ];
   }
@@ -622,6 +843,63 @@ export async function getPaymentReceipts(params: {
     }),
     basePrisma.paymentReceipt.count({ where }),
   ]);
+
+  // Duplicate Reference Detector: check if another student/applicant used the same transferReference or txnRef
+  const candidateRefs = Array.from(
+    new Set(
+      receipts
+        .map((r: any) => (r.transferReference || r.txnRef || "").trim())
+        .filter((ref: string) => ref.length >= 4)
+    )
+  );
+
+  const duplicateMap = new Map<string, Array<{ id: string; payerName: string; referenceNo: string }>>();
+  if (candidateRefs.length > 0) {
+    const dupWhere: any = {
+      OR: [
+        { transferReference: { in: candidateRefs } },
+        { txnRef: { in: candidateRefs } },
+      ],
+    };
+    if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
+      dupWhere.tenantId = params.tenantId;
+    }
+
+    const matchingRefReceipts = await basePrisma.paymentReceipt.findMany({
+      where: dupWhere,
+      select: {
+        id: true,
+        payerName: true,
+        referenceNo: true,
+        transferReference: true,
+        txnRef: true,
+      },
+    });
+
+    for (const item of matchingRefReceipts) {
+      const refKey = (item.transferReference || item.txnRef || "").trim().toUpperCase();
+      if (!refKey) continue;
+      const list = duplicateMap.get(refKey) || [];
+      list.push({
+        id: item.id,
+        payerName: item.payerName,
+        referenceNo: item.referenceNo,
+      });
+      duplicateMap.set(refKey, list);
+    }
+  }
+
+  const enrichedReceipts = receipts.map((r: any) => {
+    const refKey = (r.transferReference || r.txnRef || "").trim().toUpperCase();
+    const matches = refKey ? duplicateMap.get(refKey) || [] : [];
+    const others = matches.filter((m) => m.id !== r.id);
+    return {
+      ...r,
+      isDuplicateReference: others.length > 0,
+      duplicateCount: others.length,
+      duplicateWith: others.map((o) => `${o.payerName} (${o.referenceNo})`),
+    };
+  });
 
   // Aggregate stats
   const statsWhere: any = {};
@@ -650,7 +928,7 @@ export async function getPaymentReceipts(params: {
   ]);
 
   return {
-    receipts,
+    receipts: enrichedReceipts,
     total: totalCount,
     page,
     limit,

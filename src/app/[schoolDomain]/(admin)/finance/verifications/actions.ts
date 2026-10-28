@@ -3,6 +3,7 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit-logger";
 
 export async function getVerificationQueue(
   schoolDomain: string,
@@ -126,13 +127,15 @@ export async function approvePaymentProof(schoolDomain: string, proofId: string)
         throw new Error(`This payment proof has already been marked ${proof.status}.`);
       }
 
-      // 1. Mark Proof Approved
+      // 1. Mark Proof Approved & State SETTLED
       const updatedProof = await tx.paymentProof.update({
         where: { id: proof.id },
         data: {
           status: "APPROVED",
+          state: "SETTLED",
           verifiedAt: new Date(),
           verifiedById: verifierId,
+          verifiedByUserId: verifierId,
           verifiedByName: verifierName,
         },
       });
@@ -172,7 +175,7 @@ export async function approvePaymentProof(schoolDomain: string, proofId: string)
             },
           });
 
-          // Create formal Payment record
+          // Create formal Payment record with verification metadata
           await tx.payment.create({
             data: {
               schoolId: proof.schoolId,
@@ -181,6 +184,13 @@ export async function approvePaymentProof(schoolDomain: string, proofId: string)
               amountPaid: proof.amount,
               paymentDate: proof.paidAt || new Date(),
               method: "MANUAL_TRANSFER",
+              paymentMode: "MANUAL_TRANSFER",
+              state: "SETTLED",
+              proofOfPaymentUrl: proof.proofOfPaymentUrl || proof.proofImageUrl,
+              depositorName: proof.depositorName || proof.payerAccountName || proof.studentName,
+              transferReference: proof.transferReference || proof.sessionId,
+              verifiedByUserId: verifierId,
+              verifiedAt: new Date(),
             },
           });
         }
@@ -202,6 +212,21 @@ export async function approvePaymentProof(schoolDomain: string, proofId: string)
       });
 
       return updatedProof;
+    });
+
+    await logAuditEvent({
+      actorId: verifierId,
+      action: "PAYMENT_PROOF_VERIFIED_SETTLED",
+      target: `payment_proof:${result.id}`,
+      schoolId: result.schoolId,
+      metadata: {
+        proofId: result.id,
+        studentId: result.studentId,
+        amount: result.amount,
+        transferReference: result.transferReference || result.sessionId,
+        state: "SETTLED",
+        verifiedBy: verifierName,
+      },
     });
 
     const cleanDomain = schoolDomain.trim().toLowerCase();
@@ -251,9 +276,11 @@ export async function rejectPaymentProof(
         where: { id: proof.id },
         data: {
           status: "REJECTED",
+          state: "REJECTED",
           rejectionReason: reason.trim(),
           verifiedAt: new Date(),
           verifiedById: verifierId,
+          verifiedByUserId: verifierId,
           verifiedByName: verifierName,
         },
       });
@@ -283,6 +310,22 @@ export async function rejectPaymentProof(
       }
 
       return updatedProof;
+    });
+
+    await logAuditEvent({
+      actorId: verifierId,
+      action: "PAYMENT_PROOF_REJECTED",
+      target: `payment_proof:${result.id}`,
+      schoolId: result.schoolId,
+      metadata: {
+        proofId: result.id,
+        studentId: result.studentId,
+        amount: result.amount,
+        transferReference: result.transferReference || result.sessionId,
+        state: "REJECTED",
+        rejectionReason: reason.trim(),
+        verifiedBy: verifierName,
+      },
     });
 
     const cleanDomain = schoolDomain.trim().toLowerCase();

@@ -34,6 +34,15 @@ interface SchoolBankInfo {
   accountName: string | null;
   instruction: string;
   isConfigured: boolean;
+  isManualTransferEnabled?: boolean;
+  bankAccounts?: Array<{
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    branch_code?: string | null;
+    currency?: string | null;
+    swift_bic?: string | null;
+  }>;
 }
 
 export default function FeePaymentCheckout({
@@ -166,9 +175,13 @@ export default function FeePaymentCheckout({
           amount: Number(amountPaid),
           paidAt: paidDate,
           payerBankName,
-          payerAccountName,
+          payerAccountName: payerAccountName.trim() || student?.fullName || "Student/Parent",
+          depositor_name: payerAccountName.trim() || student?.fullName || "Student/Parent",
           sessionId: sessionId.trim(),
+          transfer_reference: sessionId.trim(),
           proofImageUrl: uploadData.url,
+          proof_of_payment_url: uploadData.url,
+          paymentMode: "MANUAL_TRANSFER",
         }),
       });
 
@@ -226,6 +239,16 @@ export default function FeePaymentCheckout({
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
                 <span className="text-xs">Loading institutional bank details...</span>
+              </div>
+            ) : bankInfo?.isManualTransferEnabled === false ? (
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Direct Manual Transfer Disabled</span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Manual bank transfer verification is currently disabled by institutional payment governance. Please contact the school bursary office.
+                </p>
               </div>
             ) : !bankInfo?.isConfigured ? (
               <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-2">
@@ -406,6 +429,21 @@ export default function FeePaymentCheckout({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Depositor / Sender Account Name */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                Depositor / Sender Account Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={payerAccountName}
+                onChange={(e) => setPayerAccountName(e.target.value)}
+                placeholder="Full name on sender's bank account"
+                className="flex h-10 w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
             {/* Session ID / Transaction Reference */}

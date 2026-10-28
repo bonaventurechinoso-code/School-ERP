@@ -119,6 +119,63 @@ async function initSuperAdmin() {
       CREATE UNIQUE INDEX IF NOT EXISTS "payment_settings_tenant_id_module_type_class_id_term_key" ON "payment_settings"("tenant_id", "module_type", "class_id", "term");
       CREATE INDEX IF NOT EXISTS "payment_settings_tenant_id_is_enabled_idx" ON "payment_settings"("tenant_id", "is_enabled");
     `).catch(() => {});
+
+    console.log('[INIT_SUPERADMIN] Ensuring platform_payment_governance & tenant_payment_settings tables exist...');
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "platform_payment_governance" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "allowed_payment_methods" JSONB NOT NULL DEFAULT '["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"]',
+        "allow_manual_verification_override" BOOLEAN NOT NULL DEFAULT true,
+        "audit_metadata" JSONB,
+        "updated_by" TEXT,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "tenant_payment_settings" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "tenant_id" TEXT NOT NULL UNIQUE,
+        "school_id" TEXT,
+        "is_manual_transfer_enabled" BOOLEAN NOT NULL DEFAULT true,
+        "manual_transfer_instructions" TEXT,
+        "bank_accounts" JSONB NOT NULL DEFAULT '[]',
+        "supported_online_gateways" JSONB NOT NULL DEFAULT '[]',
+        "gateway_credentials_vault_ref" TEXT,
+        "auto_expire_unverified_hours" INTEGER NOT NULL DEFAULT 72,
+        "updated_by" TEXT,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(() => {});
+
+    const alterStatements = [
+      `ALTER TABLE "tenant_payment_settings" ADD COLUMN IF NOT EXISTS "updated_by" TEXT`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "payment_mode" TEXT NOT NULL DEFAULT 'MANUAL_TRANSFER'`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "state" TEXT NOT NULL DEFAULT 'SETTLED'`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "proof_of_payment_url" TEXT`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "depositor_name" TEXT`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "transfer_reference" TEXT`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "verified_by_user_id" TEXT`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "verified_at" TIMESTAMP(3)`,
+      `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "rejection_reason" TEXT`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "payment_mode" TEXT NOT NULL DEFAULT 'MANUAL_TRANSFER'`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "state" TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION'`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "proof_of_payment_url" TEXT`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "depositor_name" TEXT`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "transfer_reference" TEXT`,
+      `ALTER TABLE "PaymentProof" ADD COLUMN IF NOT EXISTS "verified_by_user_id" TEXT`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "payment_mode" TEXT NOT NULL DEFAULT 'MANUAL_TRANSFER'`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "state" TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION'`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "proof_of_payment_url" TEXT`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "depositor_name" TEXT`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "transfer_reference" TEXT`,
+      `ALTER TABLE "payment_receipts" ADD COLUMN IF NOT EXISTS "verified_by_user_id" TEXT`,
+    ];
+    for (const stmt of alterStatements) {
+      await prisma.$executeRawUnsafe(stmt).catch(() => {});
+    }
   } catch (error) {
     console.warn('[INIT_SUPERADMIN] Non-fatal initialization notice:', error.message);
   } finally {

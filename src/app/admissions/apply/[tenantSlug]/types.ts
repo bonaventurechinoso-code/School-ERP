@@ -97,7 +97,7 @@ export interface DocumentsData {
 export interface PaymentData {
   amount: number;
   feeType: string;
-  paymentMethod: "BANK_TRANSFER" | "PAYSTACK" | "FLUTTERWAVE";
+  paymentMethod: "BANK_TRANSFER" | "DIRECT_GATEWAY" | "FLUTTERWAVE";
   bankName: string;
   accountNumber: string;
   accountName: string;

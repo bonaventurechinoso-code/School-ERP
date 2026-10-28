@@ -449,9 +449,23 @@ export default function BursarReceiptsHub({
                     </td>
                     <td className="p-3.5 text-slate-600 dark:text-zinc-400">
                       <div className="font-medium">{r.paymentMethod}</div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
-                        {r.bankName || r.txnRef || "—"}
+                      {r.depositorName && (
+                        <div className="text-[10px] font-semibold text-slate-600 dark:text-zinc-300 truncate max-w-[160px]">
+                          Depositor: {r.depositorName}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-slate-400 truncate max-w-[160px]">
+                        {r.bankName || r.transferReference || r.txnRef || "—"}
                       </div>
+                      {r.isDuplicateReference && (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-black border border-rose-300 dark:border-rose-800"
+                          title={`Duplicate transfer reference (${r.duplicateCount} occurrences)`}
+                        >
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>DUPLICATE REF ({r.duplicateCount})</span>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3.5">{statusBadge(r.status)}</td>
                     <td className="p-3.5 pr-6 text-right">

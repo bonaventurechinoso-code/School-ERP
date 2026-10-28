@@ -60,18 +60,73 @@ export default function PaymentSettingsManager({
   // Preview Modal state
   const [previewSetting, setPreviewSetting] = useState<PaymentSettingItem | null>(null);
 
+  // Tenant Enterprise Settlement & Gateway Settings (/api/v1/tenant/settings/payments)
+  const [tenantGovernance, setTenantGovernance] = useState<any | null>(null);
+  const [savingGovernance, setSavingGovernance] = useState(false);
+
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/v1/payments/settings?tenantId=${encodeURIComponent(tenantId)}`);
+      const [res, govRes] = await Promise.all([
+        fetch(`/api/v1/payments/settings?tenantId=${encodeURIComponent(tenantId)}`),
+        !isSuperAdmin && tenantId !== "super-admin"
+          ? fetch(`/api/v1/tenant/settings/payments?tenant_id=${encodeURIComponent(tenantId)}`)
+          : Promise.resolve(null),
+      ]);
       const data = await res.json();
       if (data.success && data.settings) {
         setSettings(data.settings);
+      }
+      if (govRes && govRes.ok) {
+        const govData = await govRes.json();
+        if (govData.success && govData.settings) {
+          setTenantGovernance(govData.settings);
+        }
       }
     } catch (err: any) {
       setToastMsg({ type: "error", text: "Failed to load payment settings" });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveTenantGovernance = async () => {
+    if (!tenantGovernance) return;
+    setSavingGovernance(true);
+    setToastMsg(null);
+    try {
+      const res = await fetch("/api/v1/tenant/settings/payments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          is_manual_transfer_enabled: tenantGovernance.is_manual_transfer_enabled,
+          manual_transfer_instructions: tenantGovernance.manual_transfer_instructions,
+          bank_accounts: tenantGovernance.bank_accounts || [],
+          supported_online_gateways: tenantGovernance.supported_online_gateways || [],
+          auto_expire_unverified_hours: Number(tenantGovernance.auto_expire_unverified_hours) || 72,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTenantGovernance(data.settings);
+        setToastMsg({
+          type: "success",
+          text: "Institutional settlement accounts & payment governance saved!",
+        });
+      } else {
+        setToastMsg({
+          type: "error",
+          text: data.error || "Failed to update tenant payment governance",
+        });
+      }
+    } catch (err: any) {
+      setToastMsg({
+        type: "error",
+        text: err.message || "Network error updating tenant payment settings",
+      });
+    } finally {
+      setSavingGovernance(false);
     }
   };
 
@@ -216,6 +271,95 @@ export default function PaymentSettingsManager({
           </div>
         </div>
       </div>
+
+      {/* Tenant Enterprise Settlement & Gateway Governance Card */}
+      {isTenant && tenantGovernance && (
+        <div className="rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-zinc-800 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                  Non-Custodial Settlement Accounts &amp; Transfer Governance
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                100% of student &amp; applicant payments route directly to your institution&apos;s designated bank accounts.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(tenantGovernance.is_manual_transfer_enabled)}
+                  disabled={tenantGovernance.platform_governance?.is_manual_transfer_allowed === false}
+                  onChange={(e) =>
+                    setTenantGovernance((prev: any) => ({
+                      ...prev,
+                      is_manual_transfer_enabled: e.target.checked,
+                    }))
+                  }
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Enable Direct Bank Transfer</span>
+              </label>
+
+              <button
+                type="button"
+                disabled={savingGovernance}
+                onClick={handleSaveTenantGovernance}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{savingGovernance ? "Saving..." : "Save Settlement Settings"}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="md:col-span-2 space-y-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Global Manual Transfer Instructions
+              </label>
+              <textarea
+                rows={2}
+                value={tenantGovernance.manual_transfer_instructions || ""}
+                onChange={(e) =>
+                  setTenantGovernance((prev: any) => ({
+                    ...prev,
+                    manual_transfer_instructions: e.target.value,
+                  }))
+                }
+                placeholder="Transfer exact fee amount and include the student Admission Number or Application Ref in your bank transfer narration."
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Auto-Expire Unverified Attempts (Hours)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={tenantGovernance.auto_expire_unverified_hours || 72}
+                onChange={(e) =>
+                  setTenantGovernance((prev: any) => ({
+                    ...prev,
+                    auto_expire_unverified_hours: Number(e.target.value) || 72,
+                  }))
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 font-mono font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <span className="block text-[10px] text-slate-400">
+                Default: 72 hours before unverified transfer attempts expire.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200/80 dark:border-zinc-800 shadow-sm">

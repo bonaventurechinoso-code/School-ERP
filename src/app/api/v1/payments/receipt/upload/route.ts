@@ -19,16 +19,35 @@ export async function POST(req: NextRequest) {
     const amount = parseFloat((formData.get("amount") as string) || "0") || 0;
     const paymentDate = (formData.get("paymentDate") as string) || new Date().toISOString();
     const paymentMethod = (formData.get("paymentMethod") as any) || "BANK_TRANSFER";
-    const txnRef = (formData.get("txnRef") as string) || undefined;
+    const paymentMode =
+      ((formData.get("paymentMode") as string) as any) ||
+      (paymentMethod === "ONLINE" ? "DIRECT_GATEWAY" : "MANUAL_TRANSFER");
+    const depositorName =
+      (formData.get("depositorName") as string) ||
+      (formData.get("depositor_name") as string) ||
+      payerName;
+    const txnRef =
+      (formData.get("transferReference") as string) ||
+      (formData.get("transfer_reference") as string) ||
+      (formData.get("txnRef") as string) ||
+      undefined;
     const bankName = (formData.get("bankName") as string) || undefined;
     const tenantId = (formData.get("tenantId") as string) || "default";
     const schoolId = (formData.get("schoolId") as string) || undefined;
     const linkedInvoiceId = (formData.get("linkedInvoiceId") as string) || undefined;
     const term = (formData.get("term") as string) || undefined;
     const session = (formData.get("session") as string) || undefined;
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "client";
 
     const file = formData.get("file") as File | null;
-    let fileUrl = (formData.get("fileUrl") as string) || "";
+    let fileUrl =
+      (formData.get("proofOfPaymentUrl") as string) ||
+      (formData.get("proof_of_payment_url") as string) ||
+      (formData.get("fileUrl") as string) ||
+      "";
     let fileKey: string | undefined = undefined;
     let fileName: string | undefined = undefined;
 
@@ -90,14 +109,19 @@ export async function POST(req: NextRequest) {
       amount,
       paymentDate,
       paymentMethod,
+      paymentMode,
+      depositorName,
+      transferReference: txnRef,
       txnRef,
       bankName,
       fileUrl,
+      proofOfPaymentUrl: fileUrl,
       fileKey,
       fileName: fileName || file?.name || "receipt.pdf",
       linkedInvoiceId,
       term,
       session,
+      ip,
     });
 
     return NextResponse.json({

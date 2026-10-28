@@ -52,10 +52,78 @@ export default function SuperAdminPaymentsClient({
   const [plans, setPlans] = useState<SubscriptionSettingItem[]>(initialPlans);
   const [searchTerm, setSearchTerm] = useState("");
   const [savingModule, setSavingModule] = useState<string | null>(null);
+  const [governance, setGovernance] = useState<any | null>(null);
+  const [savingGovernance, setSavingGovernance] = useState(false);
   const [toastMsg, setToastMsg] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/v1/admin/platform/payment-governance")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.governance) {
+          setGovernance(data.governance);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleAllowedPaymentMethod = (method: "MANUAL_BANK_TRANSFER" | "DIRECT_ONLINE_GATEWAY") => {
+    if (!governance) return;
+    const current: string[] = Array.isArray(governance.allowed_payment_methods)
+      ? governance.allowed_payment_methods
+      : [];
+    const next = current.includes(method)
+      ? current.filter((m) => m !== method)
+      : [...current, method];
+    setGovernance({ ...governance, allowed_payment_methods: next });
+  };
+
+  const handleSaveGovernance = async () => {
+    if (!governance) return;
+    setSavingGovernance(true);
+    setToastMsg(null);
+    try {
+      const res = await fetch("/api/v1/admin/platform/payment-governance", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allowed_payment_methods: governance.allowed_payment_methods,
+          allow_manual_verification_override: Boolean(
+            governance.allow_manual_verification_override
+          ),
+          allowed_online_gateways: governance.allowed_online_gateways || [
+            "STRIPE_CONNECT",
+            "FLUTTERWAVE_DIRECT",
+            "ADYEN",
+            "CYBERSOURCE",
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGovernance(data.governance);
+        setToastMsg({
+          type: "success",
+          text: "Platform-wide payment governance updated successfully!",
+        });
+      } else {
+        setToastMsg({
+          type: "error",
+          text: data.error || "Failed to update platform payment governance",
+        });
+      }
+    } catch (err: any) {
+      setToastMsg({
+        type: "error",
+        text: err?.message || "Network error updating platform governance",
+      });
+    } finally {
+      setSavingGovernance(false);
+    }
+  };
 
   const handleFieldChange = (
     moduleType: string,
@@ -215,6 +283,99 @@ export default function SuperAdminPaymentsClient({
           </div>
         </div>
       </div>
+
+      {/* Hierarchical Feature Governance Card (Super Admin Level) */}
+      {governance && (
+        <div className="rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-zinc-800 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                  Platform Payment Governance (Hierarchical Feature Control)
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                Global flags controlling which non-custodial payment models and decentralized gateways tenants are permitted to enable.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveGovernance}
+              disabled={savingGovernance}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{savingGovernance ? "Saving Governance..." : "Save Global Governance"}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={
+                  Array.isArray(governance.allowed_payment_methods) &&
+                  governance.allowed_payment_methods.includes("MANUAL_BANK_TRANSFER")
+                }
+                onChange={() => toggleAllowedPaymentMethod("MANUAL_BANK_TRANSFER")}
+                className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white block">
+                  Allow Manual Bank / Mobile Transfers
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                  Permits tenants to collect direct transfers with receipt proof verification.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={
+                  Array.isArray(governance.allowed_payment_methods) &&
+                  governance.allowed_payment_methods.includes("DIRECT_ONLINE_GATEWAY")
+                }
+                onChange={() => toggleAllowedPaymentMethod("DIRECT_ONLINE_GATEWAY")}
+                className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white block">
+                  Allow Decentralized Direct Online Gateways
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                  Permits tenants to configure their own Stripe Connect, Flutterwave Direct, Adyen, or Cybersource keys.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(governance.allow_manual_verification_override)}
+                onChange={(e) =>
+                  setGovernance({
+                    ...governance,
+                    allow_manual_verification_override: e.target.checked,
+                  })
+                }
+                className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white block">
+                  Allow Manual Verification Override
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                  Permits authorized Tenant Finance Officers to manually verify and settle transfer attempts.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Filter / Search Bar (No ACADEMICS, ADMISSIONS, FEES, SERVICES tabs - SUBSCRIPTION ONLY) */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-slate-200/80 dark:border-zinc-800 shadow-xs">

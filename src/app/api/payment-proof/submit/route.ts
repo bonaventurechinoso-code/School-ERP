@@ -69,12 +69,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Enforce hierarchical payment governance (Super Admin & Tenant Admin)
+    const { PaymentSettingsController } = await import("@/lib/payment-settings-controller");
+    const tenantGov = await PaymentSettingsController.getTenantSettings(school.id).catch(
+      () => null
+    );
+    if (tenantGov && !tenantGov.effective_is_manual_transfer_enabled) {
+      return NextResponse.json(
+        {
+          error:
+            "Manual Bank Transfer is currently disabled for this institution by payment governance policy.",
+        },
+        { status: 403 }
+      );
+    }
+
     // Check duplicate session ID within this school
-    const trimmedSessionId = sessionId.trim();
+    const trimmedSessionId = (body.transfer_reference || body.transferReference || sessionId || "").trim();
     const existingProof = await basePrisma.paymentProof.findFirst({
       where: {
         schoolId: school.id,
-        sessionId: trimmedSessionId,
+        OR: [
+          { sessionId: trimmedSessionId },
+          { transferReference: trimmedSessionId },
+        ],
         status: { in: ["PENDING", "APPROVED"] },
       },
     });
@@ -88,6 +106,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const depositorName = (
+      body.depositor_name ||
+      body.depositorName ||
+      payerAccountName ||
+      `${student.firstName} ${student.lastName}`
+    ).trim();
+    const effectiveProofUrl = (
+      body.proof_of_payment_url ||
+      body.proofOfPaymentUrl ||
+      proofImageUrl
+    ).trim();
+
     // Atomic transaction: Create PaymentProof + update Student.feeStatus
     const result = await basePrisma.$transaction(async (tx) => {
       const proof = await tx.paymentProof.create({
@@ -100,10 +130,15 @@ export async function POST(req: NextRequest) {
           amount: numericAmount,
           paidAt: paidAt ? new Date(paidAt) : new Date(),
           payerBankName: payerBankName.trim(),
-          payerAccountName: payerAccountName ? payerAccountName.trim() : null,
+          payerAccountName: depositorName,
           sessionId: trimmedSessionId,
-          proofImageUrl: proofImageUrl.trim(),
+          proofImageUrl: effectiveProofUrl,
           status: "PENDING",
+          paymentMode: "MANUAL_TRANSFER",
+          state: "PENDING_VERIFICATION",
+          proofOfPaymentUrl: effectiveProofUrl,
+          depositorName,
+          transferReference: trimmedSessionId,
         },
       });
 

@@ -89,7 +89,12 @@ export default function PaymentReceiptUpload({
   const [paymentMethod, setPaymentMethod] = useState<string>(
     existingReceipt?.paymentMethod || "BANK_TRANSFER"
   );
-  const [txnRef, setTxnRef] = useState<string>(existingReceipt?.txnRef || "");
+  const [depositorName, setDepositorName] = useState<string>(
+    existingReceipt?.depositorName || payerName || ""
+  );
+  const [txnRef, setTxnRef] = useState<string>(
+    existingReceipt?.transferReference || existingReceipt?.txnRef || ""
+  );
   const [bankName, setBankName] = useState<string>(existingReceipt?.bankName || "");
   const [receipt, setReceipt] = useState<any>(existingReceipt || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -196,7 +201,16 @@ export default function PaymentReceiptUpload({
       fd.append("amount", String(amount));
       fd.append("paymentDate", paymentDate);
       fd.append("paymentMethod", paymentMethod);
-      if (txnRef) fd.append("txnRef", txnRef);
+      fd.append("paymentMode", "MANUAL_TRANSFER");
+      if (depositorName) {
+        fd.append("depositorName", depositorName);
+        fd.append("depositor_name", depositorName);
+      }
+      if (txnRef) {
+        fd.append("txnRef", txnRef);
+        fd.append("transferReference", txnRef);
+        fd.append("transfer_reference", txnRef);
+      }
       if (bankName) fd.append("bankName", bankName);
       fd.append("tenantId", tenantId);
       if (schoolId) fd.append("schoolId", schoolId);
@@ -433,10 +447,26 @@ export default function PaymentReceiptUpload({
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Transaction Ref / Session ID</span>
+                  <span>Depositor / Sender Account Name *</span>
                 </label>
                 <input
                   type="text"
+                  required
+                  value={depositorName}
+                  onChange={(e) => setDepositorName(e.target.value)}
+                  placeholder="Full name on sender's bank account"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Transaction Ref / Session ID *</span>
+                </label>
+                <input
+                  type="text"
+                  required
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
                   placeholder="e.g. 09026723820293"

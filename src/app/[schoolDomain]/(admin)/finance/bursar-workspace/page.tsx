@@ -55,7 +55,7 @@ export default async function BursarWorkspacePage({
     },
     {
       title: "Payment Verifications",
-      description: "Review bank deposit receipts, POS slips, and automated Paystack/Monnify settlements.",
+      description: "Review bank deposit receipts, POS slips, and decentralized direct gateway settlements.",
       href: `/${schoolDomain}/finance/verifications`,
       icon: FileCheck2,
       badge: `${pendingProofsCount} Pending`,

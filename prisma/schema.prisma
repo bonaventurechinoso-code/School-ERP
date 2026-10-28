@@ -585,6 +585,16 @@ model Payment {
   paymentDate DateTime @default(now())
   method      String   @default("CASH") // CASH, CARD, TRANSFER
 
+  // Multi-Tenant Enterprise Fee Payment Verification Metadata
+  paymentMode       String    @default("MANUAL_TRANSFER") @map("payment_mode") // MANUAL_TRANSFER | DIRECT_GATEWAY
+  state             String    @default("SETTLED") // INITIATED | PENDING_VERIFICATION | SETTLED | REJECTED | EXPIRED
+  proofOfPaymentUrl String?   @map("proof_of_payment_url")
+  depositorName     String?   @map("depositor_name")
+  transferReference String?   @map("transfer_reference")
+  verifiedByUserId  String?   @map("verified_by_user_id")
+  verifiedAt        DateTime? @map("verified_at")
+  rejectionReason   String?   @map("rejection_reason")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -592,6 +602,7 @@ model Payment {
   @@index([schoolId, invoiceId])
   @@index([schoolId, paymentDate(sort: Desc)])
   @@index([schoolId, studentId, paymentDate(sort: Desc)])
+  @@index([schoolId, transferReference])
 }
 
 // ------------------------------------------------------
@@ -618,6 +629,14 @@ model PaymentProof {
   proofImageUrl    String // Path or URL to uploaded receipt image
   status           String   @default("PENDING") // PENDING | APPROVED | REJECTED
 
+  // Enterprise Transaction State & Verification Columns
+  paymentMode       String  @default("MANUAL_TRANSFER") @map("payment_mode") // MANUAL_TRANSFER | DIRECT_GATEWAY
+  state             String  @default("PENDING_VERIFICATION") // INITIATED | PENDING_VERIFICATION | SETTLED | REJECTED | EXPIRED
+  proofOfPaymentUrl String? @map("proof_of_payment_url")
+  depositorName     String? @map("depositor_name")
+  transferReference String? @map("transfer_reference")
+  verifiedByUserId  String? @map("verified_by_user_id")
+
   submittedAt     DateTime  @default(now())
   verifiedAt      DateTime?
   verifiedById    String? // Staff ID of approving/rejecting bursar
@@ -630,6 +649,7 @@ model PaymentProof {
   @@index([schoolId, status])
   @@index([schoolId, studentId])
   @@index([schoolId, sessionId])
+  @@index([schoolId, transferReference])
 }
 
 model Transaction {
@@ -1278,13 +1298,54 @@ model PaymentReceipt {
   linkedInvoiceId String?   @map("linked_invoice_id")
   term            String?
   session         String?
+
+  // Enterprise Transaction State & Verification Columns
+  paymentMode       String  @default("MANUAL_TRANSFER") @map("payment_mode") // MANUAL_TRANSFER | DIRECT_GATEWAY
+  state             String  @default("PENDING_VERIFICATION") // INITIATED | PENDING_VERIFICATION | SETTLED | REJECTED | EXPIRED
+  proofOfPaymentUrl String? @map("proof_of_payment_url")
+  depositorName     String? @map("depositor_name")
+  transferReference String? @map("transfer_reference")
+  verifiedByUserId  String? @map("verified_by_user_id")
+
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@index([tenantId, status])
+  @@index([tenantId, state])
+  @@index([tenantId, transferReference])
   @@index([moduleType, status])
   @@index([referenceNo])
   @@map("payment_receipts")
+}
+
+model PlatformPaymentGovernance {
+  id                              String   @id @default(uuid())
+  allowedPaymentMethods           Json     @default("[\"MANUAL_BANK_TRANSFER\", \"DIRECT_ONLINE_GATEWAY\"]") @map("allowed_payment_methods")
+  allowManualVerificationOverride Boolean  @default(true) @map("allow_manual_verification_override")
+  auditMetadata                   Json?    @default("{}") @map("audit_metadata")
+  updatedBy                       String?  @map("updated_by")
+  createdAt                       DateTime @default(now()) @map("created_at")
+  updatedAt                       DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_payment_governance")
+}
+
+model TenantPaymentSettings {
+  id                         String   @id @default(uuid())
+  tenantId                   String   @unique @map("tenant_id")
+  schoolId                   String?  @map("school_id")
+  isManualTransferEnabled    Boolean  @default(true) @map("is_manual_transfer_enabled")
+  manualTransferInstructions String?  @db.Text @map("manual_transfer_instructions")
+  bankAccounts               Json     @default("[]") @map("bank_accounts")
+  supportedOnlineGateways    Json     @default("[]") @map("supported_online_gateways")
+  gatewayCredentialsVaultRef String?  @map("gateway_credentials_vault_ref")
+  autoExpireUnverifiedHours  Int      @default(72) @map("auto_expire_unverified_hours")
+  updatedBy                  String?  @map("updated_by")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("tenant_payment_settings")
 }
 
 model PaymentSetting {

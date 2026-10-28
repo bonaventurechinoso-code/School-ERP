@@ -102,6 +102,29 @@ export async function updateSchoolBankDetails(
       });
     } catch {}
 
+    // Also synchronize TenantPaymentSettings record
+    try {
+      const { PaymentSettingsController } = await import("@/lib/payment-settings-controller");
+      await PaymentSettingsController.updateTenantSettings(
+        school.id,
+        {
+          manual_transfer_instructions: instruction,
+          bank_accounts: [
+            {
+              bank_name: bankName.trim(),
+              account_number: accountNumber.trim(),
+              account_name: accountName.trim().toUpperCase(),
+              branch_code: bankCode?.trim() || "",
+              currency: "NGN",
+              swift_bic: "",
+            },
+          ],
+        },
+        "SCHOOL_ADMIN",
+        "internal-action"
+      );
+    } catch {}
+
     revalidatePath(`/${cleanDomain}/settings/bank`);
     revalidatePath(`/${cleanDomain}/dashboard`);
     revalidatePath(`/${cleanDomain}/portal/student`);

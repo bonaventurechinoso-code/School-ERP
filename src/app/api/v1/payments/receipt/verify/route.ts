@@ -28,12 +28,23 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-user-name") ||
       req.headers.get("x-user-role") ||
       "Bursar Desk";
+    const verifiedByUserId =
+      body.verifiedByUserId ||
+      body.verified_by_user_id ||
+      req.headers.get("x-user-id") ||
+      agentName;
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "finance-desk";
 
     const updated = await verifyPaymentReceipt({
       receiptId,
       action,
       rejectionReason,
       verifiedBy: agentName,
+      verifiedByUserId,
+      ip,
     });
 
     return NextResponse.json({

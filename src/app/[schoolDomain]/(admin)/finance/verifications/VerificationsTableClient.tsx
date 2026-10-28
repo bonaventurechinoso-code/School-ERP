@@ -82,6 +82,16 @@ export default function VerificationsTableClient({
   // Zoom state for Lightbox
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
+  // Duplicate Reference Detector across proofs in queue
+  const sessionRefCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of proofs) {
+      const key = (p.sessionId || "").trim().toUpperCase();
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }, [proofs]);
+
   // Filtering Logic
   const filteredProofs = proofs.filter((p) => {
     const matchesStatus =
@@ -403,6 +413,12 @@ export default function VerificationsTableClient({
                             <Copy className="w-3 h-3" />
                           </button>
                         </div>
+                        {(sessionRefCounts.get((p.sessionId || "").trim().toUpperCase()) || 0) > 1 && (
+                          <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[9px] font-black border border-rose-300 dark:border-rose-800">
+                            <AlertCircle className="w-2.5 h-2.5" />
+                            <span>DUPLICATE REF</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* Proof Thumbnail & View Button */}

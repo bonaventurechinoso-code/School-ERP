@@ -208,26 +208,28 @@ export default function PaymentReceiptVerify({
       {/* Details Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>
-          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Payer:</span>
+          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Payer / Depositor:</span>
           <span className="font-bold text-slate-800 dark:text-zinc-200 truncate block">
-            {localReceipt.payerName}
+            {localReceipt.depositorName || localReceipt.payerName}
           </span>
           <span className="text-[10px] text-slate-400">({localReceipt.payerType})</span>
         </div>
         <div>
-          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Date:</span>
+          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Date / Mode:</span>
           <span className="font-bold text-slate-800 dark:text-zinc-200 block">
             {new Date(localReceipt.paymentDate).toLocaleDateString()}
           </span>
-          <span className="text-[10px] text-slate-400">{localReceipt.paymentMethod}</span>
+          <span className="text-[10px] text-slate-400">
+            {localReceipt.paymentMode || localReceipt.paymentMethod}
+          </span>
         </div>
         <div>
-          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Bank / Txn:</span>
+          <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Bank / Txn Ref:</span>
           <span className="font-bold text-slate-800 dark:text-zinc-200 truncate block">
             {localReceipt.bankName || "Direct Transfer"}
           </span>
           <span className="text-[10px] font-mono text-slate-400 truncate block">
-            {localReceipt.txnRef || "N/A"}
+            {localReceipt.transferReference || localReceipt.txnRef || "N/A"}
           </span>
         </div>
         <div>
@@ -248,6 +250,21 @@ export default function PaymentReceiptVerify({
         </div>
       </div>
 
+      {/* Duplicate Reference Detector Alert */}
+      {localReceipt.isDuplicateReference && (
+        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <strong className="block font-black">
+              Duplicate Transfer Reference Detected ({localReceipt.duplicateCount} matching records)
+            </strong>
+            <span>
+              This transaction reference has been submitted on another receipt in this institution. Verify bank statement carefully before settling.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Rejection Alert */}
       {localReceipt.rejectionReason && (
         <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300">
@@ -260,8 +277,25 @@ export default function PaymentReceiptVerify({
         <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 space-y-3">
           <p className="font-bold text-xs text-red-800 dark:text-red-200 flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <span>Provide Reason for Rejecting Payment Receipt:</span>
+            <span>Select or Provide Mandatory Reason for Rejecting Payment Receipt:</span>
           </p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              "Mismatched Amount",
+              "Unreadable Receipt",
+              "Funds Not Reflected",
+              "Duplicate Transaction Reference",
+            ].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setReason(preset)}
+                className="text-[10px] px-2 py-1 rounded-md bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 font-bold hover:bg-red-100 transition cursor-pointer"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
           <textarea
             rows={2}
             value={reason}

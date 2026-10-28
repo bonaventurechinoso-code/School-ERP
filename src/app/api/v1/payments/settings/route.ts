@@ -5,6 +5,10 @@ import {
   upsertPaymentSetting,
   ModuleType,
 } from "@/lib/payment-receipt-service";
+import {
+  PaymentSettingsController,
+  assertNoRestrictedGateway,
+} from "@/lib/payment-settings-controller";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +31,29 @@ export async function GET(req: NextRequest) {
     const classId = searchParams.get("classId");
     const term = searchParams.get("term");
 
+    const tenantGovernance =
+      tenantId !== "super-admin"
+        ? await PaymentSettingsController.getTenantSettings(tenantId).catch(() => null)
+        : null;
+
     // Single module setting query
     if (moduleType) {
       const setting = await getModulePaymentSetting(tenantId, moduleType, classId, term);
+      const primaryBank = tenantGovernance?.bank_accounts?.[0];
       return NextResponse.json({
         success: true,
-        setting,
+        setting: {
+          ...setting,
+          bankName: setting.bankName || primaryBank?.bank_name || null,
+          accountNumber: setting.accountNumber || primaryBank?.account_number || null,
+          accountName: setting.accountName || primaryBank?.account_name || null,
+          customWriteup:
+            setting.customWriteup || tenantGovernance?.manual_transfer_instructions || null,
+          isManualTransferEnabled:
+            tenantGovernance?.effective_is_manual_transfer_enabled ?? true,
+          bankAccounts: tenantGovernance?.bank_accounts || [],
+        },
+        tenant_payment_settings: tenantGovernance,
       });
     }
 
@@ -42,6 +63,7 @@ export async function GET(req: NextRequest) {
       success: true,
       tenantId,
       settings,
+      tenant_payment_settings: tenantGovernance,
     });
   } catch (error: any) {
     console.error("[PAYMENT_SETTINGS_GET_ERROR]:", error);
@@ -55,13 +77,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    assertNoRestrictedGateway(body);
 
     const headerTenantId =
       req.headers.get("x-tenant-id") ||
       req.headers.get("tenant-id") ||
       req.headers.get("x-school-id");
 
-    const tenantId = body.tenantId || headerTenantId;
+    const tenantId = body.tenantId || body.tenant_id || headerTenantId;
 
     if (!tenantId) {
       return NextResponse.json(
