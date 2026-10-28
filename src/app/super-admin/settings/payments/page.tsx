@@ -1,12 +1,68 @@
 import React from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-config";
+import { getSession } from "@/lib/auth";
 import { basePrisma } from "@/lib/tenant-prisma";
 import SuperAdminPaymentsClient, {
   SubscriptionSettingItem,
 } from "./SuperAdminPaymentsClient";
 
 export const dynamic = "force-dynamic";
+
+async function getGovernance() {
+  try {
+    const row = await basePrisma.platformPaymentGovernance.findFirst({
+      orderBy: { updatedAt: "desc" },
+    });
+    if (row) {
+      return {
+        ...row,
+        allowedOnlineGateways: Array.isArray((row.auditMetadata as any)?.allowed_online_gateways)
+          ? (row.auditMetadata as any).allowed_online_gateways
+          : ["STRIPE_CONNECT", "FLUTTERWAVE_DIRECT", "ADYEN", "CYBERSOURCE"],
+      };
+    }
+    return {
+      id: "global-platform-governance",
+      allowedPaymentMethods: ["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"],
+      allowManualVerificationOverride: true,
+      allowedOnlineGateways: ["STRIPE_CONNECT", "FLUTTERWAVE_DIRECT", "ADYEN", "CYBERSOURCE"],
+      auditMetadata: {},
+      updatedBy: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+      console.error("PROD TABLE MISSING: platform_payment_governance - run migration");
+      return {
+        id: "fallback",
+        allowedPaymentMethods: ["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"],
+        allowManualVerificationOverride: true,
+        allowedOnlineGateways: ["STRIPE_CONNECT", "FLUTTERWAVE_DIRECT", "ADYEN", "CYBERSOURCE"],
+        auditMetadata: {},
+        updatedBy: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+    throw e;
+  }
+}
+
+async function getTenantSettingsProbe() {
+  try {
+    return await basePrisma.tenantPaymentSettings.findFirst();
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+      console.error("PROD TABLE MISSING: tenant_payment_settings - run migration");
+      return { id: "fallback" };
+    }
+    throw e;
+  }
+}
 
 export const metadata = {
   title: "Platform Subscription Management | Super Admin",
@@ -71,7 +127,10 @@ export default async function SuperAdminPaymentsPage() {
 
   try {
     session = await getServerSession(authOptions);
-    const user = session?.user as any;
+    const user = (session?.user as any) || (await getSession().catch(() => null));
+    if (user && !session) {
+      session = { user } as any;
+    }
     const rawRole = (user?.role || user?.userRole || "").toUpperCase();
     isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
   } catch (authErr) {
@@ -166,11 +225,57 @@ export default async function SuperAdminPaymentsPage() {
     return plan;
   });
 
+  const [governanceRecord, tenantProbe] = await Promise.all([
+    getGovernance().catch((err) => {
+      console.error("[SuperAdminPaymentsPage] Fallback governance:", err);
+      return {
+        id: "fallback",
+        allowedPaymentMethods: ["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"],
+        allowManualVerificationOverride: true,
+        allowedOnlineGateways: ["STRIPE_CONNECT", "FLUTTERWAVE_DIRECT", "ADYEN", "CYBERSOURCE"],
+        auditMetadata: {},
+        updatedBy: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }),
+    getTenantSettingsProbe().catch(() => ({ id: "fallback" })),
+  ]);
+
+  const isFallback =
+    governanceRecord?.id === "fallback" || (tenantProbe as any)?.id === "fallback";
+
+  const serializedGovernance = {
+    id: governanceRecord.id,
+    allowed_payment_methods: Array.isArray((governanceRecord as any).allowedPaymentMethods)
+      ? (governanceRecord as any).allowedPaymentMethods
+      : ["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"],
+    allow_manual_verification_override: Boolean(
+      (governanceRecord as any).allowManualVerificationOverride ?? true
+    ),
+    allowed_online_gateways: Array.isArray((governanceRecord as any).allowedOnlineGateways)
+      ? (governanceRecord as any).allowedOnlineGateways
+      : ["STRIPE_CONNECT", "FLUTTERWAVE_DIRECT", "ADYEN", "CYBERSOURCE"],
+    audit_metadata:
+      (governanceRecord as any).auditMetadata &&
+      typeof (governanceRecord as any).auditMetadata === "object"
+        ? (governanceRecord as any).auditMetadata
+        : {},
+    updated_by: (governanceRecord as any).updatedBy || null,
+    updated_at:
+      (governanceRecord as any).updatedAt instanceof Date
+        ? (governanceRecord as any).updatedAt.toISOString()
+        : String((governanceRecord as any).updatedAt || new Date().toISOString()),
+    is_fallback: isFallback,
+  };
+
   return (
     <div className="py-4 max-w-7xl mx-auto space-y-6">
       <SuperAdminPaymentsClient
         initialPlans={initialPlans}
         pendingReceiptsCount={pendingReceiptsCount}
+        initialGovernance={serializedGovernance}
+        isFallback={isFallback}
       />
     </div>
   );

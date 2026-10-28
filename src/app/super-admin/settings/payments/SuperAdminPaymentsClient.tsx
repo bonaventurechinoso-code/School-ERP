@@ -43,16 +43,23 @@ export interface SubscriptionSettingItem {
 interface SuperAdminPaymentsClientProps {
   initialPlans: SubscriptionSettingItem[];
   pendingReceiptsCount?: number;
+  initialGovernance?: any;
+  isFallback?: boolean;
 }
 
 export default function SuperAdminPaymentsClient({
   initialPlans,
   pendingReceiptsCount = 0,
+  initialGovernance = null,
+  isFallback = false,
 }: SuperAdminPaymentsClientProps) {
   const [plans, setPlans] = useState<SubscriptionSettingItem[]>(initialPlans);
   const [searchTerm, setSearchTerm] = useState("");
   const [savingModule, setSavingModule] = useState<string | null>(null);
-  const [governance, setGovernance] = useState<any | null>(null);
+  const [governance, setGovernance] = useState<any | null>(initialGovernance);
+  const [fallbackWarning, setFallbackWarning] = useState<boolean>(
+    Boolean(isFallback || initialGovernance?.id === "fallback" || initialGovernance?.is_fallback)
+  );
   const [savingGovernance, setSavingGovernance] = useState(false);
   const [toastMsg, setToastMsg] = useState<{
     type: "success" | "error";
@@ -65,6 +72,9 @@ export default function SuperAdminPaymentsClient({
       .then((data) => {
         if (data.success && data.governance) {
           setGovernance(data.governance);
+          if (data.governance.id === "fallback" || data.governance.is_fallback) {
+            setFallbackWarning(true);
+          }
         }
       })
       .catch(() => {});
@@ -225,6 +235,19 @@ export default function SuperAdminPaymentsClient({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Yellow Warning Banner when Prod DB tables are not migrated */}
+      {(fallbackWarning || governance?.id === "fallback" || governance?.is_fallback) && (
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center gap-2.5 shadow-sm"
+        >
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>
+            Prod DB tables not migrated — showing fallback config. Run npx prisma migrate deploy on Render shell.
+          </span>
         </div>
       )}
 

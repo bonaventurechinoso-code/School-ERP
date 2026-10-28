@@ -54,6 +54,7 @@ export interface PlatformPaymentGovernanceConfig {
   audit_metadata: Record<string, any>;
   updated_by?: string | null;
   updated_at?: string;
+  is_fallback?: boolean;
 }
 
 export interface TenantPaymentSettingsConfig {
@@ -78,6 +79,7 @@ export interface TenantPaymentSettingsConfig {
   };
   updated_by?: string | null;
   updated_at?: string | null;
+  is_fallback?: boolean;
 }
 
 /**
@@ -285,6 +287,7 @@ export class PaymentSettingsController {
    * Fetch Super Admin Platform-Wide Payment Governance settings.
    */
   static async getPlatformGovernance(): Promise<PlatformPaymentGovernanceConfig> {
+    let isFallback = false;
     try {
       const record = await basePrisma.platformPaymentGovernance.findFirst({
         orderBy: { updatedAt: "desc" },
@@ -320,14 +323,22 @@ export class PaymentSettingsController {
           audit_metadata: metadata,
           updated_by: record.updatedBy,
           updated_at: record.updatedAt.toISOString(),
+          is_fallback: false,
         };
       }
-    } catch (err) {
-      console.warn("[PaymentSettingsController.getPlatformGovernance] Using default governance:", err);
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+        console.error("PROD TABLE MISSING: platform_payment_governance - run migration");
+        isFallback = true;
+      } else {
+        console.warn("[PaymentSettingsController.getPlatformGovernance] Using default governance:", e);
+        isFallback = true;
+      }
     }
 
     return {
-      id: "global-platform-governance",
+      id: isFallback ? "fallback" : "global-platform-governance",
       allowed_payment_methods: ["MANUAL_BANK_TRANSFER", "DIRECT_ONLINE_GATEWAY"],
       allow_manual_verification_override: true,
       allowed_online_gateways: [...ALLOWED_DECENTRALIZED_GATEWAYS],
@@ -337,6 +348,7 @@ export class PaymentSettingsController {
       },
       updated_by: null,
       updated_at: new Date().toISOString(),
+      is_fallback: isFallback,
     };
   }
 
@@ -402,29 +414,42 @@ export class PaymentSettingsController {
     };
 
     let savedRecord: any = null;
-    const existing = await basePrisma.platformPaymentGovernance
-      .findFirst({ orderBy: { updatedAt: "desc" } })
-      .catch(() => null);
+    try {
+      const existing = await basePrisma.platformPaymentGovernance
+        .findFirst({ orderBy: { updatedAt: "desc" } })
+        .catch(() => null);
 
-    if (existing) {
-      savedRecord = await basePrisma.platformPaymentGovernance.update({
-        where: { id: existing.id },
-        data: {
-          allowedPaymentMethods: nextAllowedMethods,
-          allowManualVerificationOverride: nextOverride,
-          auditMetadata: nextAuditMetadata,
-          updatedBy: actorId,
-        },
-      });
-    } else {
-      savedRecord = await basePrisma.platformPaymentGovernance.create({
-        data: {
-          allowedPaymentMethods: nextAllowedMethods,
-          allowManualVerificationOverride: nextOverride,
-          auditMetadata: nextAuditMetadata,
-          updatedBy: actorId,
-        },
-      });
+      if (existing) {
+        savedRecord = await basePrisma.platformPaymentGovernance.update({
+          where: { id: existing.id },
+          data: {
+            allowedPaymentMethods: nextAllowedMethods,
+            allowManualVerificationOverride: nextOverride,
+            auditMetadata: nextAuditMetadata,
+            updatedBy: actorId,
+          },
+        });
+      } else {
+        savedRecord = await basePrisma.platformPaymentGovernance.create({
+          data: {
+            allowedPaymentMethods: nextAllowedMethods,
+            allowManualVerificationOverride: nextOverride,
+            auditMetadata: nextAuditMetadata,
+            updatedBy: actorId,
+          },
+        });
+      }
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+        console.error("PROD TABLE MISSING: platform_payment_governance - run migration");
+        savedRecord = {
+          id: "fallback",
+          updatedAt: new Date(),
+        };
+      } else {
+        throw e;
+      }
     }
 
     const updatedConfig: PlatformPaymentGovernanceConfig = {
@@ -478,14 +503,22 @@ export class PaymentSettingsController {
     const { tenantId, schoolId, schoolName } = tenantIdentity;
 
     let dbRecord: any = null;
+    let isTenantFallback = Boolean(governance.is_fallback);
     try {
       dbRecord = await basePrisma.tenantPaymentSettings.findFirst({
         where: {
           OR: [{ tenantId }, { schoolId: schoolId || tenantId }],
         },
       });
-    } catch (err) {
-      console.warn("[PaymentSettingsController.getTenantSettings] Fallback query:", err);
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+        console.error("PROD TABLE MISSING: tenant_payment_settings - run migration");
+        isTenantFallback = true;
+      } else {
+        console.warn("[PaymentSettingsController.getTenantSettings] Fallback query:", e);
+        isTenantFallback = true;
+      }
     }
 
     // Parse bank accounts from TenantPaymentSettings or fallback to School settlement bank fields
@@ -554,7 +587,7 @@ export class PaymentSettingsController {
     const hasVaultCredentials = Boolean(dbRecord?.gatewayCredentialsVaultRef);
 
     return {
-      id: dbRecord?.id || null,
+      id: dbRecord?.id || (isTenantFallback ? "fallback" : null),
       tenant_id: tenantId,
       school_id: schoolId,
       school_name: schoolName,
@@ -577,6 +610,7 @@ export class PaymentSettingsController {
       },
       updated_by: options?.includeAdminMetadata ? dbRecord?.updatedBy || null : undefined,
       updated_at: dbRecord?.updatedAt ? dbRecord.updatedAt.toISOString() : null,
+      is_fallback: isTenantFallback,
     };
   }
 
@@ -697,33 +731,42 @@ export class PaymentSettingsController {
       }
     }
 
-    // Upsert TenantPaymentSettings
-    await basePrisma.tenantPaymentSettings.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        schoolId,
-        isManualTransferEnabled: nextManualEnabled,
-        manualTransferInstructions: nextInstructions,
-        bankAccounts: nextBankAccounts as any,
-        supportedOnlineGateways: nextGateways as any,
-        gatewayCredentialsVaultRef: vaultRefToUpdate || null,
-        autoExpireUnverifiedHours: nextAutoExpire,
-        updatedBy: actorId,
-      },
-      update: {
-        schoolId,
-        isManualTransferEnabled: nextManualEnabled,
-        manualTransferInstructions: nextInstructions,
-        bankAccounts: nextBankAccounts as any,
-        supportedOnlineGateways: nextGateways as any,
-        ...(vaultRefToUpdate !== undefined
-          ? { gatewayCredentialsVaultRef: vaultRefToUpdate }
-          : {}),
-        autoExpireUnverifiedHours: nextAutoExpire,
-        updatedBy: actorId,
-      },
-    });
+    // Upsert TenantPaymentSettings with prod-safe P2021/P2022 fallback
+    try {
+      await basePrisma.tenantPaymentSettings.upsert({
+        where: { tenantId },
+        create: {
+          tenantId,
+          schoolId,
+          isManualTransferEnabled: nextManualEnabled,
+          manualTransferInstructions: nextInstructions,
+          bankAccounts: nextBankAccounts as any,
+          supportedOnlineGateways: nextGateways as any,
+          gatewayCredentialsVaultRef: vaultRefToUpdate || null,
+          autoExpireUnverifiedHours: nextAutoExpire,
+          updatedBy: actorId,
+        },
+        update: {
+          schoolId,
+          isManualTransferEnabled: nextManualEnabled,
+          manualTransferInstructions: nextInstructions,
+          bankAccounts: nextBankAccounts as any,
+          supportedOnlineGateways: nextGateways as any,
+          ...(vaultRefToUpdate !== undefined
+            ? { gatewayCredentialsVaultRef: vaultRefToUpdate }
+            : {}),
+          autoExpireUnverifiedHours: nextAutoExpire,
+          updatedBy: actorId,
+        },
+      });
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (e?.code === "P2021" || e?.code === "P2022" || msg.includes("does not exist")) {
+        console.error("PROD TABLE MISSING: tenant_payment_settings - run migration");
+      } else {
+        throw e;
+      }
+    }
 
     // Synchronize primary bank account & instructions to School and Tenant records for backward compatibility
     const primaryBank = nextBankAccounts[0];

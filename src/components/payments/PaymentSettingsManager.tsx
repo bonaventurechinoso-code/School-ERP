@@ -272,6 +272,19 @@ export default function PaymentSettingsManager({
         </div>
       </div>
 
+      {/* Yellow Warning Banner when Prod DB tables are not migrated */}
+      {(tenantGovernance?.id === "fallback" || tenantGovernance?.is_fallback) && (
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center gap-2.5 shadow-sm"
+        >
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>
+            Prod DB tables not migrated — showing fallback config. Run npx prisma migrate deploy on Render shell.
+          </span>
+        </div>
+      )}
+
       {/* Tenant Enterprise Settlement & Gateway Governance Card */}
       {isTenant && tenantGovernance && (
         <div className="rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-sm space-y-5">
