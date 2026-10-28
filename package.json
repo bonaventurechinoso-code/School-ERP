@@ -2,6 +2,9 @@
   "name": "multi-tenant-school-erp",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "clean-db": "node -e \"const {PrismaClient}=require('@prisma/client');(async()=>{const p=new PrismaClient(); await p.$executeRawUnsafe('DELETE FROM \\\"User\\\"'); await p.$executeRawUnsafe('DELETE FROM \\\"School\\\" WHERE slug IS NULL'); console.log('cleaned'); await p.$disconnect()})()\"",
