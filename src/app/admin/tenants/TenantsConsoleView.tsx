@@ -1,32 +1,23 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Building2,
   Users,
   GraduationCap,
-  ShieldCheck,
   Search,
-  Filter,
   Plus,
   ExternalLink,
   Copy,
   Check,
-  Edit3,
-  Power,
-  PowerOff,
   Trash2,
+  AlertTriangle,
   X,
   RotateCcw,
-  Sparkles,
-  Server,
   Activity,
 } from "lucide-react";
-import EditSchoolModal from "../EditSchoolModal";
-import DeleteSchoolForm from "../DeleteSchoolForm";
 import RegisterSchoolDrawer from "./RegisterSchoolDrawer";
-import { toggleSchoolStatus } from "../actions";
 
 interface AcademicTierData {
   id?: string;
@@ -38,6 +29,7 @@ export interface TenantSchoolItem {
   name: string;
   subdomain: string;
   contactPhone?: string | null;
+  status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | "DELETED";
   isActive: boolean;
   students_count?: number;
   staff_count?: number;
@@ -48,6 +40,47 @@ export interface TenantSchoolItem {
 interface TenantsConsoleViewProps {
   schools: TenantSchoolItem[];
   basePlatformUrl?: string;
+}
+
+const SOFT_DELETED_STORAGE_KEY = "superadmin_soft_deleted_tenants_v1";
+const STATUS_OVERRIDE_STORAGE_KEY = "superadmin_tenant_status_overrides_v1";
+
+function getSoftDeletedIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SOFT_DELETED_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function addSoftDeletedId(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = new Set(getSoftDeletedIds());
+    current.add(id);
+    window.localStorage.setItem(SOFT_DELETED_STORAGE_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+function getStatusOverrides(): Record<string, "ACTIVE" | "SUSPENDED"> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STATUS_OVERRIDE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setStatusOverride(id: string, status: "ACTIVE" | "SUSPENDED") {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getStatusOverrides();
+    current[id] = status;
+    window.localStorage.setItem(STATUS_OVERRIDE_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
 }
 
 const AVATAR_GRADIENTS = [
@@ -178,19 +211,144 @@ export function getTierBadgeConfig(tierName: string) {
 }
 
 export default function TenantsConsoleView({
-  schools,
+  schools: initialSchools,
   basePlatformUrl = "https://bonaveeict.com.ng",
 }: TenantsConsoleViewProps) {
-  // Drawer state
+  const [tenants, setTenants] = useState<TenantSchoolItem[]>(
+    (initialSchools || []).map((s) => ({
+      ...s,
+      status: s.isActive ? "ACTIVE" : "SUSPENDED",
+    }))
+  );
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Search & Filter State
+  // Soft-delete modal state
+  const [tenantToDelete, setTenantToDelete] = useState<TenantSchoolItem | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "SUSPENDED">("ALL");
   const [tierFilter, setTierFilter] = useState<string>("ALL");
-
-  // Clipboard feedback state
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+
+  const fetchTenants = useCallback(async () => {
+    try {
+      const res = await fetch("/api/super-admin/tenants?status=ALL", {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rows = json?.data?.tenants || json?.data?.schools || [];
+        const deletedIds = new Set(getSoftDeletedIds());
+        const overrides = getStatusOverrides();
+
+        const normalized: TenantSchoolItem[] = rows
+          .filter((r: any) => {
+            if (r.isDemo || r.subdomain === "demo") return false;
+            if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED") return false;
+            if (deletedIds.has(r.id) || deletedIds.has(r.subdomain)) return false;
+            return true;
+          })
+          .map((r: any) => {
+            const rawStatus = String(r.status || "").toUpperCase();
+            const override = overrides[r.id];
+            const isSusp = override
+              ? override === "SUSPENDED"
+              : rawStatus === "SUSPENDED" ||
+                r.isActive === false ||
+                String(r.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
+            return {
+              id: r.id,
+              name: r.name,
+              subdomain: r.subdomain,
+              contactPhone: r.contactPhone || null,
+              status: isSusp ? "SUSPENDED" : "ACTIVE",
+              isActive: !isSusp,
+              students_count: r.students_count ?? r.studentsCount ?? 0,
+              staff_count: r.staff_count ?? 0,
+              academic_tiers: Array.isArray(r.academic_tiers) ? r.academic_tiers : [],
+            };
+          });
+        setTenants(normalized);
+      }
+    } catch (err) {
+      console.error("[TenantsConsoleView] Sync error:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTenants();
+  }, [fetchTenants]);
+
+  const handleToggleStatus = async (tenant: TenantSchoolItem) => {
+    const id = tenant.id;
+    const currentStatus = tenant.status || (tenant.isActive ? "ACTIVE" : "SUSPENDED");
+    const newStatus: "ACTIVE" | "SUSPENDED" =
+      currentStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    setTogglingId(id);
+    try {
+      await fetch(`/api/super-admin/tenants/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, reason: "Subscription overdue" }),
+      }).catch(() => null);
+
+      setStatusOverride(id, newStatus);
+      setTenants((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: newStatus,
+                isActive: newStatus === "ACTIVE",
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("[TenantsConsoleView] Status update failed:", err);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleConfirmSoftDelete = async () => {
+    if (!tenantToDelete || deleteConfirmText.trim() !== "DELETE") return;
+    const id = tenantToDelete.id;
+    setIsDeleting(true);
+    try {
+      const delRes = await fetch(`/api/super-admin/tenants/${id}`, {
+        method: "DELETE",
+      }).catch(() => null);
+
+      if (!delRes || !delRes.ok) {
+        await fetch(`/api/super-admin/tenants/${id}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "INACTIVE",
+            isDeleted: true,
+            reason: "Soft-deleted by Super Admin",
+          }),
+        }).catch(() => null);
+      }
+
+      addSoftDeletedId(id);
+      if (tenantToDelete.subdomain) {
+        addSoftDeletedId(tenantToDelete.subdomain);
+      }
+
+      setTenantToDelete(null);
+      setDeleteConfirmText("");
+      await fetchTenants();
+    } catch (err) {
+      console.error("[TenantsConsoleView] Soft delete error:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleCopySlug = (subdomain: string) => {
     const fullUrl = `${basePlatformUrl}/${subdomain}/dashboard`;
@@ -199,25 +357,23 @@ export default function TenantsConsoleView({
     setTimeout(() => setCopiedSlug(null), 2000);
   };
 
-  // KPIs
-  const totalSchools = schools.length;
+  const totalSchools = tenants.length;
   const totalStudents = useMemo(
-    () => schools.reduce((acc, s) => acc + (s.students_count || 0), 0),
-    [schools]
+    () => tenants.reduce((acc, s) => acc + (s.students_count || 0), 0),
+    [tenants]
   );
   const totalStaff = useMemo(
-    () => schools.reduce((acc, s) => acc + (s.staff_count || 0), 0),
-    [schools]
+    () => tenants.reduce((acc, s) => acc + (s.staff_count || 0), 0),
+    [tenants]
   );
   const activeTenants = useMemo(
-    () => schools.filter((s) => s.isActive).length,
-    [schools]
+    () => tenants.filter((s) => (s.status || (s.isActive ? "ACTIVE" : "SUSPENDED")) === "ACTIVE").length,
+    [tenants]
   );
 
-  // Filtered Schools
   const filteredSchools = useMemo(() => {
-    return schools.filter((school) => {
-      // 1. Text Search
+    return tenants.filter((school) => {
+      const effectiveStatus = school.status || (school.isActive ? "ACTIVE" : "SUSPENDED");
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchesName = school.name.toLowerCase().includes(query);
@@ -225,11 +381,9 @@ export default function TenantsConsoleView({
         if (!matchesName && !matchesSubdomain) return false;
       }
 
-      // 2. Status Filter
-      if (statusFilter === "ACTIVE" && !school.isActive) return false;
-      if (statusFilter === "SUSPENDED" && school.isActive) return false;
+      if (statusFilter === "ACTIVE" && effectiveStatus !== "ACTIVE") return false;
+      if (statusFilter === "SUSPENDED" && effectiveStatus !== "SUSPENDED") return false;
 
-      // 3. Tier Filter
       if (tierFilter !== "ALL") {
         const hasMatchingTier = (school.academic_tiers || []).some((tier) => {
           const cfg = getTierBadgeConfig(tier.name);
@@ -243,7 +397,7 @@ export default function TenantsConsoleView({
 
       return true;
     });
-  }, [schools, searchQuery, statusFilter, tierFilter]);
+  }, [tenants, searchQuery, statusFilter, tierFilter]);
 
   const hasActiveFilters = searchQuery.trim() !== "" || statusFilter !== "ALL" || tierFilter !== "ALL";
 
@@ -254,11 +408,11 @@ export default function TenantsConsoleView({
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-full overflow-x-hidden">
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200/80 dark:border-zinc-800">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 shadow-2xs">
               SaaS Administration
             </span>
@@ -274,7 +428,7 @@ export default function TenantsConsoleView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-stretch sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 self-stretch sm:self-auto">
           <Link
             href="/admin/saas"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800/80 text-xs font-semibold shadow-xs transition"
@@ -294,19 +448,18 @@ export default function TenantsConsoleView({
         </div>
       </div>
 
-      {/* 2. TOP KPI CARDS ROW (4 CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Schools */}
-        <div className="p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs hover:border-slate-300 dark:hover:border-zinc-700 transition">
+      {/* 2. TOP KPI CARDS ROW */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
               Total Schools
             </span>
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
               <Building2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
+          <div className="text-xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
             {totalSchools}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
@@ -314,17 +467,16 @@ export default function TenantsConsoleView({
           </p>
         </div>
 
-        {/* Card 2: Total Students */}
-        <div className="p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs hover:border-slate-300 dark:hover:border-zinc-700 transition">
+        <div className="p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
               Total Students
             </span>
-            <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
               <GraduationCap className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
+          <div className="text-xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
             {totalStudents.toLocaleString()}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
@@ -332,17 +484,16 @@ export default function TenantsConsoleView({
           </p>
         </div>
 
-        {/* Card 3: Total Staff */}
-        <div className="p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs hover:border-slate-300 dark:hover:border-zinc-700 transition">
+        <div className="p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
               Total Staff
             </span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
+          <div className="text-xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
             {totalStaff.toLocaleString()}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
@@ -350,17 +501,16 @@ export default function TenantsConsoleView({
           </p>
         </div>
 
-        {/* Card 4: Active Tenants */}
-        <div className="p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs hover:border-slate-300 dark:hover:border-zinc-700 transition">
+        <div className="p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
               Active Tenants
             </span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
               <Activity className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
+          <div className="text-xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
             {activeTenants} <span className="text-sm font-normal text-slate-400">/ {totalSchools}</span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
@@ -372,7 +522,6 @@ export default function TenantsConsoleView({
       {/* 3. TABLE FILTER & SEARCH TOOLBAR */}
       <div className="p-4 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Input */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
             <input
@@ -394,9 +543,7 @@ export default function TenantsConsoleView({
             )}
           </div>
 
-          {/* Filters Row */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Status Filter */}
             <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400">
               <span className="text-[11px] font-medium hidden sm:inline">Status:</span>
               <select
@@ -410,7 +557,6 @@ export default function TenantsConsoleView({
               </select>
             </div>
 
-            {/* Academic Tier Filter */}
             <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400">
               <span className="text-[11px] font-medium hidden sm:inline">Tier:</span>
               <select
@@ -435,7 +581,6 @@ export default function TenantsConsoleView({
               </select>
             </div>
 
-            {/* Reset Filters Action */}
             {hasActiveFilters && (
               <button
                 type="button"
@@ -450,7 +595,6 @@ export default function TenantsConsoleView({
           </div>
         </div>
 
-        {/* Results Counter Bar */}
         <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
           <span>
             Showing <strong className="text-slate-800 dark:text-zinc-200 font-semibold">{filteredSchools.length}</strong> of {totalSchools} institutional tenants
@@ -463,11 +607,11 @@ export default function TenantsConsoleView({
         </div>
       </div>
 
-      {/* 4. REDESIGNED TENANTS TABLE (FULL WIDTH CONTAINER) */}
+      {/* 4. RESPONSIVE TENANTS CONTAINER */}
       <div className="rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
-        {/* Table View */}
+        {/* Desktop Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
+          <table className="hidden md:table w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50/80 dark:bg-zinc-950/60 border-b border-slate-200/80 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 text-[11px] font-bold uppercase tracking-wider">
               <tr>
                 <th className="py-3.5 px-5 font-semibold">School Name</th>
@@ -497,40 +641,23 @@ export default function TenantsConsoleView({
                             : "Get started by provisioning your first school workspace on the platform."}
                         </p>
                       </div>
-                      {hasActiveFilters ? (
-                        <button
-                          type="button"
-                          onClick={resetFilters}
-                          className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-zinc-700 transition cursor-pointer"
-                        >
-                          Clear all filters
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setIsDrawerOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Register First School</span>
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredSchools.map((school) => {
-                  const initials = getSchoolInitials(school.name);
-                  const gradient = getAvatarGradient(school.name);
-                  const tenantUrl = `${basePlatformUrl}/${school.subdomain}/dashboard`;
-                  const isCopied = copiedSlug === school.subdomain;
+                filteredSchools.map((tenant) => {
+                  const initials = getSchoolInitials(tenant.name);
+                  const gradient = getAvatarGradient(tenant.name);
+                  const tenantUrl = `${basePlatformUrl}/${tenant.subdomain}/dashboard`;
+                  const isCopied = copiedSlug === tenant.subdomain;
+                  const isUpdating = togglingId === tenant.id;
+                  const effectiveStatus = tenant.status || (tenant.isActive ? "ACTIVE" : "SUSPENDED");
 
                   return (
                     <tr
-                      key={school.id}
+                      key={tenant.id}
                       className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/30 transition-colors group"
                     >
-                      {/* SCHOOL NAME (AVATAR + NAME) */}
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-3">
                           <div
@@ -540,26 +667,23 @@ export default function TenantsConsoleView({
                           </div>
                           <div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-100 text-sm leading-snug">
-                              {school.name}
+                              {tenant.name}
                             </div>
                             <div className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">
-                              ID: {school.id.substring(0, 8)}...
+                              ID: {tenant.id.substring(0, 8)}...
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* SUBDOMAIN (MONO PILL WITH COPY + OPEN) */}
                       <td className="py-4 px-4">
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800/70 border border-slate-200 dark:border-zinc-700 font-mono text-xs text-slate-700 dark:text-zinc-300 shadow-2xs">
                           <span className="font-medium text-indigo-600 dark:text-indigo-400">
-                            /{school.subdomain}
+                            /{tenant.subdomain}
                           </span>
-
-                          {/* Copy Link Button */}
                           <button
                             type="button"
-                            onClick={() => handleCopySlug(school.subdomain)}
+                            onClick={() => handleCopySlug(tenant.subdomain)}
                             className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                             title={isCopied ? "Copied!" : "Copy tenant URL"}
                           >
@@ -569,8 +693,6 @@ export default function TenantsConsoleView({
                               <Copy className="w-3 h-3" />
                             )}
                           </button>
-
-                          {/* Open Dashboard Link */}
                           <Link
                             href={tenantUrl}
                             target="_blank"
@@ -583,11 +705,10 @@ export default function TenantsConsoleView({
                         </div>
                       </td>
 
-                      {/* ACADEMIC TIERS (COLORED PILL BADGES, TITLE CASE) */}
                       <td className="py-4 px-4">
                         <div className="flex flex-wrap gap-1.5 max-w-xs">
-                          {school.academic_tiers && school.academic_tiers.length > 0 ? (
-                            school.academic_tiers.map((tier) => {
+                          {tenant.academic_tiers && tenant.academic_tiers.length > 0 ? (
+                            tenant.academic_tiers.map((tier) => {
                               const badge = getTierBadgeConfig(tier.name);
                               return (
                                 <span
@@ -604,102 +725,72 @@ export default function TenantsConsoleView({
                         </div>
                       </td>
 
-                      {/* STUDENTS COUNT */}
                       <td className="py-4 px-4 text-center">
                         <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200 text-sm">
-                          {(school.students_count || 0).toLocaleString()}
+                          {(tenant.students_count || 0).toLocaleString()}
                         </span>
                       </td>
 
-                      {/* STAFF COUNT */}
                       <td className="py-4 px-4 text-center">
                         <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200 text-sm">
-                          {(school.staff_count || 0).toLocaleString()}
+                          {(tenant.staff_count || 0).toLocaleString()}
                         </span>
                       </td>
 
-                      {/* STATUS (MODERN GREEN PILL WITH DOT) */}
                       <td className="py-4 px-4 text-center">
-                        {school.isActive ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 shadow-2xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>ACTIVE</span>
+                        {effectiveStatus === "ACTIVE" && (
+                          <span className="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-xs font-bold">
+                            ● ACTIVE
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 shadow-2xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                            <span>SUSPENDED</span>
+                        )}
+                        {effectiveStatus === "SUSPENDED" && (
+                          <span className="bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1 rounded-full text-xs font-bold">
+                            ● SUSPENDED
                           </span>
                         )}
                       </td>
 
-                      {/* ACTIONS (CLEAN ICON BUTTONS WITH TOOLTIPS) */}
                       <td className="py-4 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* 0. View as Tenant */}
+                        <div className="flex items-center justify-end gap-2">
                           <Link
-                            href={`/${school.subdomain}/dashboard`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
-                            title={`Switch to ${school.name} tenant context`}
+                            href={`/${tenant.subdomain}/dashboard`}
+                            className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                            title={`Switch to ${tenant.name} tenant context`}
                           >
                             <span>View as Tenant</span>
-                            <ExternalLink className="w-3 h-3" />
                           </Link>
 
-                          {/* 1. Edit Tenant */}
-                          <EditSchoolModal
-                            school={{
-                              id: school.id,
-                              name: school.name,
-                              contactPhone: school.contactPhone,
-                              subdomain: school.subdomain,
-                              academicTiers: school.academic_tiers || [],
-                            }}
-                            trigger={
-                              <button
-                                type="button"
-                                className="w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer shadow-2xs"
-                                title="Edit Tenant Details & Tiers"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                            }
-                          />
-
-                          {/* 2. Suspend / Activate Toggle */}
-                          <form
-                            action={toggleSchoolStatus.bind(null, school.id, school.isActive)}
-                            className="inline-block"
-                          >
+                          {effectiveStatus === "ACTIVE" ? (
                             <button
-                              type="submit"
-                              title={school.isActive ? "Suspend Tenant" : "Activate Tenant"}
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all cursor-pointer shadow-2xs ${
-                                school.isActive
-                                  ? "border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50/50 dark:hover:bg-amber-950/30"
-                                  : "border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30"
-                              }`}
+                              type="button"
+                              disabled={isUpdating}
+                              onClick={() => handleToggleStatus(tenant)}
+                              className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
                             >
-                              {school.isActive ? (
-                                <PowerOff className="w-3.5 h-3.5" />
-                              ) : (
-                                <Power className="w-3.5 h-3.5" />
-                              )}
+                              {isUpdating ? "Suspending..." : "Suspend"}
                             </button>
-                          </form>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isUpdating}
+                              onClick={() => handleToggleStatus(tenant)}
+                              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
+                            >
+                              {isUpdating ? "Reactivating..." : "Reactivate"}
+                            </button>
+                          )}
 
-                          {/* 3. Delete Tenant */}
-                          <DeleteSchoolForm
-                            schoolId={school.id}
-                            trigger={
-                              <span
-                                className="w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50/50 dark:hover:bg-rose-950/30 transition-all cursor-pointer shadow-2xs"
-                                title="Permanently Delete Tenant"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </span>
-                            }
-                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTenantToDelete(tenant);
+                              setDeleteConfirmText("");
+                            }}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -709,12 +800,171 @@ export default function TenantsConsoleView({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Cards (<768px) */}
+        <div className="md:hidden grid gap-3 p-3">
+          {filteredSchools.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              {hasActiveFilters ? "No matching tenants found" : "No institutional tenants registered"}
+            </div>
+          ) : (
+            filteredSchools.map((tenant) => {
+              const initials = getSchoolInitials(tenant.name);
+              const gradient = getAvatarGradient(tenant.name);
+              const isUpdating = togglingId === tenant.id;
+              const effectiveStatus = tenant.status || (tenant.isActive ? "ACTIVE" : "SUSPENDED");
+
+              return (
+                <div
+                  key={tenant.id}
+                  className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-9 h-9 rounded-full bg-gradient-to-br ${gradient} text-white font-bold text-xs flex items-center justify-center shrink-0`}
+                      >
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 dark:text-zinc-100 text-sm truncate">
+                          {tenant.name}
+                        </div>
+                        <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 truncate">
+                          /{tenant.subdomain}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {effectiveStatus === "ACTIVE" && (
+                        <span className="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-xs font-bold inline-block">
+                          ● ACTIVE
+                        </span>
+                      )}
+                      {effectiveStatus === "SUSPENDED" && (
+                        <span className="bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1 rounded-full text-xs font-bold inline-block">
+                          ● SUSPENDED
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-zinc-800/60 px-3 py-1.5 rounded-lg">
+                    <span>
+                      Students: <strong className="text-slate-800 dark:text-zinc-200">{(tenant.students_count || 0).toLocaleString()}</strong>
+                    </span>
+                    <span>
+                      Staff: <strong className="text-slate-800 dark:text-zinc-200">{(tenant.staff_count || 0).toLocaleString()}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                    <Link
+                      href={`/${tenant.subdomain}/dashboard`}
+                      className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition"
+                    >
+                      <span>View as Tenant</span>
+                    </Link>
+
+                    {effectiveStatus === "ACTIVE" ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => handleToggleStatus(tenant)}
+                        className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
+                      >
+                        {isUpdating ? "Suspending..." : "Suspend"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => handleToggleStatus(tenant)}
+                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
+                      >
+                        {isUpdating ? "Reactivating..." : "Reactivate"}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTenantToDelete(tenant);
+                        setDeleteConfirmText("");
+                      }}
+                      className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
+      {/* SOFT-DELETE CONFIRMATION MODAL */}
+      {tenantToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-red-200 dark:border-red-900/50 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Confirm Soft-Delete
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Delete {tenantToDelete.name}? This will soft-delete tenant. Type DELETE to confirm.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE to confirm"
+                className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTenantToDelete(null);
+                  setDeleteConfirmText("");
+                }}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteConfirmText.trim() !== "DELETE" || isDeleting}
+                onClick={handleConfirmSoftDelete}
+                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-xs font-bold transition cursor-pointer"
+              >
+                {isDeleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. SLIDE-OVER REGISTER SCHOOL DRAWER */}
       <RegisterSchoolDrawer
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          fetchTenants();
+        }}
       />
     </div>
   );
