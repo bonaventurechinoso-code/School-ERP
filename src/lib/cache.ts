@@ -140,14 +140,26 @@ export async function getCachedSchool(subdomain: string) {
     fetchFn: async () => {
       try {
         const { basePrisma } = await import("./tenant-prisma");
-        return await basePrisma.school.findUnique({
-          where: { subdomain: normalizedDomain },
+        const schoolRecord = await basePrisma.school.findFirst({
+          where: {
+            OR: [
+              { subdomain: { equals: normalizedDomain, mode: "insensitive" } },
+              { slug: { equals: normalizedDomain, mode: "insensitive" } },
+            ],
+          },
           include: {
             academicTiers: {
               orderBy: { level: "asc" },
             },
           },
         });
+        if (schoolRecord) {
+          return {
+            ...schoolRecord,
+            academicTiers: schoolRecord.academicTiers || [],
+          };
+        }
+        return null;
       } catch (err) {
         console.error(`[CACHE] Failed to fetch school metadata for ${normalizedDomain}:`, err);
         return null;

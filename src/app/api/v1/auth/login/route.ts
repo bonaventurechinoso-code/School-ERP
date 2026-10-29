@@ -8,6 +8,7 @@ import {
   resolveTierCode
 } from "@/lib/tenant-tier-utils";
 import { resolveTenant } from "@/lib/tenant-service";
+import { isTenantSuspended } from "@/lib/tenantStatus";
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -417,48 +418,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // Tenant must be active before any credential check.
-    const tenantStatus =
-      !tenant.isActive || String(tenant.status || "").toUpperCase() === "SUSPENDED"
-        ? "SUSPENDED"
-        : String(tenant.status || "").toUpperCase();
-    if (!tenant.isActive || tenantStatus === "SUSPENDED" || tenantStatus === "INACTIVE") {
-      let tenantMeta: any = null;
-      try {
-        tenantMeta = await basePrisma.tenant.findFirst({
-          where: {
-            OR: [
-              { id: tenant.id },
-              { subdomain: { equals: tenant.subdomain, mode: "insensitive" } },
-            ],
-          },
-          select: { suspendedReason: true, suspendedAt: true },
-        });
-      } catch {}
-
-      tenant.status = tenantStatus;
-      tenant.slug = tenant.slug || tenant.subdomain || targetSchoolCode;
-      tenant.suspensionReason = tenant.suspensionReason || tenantMeta?.suspendedReason || "Subscription overdue";
-      tenant.suspendedAt = tenant.suspendedAt
-        ? new Date(tenant.suspendedAt)
-        : tenantMeta?.suspendedAt
-        ? new Date(tenantMeta.suspendedAt)
-        : tenant.updatedAt
-        ? new Date(tenant.updatedAt)
-        : new Date();
-
-      let errorMsg = "This institution is currently inactive or suspended. Please contact platform administration.";
-      if (tenant.status === "SUSPENDED") {
-        errorMsg = `Institution ${tenant.slug} is SUSPENDED: ${tenant.suspensionReason || "Subscription overdue"}. Suspended on ${tenant.suspendedAt?.toLocaleDateString()}. To reactivate, pay at /admin/billing and contact Platform Admin.`;
-      }
-
-      return NextResponse.json(
-        {
-          error: errorMsg,
-          code: "TENANT_INACTIVE",
-        },
-        { status: 403 }
-      );
+    // Unified Suspension Logic: Do NOT block login with 403.
+    // Suspended users can still login to pay and view subscription status.
+    const isSuspended = isTenantSuspended(tenant);
+    if (isSuspended) {
+      tenant.isSuspended = true;
+      tenant.status = "SUSPENDED";
+      tenant.subscriptionStatus = "SUSPENDED";
     }
 
     const activeTiers: string[] = (tenant.academicTiers || []).map((t: any) => t.name);
@@ -847,6 +813,7 @@ export async function POST(req: Request) {
       email: authenticatedEmail,
       isSuperAdmin: false,
       mustChangePassword,
+      isSuspended,
     });
 
     const { rawRefreshToken } = await issueRefreshToken({
@@ -924,6 +891,8 @@ export async function POST(req: Request) {
       sessionToken: sessionResult.sessionToken || distinctSessionToken,
       token: accessToken,
       maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
+      isSuspended,
+      subscriptionStatus: isSuspended ? "SUSPENDED" : "ACTIVE",
     });
 
     response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, rawRefreshToken, getRefreshTokenCookieOptions());

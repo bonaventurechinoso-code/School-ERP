@@ -13,6 +13,7 @@ import {
 } from "./DashboardCards";
 import DashboardClientHeader from "./DashboardClientHeader";
 import { getClassroomsForTenant } from "./actions";
+import { isTenantSuspended } from "@/lib/tenantStatus";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -48,8 +49,16 @@ export default async function TenantDashboard({
     redirect(`/login?school=${encodeURIComponent(schoolDomain)}`);
   }
 
-  // Pre-fetch classrooms for application modal (backed by Redis cache)
-  const classrooms = await getClassroomsForTenant(school.id, activeTier);
+  // Pre-fetch classrooms with safe fallback
+  let classrooms: any[] = [];
+  try {
+    classrooms = await getClassroomsForTenant(school.id, activeTier);
+  } catch (err) {
+    console.error("[DASHBOARD] Failed to load classrooms:", err);
+    classrooms = [];
+  }
+
+  const isSuspended = isTenantSuspended(school);
 
   const primaryColor = "#0f172a";
   const userRole = session?.role?.toUpperCase() || "";
@@ -58,13 +67,30 @@ export default async function TenantDashboard({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-200">
+      {isSuspended && (
+        <div className="bg-amber-500/10 border border-amber-300 text-amber-900 dark:text-amber-200 dark:border-amber-700/50 p-4 rounded-xl flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-sm sm:text-base">Subscription Overdue - Institutional Access Restricted</p>
+            <p className="text-xs sm:text-sm text-amber-800 dark:text-amber-300">
+              Please renew your institutional platform license to restore full administrative services.
+            </p>
+          </div>
+          <a
+            href="/dashboard/subscription"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap ml-4"
+          >
+            Renew Now
+          </a>
+        </div>
+      )}
+
       {/* Decoupled Interactive Header & New Application Modal Trigger */}
       <DashboardClientHeader
         schoolName={school.name}
         primaryColor={primaryColor}
         schoolId={school.id}
         activeTier={activeTier}
-        tiers={school.academicTiers}
+        tiers={school.academicTiers || []}
         classrooms={classrooms}
       />
 

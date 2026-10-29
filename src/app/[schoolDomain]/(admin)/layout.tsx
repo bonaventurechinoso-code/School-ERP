@@ -52,7 +52,7 @@ export default async function AdminLayout({
     <ClientLayout 
       schoolName={school.name}
       headerContent={null}
-      tiers={school.academicTiers.map((t) => ({
+      tiers={(school.academicTiers || []).map((t) => ({
         id: t.id,
         name: t.name,
         databaseName: t.databaseName,

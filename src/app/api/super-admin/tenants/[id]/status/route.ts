@@ -110,7 +110,7 @@ async function handleStatusUpdate(
 
       await clearTenantCache(tenantId);
       // Asynchronously notify admins without blocking or failing the request
-      notifyTenantAdmins(tenantId, "REACTIVATED").catch(() => {});
+      notifyTenantAdmins(tenantId, "REACTIVATED").catch(() => { });
 
       return NextResponse.json({
         success: true,
@@ -157,7 +157,7 @@ async function handleStatusUpdate(
 
       await clearTenantCache(tenantId);
       // Asynchronously notify admins
-      notifyTenantAdmins(tenantId, "SUSPENDED", reason).catch(() => {});
+      notifyTenantAdmins(tenantId, "SUSPENDED", reason).catch(() => { });
 
       return NextResponse.json({
         success: true,

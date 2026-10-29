@@ -71,7 +71,8 @@ export default async function TenantLayout({
   const cookieStore = await cookies();
   const activeTierCookie = cookieStore.get("activeTier")?.value;
 
-  let isHigherEd = school.academicTiers.some(tier =>
+  const tiers = school.academicTiers || [];
+  let isHigherEd = tiers.some(tier =>
     tier.name.toUpperCase().includes("UNIVERSITY") ||
     tier.name.toUpperCase().includes("POLYTECHNIC") ||
     tier.name.toUpperCase().includes("COLLEGE") ||
@@ -80,8 +81,8 @@ export default async function TenantLayout({
 
   // Resolve baseline precise tier from school's academic tiers
   let preciseTier = "K12_GENERIC";
-  if (school.academicTiers.length > 0) {
-    const tierNames = school.academicTiers.map(t => t.name.toUpperCase());
+  if (tiers.length > 0) {
+    const tierNames = tiers.map(t => t.name.toUpperCase());
     const hasPrimary = tierNames.some(t => t.includes("PRIMARY"));
     const hasSecondary = tierNames.some(t => t.includes("SECONDARY") || t.includes("HIGH SCHOOL"));
 
@@ -125,7 +126,7 @@ export default async function TenantLayout({
     subdomain: school.subdomain,
     institutionType: isHigherEd ? "HIGHER_ED" : "K12",
     preciseTier: preciseTier,
-    activeTier: activeTierCookie || (school.academicTiers[0]?.name ?? "Primary School"),
+    activeTier: activeTierCookie || (tiers[0]?.name ?? "Primary School"),
     subscriptionPlan: school.subscriptionPlan,
     subscriptionStatus: school.subscriptionStatus || "ACTIVE",
     subscriptionExpiresAt: school.subscriptionExpiresAt,
