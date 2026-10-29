@@ -154,7 +154,7 @@ export default function BillingProofClient({
         }
       }
 
-      const res = await fetch("/api/tenant/submit-subscription-proof", {
+      let res = await fetch(`/api/${schoolDomain}/subscription/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -167,6 +167,23 @@ export default function BillingProofClient({
           fileUrl,
         }),
       });
+
+      if (!res.ok && res.status === 404) {
+        // Fallback to legacy endpoint if route was not found
+        res = await fetch("/api/tenant/submit-subscription-proof", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolDomain,
+            reference: form.reference.trim(),
+            amount: Number(form.amount),
+            bankName: form.bankName,
+            payerName: form.payerName.trim(),
+            note: form.note.trim(),
+            fileUrl,
+          }),
+        });
+      }
 
       const data = await res.json();
 

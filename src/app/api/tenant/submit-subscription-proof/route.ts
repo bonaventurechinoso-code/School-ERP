@@ -138,6 +138,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // ── Record TenantSubscriptionPayment for Central Platform Finance Desk ─
+    try {
+      const effectiveTenantId = tenant?.id || school.id;
+      await basePrisma.tenantSubscriptionPayment.upsert({
+        where: { nipSessionId: reference.trim() },
+        update: {},
+        create: {
+          tenantId: effectiveTenantId,
+          schoolSlug: tenant?.slug || school.slug || cleanDomain,
+          schoolName: tenant?.schoolName || school.name,
+          amount: Number(amount),
+          nipSessionId: reference.trim(),
+          senderBank: bankName.trim(),
+          receiptUrl: body.fileUrl || null,
+          accountName: payerName?.trim() || null,
+          status: "PENDING",
+          notes: note?.trim() || null,
+        },
+      });
+    } catch (e) {
+      console.warn("[submit-subscription-proof] TenantSubscriptionPayment creation non-fatal:", e);
+    }
+
     // ── Sync School record — keep portal live during review ───────────────
     await basePrisma.school.update({
       where: { id: school.id },

@@ -38,24 +38,54 @@ export default async function SuperAdminFinanceReceiptsPage() {
     );
   }
 
-  // Pure query on subscriptionPayment: ONLY tenant subscription receipts, no student academic transactions!
-  let subscriptionPayments: any[] = [];
+  // 1. Fetch TenantSubscriptionPayment records
+  let tenantPayments: any[] = [];
   try {
-    subscriptionPayments = await prisma.subscriptionPayment.findMany({
-      where: {
-        status: { in: ["PENDING_VERIFICATION", "VERIFIED"] },
-      },
-      include: {
-        tenant: true,
-      },
-      orderBy: { createdAt: "desc" },
+    tenantPayments = await prisma.tenantSubscriptionPayment.findMany({
+      orderBy: { submittedAt: "desc" },
+      include: { tenant: true },
     });
   } catch (err) {
-    console.error("[SuperAdminFinanceReceiptsPage] Error fetching subscriptionPayments:", err);
+    console.error("[SuperAdminFinanceReceiptsPage] Error fetching TenantSubscriptionPayment:", err);
+  }
+
+  // 2. Fetch legacy SubscriptionPayment records if any
+  let legacyPayments: any[] = [];
+  try {
+    legacyPayments = await prisma.subscriptionPayment.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { tenant: true },
+    });
+  } catch (err) {
+    console.error("[SuperAdminFinanceReceiptsPage] Error fetching SubscriptionPayment:", err);
+  }
+
+  const existingIds = new Set(tenantPayments.map((p) => p.id));
+  const mergedPayments: any[] = [...tenantPayments];
+
+  for (const lp of legacyPayments) {
+    if (!existingIds.has(lp.id)) {
+      mergedPayments.push({
+        id: lp.id,
+        tenantId: lp.tenantId,
+        schoolSlug: lp.tenant?.subdomain || lp.tenantId,
+        schoolName: lp.tenant?.schoolName || "Institution",
+        amount: Number(lp.amount || 0),
+        nipSessionId: lp.id,
+        senderBank: "Bank Transfer",
+        receiptUrl: lp.receiptUrl,
+        accountName: null,
+        status: lp.status === "PENDING_VERIFICATION" ? "PENDING" : lp.status,
+        submittedAt: lp.createdAt,
+        verifiedAt: lp.verifiedAt,
+        notes: lp.rejectionReason,
+        tenant: lp.tenant,
+      });
+    }
   }
 
   // Also query school names if needed for richer display
-  const subdomains = subscriptionPayments.map((p) => p.tenant?.subdomain).filter(Boolean);
+  const subdomains = mergedPayments.map((p) => p.schoolSlug || p.tenant?.subdomain).filter(Boolean);
   let schoolMap = new Map<string, any>();
   if (subdomains.length > 0) {
     try {
@@ -78,31 +108,31 @@ export default async function SuperAdminFinanceReceiptsPage() {
     } catch {}
   }
 
-  const serializablePayments = subscriptionPayments.map((p) => {
-    const s = schoolMap.get(p.tenant?.subdomain?.toLowerCase());
+  const serializablePayments = mergedPayments.map((p) => {
+    const slug = (p.schoolSlug || p.tenant?.subdomain || "").toLowerCase();
+    const s = schoolMap.get(slug);
+    const rawDate = p.submittedAt || p.createdAt || new Date();
     return {
       id: p.id,
       tenantId: p.tenantId,
       amount: Number(p.amount || 0),
       receiptUrl: p.receiptUrl,
-      status: p.status,
-      createdAt: (p.createdAt instanceof Date ? p.createdAt : new Date(p.createdAt)).toISOString(),
+      status: p.status === "PENDING_VERIFICATION" ? "PENDING" : p.status,
+      createdAt: (rawDate instanceof Date ? rawDate : new Date(rawDate)).toISOString(),
       verifiedAt: p.verifiedAt ? (p.verifiedAt instanceof Date ? p.verifiedAt : new Date(p.verifiedAt)).toISOString() : null,
-      rejectionReason: p.rejectionReason || null,
-      tenant: p.tenant
-        ? {
-            id: p.tenant.id,
-            schoolName: s?.name || p.tenant.schoolName || "Institution",
-            subdomain: p.tenant.subdomain,
-            status: p.tenant.status,
-            subscriptionStatus: p.tenant.subscriptionStatus,
-            planName: s?.subscriptionPlan || "MONTHLY",
-          }
-        : null,
+      rejectionReason: p.notes || p.rejectionReason || null,
+      tenant: {
+        id: p.tenant?.id || p.tenantId,
+        schoolName: p.schoolName || s?.name || p.tenant?.schoolName || "Institution",
+        subdomain: p.schoolSlug || p.tenant?.subdomain || "portal",
+        status: p.tenant?.status || s?.status || "ACTIVE",
+        subscriptionStatus: p.tenant?.subscriptionStatus || s?.subscriptionStatus || "ACTIVE",
+        planName: s?.subscriptionPlan || "MONTHLY",
+      },
     };
   });
 
-  const pendingCount = serializablePayments.filter((p) => p.status === "PENDING_VERIFICATION").length;
+  const pendingCount = serializablePayments.filter((p) => p.status === "PENDING" || p.status === "PENDING_VERIFICATION").length;
   const verifiedCount = serializablePayments.filter((p) => p.status === "VERIFIED").length;
 
   return (

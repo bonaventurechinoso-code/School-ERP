@@ -1073,7 +1073,7 @@ model Tenant {
   institutionTypes        Json // ["PRIMARY","SECONDARY"]
   planId                  String?
   plan                    Plan?     @relation(fields: [planId], references: [id])
-  status                  String    @default("PENDING") // PENDING, ACTIVE, SUSPENDED
+  status                  String    @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
   subscriptionStatus      String?   @default("ACTIVE")
   planTier                String?
   isDemo                  Boolean   @default(false)
@@ -1104,7 +1104,9 @@ model Tenant {
   campuses                TenantCampus[]
   featureFlags            TenantFeatureFlag[]
   auditTrails             PlatformAuditTrail[]
-  subscriptionPayments    SubscriptionPayment[]
+  subscriptionPayments    TenantSubscriptionPayment[]
+  legacySubscriptionPayments SubscriptionPayment[] @relation("LegacyTenantSubscriptionPayment")
+  notifications           TenantNotification[]
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -1610,10 +1612,48 @@ model SubscriptionPayment {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation("LegacyTenantSubscriptionPayment", fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([status])
+}
+
+model TenantSubscriptionPayment {
+  id                String    @id @default(cuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  schoolSlug        String
+  schoolName        String
+  amount            Float
+  nipSessionId      String    @unique
+  senderBank        String
+  receiptUrl        String?
+  accountName       String?
+  status            String    @default("PENDING")
+  submittedAt       DateTime  @default(now())
+  verifiedAt        DateTime?
+  verifiedBy        String?
+  subscriptionStart DateTime?
+  subscriptionEnd   DateTime?
+  notes             String?
+
+  @@index([status])
+  @@index([tenantId])
+}
+
+model TenantNotification {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type      String   // SUBSCRIPTION_REACTIVATED | SUBSCRIPTION_EXPIRING | PAYMENT_RECEIVED
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  actionUrl String?  // e.g., /egede/dashboard
+
+  @@index([tenantId])
+  @@index([isRead])
 }
 
 model PlatformOwnerBankAccount {

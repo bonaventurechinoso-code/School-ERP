@@ -14,6 +14,7 @@ import {
 import DashboardClientHeader from "./DashboardClientHeader";
 import { getClassroomsForTenant } from "./actions";
 import { isTenantSuspended } from "@/lib/tenantStatus";
+import ReactivationBanner from "./ReactivationBanner";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -60,6 +61,47 @@ export default async function TenantDashboard({
 
   const isSuspended = isTenantSuspended(school);
 
+  // Fetch unread notifications for tenant
+  let notifications: any[] = [];
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: schoolDomain, mode: "insensitive" } },
+          { slug: { equals: schoolDomain, mode: "insensitive" } },
+          { id: school.id },
+        ],
+      },
+      select: { id: true },
+    });
+    const effectiveTenantId = tenant?.id || school.id;
+    notifications = await prisma.tenantNotification.findMany({
+      where: {
+        tenantId: effectiveTenantId,
+        isRead: false,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+  } catch (e) {
+    console.warn("[DASHBOARD] Notifications fetch error:", e);
+  }
+
+  const serializedNotifications = notifications.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    message: n.message,
+    isRead: Boolean(n.isRead),
+    createdAt: (n.createdAt instanceof Date ? n.createdAt : new Date(n.createdAt)).toISOString(),
+    actionUrl: n.actionUrl || null,
+  }));
+
+  const reactivationNotif = serializedNotifications.find(
+    (n) => n.type === "SUBSCRIPTION_REACTIVATED"
+  );
+
   const primaryColor = "#0f172a";
   const userRole = session?.role?.toUpperCase() || "";
   const staffRole = session?.staffRole || "";
@@ -82,6 +124,13 @@ export default async function TenantDashboard({
             Renew Now
           </a>
         </div>
+      )}
+
+      {reactivationNotif && (
+        <ReactivationBanner
+          notification={reactivationNotif}
+          schoolDomain={schoolDomain}
+        />
       )}
 
       {/* Decoupled Interactive Header & New Application Modal Trigger */}

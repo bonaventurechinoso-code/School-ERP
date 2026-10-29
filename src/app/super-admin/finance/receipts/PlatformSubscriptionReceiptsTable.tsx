@@ -49,15 +49,23 @@ export default function PlatformSubscriptionReceiptsTable({
     setFeedback(null);
 
     try {
-      const res = await fetch(`/api/super-admin/finance/verify/${paymentId}`, {
+      let res = await fetch(`/api/super-admin/finance/receipts/${paymentId}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "APPROVE" }),
       });
 
+      if (!res.ok) {
+        res = await fetch(`/api/super-admin/finance/verify/${paymentId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "APPROVE" }),
+        });
+      }
+
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to approve payment.");
+        throw new Error(data.error || "Failed to verify payment.");
       }
 
       setReceipts((prev) =>
@@ -283,7 +291,7 @@ export default function PlatformSubscriptionReceiptsTable({
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs transition shadow-2xs disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            Approve
+                            VERIFY
                           </button>
                           {!isRejected && (
                             <button

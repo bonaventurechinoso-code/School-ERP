@@ -14,30 +14,63 @@ export const metadata = {
 
 async function getBillingData(schoolDomain: string) {
   try {
-    const [school, platformBank] = await Promise.all([
-      basePrisma.school.findFirst({
+    const cleanDomain = (schoolDomain || "").trim().toLowerCase();
+    let school: any = null;
+    let tenant: any = null;
+
+    try {
+      school = await basePrisma.school.findFirst({
         where: {
           OR: [
-            { subdomain: schoolDomain.trim().toLowerCase() },
-            { id: schoolDomain.trim() },
+            { subdomain: cleanDomain },
+            { slug: cleanDomain },
+            { id: cleanDomain },
           ],
         },
-        select: {
-          id: true,
-          name: true,
-          subdomain: true,
-          subscriptionPlan: true,
-          subscriptionStatus: true,
-          subscriptionExpiresAt: true,
-        },
-      }),
-      getCachedPlatformBank(),
-    ]);
+      });
+    } catch (e) {
+      console.warn("[BILLING_PAGE] school findFirst fallback:", e);
+    }
 
-    return { school, platformBank };
+    try {
+      tenant = await basePrisma.tenant.findFirst({
+        where: {
+          OR: [
+            { subdomain: cleanDomain },
+            { slug: cleanDomain },
+            { id: cleanDomain },
+          ],
+        },
+      });
+    } catch (e) {
+      console.warn("[BILLING_PAGE] tenant findFirst fallback:", e);
+    }
+
+    const platformBank = await getCachedPlatformBank().catch(() => null);
+
+    const merged = {
+      id: school?.id || tenant?.id || cleanDomain,
+      name: school?.name || tenant?.schoolName || cleanDomain,
+      subdomain: school?.subdomain || tenant?.subdomain || cleanDomain,
+      subscriptionPlan: school?.subscriptionPlan || tenant?.planTier || "BASIC",
+      subscriptionStatus: tenant?.subscriptionStatus || school?.subscriptionStatus || "ACTIVE",
+      subscriptionExpiresAt: school?.subscriptionExpiresAt || tenant?.subscriptionExpiresAt || null,
+    };
+
+    return { school: merged, platformBank };
   } catch (err) {
     console.error("[BILLING_PAGE_ERROR]:", err);
-    return { school: null, platformBank: null };
+    return {
+      school: {
+        id: schoolDomain,
+        name: schoolDomain,
+        subdomain: schoolDomain,
+        subscriptionPlan: "BASIC",
+        subscriptionStatus: "ACTIVE",
+        subscriptionExpiresAt: null,
+      },
+      platformBank: null,
+    };
   }
 }
 

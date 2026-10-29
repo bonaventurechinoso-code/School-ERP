@@ -7,6 +7,8 @@ import { AcademicTier } from "@prisma/client";
 import NewApplicationModal from "./NewApplicationModal";
 import { createAdmissionLead, getClassroomsForTenant } from "./actions";
 
+import NotificationBell, { TenantNotificationItem } from "./NotificationBell";
+
 interface DashboardClientHeaderProps {
   schoolName: string;
   primaryColor?: string;
@@ -14,6 +16,8 @@ interface DashboardClientHeaderProps {
   activeTier?: string;
   tiers: AcademicTier[];
   classrooms?: any[];
+  notifications?: TenantNotificationItem[];
+  schoolDomain?: string;
 }
 
 export default function DashboardClientHeader({
@@ -23,6 +27,8 @@ export default function DashboardClientHeader({
   activeTier,
   tiers,
   classrooms: initialClassrooms = [],
+  notifications = [],
+  schoolDomain = "",
 }: DashboardClientHeaderProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,6 +76,12 @@ export default function DashboardClientHeader({
 
         {/* Unified Top Utility Actions Toolbar */}
         <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
+          {/* Notification Bell */}
+          <NotificationBell
+            notifications={notifications}
+            schoolDomain={schoolDomain}
+          />
+
           {/* Ask Institutional AI Trigger */}
           <button
             type="button"

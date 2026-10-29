@@ -101,7 +101,40 @@ async function main() {
     }
   }
 
-  // 4. Invalidate Redis cache if REDIS_URL or KV configured
+  // 4. Create reactivation notification for tenant admin proof
+  const egedeTenant = await prisma.tenant.findFirst({
+    where: {
+      OR: [
+        { subdomain: "egede" },
+        { slug: "egede" },
+      ],
+    },
+  });
+
+  if (egedeTenant) {
+    const existingNotif = await prisma.tenantNotification.findFirst({
+      where: {
+        tenantId: egedeTenant.id,
+        type: "SUBSCRIPTION_REACTIVATED",
+      },
+    });
+
+    if (!existingNotif) {
+      await prisma.tenantNotification.create({
+        data: {
+          tenantId: egedeTenant.id,
+          type: "SUBSCRIPTION_REACTIVATED",
+          title: "Subscription Reactivated! 🎉",
+          message: `Your payment has been verified by Platform Admin. Your school Egede is now ACTIVE till ${nextYear.toDateString()}. Thank you!`,
+          isRead: false,
+          actionUrl: "/egede/dashboard",
+        },
+      });
+      console.log("Created TenantNotification for Egede.");
+    }
+  }
+
+  // 5. Invalidate Redis cache if REDIS_URL or KV configured
   try {
     const redisUrl = process.env.REDIS_URL;
     if (redisUrl) {
