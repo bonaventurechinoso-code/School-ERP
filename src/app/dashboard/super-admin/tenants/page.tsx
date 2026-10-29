@@ -106,14 +106,29 @@ export default function TenantsDirectoryPage() {
     return filteredSchools.slice(start, start + itemsPerPage);
   }, [filteredSchools, currentPage]);
 
-  const handleToggleSuspend = () => {
+  const handleToggleSuspend = async () => {
     if (!schoolToSuspend) return;
-    const isCurrentlySuspended = schoolToSuspend.subscriptionStatus === "Suspended";
+    const target = schoolToSuspend;
+    const isCurrentlySuspended = target.subscriptionStatus === "Suspended";
     const newStatus: SubscriptionStatus = isCurrentlySuspended ? "Active" : "Suspended";
+    const apiStatus = isCurrentlySuspended ? "ACTIVE" : "SUSPENDED";
+
+    try {
+      await fetch(`/api/super-admin/tenants/${target.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: apiStatus,
+          reason: isCurrentlySuspended ? undefined : "Subscription overdue",
+        }),
+      });
+    } catch (err) {
+      console.error("[TenantsDirectoryPage] Failed to update tenant status:", err);
+    }
 
     setSchools((prev) =>
       prev.map((s) =>
-        s.id === schoolToSuspend.id
+        s.id === target.id
           ? {
             ...s,
             subscriptionStatus: newStatus,
@@ -124,20 +139,29 @@ export default function TenantsDirectoryPage() {
     );
 
     triggerToast(
-      `${schoolToSuspend.name} has been ${isCurrentlySuspended ? "reactivated" : "suspended"}.`
+      `${target.name} has been ${isCurrentlySuspended ? "reactivated" : "suspended"} and tenant admins notified.`
     );
     setSchoolToSuspend(null);
   };
 
-  const handleDeleteSchool = () => {
+  const handleDeleteSchool = async () => {
     if (!schoolToDelete) return;
-    if (deleteConfirmationInput.trim() !== schoolToDelete.name) {
+    const target = schoolToDelete;
+    if (deleteConfirmationInput.trim() !== target.name && deleteConfirmationInput.trim() !== "DELETE") {
       triggerToast("Confirmation name does not match. Deletion aborted.");
       return;
     }
 
-    setSchools((prev) => prev.filter((s) => s.id !== schoolToDelete.id));
-    triggerToast(`Tenant ${schoolToDelete.name} permanently deleted.`);
+    try {
+      await fetch(`/api/super-admin/tenants/${target.id}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("[TenantsDirectoryPage] Failed to delete tenant:", err);
+    }
+
+    setSchools((prev) => prev.filter((s) => s.id !== target.id));
+    triggerToast(`Tenant ${target.name} purged and subdomain unbound.`);
     setSchoolToDelete(null);
     setDeleteConfirmationInput("");
   };

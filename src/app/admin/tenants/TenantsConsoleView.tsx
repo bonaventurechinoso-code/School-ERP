@@ -246,19 +246,18 @@ export default function TenantsConsoleView({
 
         const normalized: TenantSchoolItem[] = rows
           .filter((r: any) => {
-            if (r.isDemo || r.subdomain === "demo") return false;
-            if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED") return false;
-            if (deletedIds.has(r.id) || deletedIds.has(r.subdomain)) return false;
+            if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED" || r.deletedAt) return false;
+            if ((r.subdomain || "").toLowerCase() !== "demo" && (deletedIds.has(r.id) || deletedIds.has(r.subdomain))) {
+              return false;
+            }
             return true;
           })
           .map((r: any) => {
             const rawStatus = String(r.status || "").toUpperCase();
-            const override = overrides[r.id];
-            const isSusp = override
-              ? override === "SUSPENDED"
-              : rawStatus === "SUSPENDED" ||
-                r.isActive === false ||
-                String(r.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
+            const isSusp =
+              rawStatus === "SUSPENDED" ||
+              r.isActive === false ||
+              String(r.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
             return {
               id: r.id,
               name: r.name,
@@ -268,7 +267,10 @@ export default function TenantsConsoleView({
               isActive: !isSusp,
               students_count: r.students_count ?? r.studentsCount ?? 0,
               staff_count: r.staff_count ?? 0,
-              academic_tiers: Array.isArray(r.academic_tiers) ? r.academic_tiers : [],
+              academic_tiers:
+                Array.isArray(r.academic_tiers) && r.academic_tiers.length > 0
+                  ? r.academic_tiers
+                  : [{ id: "default-primary", name: "Primary School" }],
             };
           });
         setTenants(normalized);

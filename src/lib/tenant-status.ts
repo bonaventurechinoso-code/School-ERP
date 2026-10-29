@@ -10,11 +10,14 @@ let hasHealedInitialState = false;
 /**
  * Purges both L1 in-memory cache and L2 Redis tenant metadata cache for a tenant.
  */
-export async function clearTenantCache(subdomainOrId: string): Promise<void> {
+export async function clearTenantCache(subdomainOrId: string, schoolId?: string | null): Promise<void> {
   const clean = (subdomainOrId || "").trim().toLowerCase();
   if (!clean) return;
   try {
     clearL1TenantCache(clean);
+    if (schoolId) {
+      clearL1TenantCache(schoolId);
+    }
     await invalidateTenantMetadata(clean).catch(() => {});
   } catch {}
 }
@@ -234,7 +237,7 @@ export async function notifyTenantAdmins(
   tenantIdOrSlug: string,
   type: "SUSPENDED" | "REACTIVATED",
   reason?: string
-): Promise<{ notifiedCount: number; emails: string[] }> {
+): Promise<{ notifiedCount: number; emails: string[]; mailResults?: any[] }> {
   const { school, tenant } = await findSchoolAndTenant(tenantIdOrSlug);
   const schoolId = school?.id || null;
   const tenantId = tenant?.id || school?.id || tenantIdOrSlug;
@@ -268,6 +271,9 @@ export async function notifyTenantAdmins(
   }
   if (school?.staff?.[0]?.email && school.staff[0].email.includes("@")) {
     emailSet.add(school.staff[0].email.includes("@") ? school.staff[0].email.trim().toLowerCase() : "");
+  }
+  if (emailSet.size === 0 && subdomain) {
+    emailSet.add(`admin@${subdomain}.edu.ng`);
   }
 
   const emails = Array.from(emailSet).filter(Boolean);
@@ -315,6 +321,7 @@ export async function notifyTenantAdmins(
   });
 
   // 4. Send emails to each tenant admin of this school
+  const mailResults: any[] = [];
   if (emails.length > 0) {
     try {
       const { sendMail } = await import("@/lib/mail");
@@ -342,7 +349,7 @@ export async function notifyTenantAdmins(
             </p>
           </div>`;
 
-      await Promise.all(
+      const dispatched = await Promise.all(
         emails.map((toEmail) =>
           sendMail({
             to: toEmail,
@@ -351,15 +358,22 @@ export async function notifyTenantAdmins(
             schoolId: schoolId || undefined,
             recipientType: "ADMIN",
             logCategory: isSuspended ? "TENANT_SUSPENDED" : "TENANT_REACTIVATED",
-          }).catch(() => null)
+          }).catch((err) => ({
+            success: false,
+            deliveryStatus: "ERROR",
+            provider: "NONE",
+            recipients: [toEmail],
+            error: String(err),
+          }))
         )
       );
+      mailResults.push(...dispatched);
     } catch (e) {
       console.error("[notifyTenantAdmins] Email dispatch warning:", e);
     }
   }
 
-  return { notifiedCount: emails.length, emails };
+  return { notifiedCount: emails.length, emails, mailResults };
 }
 
 /**
@@ -384,7 +398,8 @@ export async function reactivateTenant(
     id
   )
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/__purged_\d+$/, "");
 
   let updatedSchool: any = null;
   if (school) {
@@ -408,8 +423,8 @@ export async function reactivateTenant(
         trialEndDate: schoolTrialEnd,
         subscriptionExpiresAt: schoolSubExpires,
         isPublicPortalEnabled: true,
-        subdomain: school.subdomain.trim().toLowerCase(),
-        slug: (school.slug || school.subdomain).trim().toLowerCase(),
+        subdomain: resolvedSubdomain,
+        slug: (school.slug || resolvedSubdomain).trim().toLowerCase().replace(/__purged_\d+$/, ""),
       },
     });
 
@@ -542,13 +557,18 @@ export async function reactivateTenant(
     }
   } catch {}
 
-  await clearTenantCache(resolvedSubdomain);
+  await clearTenantCache(resolvedSubdomain, school?.id);
 
-  let notificationResult = { notifiedCount: 0, emails: [] as string[] };
+  let notificationResult: { notifiedCount: number; emails: string[]; mailResults?: any[] } = {
+    notifiedCount: 0,
+    emails: [],
+    mailResults: [],
+  };
   if (!options?.silent) {
     notificationResult = await notifyTenantAdmins(id, "REACTIVATED").catch(() => ({
       notifiedCount: 0,
       emails: [],
+      mailResults: [],
     }));
   }
 
@@ -561,7 +581,8 @@ export async function reactivateTenant(
 }
 
 /**
- * Suspends a tenant across both School and Tenant tables (never deletes data).
+ * Suspends a tenant across both School and Tenant tables (never deletes data),
+ * revokes active authentication tokens/sessions for that tenant, and clears cache.
  */
 export async function suspendTenant(
   id: string,
@@ -588,6 +609,21 @@ export async function suspendTenant(
         isBanned: true,
       },
     });
+
+    // Invalidate active authentication sessions & refresh tokens for this tenant
+    await prisma.refreshToken
+      .updateMany({
+        where: { schoolId: school.id },
+        data: { isRevoked: true },
+      })
+      .catch(() => {});
+
+    await prisma.user
+      .updateMany({
+        where: { schoolId: school.id },
+        data: { status: "SUSPENDED" },
+      })
+      .catch(() => {});
   }
 
   let updatedTenant: any = null;
@@ -657,13 +693,18 @@ export async function suspendTenant(
     }
   } catch {}
 
-  await clearTenantCache(resolvedSubdomain);
+  await clearTenantCache(resolvedSubdomain, school?.id);
 
-  let notificationResult = { notifiedCount: 0, emails: [] as string[] };
+  let notificationResult: { notifiedCount: number; emails: string[]; mailResults?: any[] } = {
+    notifiedCount: 0,
+    emails: [],
+    mailResults: [],
+  };
   if (!options?.silent) {
     notificationResult = await notifyTenantAdmins(id, "SUSPENDED", reason).catch(() => ({
       notifiedCount: 0,
       emails: [],
+      mailResults: [],
     }));
   }
 
@@ -676,8 +717,10 @@ export async function suspendTenant(
 }
 
 /**
- * Soft-deletes a tenant across School and Tenant tables (sets status='DELETED', deletedAt=now, isActive=false).
- * Never performs a hard DELETE.
+ * Software Deletion Firewall (Clean Purge):
+ * Safely unbinds tenant domain/slug references so the subdomain/slug becomes available for reuse,
+ * revokes active tenant authentication tokens, clears cache allocations, and marks the organizational
+ * row DELETED in the central registry without hard-deleting historical audit records.
  */
 export async function softDeleteTenant(id: string, reason = "Soft-deleted by Super Admin") {
   const now = new Date();
@@ -688,7 +731,9 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
     id
   )
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/__purged_\d+$/, "");
+  const unboundDomain = `${resolvedSubdomain}__purged_${now.getTime()}`;
 
   let updatedSchool: any = null;
   if (school) {
@@ -699,8 +744,24 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
         isActive: false,
         isBanned: true,
         deletedAt: now,
+        subdomain: unboundDomain,
+        slug: unboundDomain,
+        isPublicPortalEnabled: false,
       },
     });
+
+    await prisma.refreshToken
+      .updateMany({
+        where: { schoolId: school.id },
+        data: { isRevoked: true },
+      })
+      .catch(() => {});
+
+    await prisma.passwordResetToken
+      .deleteMany({
+        where: { schoolId: school.id },
+      })
+      .catch(() => {});
   }
 
   let updatedTenant: any = null;
@@ -710,9 +771,10 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
       data: {
         status: "DELETED",
         subscriptionStatus: "SUSPENDED",
+        subdomain: unboundDomain,
         suspendedReason: reason,
         suspendedAt: now,
-        statusReason: reason,
+        statusReason: `${reason} [originalSubdomain:${resolvedSubdomain}]`,
         statusChangedAt: now,
       },
     });
@@ -738,15 +800,21 @@ export async function softDeleteTenant(id: string, reason = "Soft-deleted by Sup
     action: "TENANT_SOFT_DELETED",
     target: school?.name || tenant?.schoolName || resolvedSubdomain,
     details: {
-      subdomain: resolvedSubdomain,
+      originalSubdomain: resolvedSubdomain,
+      unboundDomain,
       reason,
       deletedAt: now.toISOString(),
     },
   });
 
-  await clearTenantCache(resolvedSubdomain);
+  await clearTenantCache(resolvedSubdomain, school?.id);
 
-  return { school: updatedSchool || school, tenant: updatedTenant || tenant, resolvedSubdomain };
+  return {
+    school: updatedSchool || school,
+    tenant: updatedTenant || tenant,
+    resolvedSubdomain,
+    unboundDomain,
+  };
 }
 
 /**

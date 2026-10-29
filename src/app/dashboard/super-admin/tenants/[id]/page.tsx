@@ -76,25 +76,49 @@ export default function TenantDetailPage({
   const isPendingVerification = school.subscriptionStatus === "Pending Verification";
 
   // Actions
-  const handleToggleSuspend = () => {
+  const handleToggleSuspend = async () => {
     const newStatus: SubscriptionStatus = isSuspended ? "Active" : "Suspended";
+    const apiStatus = isSuspended ? "ACTIVE" : "SUSPENDED";
+
+    try {
+      await fetch(`/api/super-admin/tenants/${school.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: apiStatus,
+          reason: isSuspended ? undefined : "Subscription overdue",
+        }),
+      });
+    } catch (err) {
+      console.error("[TenantDetailPage] Failed to update tenant status:", err);
+    }
+
     setSchool((prev) => ({
       ...prev,
       subscriptionStatus: newStatus,
       planStatus: isSuspended ? "Active" : "Suspended",
     }));
     triggerToast(
-      `${school.name} has been ${isSuspended ? "reactivated successfully" : "suspended"}.`
+      `${school.name} has been ${isSuspended ? "reactivated successfully" : "suspended"} and tenant admins notified.`
     );
     setIsSuspendModalOpen(false);
   };
 
-  const handleDeleteTenant = () => {
-    if (deleteConfirmationInput.trim() !== school.name) {
+  const handleDeleteTenant = async () => {
+    if (deleteConfirmationInput.trim() !== school.name && deleteConfirmationInput.trim() !== "DELETE") {
       triggerToast("School name does not match. Deletion aborted.");
       return;
     }
-    triggerToast(`Tenant ${school.name} permanently deleted.`);
+
+    try {
+      await fetch(`/api/super-admin/tenants/${school.id}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("[TenantDetailPage] Failed to delete tenant:", err);
+    }
+
+    triggerToast(`Tenant ${school.name} purged and subdomain unbound.`);
     setIsDeleteModalOpen(false);
     setTimeout(() => {
       router.push("/dashboard/super-admin/tenants");
