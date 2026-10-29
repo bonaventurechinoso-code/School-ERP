@@ -16,7 +16,45 @@ const BankAccountSchema = z.object({
     .regex(/^\d{10}$/, "Account number must be exactly 10 digits"),
   accountName: z.string().min(2, "Account name must be at least 2 characters"),
   bankCode: z.string().optional().nullable(),
+  isPrimary: z.boolean().optional().default(true),
+  isActive: z.boolean().optional().default(true),
 });
+
+export async function upsertBankAccount(data: {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  bankCode?: string | null;
+  isPrimary?: boolean;
+  isActive?: boolean;
+}) {
+  try {
+    return await prisma.platformOwnerBankAccount.upsert({
+      where: { accountNumber: data.accountNumber },
+      update: data,
+      create: { id: "global", ...data },
+    });
+  } catch (e) {
+    console.error("PlatformOwnerBankAccount missing, fallback to PlatformBankConfig", e);
+    if ((prisma as any).platformBankConfig) {
+      return await prisma.platformBankConfig.upsert({
+        where: { id: "global" },
+        update: {
+          bankName: data.bankName,
+          accountNumber: data.accountNumber,
+          bankCode: data.bankCode || "070",
+        },
+        create: {
+          id: "global",
+          bankName: data.bankName,
+          accountNumber: data.accountNumber,
+          bankCode: data.bankCode || "070",
+        },
+      });
+    }
+    throw e;
+  }
+}
 
 export async function saveBankAccountAction(data: {
   id?: string;
@@ -24,6 +62,8 @@ export async function saveBankAccountAction(data: {
   accountNumber: string;
   accountName: string;
   bankCode?: string | null;
+  isPrimary?: boolean;
+  isActive?: boolean;
 }) {
   try {
     // 1. Dual Server Session Check: getServerSession + getSession fallback
@@ -49,48 +89,19 @@ export async function saveBankAccountAction(data: {
       };
     }
 
-    const { id, bankName, accountNumber, accountName, bankCode } = parseResult.data;
-    const targetId = id || "global";
+    const { bankName, accountNumber, accountName, bankCode, isPrimary, isActive } = parseResult.data;
 
-    // 3. Upsert PlatformOwnerBankAccount
-    await prisma.platformOwnerBankAccount.upsert({
-      where: { id: targetId },
-      create: {
-        id: targetId,
-        bankName,
-        accountNumber,
-        accountName,
-        bankCode: bankCode || "035",
-      },
-      update: {
-        bankName,
-        accountNumber,
-        accountName,
-        bankCode: bankCode || "035",
-      },
+    // 3. Upsert with resilient fallback
+    await upsertBankAccount({
+      bankName,
+      accountNumber,
+      accountName,
+      bankCode: bankCode || "070",
+      isPrimary: isPrimary ?? true,
+      isActive: isActive ?? true,
     });
 
-    // 4. If this is the primary or global account, also update legacy PlatformBankConfig
-    if (targetId === "global" || !id) {
-      await prisma.platformBankConfig
-        .upsert({
-          where: { id: "global" },
-          create: {
-            id: "global",
-            bankName,
-            accountNumber,
-            bankCode: bankCode || "035",
-          },
-          update: {
-            bankName,
-            accountNumber,
-            bankCode: bankCode || "035",
-          },
-        })
-        .catch(() => {});
-    }
-
-    // 5. Revalidate affected paths
+    // 4. Revalidate affected paths
     revalidatePath("/super-admin/finance/bank-accounts");
     revalidatePath("/super-admin/finance/bank-account");
     revalidatePath("/super-admin/billing/bank-accounts");

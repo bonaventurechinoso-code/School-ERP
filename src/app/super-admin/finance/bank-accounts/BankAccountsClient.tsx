@@ -31,11 +31,11 @@ export default function BankAccountsClient({
 }) {
   const [accounts, setAccounts] = useState<BankAccountItem[]>(initialAccounts);
   const [formData, setFormData] = useState({
-    id: "global",
-    bankName: initialAccounts[0]?.bankName || "Wema Bank",
-    accountNumber: initialAccounts[0]?.accountNumber || "4058065110",
+    id: initialAccounts[0]?.id || "global",
+    bankName: initialAccounts[0]?.bankName || "Fidelity Bank",
+    accountNumber: initialAccounts[0]?.accountNumber || "6560627850",
     accountName: initialAccounts[0]?.accountName || "BONAVEE ICT CONCEPTS",
-    bankCode: initialAccounts[0]?.bankCode || "035",
+    bankCode: initialAccounts[0]?.bankCode || "070",
   });
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);

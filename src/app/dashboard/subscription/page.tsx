@@ -21,10 +21,10 @@ export default async function TenantSubscriptionBillingPage() {
   let legacyBank = await prisma.platformBankConfig.findUnique({ where: { id: "global" } }).catch(() => null);
 
   const bankAccount = {
-    bankName: ownerBank?.bankName || legacyBank?.bankName || "Wema Bank",
-    accountNumber: ownerBank?.accountNumber || legacyBank?.accountNumber || "0123456789",
-    accountName: ownerBank?.accountName || "BonaVee ICT Corporate",
-    bankCode: ownerBank?.bankCode || legacyBank?.bankCode || "035",
+    bankName: ownerBank?.bankName || legacyBank?.bankName || "Fidelity Bank",
+    accountNumber: ownerBank?.accountNumber || legacyBank?.accountNumber || "6560627850",
+    accountName: ownerBank?.accountName || "BONAVEE ICT CONCEPTS",
+    bankCode: ownerBank?.bankCode || legacyBank?.bankCode || "070",
   };
 
   // 2. Resolve Active Tenant and School

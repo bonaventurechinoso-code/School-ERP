@@ -60,24 +60,24 @@ export default async function SuperAdminBankAccountsPage() {
       if (legacy) {
         rawAccounts.push({
           id: legacy.id,
-          bankName: legacy.bankName || "Wema Bank",
-          accountNumber: legacy.accountNumber || "4058065110",
+          bankName: legacy.bankName || "Fidelity Bank",
+          accountNumber: legacy.accountNumber || "6560627850",
           accountName: "BONAVEE ICT CONCEPTS",
-          bankCode: legacy.bankCode || "035",
+          bankCode: legacy.bankCode || "070",
           createdAt: new Date(),
         });
       }
     } catch {}
   }
 
-  // 4. Default baseline account if still empty (Wema 4058065110 / BONAVEE ICT CONCEPTS)
+  // 4. Default baseline account if still empty (Fidelity Bank 6560627850 / BONAVEE ICT CONCEPTS)
   if (rawAccounts.length === 0) {
     rawAccounts.push({
       id: "global",
-      bankName: "Wema Bank",
-      accountNumber: "4058065110",
+      bankName: "Fidelity Bank",
+      accountNumber: "6560627850",
       accountName: "BONAVEE ICT CONCEPTS",
-      bankCode: "035",
+      bankCode: "070",
       createdAt: new Date(),
     });
   }
