@@ -198,12 +198,21 @@ export default function SuperAdminTenantsPage() {
     const newStatus: "ACTIVE" | "SUSPENDED" =
       tenant.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
     setTogglingId(id);
+    const action = newStatus === "ACTIVE" ? "reactivate" : "suspend";
     try {
-      const res = await fetch(`/api/super-admin/tenants/${id}/status`, {
-        method: "PUT",
+      let res = await fetch(`/api/super-admin/tenants/${id}/status`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, reason: "Subscription overdue" }),
+        body: JSON.stringify({ action, status: newStatus, reason: "Subscription overdue" }),
       }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await fetch(`/api/super-admin/tenants/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, status: newStatus, reason: "Subscription overdue" }),
+        }).catch(() => null);
+      }
 
       setStatusOverride(id, newStatus);
       setTenants((prev) =>

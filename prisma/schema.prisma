@@ -85,6 +85,7 @@ model School {
   trialStartDate DateTime? @default(now())
   trialEndDate   DateTime?
   isBanned       Boolean   @default(false)
+  isSuspended    Boolean?  @default(false)
 
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")
@@ -1078,6 +1079,10 @@ model Tenant {
   isDemo                  Boolean   @default(false)
   isTrial                 Boolean   @default(false)
   trialEndsAt             DateTime?
+  isActive                Boolean   @default(true)
+  isSuspended             Boolean   @default(false)
+  subscriptionExpiresAt   DateTime?
+  slug                    String?
   kycStatus               String    @default("pending")
   kycDocs                 Json?
   settlementBankName      String?
