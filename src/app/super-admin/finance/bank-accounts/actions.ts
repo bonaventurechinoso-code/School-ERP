@@ -3,91 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-config";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-// Lightweight Zod-compatible validator (no external zod dependency required)
-export const z = {
-  string: () => {
-    let minLen = 0;
-    let minMsg = "";
-    let regexPattern: RegExp | null = null;
-    let regexMsg = "";
-    let isOptional = false;
-    let isTrim = false;
-
-    const validator = {
-      min(len: number, msg?: string) {
-        minLen = len;
-        minMsg = msg || `Must be at least ${len} characters`;
-        return validator;
-      },
-      trim() {
-        isTrim = true;
-        return validator;
-      },
-      regex(pattern: RegExp, msg?: string) {
-        regexPattern = pattern;
-        regexMsg = msg || "Invalid format";
-        return validator;
-      },
-      optional() {
-        isOptional = true;
-        return validator;
-      },
-      nullable() {
-        isOptional = true;
-        return validator;
-      },
-      _validate(val: any) {
-        if (val === undefined || val === null || val === "") {
-          if (isOptional) return { success: true, data: val };
-          return { success: false, error: "Field is required" };
-        }
-        let str = String(val);
-        if (isTrim) str = str.trim();
-        if (minLen && str.length < minLen) {
-          return { success: false, error: minMsg };
-        }
-        if (regexPattern && !regexPattern.test(str)) {
-          return { success: false, error: regexMsg };
-        }
-        return { success: true, data: str };
-      },
-    };
-    return validator;
-  },
-  object: (schema: Record<string, any>) => ({
-    safeParse: (data: any) => {
-      const errors: Array<{ message: string }> = [];
-      const result: Record<string, any> = {};
-
-      for (const [key, fieldValidator] of Object.entries(schema)) {
-        const val = data?.[key];
-        const res = (fieldValidator as any)._validate(val);
-        if (!res.success) {
-          errors.push({ message: res.error });
-        } else {
-          result[key] = res.data;
-        }
-      }
-
-      if (errors.length > 0) {
-        return {
-          success: false as const,
-          error: { issues: errors },
-          data: undefined,
-        };
-      }
-      return {
-        success: true as const,
-        data: result,
-        error: undefined,
-      };
-    },
-  }),
-};
+import { z } from "zod";
 
 const BankAccountSchema = z.object({
+  id: z.string().optional().default("global"),
   bankName: z.string().min(2, "Bank name must be at least 2 characters"),
   accountNumber: z
     .string()
@@ -97,37 +18,45 @@ const BankAccountSchema = z.object({
   bankCode: z.string().optional().nullable(),
 });
 
-export async function updateGlobalBankAccountAction(data: {
+export async function saveBankAccountAction(data: {
+  id?: string;
   bankName: string;
   accountNumber: string;
   accountName: string;
   bankCode?: string | null;
 }) {
   try {
-    const session = await getServerSession(authOptions);
-    const user = session?.user as any;
+    // 1. Dual Server Session Check: getServerSession + getSession fallback
+    let session = await getServerSession(authOptions).catch(() => null);
+    let user = (session?.user as any) || (await getSession().catch(() => null));
+    if (user && !session) {
+      session = { user } as any;
+    }
+
     const rawRole = (user?.role || user?.userRole || "").toUpperCase();
     const isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
 
     if (!session || !isSuperAdmin) {
-      return { success: false, error: "Unauthorized: Super Admin access required" };
+      return { success: false, error: "Unauthorized: Super Admin access required." };
     }
 
-    const parsed = BankAccountSchema.safeParse(data);
-    if (!parsed.success) {
+    // 2. Validate input on the server using pinned Zod 3.23.8
+    const parseResult = BankAccountSchema.safeParse(data);
+    if (!parseResult.success) {
       return {
         success: false,
-        error: parsed.error.issues[0]?.message || "Validation failed",
+        error: parseResult.error.issues[0]?.message || "Validation failed.",
       };
     }
 
-    const { bankName, accountNumber, accountName, bankCode } = parsed.data;
+    const { id, bankName, accountNumber, accountName, bankCode } = parseResult.data;
+    const targetId = id || "global";
 
-    // 1. Upsert PlatformOwnerBankAccount
+    // 3. Upsert PlatformOwnerBankAccount
     await prisma.platformOwnerBankAccount.upsert({
-      where: { id: "global" },
+      where: { id: targetId },
       create: {
-        id: "global",
+        id: targetId,
         bankName,
         accountNumber,
         accountName,
@@ -141,32 +70,40 @@ export async function updateGlobalBankAccountAction(data: {
       },
     });
 
-    // 2. Also keep legacy PlatformBankConfig in sync for backward compatibility
-    try {
-      await prisma.platformBankConfig.upsert({
-        where: { id: "global" },
-        create: {
-          id: "global",
-          bankName,
-          accountNumber,
-          bankCode: bankCode || "035",
-        },
-        update: {
-          bankName,
-          accountNumber,
-          bankCode: bankCode || "035",
-        },
-      });
-    } catch {}
+    // 4. If this is the primary or global account, also update legacy PlatformBankConfig
+    if (targetId === "global" || !id) {
+      await prisma.platformBankConfig
+        .upsert({
+          where: { id: "global" },
+          create: {
+            id: "global",
+            bankName,
+            accountNumber,
+            bankCode: bankCode || "035",
+          },
+          update: {
+            bankName,
+            accountNumber,
+            bankCode: bankCode || "035",
+          },
+        })
+        .catch(() => {});
+    }
 
+    // 5. Revalidate affected paths
     revalidatePath("/super-admin/finance/bank-accounts");
     revalidatePath("/super-admin/finance/bank-account");
+    revalidatePath("/super-admin/billing/bank-accounts");
+    revalidatePath("/super-admin/billings/bank-accounts");
+    revalidatePath("/super-admin/settings/banking");
     revalidatePath("/dashboard/subscription");
 
     return { success: true };
   } catch (err: any) {
-    console.error("[updateGlobalBankAccountAction] Error:", err);
-    return { success: false, error: err.message || "Failed to update bank configuration" };
+    console.error("[saveBankAccountAction] Error:", err);
+    return {
+      success: false,
+      error: err?.message || "Failed to update platform corporate bank configuration.",
+    };
   }
 }
-

@@ -1,8 +1,9 @@
 import React from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-config";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import BankAccountsClient from "./BankAccountsClient";
+import BankAccountsClient, { BankAccountItem } from "./BankAccountsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,13 @@ export const metadata = {
 };
 
 export default async function SuperAdminBankAccountsPage() {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as any;
+  // 1. Dual Server Session Resolution: getServerSession + getSession fallback (fixes 401 /api/auth/session)
+  let session = await getServerSession(authOptions).catch(() => null);
+  let user = (session?.user as any) || (await getSession().catch(() => null));
+  if (user && !session) {
+    session = { user } as any;
+  }
+
   const rawRole = (user?.role || user?.userRole || "").toUpperCase();
   const isSuperAdmin = rawRole === "SUPER_ADMIN" || Boolean(user?.isSuperAdmin);
 
@@ -37,17 +43,54 @@ export default async function SuperAdminBankAccountsPage() {
     );
   }
 
-  // Pure global queries — strictly NO tenantId / useTenant / useParams requirements
-  let ownerBank = await prisma.platformOwnerBankAccount.findFirst().catch(() => null);
-  let legacyBank = await prisma.platformBankConfig.findUnique({ where: { id: "global" } }).catch(() => null);
+  // 2. Fetch all bank accounts from Prisma without requiring any tenantId
+  let rawAccounts: any[] = [];
+  try {
+    rawAccounts = await prisma.platformOwnerBankAccount.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err) {
+    console.error("[SuperAdminBankAccountsPage] Error fetching bank accounts:", err);
+  }
 
-  const initialAccount = {
-    bankName: ownerBank?.bankName || legacyBank?.bankName || "Wema Bank",
-    accountNumber: ownerBank?.accountNumber || legacyBank?.accountNumber || "0123456789",
-    accountName: ownerBank?.accountName || "BonaVee ICT Corporate",
-    bankCode: ownerBank?.bankCode || legacyBank?.bankCode || "035",
-  };
+  // 3. Fallback to PlatformBankConfig if empty
+  if (rawAccounts.length === 0) {
+    try {
+      const legacy = await prisma.platformBankConfig.findUnique({ where: { id: "global" } });
+      if (legacy) {
+        rawAccounts.push({
+          id: legacy.id,
+          bankName: legacy.bankName || "Wema Bank",
+          accountNumber: legacy.accountNumber || "4058065110",
+          accountName: "BONAVEE ICT CONCEPTS",
+          bankCode: legacy.bankCode || "035",
+          createdAt: new Date(),
+        });
+      }
+    } catch {}
+  }
 
-  return <BankAccountsClient initialConfig={initialAccount} />;
+  // 4. Default baseline account if still empty (Wema 4058065110 / BONAVEE ICT CONCEPTS)
+  if (rawAccounts.length === 0) {
+    rawAccounts.push({
+      id: "global",
+      bankName: "Wema Bank",
+      accountNumber: "4058065110",
+      accountName: "BONAVEE ICT CONCEPTS",
+      bankCode: "035",
+      createdAt: new Date(),
+    });
+  }
+
+  // 5. Map to serializable props
+  const initialAccounts: BankAccountItem[] = rawAccounts.map((a) => ({
+    id: a.id,
+    bankName: a.bankName,
+    accountNumber: a.accountNumber,
+    accountName: a.accountName,
+    bankCode: a.bankCode || "035",
+    createdAt: (a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || Date.now())).toISOString(),
+  }));
+
+  return <BankAccountsClient initialAccounts={initialAccounts} />;
 }
-
