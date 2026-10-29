@@ -1,1 +1,1 @@
-export { default } from "@/app/admin/bank/page";
+export { default } from "../bank-accounts/page";

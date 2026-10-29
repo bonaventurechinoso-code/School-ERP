@@ -272,10 +272,10 @@ export default function SuperAdminSidebar() {
                 >
                   <div className="ml-3 border-l border-white/10 pl-2.5 py-1 space-y-1">
                     <Link
-                      href="/super-admin/finance/bank-account"
+                      href="/super-admin/finance/bank-accounts"
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 min-h-[36px] touch-manipulation ${
-                        isActive("/super-admin/finance/bank-account")
+                        isActive("/super-admin/finance/bank-account") || isActive("/super-admin/finance/bank-accounts")
                           ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
                           : "text-slate-400 hover:text-white hover:bg-white/5"
                       }`}
@@ -312,7 +312,7 @@ export default function SuperAdminSidebar() {
                     >
                       <div className="flex items-center gap-2 truncate">
                         <FileCheck className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">Receipts &amp; Clearance</span>
+                        <span className="truncate">Payment &amp; Verification</span>
                       </div>
                     </Link>
                   </div>

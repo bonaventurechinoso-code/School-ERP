@@ -1,16 +1,15 @@
 import React from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/nextauth-config";
-import { basePrisma } from "@/lib/tenant-prisma";
-import BursarReceiptsHub from "@/components/payments/BursarReceiptsHub";
+import { prisma } from "@/lib/prisma";
 import PlatformSubscriptionReceiptsTable from "./PlatformSubscriptionReceiptsTable";
-import { Clock, ShieldCheck, Layers, FileCheck } from "lucide-react";
+import { Clock, ShieldCheck, FileCheck, Layers } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Platform Receipts & Subscriptions | Super Admin",
-  description: "Cross-School Payment Receipt Verification & Platform Subscription Clearance",
+  title: "Payment & Verification | Super Admin Finance",
+  description: "Tenant Subscription Payment Proofs & Institutional Verification Desk",
 };
 
 export default async function SuperAdminFinanceReceiptsPage() {
@@ -31,7 +30,7 @@ export default async function SuperAdminFinanceReceiptsPage() {
               Access Denied (403 Forbidden)
             </h2>
             <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
-              Platform Receipts &amp; Subscription clearance is strictly restricted to Central Platform Super-Administrators.
+              Payment &amp; Verification clearance desk is strictly restricted to Central Platform Super-Administrators.
             </p>
           </div>
         </div>
@@ -39,75 +38,72 @@ export default async function SuperAdminFinanceReceiptsPage() {
     );
   }
 
-  // Query pending platform subscription receipts
-  let pendingSubscriptionReceipts: any[] = [];
-  let schoolMap = new Map<string, any>();
-
+  // Pure query on subscriptionPayment: ONLY tenant subscription receipts, no student academic transactions!
+  let subscriptionPayments: any[] = [];
   try {
-    pendingSubscriptionReceipts = await basePrisma.paymentReceipt.findMany({
+    subscriptionPayments = await prisma.subscriptionPayment.findMany({
       where: {
-        moduleType: { contains: "SUBSCRIPTION" },
-        status: "PENDING",
+        status: { in: ["PENDING_VERIFICATION", "VERIFIED"] },
+      },
+      include: {
+        tenant: true,
       },
       orderBy: { createdAt: "desc" },
     });
+  } catch (err) {
+    console.error("[SuperAdminFinanceReceiptsPage] Error fetching subscriptionPayments:", err);
+  }
 
-    const schoolIdentifiers = Array.from(
-      new Set(
-        pendingSubscriptionReceipts
-          .flatMap((r) => [r.schoolId, r.tenantId])
-          .filter(Boolean)
-      )
-    );
-
-    if (schoolIdentifiers.length > 0) {
-      const schools = await basePrisma.school.findMany({
+  // Also query school names if needed for richer display
+  const subdomains = subscriptionPayments.map((p) => p.tenant?.subdomain).filter(Boolean);
+  let schoolMap = new Map<string, any>();
+  if (subdomains.length > 0) {
+    try {
+      const schools = await prisma.school.findMany({
         where: {
-          OR: [
-            { id: { in: schoolIdentifiers } },
-            { subdomain: { in: schoolIdentifiers } },
-          ],
+          subdomain: { in: subdomains },
         },
         select: {
           id: true,
           name: true,
           subdomain: true,
+          status: true,
+          subscriptionStatus: true,
           subscriptionPlan: true,
         },
       });
-
       for (const s of schools) {
-        schoolMap.set(s.id, s);
-        schoolMap.set(s.subdomain, s);
+        schoolMap.set(s.subdomain.toLowerCase(), s);
       }
-    }
-  } catch (err) {
-    console.error("[SuperAdminFinanceReceiptsPage] Error fetching receipts:", err);
+    } catch {}
   }
 
-  const serializableReceipts = pendingSubscriptionReceipts.map((r) => {
-    const matchedSchool = schoolMap.get(r.schoolId) || schoolMap.get(r.tenantId) || null;
+  const serializablePayments = subscriptionPayments.map((p) => {
+    const s = schoolMap.get(p.tenant?.subdomain?.toLowerCase());
     return {
-      id: r.id,
-      tenantId: r.tenantId,
-      moduleType: r.moduleType,
-      payerName: r.payerName,
-      referenceNo: r.referenceNo,
-      amount: Number(r.amount?.toString() || 0),
-      bankName: r.bankName,
-      fileUrl: r.fileUrl,
-      status: r.status,
-      createdAt: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt)).toISOString(),
-      school: matchedSchool
+      id: p.id,
+      tenantId: p.tenantId,
+      amount: Number(p.amount || 0),
+      receiptUrl: p.receiptUrl,
+      status: p.status,
+      createdAt: (p.createdAt instanceof Date ? p.createdAt : new Date(p.createdAt)).toISOString(),
+      verifiedAt: p.verifiedAt ? (p.verifiedAt instanceof Date ? p.verifiedAt : new Date(p.verifiedAt)).toISOString() : null,
+      rejectionReason: p.rejectionReason || null,
+      tenant: p.tenant
         ? {
-            id: matchedSchool.id,
-            name: matchedSchool.name,
-            subdomain: matchedSchool.subdomain,
-            subscriptionPlan: matchedSchool.subscriptionPlan,
+            id: p.tenant.id,
+            schoolName: s?.name || p.tenant.schoolName || "Institution",
+            subdomain: p.tenant.subdomain,
+            status: p.tenant.status,
+            subscriptionStatus: p.tenant.subscriptionStatus,
+            planName: s?.subscriptionPlan || "MONTHLY",
           }
         : null,
     };
   });
+
+  const pendingCount = serializablePayments.filter((p) => p.status === "PENDING_VERIFICATION").length;
+  const verifiedCount = serializablePayments.filter((p) => p.status === "VERIFIED").length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-200">
@@ -118,52 +114,86 @@ export default async function SuperAdminFinanceReceiptsPage() {
             Platform Finance
           </span>
           <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
-            Audit &amp; Clearance Desk
+            SaaS Clearance Desk
           </span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1">
-          Platform Receipts &amp; Subscriptions
+          Payment &amp; Verification
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-          Review offline manual bank transfer proofs for SaaS portal subscriptions and institutional fee settlements
+          Audit and approve offline tenant SaaS subscription payment proofs to instantly activate locked institutions
         </p>
       </div>
 
-      {/* ── Section: Pending Platform Subscription Receipts ── */}
-      <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-100 dark:border-amber-900/40 flex items-center justify-between gap-3">
+      {/* Metrics Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Pending Clearance
+            </p>
+            <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
+              {pendingCount}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Verified &amp; Active
+            </p>
+            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+              {verifiedCount}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs flex items-center justify-between sm:col-span-2 lg:col-span-1">
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Total Receipts Tracked
+            </p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white">
+              {serializablePayments.length}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+            <FileCheck className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Subscription Receipts Table */}
+      <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 bg-slate-50 dark:bg-zinc-800/40 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs">
-              <Clock className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+              <Layers className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                Pending Platform Subscription Receipts ({serializableReceipts.length})
+                Tenant Subscription Payments
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                Tenant school renewal proofs requiring root super-admin clearance
+                Filtered strictly to institutional SaaS subscriptions — zero academic student fees
               </p>
             </div>
           </div>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 uppercase tracking-wider">
-            Clearance Queue
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+            Verification Engine
           </span>
         </div>
 
         <div className="p-4 sm:p-6">
-          <PlatformSubscriptionReceiptsTable initialReceipts={serializableReceipts} />
+          <PlatformSubscriptionReceiptsTable initialReceipts={serializablePayments} />
         </div>
-      </div>
-
-      {/* ── Section: Cross-School Fee Receipts Hub ── */}
-      <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-3">
-          <FileCheck className="w-4 h-4 text-indigo-500" />
-          <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
-            Universal Cross-Tenant Fee Receipts Directory
-          </h2>
-        </div>
-        <BursarReceiptsHub isSuperAdmin={true} tenantId="super-admin" />
       </div>
     </div>
   );

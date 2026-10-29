@@ -215,6 +215,13 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             icon: MessageSquare,
           },
           {
+            id: "subscription-billing",
+            label: "Subscription & Billing",
+            href: () => `/dashboard/subscription`,
+            icon: CreditCard,
+            matchPaths: ["/dashboard/subscription", "/subscription", "/settings/billing"],
+          },
+          {
             id: "system-payment-settings",
             label: "Payment Settings",
             href: (domain) => `/${domain}/settings/payments`,

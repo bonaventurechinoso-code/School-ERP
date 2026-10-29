@@ -1099,6 +1099,7 @@ model Tenant {
   campuses                TenantCampus[]
   featureFlags            TenantFeatureFlag[]
   auditTrails             PlatformAuditTrail[]
+  subscriptionPayments    SubscriptionPayment[]
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
@@ -1591,6 +1592,33 @@ model TenantFeatureFlag {
 
   @@unique([tenantId, flagKey])
   @@index([tenantId])
+}
+
+model SubscriptionPayment {
+  id              String    @id @default(cuid())
+  tenantId        String
+  amount          Float     @default(0)
+  receiptUrl      String
+  status          String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION | VERIFIED | REJECTED
+  verifiedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model PlatformOwnerBankAccount {
+  id            String   @id @default("global")
+  bankName      String   @default("Wema Bank")
+  accountNumber String   @default("0123456789")
+  accountName   String   @default("BonaVee ICT Corporate")
+  bankCode      String?  @default("035")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 
