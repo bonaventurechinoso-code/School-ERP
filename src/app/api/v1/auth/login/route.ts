@@ -418,13 +418,20 @@ export async function POST(req: Request) {
       );
     }
 
-    // Unified Suspension Logic: Do NOT block login with 403.
-    // Suspended users can still login to pay and view subscription status.
+    // Unified Suspension Logic: Block login when institution is suspended or inactive
     const isSuspended = isTenantSuspended(tenant);
     if (isSuspended) {
       tenant.isSuspended = true;
       tenant.status = "SUSPENDED";
       tenant.subscriptionStatus = "SUSPENDED";
+      return NextResponse.json(
+        {
+          error: `Institution ${tenant.name || tenant.subdomain || "account"} is suspended: Subscription overdue or inactive.`,
+          code: "ACCOUNT_SUSPENDED",
+          isSuspended: true,
+        },
+        { status: 403 }
+      );
     }
 
     const activeTiers: string[] = (tenant.academicTiers || []).map((t: any) => t.name);

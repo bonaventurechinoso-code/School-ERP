@@ -180,6 +180,7 @@ interface VerifiedClaims {
   schoolDomain?: string | null;
   isSuperAdmin: boolean;
   sessionToken?: string;
+  isSuspended?: boolean;
 }
 
 async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims | null> {
@@ -228,6 +229,7 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
           schoolDomain: (payload.schoolDomain as string) || (payload.tenantSlug as string) || null,
           isSuperAdmin,
           sessionToken: sessionTokenId,
+          isSuspended: Boolean(payload.isSuspended) || payload.status === "SUSPENDED" || payload.subscriptionStatus === "SUSPENDED",
         };
       }
     } catch {
@@ -255,6 +257,7 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
           schoolDomain: (nextAuthToken.schoolDomain as string) || null,
           isSuperAdmin,
           sessionToken: (nextAuthToken.sessionToken as string) || undefined,
+          isSuspended: Boolean(nextAuthToken.isSuspended) || nextAuthToken.status === "SUSPENDED" || nextAuthToken.subscriptionStatus === "SUSPENDED",
         };
       }
     }
@@ -355,6 +358,20 @@ export async function middleware(req: NextRequest) {
   // 5. TENANT ISOLATION CHECK:
   // Non-super-admins cannot access another tenant's workspace
   if (requestedTenant && !claims.isSuperAdmin) {
+    if (claims.isSuspended) {
+      if (lowerPath.startsWith("/api/")) {
+        return NextResponse.json(
+          { success: false, error: "Account suspended: Subscription overdue or inactive.", code: "ACCOUNT_SUSPENDED" },
+          { status: 403, headers: NO_CACHE_HEADERS }
+        );
+      }
+      const loginUrl = new URL(`/${requestedTenant}/login?error=suspended&code=${requestedTenant}`, req.url);
+      const redirectResponse = NextResponse.redirect(loginUrl);
+      for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+        redirectResponse.headers.set(k, v);
+      }
+      return redirectResponse;
+    }
     const userDomain = (claims.schoolDomain || "").toLowerCase().trim();
     const userTenantId = (claims.tenantId || "").trim();
 
@@ -376,6 +393,7 @@ export async function middleware(req: NextRequest) {
 
   // 6. ATTACH REQUEST-SCOPED CONTEXT TO INCOMING REQUEST HEADERS
   const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", lowerPath);
   requestHeaders.set("x-user-id", claims.userId);
   requestHeaders.set("x-user-role", claims.role);
   if (claims.tenantId) requestHeaders.set("x-tenant-id", claims.tenantId);

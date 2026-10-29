@@ -12,6 +12,8 @@ import {
   mapTierTokenToTierName 
 } from "./tenant-tier-utils";
 import { resolveTenant } from "./tenant-service";
+import { isTenantSuspended } from "./tenantStatus";
+import { getCachedSchool } from "./cache";
 
 
 /**
@@ -300,6 +302,10 @@ export const authOptions: NextAuthOptions = {
           effectiveSchool?.subdomain?.toLowerCase() === "demo" ||
           effectiveSchool?.slug?.toLowerCase() === "demo" ||
           normalizedEmail === "headmaster@demo.edu.ng";
+
+        if (user && effectiveSchool && isTenantSuspended(effectiveSchool) && !isSuperAdminEmail) {
+          throw new Error("Institution account is suspended. Subscription overdue or inactive.");
+        }
 
         if (user && effectiveSchool && (effectiveSchool.isActive ?? true) && !effectiveSchool.deletedAt) {
           let isPasswordValid = false;
@@ -947,6 +953,17 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
+      if (token.schoolDomain && token.role !== "SUPER_ADMIN" && String(token.schoolDomain).toLowerCase() !== "demo") {
+        try {
+          const school = await getCachedSchool(token.schoolDomain as string);
+          if (school && isTenantSuspended(school)) {
+            token.isSuspended = true;
+          } else {
+            token.isSuspended = false;
+          }
+        } catch {}
+      }
+
       return token;
     },
 
@@ -970,6 +987,7 @@ export const authOptions: NextAuthOptions = {
         session.user.permissions = (token.permissions as string[]) || [];
         session.user.sessionToken = token.sessionToken as string;
         (session.user as any).mustChangePassword = token.mustChangePassword || false;
+        (session.user as any).isSuspended = Boolean(token.isSuspended);
       }
       return session;
     },

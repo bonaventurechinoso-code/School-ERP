@@ -154,11 +154,21 @@ export async function getCachedSchool(subdomain: string) {
           },
         });
         if (schoolRecord) {
+          const isSuspended =
+            schoolRecord.isSuspended === true ||
+            schoolRecord.isActive === false ||
+            String(schoolRecord.status || "").toUpperCase() === "SUSPENDED" ||
+            String(schoolRecord.subscriptionStatus || "").toUpperCase() === "SUSPENDED";
+
           return {
             ...schoolRecord,
+            isActive: !isSuspended,
+            isSuspended: isSuspended,
+            status: isSuspended ? "SUSPENDED" : schoolRecord.status,
             academicTiers: schoolRecord.academicTiers || [],
           };
         }
+
         return null;
       } catch (err) {
         console.error(`[CACHE] Failed to fetch school metadata for ${normalizedDomain}:`, err);

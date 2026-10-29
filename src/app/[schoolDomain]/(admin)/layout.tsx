@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCachedSchool } from "@/lib/cache";
 import { getSession } from "@/lib/auth";
+import { isTenantSuspended } from "@/lib/tenantStatus";
 import ClientLayout from "../ClientLayout";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,23 @@ export default async function AdminLayout({
 
   const currentTier = cookieStore.get("activeTier")?.value || null;
   const userRole = (session.role || session.userRole || "").toUpperCase();
+  const isSuperAdmin =
+    userRole === "SUPER_ADMIN" ||
+    Boolean(session.isSuperAdmin) ||
+    session.email === "bonaventure.chinoso@gmail.com" ||
+    session.email === "admin@bonaveeict.com.ng";
+
+  // SUSPENSION ENFORCEMENT: Immediately eject active sessions of suspended institutions
+  const isSuspended =
+    school.isActive === false ||
+    school.isSuspended === true ||
+    String(school.status || "").toUpperCase() === "SUSPENDED" ||
+    String(school.subscriptionStatus || "").toUpperCase() === "SUSPENDED" ||
+    isTenantSuspended(school);
+
+  if (isSuspended && !isSuperAdmin) {
+    redirect(`/${params.schoolDomain}/login?error=suspended&code=${encodeURIComponent(params.schoolDomain)}`);
+  }
 
   // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES
   if (userRole === "STUDENT") {

@@ -3,6 +3,8 @@ import * as jose from "jose";
 import crypto from "crypto";
 import { basePrisma } from "./tenant-prisma";
 import { SessionPayload, UserRole } from "./auth";
+import { getCachedSchool } from "./cache";
+import { isTenantSuspended } from "./tenantStatus";
 
 /**
  * STRICT SESSION CONFIGURATION
@@ -259,6 +261,18 @@ export async function validateDatabaseSession(
       });
       if (userRow) {
         mustChangePassword = Boolean(userRow.mustChangePassword);
+      }
+    }
+
+    // 7b. Check authoritative tenant suspension state
+    if (dbSession.schoolDomain && dbSession.role !== "SUPER_ADMIN") {
+      const isDemo = dbSession.schoolDomain.toLowerCase() === "demo";
+      if (!isDemo) {
+        const school = await getCachedSchool(dbSession.schoolDomain);
+        if (school && isTenantSuspended(school)) {
+          console.warn(`[AUTH_SECURITY]: Session '${sessionTokenId}' rejected because tenant '${dbSession.schoolDomain}' is suspended.`);
+          return null;
+        }
       }
     }
 

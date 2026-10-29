@@ -6,6 +6,7 @@ export function isTenantSuspended(tenant: any): boolean {
   if (!tenant) return false;
   return (
     tenant.isSuspended === true ||
+    tenant.isActive === false ||
     String(tenant.status || "").toUpperCase() === "SUSPENDED" ||
     String(tenant.subscriptionStatus || "").toUpperCase() === "SUSPENDED"
   );

@@ -1,11 +1,12 @@
 import { ReactNode } from "react";
 import { redirect, notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
 import { getSession } from "@/lib/auth";
 import { getCachedSchool, getCachedPlatformBank } from "@/lib/cache";
+import { isTenantSuspended } from "@/lib/tenantStatus";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -66,6 +67,43 @@ export default async function TenantLayout({
   if (!school) {
     // School domain not recognised — redirect cleanly to login with a surfaceable error
     redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
+  }
+
+  // SUSPENSION ENFORCEMENT: Block access to protected tenant routes if institution is suspended/inactive
+  const isSuspended =
+    school.isActive === false ||
+    school.isSuspended === true ||
+    String(school.status || "").toUpperCase() === "SUSPENDED" ||
+    String(school.subscriptionStatus || "").toUpperCase() === "SUSPENDED" ||
+    isTenantSuspended(school);
+
+  if (isSuspended) {
+    const isSuperAdmin =
+      session &&
+      ((session.role || "").toUpperCase() === "SUPER_ADMIN" ||
+        Boolean(session.isSuperAdmin) ||
+        session.email === "bonaventure.chinoso@gmail.com" ||
+        session.email === "admin@bonaveeict.com.ng");
+
+    if (!isSuperAdmin) {
+      const headerList = await headers();
+      const rawPath = (headerList.get("x-pathname") || "").toLowerCase();
+      const pathSegments = rawPath.replace(/^\/+/, "").split("/").filter(Boolean);
+      const secondSegment = pathSegments[1]?.toLowerCase() || "";
+
+      // Whitelisted public tenant routes
+      const isPublicTenantAction =
+        secondSegment === "login" ||
+        secondSegment === "apply" ||
+        secondSegment === "forgot-password" ||
+        secondSegment === "reset-password" ||
+        (secondSegment === "admissions" && pathSegments.length >= 3 && pathSegments[2] === "upload") ||
+        pathSegments.length <= 1;
+
+      if (!isPublicTenantAction) {
+        redirect(`/${schoolDomain}/login?error=suspended&code=${encodeURIComponent(schoolDomain)}`);
+      }
+    }
   }
 
   const cookieStore = await cookies();

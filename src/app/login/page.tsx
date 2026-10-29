@@ -145,6 +145,9 @@ function LoginPageContent() {
     } else if (urlError === "tenant_not_found") {
       const badSchool = searchParams.get("school") || "that school code";
       showToast(`No school found for "${badSchool}". Please check your School Code and try again.`, "error");
+    } else if (urlError === "suspended") {
+      const suspendedSchool = searchParams.get("code") || searchParams.get("school") || "This institution";
+      showToast(`Institution ${suspendedSchool} is suspended: Subscription overdue or inactive. Please contact administration or visit billing.`, "error");
     } else if (urlMessage) {
       showToast(urlMessage, "info");
     } else if (urlError && !urlError.toLowerCase().includes("super admin")) {
