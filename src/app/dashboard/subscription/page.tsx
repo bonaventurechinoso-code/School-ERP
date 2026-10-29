@@ -43,7 +43,6 @@ export default async function TenantSubscriptionBillingPage() {
   resolvedSchool = found.school;
 
   if (!resolvedTenant && !resolvedSchool) {
-    // Fallback: look for the most recently active non-deleted tenant
     resolvedTenant = await prisma.tenant.findFirst({
       where: { status: { not: "DELETED" } },
       orderBy: { createdAt: "desc" },
@@ -57,30 +56,54 @@ export default async function TenantSubscriptionBillingPage() {
 
   const tenantDetails = {
     id: resolvedTenant?.id || resolvedSchool?.id || candidateIdentifier,
-    schoolName: resolvedSchool?.name || resolvedTenant?.schoolName || "My Educational Institution",
-    subdomain: resolvedSchool?.subdomain || resolvedTenant?.subdomain || "portal",
+    schoolName: resolvedSchool?.name || resolvedTenant?.name || (resolvedTenant as any)?.schoolName || "My Educational Institution",
+    subdomain: resolvedSchool?.subdomain || resolvedTenant?.subdomain || resolvedTenant?.slug || "portal",
     schoolStatus: resolvedSchool?.status || resolvedTenant?.status || "ACTIVE",
     subscriptionStatus: resolvedTenant?.subscriptionStatus || resolvedSchool?.subscriptionStatus || "ACTIVE",
     trialEndDate: (resolvedSchool?.trialEndDate || resolvedTenant?.trialEndsAt)?.toISOString() || null,
   };
 
-  // 3. Fetch Recent Subscription Payments
+  // 3. Fetch Recent Subscription Payments (Priority: TenantSubscriptionPayment, fallback: subscriptionPayment)
   let recentPayments: any[] = [];
-  if (resolvedTenant?.id) {
+  const targetId = resolvedTenant?.id || resolvedSchool?.id;
+  const targetSlug = (resolvedTenant?.slug || resolvedTenant?.subdomain || resolvedSchool?.subdomain || "").toLowerCase();
+
+  if (targetId || targetSlug) {
     try {
-      const records = await prisma.subscriptionPayment.findMany({
-        where: { tenantId: resolvedTenant.id },
-        orderBy: { createdAt: "desc" },
+      const records = await prisma.tenantSubscriptionPayment.findMany({
+        where: {
+          OR: [
+            ...(targetId ? [{ tenantId: targetId }] : []),
+            ...(targetSlug ? [{ schoolSlug: targetSlug }] : []),
+          ],
+        },
+        orderBy: { submittedAt: "desc" },
         take: 10,
       });
 
-      recentPayments = records.map((r) => ({
-        id: r.id,
-        amount: Number(r.amount),
-        receiptUrl: r.receiptUrl,
-        status: r.status,
-        createdAt: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt)).toISOString(),
-      }));
+      if (records.length > 0) {
+        recentPayments = records.map((r) => ({
+          id: r.id,
+          amount: Number(r.amount),
+          receiptUrl: r.receiptUrl || (r.receiptData ? `data:${r.receiptMimeType || "image/jpeg"};base64,${r.receiptData}` : ""),
+          status: r.status,
+          createdAt: (r.submittedAt instanceof Date ? r.submittedAt : new Date(r.submittedAt)).toISOString(),
+        }));
+      } else if (targetId) {
+        const legacyRecords = await prisma.subscriptionPayment.findMany({
+          where: { tenantId: targetId },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        });
+
+        recentPayments = legacyRecords.map((r) => ({
+          id: r.id,
+          amount: Number(r.amount),
+          receiptUrl: r.receiptUrl,
+          status: r.status,
+          createdAt: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt)).toISOString(),
+        }));
+      }
     } catch (err) {
       console.error("[TenantSubscriptionBillingPage] Error fetching payments:", err);
     }
@@ -94,4 +117,3 @@ export default async function TenantSubscriptionBillingPage() {
     />
   );
 }
-

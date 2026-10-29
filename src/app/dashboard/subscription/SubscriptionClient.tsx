@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition, useRef } from "react";
+import React, { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   CreditCard,
   Landmark,
@@ -15,9 +16,11 @@ import {
   Building2,
   Eye,
   ExternalLink,
+  Download,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format-utils";
-import { submitSubscriptionPaymentAction } from "./actions";
 
 interface BankAccount {
   bankName: string;
@@ -52,11 +55,11 @@ export default function SubscriptionClient({
   tenant: TenantDetails;
   recentPayments: PaymentRecord[];
 }) {
+  const router = useRouter();
   const [payments, setPayments] = useState<PaymentRecord[]>(initialPayments);
   const [amount, setAmount] = useState<string>("25000");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -68,43 +71,26 @@ export default function SubscriptionClient({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const validateAndSetFile = (file: File) => {
-    const validMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp", "application/pdf"];
-    if (!validMimes.includes(file.type)) {
-      setFeedback({
-        type: "error",
-        message: "Invalid file format. Please upload a PDF, PNG, or JPG receipt.",
-      });
-      return false;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setFeedback({
-        type: "error",
-        message: "File exceeds 5MB limit. Please upload a smaller file.",
-      });
-      return false;
-    }
-    setSelectedFile(file);
-    setFeedback(null);
-    return true;
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const validMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp", "application/pdf"];
+      if (!validMimes.includes(file.type)) {
+        setFeedback({
+          type: "error",
+          message: "Invalid file format. Please upload a PDF, PNG, or JPG receipt.",
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setFeedback({
+          type: "error",
+          message: "File exceeds 5MB limit. Please upload a smaller file.",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      setFeedback(null);
     }
   };
 
@@ -113,7 +99,7 @@ export default function SubscriptionClient({
     setFeedback(null);
 
     if (!selectedFile) {
-      setFeedback({ type: "error", message: "Please select or drop a payment proof receipt." });
+      setFeedback({ type: "error", message: "Please select your bank transfer payment proof receipt." });
       return;
     }
 
@@ -123,58 +109,60 @@ export default function SubscriptionClient({
       return;
     }
 
-    startTransition(async () => {
-      try {
-        // 1. Upload file to /api/upload/payment-proof
-        const formData = new FormData();
-        formData.append("file", selectedFile);
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("amount", String(numAmount));
+      formData.append("tenantId", tenant.id);
 
-        const uploadRes = await fetch("/api/upload/payment-proof", {
-          method: "POST",
-          body: formData,
-        });
+      const res = await fetch("/api/tenant-subscription-payments/submit", {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
 
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok || !uploadData.success || !uploadData.url) {
-          throw new Error(uploadData.error || "Failed to upload receipt file.");
-        }
+      const data = await res.json();
 
-        // 2. Submit payment record via server action
-        const result = await submitSubscriptionPaymentAction({
-          tenantId: tenant.id,
-          amount: numAmount,
-          receiptUrl: uploadData.url,
-        });
-
-        if (!result.success) {
-          throw new Error(result.error || "Failed to submit subscription payment record.");
-        }
-
-        // 3. Add to local list
-        setPayments((prev) => [
-          {
-            id: result.paymentId || String(Date.now()),
-            amount: numAmount,
-            receiptUrl: uploadData.url,
-            status: "PENDING_VERIFICATION",
-            createdAt: new Date().toISOString(),
-          },
-          ...prev,
-        ]);
-
-        setSelectedFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        setFeedback({
-          type: "success",
-          message: "Payment receipt submitted successfully! Super Admin will review and activate your subscription shortly.",
-        });
-      } catch (err: any) {
-        setFeedback({
-          type: "error",
-          message: err.message || "An unexpected error occurred during submission.",
-        });
+      if (res.status === 401) {
+        setFeedback({ type: "error", message: "Session expired, please login again." });
+        router.push("/login");
+        return;
       }
-    });
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit subscription receipt proof.");
+      }
+
+      setFeedback({
+        type: "success",
+        message: "Receipt submitted successfully, pending Super Admin verification.",
+      });
+
+      // Add to local table list
+      setPayments((prev) => [
+        {
+          id: data.id || data.paymentId || String(Date.now()),
+          amount: numAmount,
+          receiptUrl: "",
+          status: "PENDING_VERIFICATION",
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      router.refresh();
+    } catch (err: any) {
+      // NOTE: DO NOT call signOut() on failure
+      setFeedback({
+        type: "error",
+        message: err.message || "An unexpected error occurred during submission.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isSchoolActive = tenant.schoolStatus.toUpperCase() === "ACTIVE";
@@ -201,209 +189,213 @@ export default function SubscriptionClient({
           </p>
         </div>
 
-        {/* Live Status Badges */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* School Status */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs shadow-xs">
-            <span className="text-slate-400 font-semibold text-[11px]">School Status:</span>
-            {isSchoolActive ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                <CheckCircle2 className="w-3 h-3" />
-                ACTIVE
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[10px] bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                <AlertCircle className="w-3 h-3" />
-                {tenant.schoolStatus}
-              </span>
-            )}
+        {/* Current Status Pill */}
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-[11px] uppercase tracking-wider font-bold text-slate-400">
+              Institution License
+            </p>
+            <p className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+              {tenant.schoolName}
+            </p>
           </div>
-
-          {/* Subscription Status */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs shadow-xs">
-            <span className="text-slate-400 font-semibold text-[11px]">Subscription:</span>
-            {isSubActive ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                <ShieldCheck className="w-3 h-3" />
-                ACTIVE
-              </span>
+          <div
+            className={`px-3.5 py-1.5 rounded-2xl flex items-center gap-2 border shadow-xs ${
+              isSubActive && isSchoolActive
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                : "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
+            }`}
+          >
+            {isSubActive && isSchoolActive ? (
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                <Clock className="w-3 h-3" />
-                {tenant.subscriptionStatus}
-              </span>
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
             )}
+            <span className="font-extrabold text-xs tracking-wide uppercase">
+              {isSubActive && isSchoolActive ? "ACTIVE" : "SUSPENDED / TRIAL"}
+            </span>
           </div>
         </div>
       </div>
 
+      {/* Feedback Banner */}
       {feedback && (
         <div
-          className={`p-4 rounded-2xl flex items-center gap-2.5 text-xs font-bold transition shadow-sm ${
+          className={`p-4 rounded-2xl border text-sm font-semibold flex items-center justify-between gap-3 ${
             feedback.type === "success"
-              ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-              : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800"
+              : "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800"
           }`}
         >
-          {feedback.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-          ) : (
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-          )}
-          <span>{feedback.message}</span>
+          <div className="flex items-center gap-2.5">
+            {feedback.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span>{feedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="text-xs font-bold underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* Grid: Bank Details Card + Upload Proof Dropzone */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Read-Only Bank Account Card */}
-        <div className="lg:col-span-5 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-7 shadow-xl border border-indigo-500/20 relative overflow-hidden">
-          <div className="flex items-center justify-between pb-5 border-b border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white">
-                <Landmark className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold tracking-widest text-indigo-300">
-                  Official Transfer Account
-                </p>
-                <p className="text-base font-black text-white">{bankAccount.bankName}</p>
-              </div>
+      {/* Main Grid: Bank Details + Upload Form */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+        {/* Left Column: Platform Settlement Bank Account Details */}
+        <div className="lg:col-span-5 rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 p-6 sm:p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+              <Landmark className="w-5 h-5" />
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              VERIFIED
-            </span>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+                Platform Settlement Account
+              </h2>
+              <p className="text-xs text-slate-400">
+                Transfer your SaaS renewal fees to this official account
+              </p>
+            </div>
           </div>
 
-          <div className="py-6 space-y-4">
-            <div>
-              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                Account Number (NUBAN)
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-2xl sm:text-3xl font-mono font-black tracking-widest text-white">
+          {/* Account Details Card */}
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-800 space-y-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Bank Name
+                </span>
+                <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-100 mt-0.5">
+                  {bankAccount.bankName}
+                </p>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Account Name
+                </span>
+                <p className="text-sm font-extrabold text-slate-800 dark:text-zinc-100 mt-0.5">
+                  {bankAccount.accountName}
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Account Number
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(bankAccount.accountNumber)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-500" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-2xl font-black font-mono tracking-wider text-slate-900 dark:text-white mt-1">
                   {bankAccount.accountNumber}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(bankAccount.accountNumber)}
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95"
-                  title="Copy Account Number"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                </button>
               </div>
             </div>
 
-            <div>
-              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                Beneficiary Name
+            <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-200 space-y-2">
+              <p className="font-bold flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
+                Instant Account Verification
               </p>
-              <p className="text-sm font-bold text-slate-100 uppercase tracking-wide mt-0.5">
-                {bankAccount.accountName}
+              <p className="text-[11px] leading-relaxed opacity-90">
+                After transfer, take a screenshot or download the transaction PDF receipt from your mobile bank app and upload it using the form. Super Admin verifies within 1–2 hours.
               </p>
             </div>
-          </div>
-
-          <div className="pt-4 border-t border-white/10 text-[11px] text-slate-400 leading-relaxed">
-            Please make your bank transfer using the exact details above, then upload your transaction receipt on the right to clear your subscription.
           </div>
         </div>
 
-        {/* Upload Proof Dropzone Form */}
-        <div className="lg:col-span-7 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm p-6 sm:p-7 overflow-hidden">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
-              <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <div>
-                <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  Submit Payment Proof
-                </h2>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                  Upload a PDF document or image screenshot of your bank transfer receipt
-                </p>
-              </div>
+        {/* Right Column: Upload Receipt Form */}
+        <div className="lg:col-span-7 rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 p-6 sm:p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+              <CreditCard className="w-5 h-5" />
             </div>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+                Submit Payment Receipt
+              </h2>
+              <p className="text-xs text-slate-400">
+                Provide transfer amount and attach proof of payment
+              </p>
+            </div>
+          </div>
 
-            {/* Amount Field */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Amount Input */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                Transfer Amount (NGN ₦)
+                Transfer Amount (₦)
               </label>
               <input
                 type="number"
+                min="1000"
+                step="500"
                 required
-                min={100}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="25000"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 text-sm font-bold text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 text-sm font-bold text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            {/* Dropzone */}
+            {/* Whole Card Clickable Upload Dropzone */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1">
                 Receipt File (PDF, PNG, JPG max 5MB)
               </label>
               <div
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 ${
-                  dragActive
-                    ? "border-indigo-500 bg-indigo-500/10"
-                    : "border-slate-300 dark:border-zinc-700 hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50"
-                }`}
+                className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:border-blue-500 transition"
               >
                 <input
-                  ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      validateAndSetFile(e.target.files[0]);
-                    }
-                  }}
-                  className="hidden"
+                  ref={fileInputRef}
+                  hidden
+                  accept=".jpg,.jpeg,.png,.pdf,.webp"
+                  onChange={handleFileChange}
                 />
-
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                <div className="mx-auto w-12 h-12 bg-blue-600/20 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-3">
                   <UploadCloud className="w-6 h-6" />
                 </div>
-
-                {selectedFile ? (
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-center gap-1">
-                      <FileText className="w-3.5 h-3.5 text-indigo-500" />
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      {(selectedFile.size / 1024).toFixed(1)} KB — Ready to upload
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
-                      Drag &amp; drop receipt here, or <span className="text-indigo-600 dark:text-indigo-400 underline">browse</span>
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      PDF, JPG, or PNG up to 5MB
-                    </p>
-                  </div>
+                <p className="font-semibold text-slate-900 dark:text-white">Click to Upload Your Receipt</p>
+                <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG up to 5MB</p>
+                {selectedFile && (
+                  <p className="mt-3 text-sm text-green-500 dark:text-green-400 font-medium flex items-center justify-center gap-1">
+                    ✓ {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB) selected
+                  </p>
                 )}
               </div>
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
-              disabled={isPending || !selectedFile}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm shadow-md transition disabled:opacity-50"
+              disabled={!selectedFile || loading}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md transition disabled:opacity-50 cursor-pointer"
             >
               <UploadCloud className="w-4 h-4" />
-              {isPending ? "Uploading Receipt Proof..." : "Submit Receipt for Verification"}
+              {loading ? "Uploading..." : "Submit Receipt for Verification"}
             </button>
           </form>
         </div>
@@ -436,92 +428,125 @@ export default function SubscriptionClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
-                {payments.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/20">
-                    <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(p.amount)}
-                    </td>
-                    <td className="py-3 px-4">
-                      {p.status === "VERIFIED" ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                          VERIFIED
-                        </span>
-                      ) : p.status === "REJECTED" ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                          REJECTED
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                          PENDING VERIFICATION
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewUrl(p.receiptUrl)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 font-bold text-[10px]"
-                        >
-                          <Eye className="w-3 h-3" />
-                          View
-                        </button>
-                        <a
-                          href={p.receiptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1 text-slate-400 hover:text-slate-600"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 dark:text-zinc-400 text-[11px]">
-                      {new Date(p.createdAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                  </tr>
-                ))}
+                {payments.map((p) => {
+                  const isVerified = p.status === "VERIFIED";
+                  const isRejected = p.status === "REJECTED";
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/20">
+                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                        {formatCurrency(p.amount)}
+                      </td>
+                      <td className="py-3 px-4">
+                        {isVerified ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            VERIFIED
+                          </span>
+                        ) : isRejected ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                            REJECTED
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                            PENDING VERIFICATION
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {p.receiptUrl ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewUrl(p.receiptUrl)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 font-bold text-[10px] cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3" />
+                              View
+                            </button>
+                            {p.receiptUrl.startsWith("https://") && (
+                              <a
+                                href={p.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 text-slate-400 hover:text-slate-600"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            Submitted
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 dark:text-zinc-400 text-[11px]">
+                        {new Date(p.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </div>
 
-      {/* Preview Modal */}
+      {/* Lightbox / Preview Modal */}
       {previewUrl && (
         <div
           role="dialog"
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
           onClick={() => setPreviewUrl(null)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl overflow-hidden max-w-2xl w-full p-4 space-y-3"
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-              <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-500" />
-                Proof Document Preview
-              </span>
+              <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                Payment Proof Receipt
+              </h4>
               <button
                 type="button"
                 onClick={() => setPreviewUrl(null)}
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-50 dark:bg-zinc-950 rounded-2xl p-2">
-              {previewUrl.toLowerCase().endsWith(".pdf") ? (
-                <iframe src={previewUrl} className="w-full h-[60vh] rounded-xl" title="PDF Preview" />
+            <div className="max-h-[60vh] overflow-y-auto rounded-xl bg-slate-50 dark:bg-zinc-950 p-2 flex items-center justify-center">
+              {previewUrl.includes(".pdf") || previewUrl.startsWith("data:application/pdf") ? (
+                <iframe src={previewUrl} className="w-full h-[400px] rounded-lg" title="PDF Proof" />
               ) : (
-                <img src={previewUrl} alt="Receipt Proof" className="max-h-[60vh] max-w-full object-contain rounded-xl" />
+                <img
+                  src={previewUrl}
+                  alt="Receipt Preview"
+                  className="max-h-[400px] w-auto mx-auto object-contain rounded-lg"
+                />
               )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <a
+                href={previewUrl}
+                download="subscription_receipt"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewUrl(null)}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -529,4 +554,3 @@ export default function SubscriptionClient({
     </div>
   );
 }
-

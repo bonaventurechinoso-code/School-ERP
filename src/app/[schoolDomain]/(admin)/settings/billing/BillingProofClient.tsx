@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   Landmark,
   Send,
@@ -17,6 +17,7 @@ import {
   XCircle,
   FileText,
   Calendar,
+  UploadCloud,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { formatCurrency } from "@/lib/format-utils";
@@ -106,6 +107,19 @@ export default function BillingProofClient({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [showRenewForm, setShowRenewForm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMsg("File exceeds 5MB limit. Please upload a smaller file.");
+        return;
+      }
+      setSelectedFile(file);
+      setErrorMsg("");
+    }
+  };
 
   const bankName = platformBankName || (tenant?.platformBank as any)?.bankName || "Fidelity Bank";
   const accountNumber =
@@ -140,79 +154,43 @@ export default function BillingProofClient({
     setErrorMsg("");
     setFormState("submitting");
 
+    if (!selectedFile) {
+      setErrorMsg("Please attach your bank transfer receipt proof.");
+      setFormState("error");
+      return;
+    }
+
     try {
-      let fileUrl = "";
-      let receiptData: string | null = null;
-      let receiptMimeType: string | null = null;
-      let receiptSize: number | null = null;
-      let receiptChecksum: string | null = null;
-      let receiptPublicId: string | null = null;
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("amount", form.amount);
+      formData.append("tenantId", schoolDomain);
+      formData.append("reference", form.reference.trim());
+      formData.append("bankName", form.bankName);
+      formData.append("payerName", form.payerName.trim());
+      formData.append("notes", form.note.trim());
 
-      // 1. Process receipt through storage adapter
-      if (selectedFile) {
-        try {
-          const fd = new FormData();
-          fd.append("file", selectedFile);
-
-          const upRes = await fetch("/api/upload/payment-proof", {
-            method: "POST",
-            body: fd,
-          });
-          const upData = await upRes.json();
-          if (upRes.ok && upData.success) {
-            fileUrl = upData.url || upData.receiptUrl || "";
-            receiptData = upData.receiptData || null;
-            receiptMimeType = upData.mimeType || null;
-            receiptSize = upData.size || null;
-            receiptChecksum = upData.checksum || null;
-            receiptPublicId = upData.publicId || null;
-          }
-        } catch (uploadErr) {
-          console.warn("[BILLING_PROOF] Upload non-fatal error:", uploadErr);
-        }
-      }
-
-      // 2. Submit payment proof
-      const submitPayload = {
-        schoolDomain,
-        reference: form.reference.trim(),
-        amount: Number(form.amount),
-        bankName: form.bankName,
-        payerName: form.payerName.trim(),
-        note: form.note.trim(),
-        fileUrl,
-        receiptData,
-        receiptMimeType,
-        receiptSize,
-        receiptChecksum,
-        receiptPublicId,
-      };
-
-      let res = await fetch(`/api/${schoolDomain}/subscription/submit`, {
+      const res = await fetch("/api/tenant-subscription-payments/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submitPayload),
+        body: formData,
+        credentials: "same-origin",
       });
-
-      if (!res.ok && res.status === 404) {
-        res = await fetch("/api/tenant/submit-subscription-proof", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(submitPayload),
-        });
-      }
 
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        setErrorMsg(data.error || "Failed to submit proof. Please try again.");
-        setFormState("error");
+      if (res.status === 401) {
+        setErrorMsg("Session expired, please login again.");
+        window.location.href = `/${schoolDomain}/login`;
         return;
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit proof. Please try again.");
       }
 
       // Add new payment to local history
       const newPayment: PaymentHistoryItem = {
-        id: data.paymentId || form.reference.trim(),
+        id: data.id || data.paymentId || form.reference.trim(),
         amount: Number(form.amount),
         nipSessionId: form.reference.trim(),
         senderBank: form.bankName,
@@ -225,9 +203,10 @@ export default function BillingProofClient({
       setFormState("success");
       setForm(INITIAL_FORM);
       setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setShowRenewForm(false);
-    } catch {
-      setErrorMsg("Network error. Please check your connection and try again.");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Network error. Please check your connection and try again.");
       setFormState("error");
     }
   };
@@ -480,12 +459,28 @@ export default function BillingProofClient({
               <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5">
                 Receipt File Proof (JPG, PNG, PDF up to 5MB)
               </label>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
-              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:border-blue-500 transition"
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  hidden
+                  accept=".jpg,.jpeg,.png,.pdf,.webp"
+                  onChange={handleFileChange}
+                />
+                <div className="mx-auto w-12 h-12 bg-blue-600/20 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-3">
+                  <UploadCloud className="w-6 h-6" />
+                </div>
+                <p className="font-semibold text-slate-900 dark:text-white">Click to Upload Your Receipt</p>
+                <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG up to 5MB</p>
+                {selectedFile && (
+                  <p className="mt-3 text-sm text-green-500 dark:text-green-400 font-medium flex items-center justify-center gap-1">
+                    ✓ {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB) selected
+                  </p>
+                )}
+              </div>
             </div>
 
             <div>

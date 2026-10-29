@@ -186,12 +186,26 @@ export default function PlatformSubscriptionReceiptsTable({
     }
   };
 
+  const isOldEphemeral = (r: PlatformSubscriptionReceipt) => {
+    if (r.receiptData) return false;
+    if (r.receiptUrl?.startsWith("data:")) return false;
+    if (r.receiptUrl?.startsWith("https://res.cloudinary.com") || r.receiptUrl?.includes("cloudinary")) return false;
+    if (r.receiptUrl?.includes("/uploads/")) return true;
+    if (!r.receiptUrl) return true;
+    return false;
+  };
+
   const getPreviewSource = (r: PlatformSubscriptionReceipt) => {
-    if (r.receiptUrl?.startsWith("https://") || r.receiptUrl?.startsWith("data:")) {
+    if (r.receiptData) {
+      return r.receiptData.startsWith("data:")
+        ? r.receiptData
+        : `data:${r.receiptMimeType || "image/jpeg"};base64,${r.receiptData}`;
+    }
+    if (r.receiptUrl?.startsWith("data:")) {
       return r.receiptUrl;
     }
-    if (r.receiptData) {
-      return `data:${r.receiptMimeType || "image/jpeg"};base64,${r.receiptData}`;
+    if (r.receiptUrl?.startsWith("https://") && !r.receiptUrl.includes("/uploads/")) {
+      return r.receiptUrl;
     }
     return null;
   };
@@ -387,7 +401,16 @@ export default function PlatformSubscriptionReceiptsTable({
 
                       {/* Proof File */}
                       <td className="py-3.5 px-4">
-                        {previewSrc ? (
+                        {isOldEphemeral(r) ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewItem(r)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 font-bold text-[10px] transition hover:bg-yellow-500/20 cursor-pointer"
+                          >
+                            <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                            <span>File Expired</span>
+                          </button>
+                        ) : previewSrc ? (
                           <button
                             type="button"
                             onClick={() => setPreviewItem(r)}
@@ -395,15 +418,6 @@ export default function PlatformSubscriptionReceiptsTable({
                           >
                             <Eye className="w-3 h-3 text-indigo-500" />
                             <span>Preview</span>
-                          </button>
-                        ) : isEphemeralLost ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewItem(r)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[10px] font-medium"
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>Needs Re-upload</span>
                           </button>
                         ) : (
                           <span className="text-slate-400 italic text-[11px]">No file</span>
@@ -495,45 +509,66 @@ export default function PlatformSubscriptionReceiptsTable({
             </div>
 
             {/* Modal Preview Body */}
-            <div className="max-h-[60vh] overflow-y-auto rounded-xl bg-slate-50 dark:bg-zinc-950 p-2 flex items-center justify-center">
+            <div className="max-h-[60vh] overflow-y-auto rounded-xl bg-slate-50 dark:bg-zinc-950 p-3 flex items-center justify-center">
               {(() => {
-                const src = getPreviewSource(previewItem);
-                const isPdf =
-                  previewItem.receiptMimeType === "application/pdf" ||
-                  src?.startsWith("data:application/pdf") ||
-                  previewItem.receiptUrl?.endsWith(".pdf");
+                const isExpired = isOldEphemeral(previewItem);
+                const url = getPreviewSource(previewItem);
 
-                if (!src) {
+                if (isExpired || !url) {
                   return (
-                    <div className="p-8 text-center space-y-3">
-                      <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
-                      <p className="font-extrabold text-sm text-slate-800 dark:text-zinc-200">
-                        File Expired Before Persistence Fix
+                    <div className="bg-yellow-900/30 border border-yellow-600 p-6 rounded-2xl w-full text-center space-y-3">
+                      <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto" />
+                      <p className="font-extrabold text-sm text-yellow-400">
+                        File expired before persistence fix ({previewItem.nipSessionId || previewItem.id || 'proof_1793292849834'})
                       </p>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                        This receipt was uploaded to ephemeral disk on Render before the persistence fix was deployed.
-                        The transaction reference is intact. <b>You can still verify this institution below</b>, or ask the school to re-upload.
+                      <p className="text-xs text-yellow-200/90 max-w-md mx-auto leading-relaxed">
+                        File expired before persistence fix ({previewItem.nipSessionId || previewItem.id}) - Ask tenant to re-upload, but you can still VERIFY to activate.
                       </p>
                     </div>
                   );
                 }
 
+                const isPdf =
+                  previewItem.receiptMimeType === "application/pdf" ||
+                  url.startsWith("data:application/pdf") ||
+                  url.endsWith(".pdf");
+
                 if (isPdf) {
                   return (
                     <iframe
-                      src={src}
+                      src={url}
                       className="w-full h-[500px] rounded-lg border border-slate-200 dark:border-zinc-800"
                       title="PDF Proof"
                     />
                   );
                 }
 
+                if (url.startsWith("data:")) {
+                  return (
+                    <img
+                      src={url}
+                      alt="Payment Receipt"
+                      className="max-h-[70vh] max-w-full mx-auto object-contain rounded-lg shadow-sm"
+                    />
+                  );
+                }
+
+                if (url.startsWith("https://")) {
+                  return (
+                    <img
+                      src={url}
+                      crossOrigin="anonymous"
+                      alt="Payment Receipt"
+                      className="max-h-[70vh] max-w-full mx-auto object-contain rounded-lg shadow-sm"
+                    />
+                  );
+                }
+
                 return (
-                  <img
-                    src={src}
-                    alt="Payment Receipt"
-                    className="max-h-[500px] w-auto mx-auto object-contain rounded-lg shadow-sm"
-                  />
+                  <div className="p-6 text-center space-y-2">
+                    <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
+                    <p className="text-xs text-slate-400">Unable to render preview.</p>
+                  </div>
                 );
               })()}
             </div>

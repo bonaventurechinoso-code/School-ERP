@@ -10,11 +10,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-    }
-
     const resolvedParams = await Promise.resolve(params);
     const { id } = resolvedParams;
 
@@ -22,7 +17,11 @@ export async function GET(
       return NextResponse.json({ error: "Missing payment ID" }, { status: 400 });
     }
 
-    // Lookup payment proof in database
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
+    }
+
     const payment = await prisma.tenantSubscriptionPayment.findUnique({
       where: { id },
     });
@@ -31,50 +30,51 @@ export async function GET(
       return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
     }
 
-    // 1. Direct Cloud URL (e.g., Cloudinary)
-    if (payment.receiptUrl?.startsWith("https://")) {
-      return NextResponse.redirect(payment.receiptUrl);
+    const user = session.user as any;
+    const isSuperAdmin =
+      user.role === "SUPER_ADMIN" ||
+      user.userRole === "SUPER_ADMIN" ||
+      Boolean(user.isSuperAdmin);
+
+    const userTenantId = (user.tenantId || "").trim();
+    if (userTenantId !== payment.tenantId && !isSuperAdmin) {
+      return NextResponse.json({ error: "Forbidden: Access denied to this payment receipt" }, { status: 403 });
     }
 
-    // 2. Base64 database persistent stream
+    // 1. Permanent Base64 storage in database
     if (payment.receiptData) {
-      const buffer = Buffer.from(payment.receiptData, "base64");
+      const rawBase64 = payment.receiptData.includes(",")
+        ? payment.receiptData.split(",")[1]
+        : payment.receiptData;
+      const buffer = Buffer.from(rawBase64, "base64");
       const mimeType = payment.receiptMimeType || "image/jpeg";
-      return new NextResponse(buffer, {
+      const ext = mimeType.includes("pdf") ? "pdf" : "jpg";
+
+      return new Response(buffer, {
         headers: {
           "Content-Type": mimeType,
-          "Content-Disposition": `inline; filename="receipt_${payment.nipSessionId || payment.id}.${mimeType.includes("pdf") ? "pdf" : "jpg"}"`,
+          "Content-Disposition": `inline; filename="receipt_${payment.nipSessionId || payment.id}.${ext}"`,
           "Cache-Control": "private, max-age=86400",
         },
       });
     }
 
-    // 3. Data URI in receiptUrl
-    if (payment.receiptUrl?.startsWith("data:")) {
-      const matches = payment.receiptUrl.match(/^data:([^;]+);base64,(.+)$/);
-      if (matches) {
-        const mime = matches[1];
-        const buffer = Buffer.from(matches[2], "base64");
-        return new NextResponse(buffer, {
-          headers: {
-            "Content-Type": mime,
-            "Content-Disposition": `inline; filename="receipt_${payment.nipSessionId || payment.id}.${mime.includes("pdf") ? "pdf" : "jpg"}"`,
-            "Cache-Control": "private, max-age=86400",
-          },
-        });
-      }
+    // 2. Direct external HTTPS URL (e.g. Cloudinary) - only if not ephemeral /uploads/
+    if (payment.receiptUrl?.startsWith("https://") && !payment.receiptUrl.includes("/uploads/")) {
+      return NextResponse.redirect(payment.receiptUrl);
     }
 
+    // 3. Fallback for legacy ephemeral files deleted during deploy
     return NextResponse.json(
       {
-        error: "Receipt file was saved to ephemeral disk before the enterprise persistence update. Please verify based on reference or request re-upload.",
+        error: "File expired before persistence fix",
+        code: "FILE_EXPIRED",
         isExpiredEphemeral: true,
       },
-      { status: 404 }
+      { status: 410 }
     );
   } catch (error: any) {
-    console.error("[RECEIPT_FILE_SERVE_ERROR]:", error);
-    return NextResponse.json({ error: "Failed to retrieve receipt file" }, { status: 500 });
+    console.error("[RECEIPT_FILE_STREAM_ERROR]:", error);
+    return NextResponse.json({ error: "Failed to stream receipt file" }, { status: 500 });
   }
 }
-
