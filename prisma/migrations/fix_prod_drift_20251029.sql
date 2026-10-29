@@ -1,0 +1,45 @@
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "isSuspended" BOOLEAN DEFAULT false;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'ACTIVE';
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "subscriptionStatus" TEXT DEFAULT 'ACTIVE';
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "subscriptionExpiresAt" TIMESTAMPTZ;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "suspendedAt" TIMESTAMPTZ;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "suspendedReason" TEXT;
+
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "isSuspended" BOOLEAN DEFAULT false;
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "subscriptionStatus" TEXT DEFAULT 'ACTIVE';
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "subscriptionExpiresAt" TIMESTAMPTZ;
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "suspendedAt" TIMESTAMPTZ;
+ALTER TABLE "School" ADD COLUMN IF NOT EXISTS "suspendedReason" TEXT;
+
+CREATE TABLE IF NOT EXISTS "TenantSubscriptionPayment" (
+  "id" TEXT PRIMARY KEY,
+  "tenantId" TEXT NOT NULL REFERENCES "Tenant"("id") ON DELETE CASCADE,
+  "schoolSlug" TEXT NOT NULL,
+  "schoolName" TEXT NOT NULL,
+  "amount" DOUBLE PRECISION NOT NULL,
+  "nipSessionId" TEXT UNIQUE NOT NULL,
+  "senderBank" TEXT NOT NULL,
+  "receiptUrl" TEXT,
+  "accountName" TEXT,
+  "status" TEXT DEFAULT 'PENDING',
+  "submittedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "verifiedAt" TIMESTAMPTZ,
+  "verifiedBy" TEXT,
+  "subscriptionStart" TIMESTAMPTZ,
+  "subscriptionEnd" TIMESTAMPTZ,
+  "notes" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "TenantNotification" (
+  "id" TEXT PRIMARY KEY,
+  "tenantId" TEXT NOT NULL REFERENCES "Tenant"("id") ON DELETE CASCADE,
+  "type" TEXT NOT NULL,
+  "title" TEXT NOT NULL,
+  "message" TEXT NOT NULL,
+  "isRead" BOOLEAN DEFAULT false,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "actionUrl" TEXT
+);
+

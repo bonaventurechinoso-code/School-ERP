@@ -85,7 +85,9 @@ model School {
   trialStartDate DateTime? @default(now())
   trialEndDate   DateTime?
   isBanned       Boolean   @default(false)
-  isSuspended    Boolean?  @default(false)
+  isSuspended           Boolean             @default(false)
+  suspendedAt           DateTime?
+  suspendedReason       String?
 
   isPublicPortalEnabled Boolean @default(true)
   welcomeGreeting       String? @default("Welcome to our institution!")

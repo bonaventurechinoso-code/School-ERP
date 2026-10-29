@@ -1,3 +1,7 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 import React from "react";
 import { redirect } from "next/navigation";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
@@ -7,7 +11,13 @@ import Link from "next/link";
 import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function UniversalChangePasswordPage() {
-  const session = await getSession();
+  let session = null;
+  try {
+    session = await getSession();
+  } catch (e) {
+    console.warn("[build] getSession fallback in change-password:", e);
+  }
+
   const schoolDomain = session?.schoolDomain || "york";
   if (schoolDomain.toLowerCase() === "demo") {
     redirect("/demo/dashboard");
@@ -17,16 +27,21 @@ export default async function UniversalChangePasswordPage() {
   // Look up school brand color if possible
   let brandColor = "#4f46e5";
   if (schoolDomain) {
-    const school = await basePrisma.school.findFirst({
-      where: {
-        OR: [
-          { subdomain: schoolDomain.toLowerCase().trim() },
-          { slug: schoolDomain.toLowerCase().trim() },
-        ],
-      },
-    });
-    if ((school as any)?.branding?.primaryColor) {
-      brandColor = (school as any).branding.primaryColor;
+    let school = null;
+    try {
+      school = await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: schoolDomain.toLowerCase().trim() },
+            { slug: schoolDomain.toLowerCase().trim() },
+          ],
+        },
+      });
+      if ((school as any)?.branding?.primaryColor) {
+        brandColor = (school as any).branding.primaryColor;
+      }
+    } catch (e) {
+      console.warn("[build] School drift fallback", e);
     }
   }
 
