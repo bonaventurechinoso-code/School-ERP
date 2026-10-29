@@ -41,7 +41,6 @@ export async function POST(
       });
 
       if (legacy) {
-        // Upgrade/create entry in TenantSubscriptionPayment
         payment = await prisma.tenantSubscriptionPayment.upsert({
           where: { nipSessionId: legacy.id },
           update: {},
@@ -69,78 +68,7 @@ export async function POST(
     const startDate = new Date();
     const endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
-    // Handle Rejection
-    if (action === "REJECT") {
-      await prisma.tenantSubscriptionPayment.update({
-        where: { id: payment.id },
-        data: {
-          status: "REJECTED",
-          verifiedAt: startDate,
-          verifiedBy: user?.email || "super_admin",
-          notes: rejectionReason,
-        },
-      });
-
-      try {
-        await prisma.subscriptionPayment.update({
-          where: { id: payment.id },
-          data: {
-            status: "REJECTED",
-            verifiedAt: startDate,
-            rejectionReason,
-          },
-        });
-      } catch {}
-
-      return NextResponse.json({
-        success: true,
-        status: "REJECTED",
-        message: "Subscription payment rejected.",
-      });
-    }
-
-    // 2. VERIFY & REACTIVATE
-    await prisma.tenantSubscriptionPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: "VERIFIED",
-        verifiedAt: startDate,
-        verifiedBy: user?.email || "super_admin",
-        subscriptionStart: startDate,
-        subscriptionEnd: endDate,
-      },
-    });
-
-    try {
-      await prisma.subscriptionPayment.update({
-        where: { id: payment.id },
-        data: {
-          status: "VERIFIED",
-          verifiedAt: startDate,
-        },
-      });
-    } catch {}
-
-    // AUTO-REACTIVATE Tenant and School
-    await prisma.tenant.updateMany({
-      where: {
-        OR: [
-          { id: payment.tenantId },
-          { subdomain: payment.schoolSlug },
-          { slug: payment.schoolSlug },
-        ],
-      },
-      data: {
-        isSuspended: false,
-        isActive: true,
-        status: "ACTIVE",
-        subscriptionStatus: "ACTIVE",
-        suspendedAt: null,
-        suspendedReason: null,
-        subscriptionExpiresAt: endDate,
-      },
-    });
-
+    // 2. ATOMIC TRANSACTIONAL EXECUTION
     const targetSchool = await prisma.school.findFirst({
       where: {
         OR: [
@@ -151,38 +79,152 @@ export async function POST(
       },
     });
 
-    await prisma.school.updateMany({
-      where: {
-        OR: [
-          { id: payment.tenantId },
-          { subdomain: payment.schoolSlug },
-          { slug: payment.schoolSlug },
-        ],
-      },
-      data: {
-        isSuspended: false,
-        isActive: true,
-        status: "ACTIVE",
-        subscriptionStatus: "ACTIVE",
-        subscriptionExpiresAt: endDate,
-        trialEndDate: endDate,
-        deletedAt: null,
-      },
+    if (action === "REJECT") {
+      await prisma.$transaction(async (tx) => {
+        await tx.tenantSubscriptionPayment.update({
+          where: { id: payment.id },
+          data: {
+            status: "REJECTED",
+            verifiedAt: startDate,
+            verifiedBy: user?.email || "super_admin",
+            notes: rejectionReason,
+          },
+        });
+
+        try {
+          await tx.subscriptionPayment.update({
+            where: { id: payment.id },
+            data: {
+              status: "REJECTED",
+              verifiedAt: startDate,
+              rejectionReason,
+            },
+          });
+        } catch {}
+
+        await tx.tenantNotification.create({
+          data: {
+            tenantId: payment.tenantId,
+            type: "SUBSCRIPTION_REJECTED",
+            title: "Subscription Proof Rejected",
+            message: `Your payment proof of ₦${payment.amount.toLocaleString()} (Ref: ${payment.nipSessionId}) could not be verified: ${rejectionReason}. Please re-upload your receipt in settings/billing.`,
+            isRead: false,
+            actionUrl: `/${payment.schoolSlug}/settings/billing`,
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        status: "REJECTED",
+        message: "Subscription payment rejected and tenant notified.",
+      });
+    }
+
+    // VERIFY: Guard against double-verification
+    if (payment.status === "VERIFIED") {
+      return NextResponse.json(
+        { error: "This subscription payment has already been verified and activated.", code: "ALREADY_VERIFIED" },
+        { status: 409 }
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // a) Update payment status
+      await tx.tenantSubscriptionPayment.update({
+        where: { id: payment.id },
+        data: {
+          status: "VERIFIED",
+          verifiedAt: startDate,
+          verifiedBy: user?.email || "super_admin",
+          subscriptionStart: startDate,
+          subscriptionEnd: endDate,
+        },
+      });
+
+      try {
+        await tx.subscriptionPayment.update({
+          where: { id: payment.id },
+          data: {
+            status: "VERIFIED",
+            verifiedAt: startDate,
+          },
+        });
+      } catch {}
+
+      // b) Atomically reactivate Tenant
+      await tx.tenant.updateMany({
+        where: {
+          OR: [
+            { id: payment.tenantId },
+            { subdomain: payment.schoolSlug },
+            { slug: payment.schoolSlug },
+          ],
+        },
+        data: {
+          isSuspended: false,
+          isActive: true,
+          status: "ACTIVE",
+          subscriptionStatus: "ACTIVE",
+          suspendedAt: null,
+          suspendedReason: null,
+          subscriptionExpiresAt: endDate,
+        },
+      });
+
+      // c) Atomically reactivate School
+      await tx.school.updateMany({
+        where: {
+          OR: [
+            { id: payment.tenantId },
+            { subdomain: payment.schoolSlug },
+            { slug: payment.schoolSlug },
+          ],
+        },
+        data: {
+          isSuspended: false,
+          isActive: true,
+          status: "ACTIVE",
+          subscriptionStatus: "ACTIVE",
+          subscriptionExpiresAt: endDate,
+          trialEndDate: endDate,
+          deletedAt: null,
+        },
+      });
+
+      // d) Create in-app proof notification for Tenant
+      await tx.tenantNotification.create({
+        data: {
+          tenantId: payment.tenantId,
+          type: "SUBSCRIPTION_REACTIVATED",
+          title: "Subscription Reactivated! 🎉",
+          message: `Your payment of ₦${payment.amount.toLocaleString()} (Ref: ${payment.nipSessionId}) has been verified by Platform Admin. Your school ${payment.schoolName} is now ACTIVE till ${endDate.toDateString()}. Thank you!`,
+          isRead: false,
+          actionUrl: `/${payment.schoolSlug}/dashboard`,
+        },
+      });
+
+      // e) Audit Log
+      try {
+        await tx.platformAuditTrail.create({
+          data: {
+            tenantId: payment.tenantId,
+            actorId: user?.id || "super_admin",
+            actorEmail: user?.email || "superadmin@bonaveeict.com.ng",
+            action: "SUBSCRIPTION_PAYMENT_VERIFIED",
+            details: {
+              target: payment.schoolName,
+              paymentId: payment.id,
+              nipSessionId: payment.nipSessionId,
+              amount: payment.amount,
+              expiresAt: endDate.toISOString(),
+            },
+          },
+        });
+      } catch {}
     });
 
-    // 3. CREATE REACTIVATION NOTIFICATION FOR TENANT ADMIN
-    await prisma.tenantNotification.create({
-      data: {
-        tenantId: payment.tenantId,
-        type: "SUBSCRIPTION_REACTIVATED",
-        title: "Subscription Reactivated! 🎉",
-        message: `Your payment of ₦${payment.amount.toLocaleString()} (Ref: ${payment.nipSessionId}) has been verified by Platform Admin. Your school ${payment.schoolName} is now ACTIVE till ${endDate.toDateString()}. Thank you!`,
-        isRead: false,
-        actionUrl: `/${payment.schoolSlug}/dashboard`,
-      },
-    });
-
-    // 4. SEND EMAIL TO TENANT ADMIN
+    // 3. SEND TRANSACTIONAL CONFIRMATION EMAIL TO TENANT ADMINS
     const adminUsers = await prisma.user.findMany({
       where: {
         OR: [
@@ -241,7 +283,7 @@ export async function POST(
       }
     }
 
-    // 5. Invalidate tenant cache
+    // 4. Invalidate Redis and L1 Tenant Caches
     await clearTenantCache(payment.schoolSlug, targetSchool?.id);
 
     return NextResponse.json({
@@ -254,4 +296,3 @@ export async function POST(
     return NextResponse.json({ error: error.message || "Failed to verify payment." }, { status: 500 });
   }
 }
-

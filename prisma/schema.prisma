@@ -1630,6 +1630,12 @@ model TenantSubscriptionPayment {
   nipSessionId      String    @unique
   senderBank        String
   receiptUrl        String?
+  receiptData       String?   @db.Text
+  receiptMimeType   String?
+  receiptSize       Int?
+  receiptPublicId   String?
+  receiptChecksum   String?
+  uploadedAt        DateTime  @default(now())
   accountName       String?
   status            String    @default("PENDING")
   submittedAt       DateTime  @default(now())
@@ -1641,6 +1647,7 @@ model TenantSubscriptionPayment {
 
   @@index([status])
   @@index([tenantId])
+  @@index([submittedAt])
 }
 
 model TenantNotification {

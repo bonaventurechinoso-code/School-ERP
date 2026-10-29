@@ -46,7 +46,48 @@ async function getBillingData(schoolDomain: string) {
       console.warn("[BILLING_PAGE] tenant findFirst fallback:", e);
     }
 
-    const platformBank = await getCachedPlatformBank().catch(() => null);
+    let platformBank: any = null;
+    try {
+      platformBank = await basePrisma.platformOwnerBankAccount.findFirst({
+        where: { isActive: true },
+        orderBy: { isPrimary: "desc" },
+      });
+    } catch (e) {
+      console.warn("[BILLING_PAGE] platformOwnerBankAccount lookup fallback:", e);
+    }
+
+    if (!platformBank) {
+      platformBank = await getCachedPlatformBank().catch(() => null);
+    }
+
+    let paymentHistory: any[] = [];
+    try {
+      const records = await basePrisma.tenantSubscriptionPayment.findMany({
+        where: {
+          OR: [
+            { tenantId: cleanDomain },
+            { schoolSlug: cleanDomain },
+            ...(school?.id ? [{ tenantId: school.id }] : []),
+            ...(tenant?.id ? [{ tenantId: tenant.id }] : []),
+          ],
+        },
+        orderBy: { submittedAt: "desc" },
+        take: 10,
+      });
+
+      paymentHistory = records.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        nipSessionId: p.nipSessionId,
+        senderBank: p.senderBank,
+        status: p.status,
+        submittedAt: p.submittedAt.toISOString(),
+        verifiedAt: p.verifiedAt ? p.verifiedAt.toISOString() : null,
+        notes: p.notes,
+      }));
+    } catch (e) {
+      console.warn("[BILLING_PAGE] paymentHistory fallback:", e);
+    }
 
     const merged = {
       id: school?.id || tenant?.id || cleanDomain,
@@ -57,7 +98,7 @@ async function getBillingData(schoolDomain: string) {
       subscriptionExpiresAt: school?.subscriptionExpiresAt || tenant?.subscriptionExpiresAt || null,
     };
 
-    return { school: merged, platformBank };
+    return { school: merged, platformBank, paymentHistory };
   } catch (err) {
     console.error("[BILLING_PAGE_ERROR]:", err);
     return {
@@ -70,6 +111,7 @@ async function getBillingData(schoolDomain: string) {
         subscriptionExpiresAt: null,
       },
       platformBank: null,
+      paymentHistory: [],
     };
   }
 }
@@ -82,14 +124,14 @@ export default async function BillingPage({
   const params = await paramsPromise;
   const schoolDomain = params.schoolDomain;
 
-  const { school, platformBank } = await getBillingData(schoolDomain);
+  const { school, platformBank, paymentHistory } = await getBillingData(schoolDomain);
 
   if (!school) {
     notFound();
   }
 
   return (
-    <div className="space-y-6 py-4 max-w-2xl">
+    <div className="space-y-6 py-4 max-w-3xl">
       {/* Page Header */}
       <div className="space-y-1">
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
@@ -108,6 +150,8 @@ export default async function BillingPage({
         subscriptionExpiresAt={school.subscriptionExpiresAt?.toISOString() ?? null}
         platformBankName={platformBank?.bankName ?? undefined}
         platformAccountNumber={platformBank?.accountNumber ?? undefined}
+        platformAccountName={platformBank?.accountName ?? undefined}
+        initialPayments={paymentHistory}
       />
     </div>
   );

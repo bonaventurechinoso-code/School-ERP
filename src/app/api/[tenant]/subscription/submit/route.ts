@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getStorage, validateMagicBytes } from "@/lib/storage";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +17,63 @@ export async function POST(
       return NextResponse.json({ error: "Tenant domain parameter is required." }, { status: 400 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const reference = String(body.reference || body.nipSessionId || "").trim();
-    const amount = Number(body.amount);
-    const bankName = String(body.bankName || body.senderBank || "").trim();
-    const payerName = String(body.payerName || body.accountName || "").trim();
-    const receiptUrl = String(body.fileUrl || body.receiptUrl || "").trim() || null;
-    const notes = String(body.note || body.notes || "").trim() || null;
+    let reference = "";
+    let amount = 0;
+    let bankName = "";
+    let payerName = "";
+    let receiptUrl: string | null = null;
+    let receiptData: string | null = null;
+    let receiptMimeType: string | null = null;
+    let receiptSize: number | null = null;
+    let receiptPublicId: string | null = null;
+    let receiptChecksum: string | null = null;
+    let notes: string | null = null;
+
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await (req as NextRequest).formData();
+      reference = String(formData.get("reference") || formData.get("nipSessionId") || "").trim();
+      amount = Number(formData.get("amount"));
+      bankName = String(formData.get("bankName") || formData.get("senderBank") || "").trim();
+      payerName = String(formData.get("payerName") || formData.get("accountName") || "").trim();
+      notes = String(formData.get("note") || formData.get("notes") || "").trim() || null;
+
+      const file = formData.get("file") as File | null;
+      if (file && file.size > 0) {
+        if (file.size > 5 * 1024 * 1024) {
+          return NextResponse.json({ error: "File exceeds 5MB size limit." }, { status: 400 });
+        }
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        if (!validateMagicBytes(buffer, file.type)) {
+          return NextResponse.json({ error: "Invalid receipt file contents." }, { status: 400 });
+        }
+
+        const cleanFileName = `proof_${Date.now()}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}.${file.name.split(".").pop() || "jpg"}`;
+        const uploadResult = await getStorage().upload(buffer, cleanFileName, file.type);
+        receiptUrl = uploadResult.url;
+        receiptData = uploadResult.data || null;
+        receiptMimeType = uploadResult.mimeType;
+        receiptSize = uploadResult.size;
+        receiptPublicId = uploadResult.publicId || null;
+        receiptChecksum = uploadResult.checksum;
+      }
+    } else {
+      const body = await req.json().catch(() => ({}));
+      reference = String(body.reference || body.nipSessionId || "").trim();
+      amount = Number(body.amount);
+      bankName = String(body.bankName || body.senderBank || "").trim();
+      payerName = String(body.payerName || body.accountName || "").trim();
+      receiptUrl = String(body.fileUrl || body.receiptUrl || "").trim() || null;
+      receiptData = String(body.receiptData || "").trim() || null;
+      receiptMimeType = String(body.receiptMimeType || body.mimeType || "").trim() || null;
+      receiptSize = body.receiptSize ? Number(body.receiptSize) : null;
+      receiptPublicId = String(body.receiptPublicId || body.publicId || "").trim() || null;
+      receiptChecksum = String(body.receiptChecksum || body.checksum || "").trim() || null;
+      notes = String(body.note || body.notes || "").trim() || null;
+    }
 
     if (!reference) {
       return NextResponse.json({ error: "Payment Reference / NIP Session ID is required." }, { status: 400 });
@@ -56,7 +108,6 @@ export async function POST(
       return NextResponse.json({ error: "Institution tenant not found." }, { status: 404 });
     }
 
-    // Ensure we have a tenant ID (fallback to school ID or create matching tenant if missing)
     let tenantId = tenant?.id;
     if (!tenantId && school) {
       tenant = await prisma.tenant.findUnique({ where: { subdomain: school.subdomain } });
@@ -85,6 +136,25 @@ export async function POST(
     const schoolSlug = tenant?.slug || school?.slug || school?.subdomain || rawDomain;
     const schoolName = tenant?.schoolName || school?.name || rawDomain;
 
+    // Rate Limit: Max 3 uploads per schoolSlug per hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentSubmissions = await prisma.tenantSubscriptionPayment.count({
+      where: {
+        schoolSlug,
+        submittedAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (recentSubmissions >= 3) {
+      return NextResponse.json(
+        {
+          error: "Too many upload attempts. You may submit at most 3 payment proofs per hour.",
+          code: "RATE_LIMITED",
+        },
+        { status: 429 }
+      );
+    }
+
     // Check duplicate NIP Session ID / Reference
     const existingPayment = await prisma.tenantSubscriptionPayment.findFirst({
       where: { nipSessionId: reference },
@@ -100,7 +170,7 @@ export async function POST(
       );
     }
 
-    // Create TenantSubscriptionPayment
+    // Create TenantSubscriptionPayment with permanent enterprise fields
     const payment = await prisma.tenantSubscriptionPayment.create({
       data: {
         tenantId,
@@ -110,6 +180,11 @@ export async function POST(
         nipSessionId: reference,
         senderBank: bankName || "Bank Transfer",
         receiptUrl,
+        receiptData,
+        receiptMimeType,
+        receiptSize,
+        receiptPublicId,
+        receiptChecksum,
         accountName: payerName || null,
         status: "PENDING",
         notes,
@@ -133,6 +208,7 @@ export async function POST(
       success: true,
       message: "Subscription payment proof submitted successfully. Pending Super Admin verification.",
       paymentId: payment.id,
+      receiptUrl,
     });
   } catch (error: any) {
     console.error("[Subscription Submit Error]:", error);
@@ -142,4 +218,3 @@ export async function POST(
     );
   }
 }
-

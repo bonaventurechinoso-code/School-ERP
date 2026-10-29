@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { getStorage, validateMagicBytes } from "@/lib/storage";
 import crypto from "crypto";
+
+export const dynamic = "force-dynamic";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -12,14 +13,6 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/jpg",
   "application/pdf",
 ]);
-
-const EXTENSION_MAP: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-};
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,27 +40,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const ext = EXTENSION_MAP[file.type] || "png";
-    const uniqueId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-    const fileName = `proof_${Date.now()}_${uniqueId}.${ext}`;
-
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "payment-proofs");
-    await mkdir(uploadDir, { recursive: true });
-
-    const filePath = path.join(uploadDir, fileName);
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    await writeFile(filePath, buffer);
+    // Strict Magic Bytes Verification
+    if (!validateMagicBytes(buffer, file.type)) {
+      return NextResponse.json(
+        { error: "Corrupted or invalid file contents. File does not match declared media type." },
+        { status: 400 }
+      );
+    }
 
-    const publicUrl = `/uploads/payment-proofs/${fileName}`;
+    const storage = getStorage();
+    const cleanFileName = `proof_${Date.now()}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}.${file.name.split(".").pop() || "jpg"}`;
+    const result = await storage.upload(buffer, cleanFileName, file.type);
 
     return NextResponse.json({
       success: true,
-      url: publicUrl,
-      fileName,
-      size: file.size,
-      mimeType: file.type,
+      url: result.url,
+      receiptUrl: result.url,
+      receiptData: result.data || null,
+      mimeType: result.mimeType,
+      receiptMimeType: result.mimeType,
+      size: result.size,
+      receiptSize: result.size,
+      checksum: result.checksum,
+      receiptChecksum: result.checksum,
+      publicId: result.publicId || null,
+      receiptPublicId: result.publicId || null,
+      fileName: cleanFileName,
     });
   } catch (error: any) {
     console.error("[UPLOAD_PAYMENT_PROOF_ERROR]:", error);
