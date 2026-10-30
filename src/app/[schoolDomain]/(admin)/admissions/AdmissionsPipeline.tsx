@@ -21,33 +21,78 @@ import {
   X,
   Lock,
   FileCheck,
+  Layers,
+  Settings,
+  AlertTriangle,
+  ShieldAlert,
+  SlidersHorizontal,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
   sendBankDetailsEmailAction,
   markFormFeePaidAction,
+  createAdmissionTrackAction,
+  configureAdmissionStageAction,
+  transitionCandidateStageAction,
 } from "./actions";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import NewInquiryModal from "./NewInquiryModal";
 import AdmissionRegisterTable from "./AdmissionRegisterTable";
 
-export const STAGES = [
-  { id: "INQUIRY", label: "INQUIRY", dotColor: "bg-slate-400" },
-  { id: "DOCS_PENDING", label: "DOCS PENDING", dotColor: "bg-amber-500" },
-  { id: "VERIFIED", label: "SCREENED & VERIFIED", dotColor: "bg-blue-500" },
-  { id: "INTERVIEW", label: "EXAM/INTERVIEW", dotColor: "bg-purple-500" },
-  { id: "APPROVED", label: "PROVISIONAL OFFER", dotColor: "bg-indigo-500" },
-  { id: "ENROLLED", label: "MATRICULATED", dotColor: "bg-emerald-500" },
+export interface PipelineStageConfig {
+  id: string;
+  name: string;
+  label?: string;
+  sequenceOrder: number;
+  constraints?: {
+    require_payment?: boolean;
+    require_birth_cert?: boolean;
+    require_passport?: boolean;
+    require_academic_results?: boolean;
+    require_jamb?: boolean;
+    min_age?: number;
+    [key: string]: any;
+  } | null;
+  color?: string | null;
+  dotColor?: string;
+}
+
+export interface PipelineTrackConfig {
+  id: string;
+  tenantId: string;
+  name: string;
+  tierType: "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY";
+  description?: string | null;
+  isActive: boolean;
+  stages: PipelineStageConfig[];
+}
+
+export const FALLBACK_STAGES: PipelineStageConfig[] = [
+  { id: "INQUIRY", name: "Inquiry Logged", label: "INQUIRY", sequenceOrder: 0, color: "#94a3b8", dotColor: "bg-slate-400" },
+  { id: "DOCS_PENDING", name: "Dossier Intake", label: "DOCS PENDING", sequenceOrder: 1, color: "#f59e0b", dotColor: "bg-amber-500", constraints: { require_birth_cert: true } },
+  { id: "VERIFIED", name: "Screened & Verified", label: "SCREENED & VERIFIED", sequenceOrder: 2, color: "#3b82f6", dotColor: "bg-blue-500" },
+  { id: "INTERVIEW", name: "Assessment & Exam", label: "EXAM / INTERVIEW", sequenceOrder: 3, color: "#8b5cf6", dotColor: "bg-purple-500", constraints: { require_payment: true } },
+  { id: "APPROVED", name: "Provisional Offer", label: "PROVISIONAL OFFER", sequenceOrder: 4, color: "#6366f1", dotColor: "bg-indigo-500" },
+  { id: "ENROLLED", name: "Matriculated", label: "MATRICULATED", sequenceOrder: 5, color: "#10b981", dotColor: "bg-emerald-500" },
 ];
 
-function leadMatchesStage(leadStatus: string | null | undefined, stageId: string): boolean {
-  const norm = (leadStatus || "INQUIRY").toUpperCase();
-  if (norm === stageId) return true;
-  if (stageId === "DOCS_PENDING" && norm === "APPLIED") return true;
-  if (stageId === "VERIFIED" && (norm === "SCREENED" || norm === "DOCS_VERIFIED")) return true;
-  if (stageId === "INTERVIEW" && (norm === "EXAM" || norm === "SCREENING")) return true;
-  if (stageId === "APPROVED" && (norm === "OFFER" || norm === "OFFERED")) return true;
-  if (stageId === "ENROLLED" && (norm === "CONVERTED" || norm === "ADMITTED")) return true;
+function leadMatchesStage(
+  lead: LeadWithTier,
+  stage: PipelineStageConfig
+): boolean {
+  if (lead.stageId && lead.stageId === stage.id) return true;
+  const leadNorm = (lead.status || "INQUIRY").toUpperCase();
+  const stageNameUpper = (stage.name || "").toUpperCase();
+  const stageIdUpper = (stage.id || "").toUpperCase();
+
+  if (leadNorm === stageNameUpper || leadNorm === stageIdUpper) return true;
+  if (stageIdUpper === "DOCS_PENDING" && (leadNorm === "APPLIED" || leadNorm.includes("DOC"))) return true;
+  if (stageIdUpper === "VERIFIED" && (leadNorm === "SCREENED" || leadNorm === "DOCS_VERIFIED")) return true;
+  if (stageIdUpper === "INTERVIEW" && (leadNorm === "EXAM" || leadNorm === "SCREENING" || leadNorm.includes("CBT"))) return true;
+  if (stageIdUpper === "APPROVED" && (leadNorm === "OFFER" || leadNorm === "OFFERED" || leadNorm.includes("PROVISIONAL"))) return true;
+  if (stageIdUpper === "ENROLLED" && (leadNorm === "CONVERTED" || leadNorm === "ADMITTED" || leadNorm === "MATRICULATED")) return true;
   return false;
 }
 
@@ -64,6 +109,8 @@ type LeadWithTier = AdmissionLead & {
   targetClass?: string;
   academicTier?: string;
   targetClassCohort?: string;
+  trackId?: string | null;
+  stageId?: string | null;
 };
 
 export default function AdmissionsPipeline({
@@ -73,6 +120,8 @@ export default function AdmissionsPipeline({
   tiers,
   schoolName = "Institution Admissions Desk",
   canMutate = false,
+  isTenantAdmin = false,
+  initialTracks = [],
 }: {
   leads: LeadWithTier[];
   schoolId: string;
@@ -80,6 +129,8 @@ export default function AdmissionsPipeline({
   tiers: AcademicTier[];
   schoolName?: string;
   canMutate?: boolean;
+  isTenantAdmin?: boolean;
+  initialTracks?: PipelineTrackConfig[];
 }) {
   const router = useRouter();
   const [localLeads, setLocalLeads] = useState<LeadWithTier[]>(leads);
@@ -90,14 +141,53 @@ export default function AdmissionsPipeline({
     setLocalLeads(leads);
   }, [leads]);
 
-  // Search & Stage Filter
+  // Tracks State
+  const [tracks, setTracks] = useState<PipelineTrackConfig[]>(initialTracks || []);
+  const [activeTrackId, setActiveTrackId] = useState<string>(
+    initialTracks && initialTracks.length > 0 ? initialTracks[0].id : "default"
+  );
+
+  // Active track and stages
+  const activeTrack = useMemo(() => {
+    return tracks.find((t) => t.id === activeTrackId) || tracks[0] || null;
+  }, [tracks, activeTrackId]);
+
+  const stages: PipelineStageConfig[] = useMemo(() => {
+    if (activeTrack && activeTrack.stages && activeTrack.stages.length > 0) {
+      return [...activeTrack.stages].sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+    }
+    return FALLBACK_STAGES;
+  }, [activeTrack]);
+
+  // Mobile Active Stage Tab (Sticky bar on small screens)
+  const [mobileActiveStageId, setMobileActiveStageId] = useState<string>("");
+
+  useEffect(() => {
+    if (stages.length > 0 && !mobileActiveStageId) {
+      setMobileActiveStageId(stages[0].id);
+    }
+  }, [stages, mobileActiveStageId]);
+
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedStage, setSelectedStage] = useState<string>("ALL");
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>("ALL");
 
   // Modals & Drawers
   const [selectedLead, setSelectedLead] = useState<LeadWithTier | null>(null);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
+
+  // Stage Guardrail Alert Dialog
+  const [guardrailAlert, setGuardrailAlert] = useState<{
+    stageName: string;
+    missingPrerequisites: string[];
+    lead: LeadWithTier;
+  } | null>(null);
+
+  // Track & Stage Configuration Modals (Tenant Admin Only)
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isCreateTrackModalOpen, setIsCreateTrackModalOpen] = useState(false);
+  const [selectedStageForConfig, setSelectedStageForConfig] = useState<PipelineStageConfig | null>(null);
 
   // Form Fee Dialog State (for manual mobile bank transfer)
   const [feeModalLead, setFeeModalLead] = useState<LeadWithTier | null>(null);
@@ -125,6 +215,11 @@ export default function AdmissionsPipeline({
   // Filtered Leads
   const filteredLeads = useMemo(() => {
     return localLeads.filter((l) => {
+      // Filter by active track if trackId is set
+      if (activeTrack && l.trackId && l.trackId !== activeTrack.id) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -134,32 +229,52 @@ export default function AdmissionsPipeline({
         (l.parentPhone && l.parentPhone.includes(q)) ||
         (l.id && l.id.toLowerCase().includes(q));
 
-      const matchesStage = selectedStage === "ALL" || leadMatchesStage(l.status, selectedStage);
+      const matchesStage =
+        selectedStageFilter === "ALL" ||
+        stages.some((s) => s.id === selectedStageFilter && leadMatchesStage(l, s));
+
       return matchesSearch && matchesStage;
     });
-  }, [localLeads, searchQuery, selectedStage]);
+  }, [localLeads, searchQuery, selectedStageFilter, activeTrack, stages]);
 
-  // Stage advance handler
-  const handleStageAdvance = (leadId: string, currentStage: string) => {
-    const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
-    if (currentIndex >= STAGES.length - 1) return;
-    const nextStage = STAGES[currentIndex + 1].id;
+  // Stage advance handler with Guardrail Verification
+  const handleStageAdvance = (lead: LeadWithTier, currentStageIndex: number) => {
+    if (currentStageIndex >= stages.length - 1) return;
+    const targetStage = stages[currentStageIndex + 1];
 
     startTransition(async () => {
       try {
-        const res = await updateLeadStatusAction({
-          leadId,
-          status: nextStage,
+        const res = await transitionCandidateStageAction({
+          leadId: lead.id,
+          targetStageId: targetStage.id,
+          targetStatus: targetStage.name,
           schoolId,
           schoolDomain: schoolDomain || "",
         });
+
         if (res && res.success) {
           setLocalLeads((prev) =>
-            prev.map((l) => (l.id === leadId ? { ...l, status: nextStage } : l))
+            prev.map((l) =>
+              l.id === lead.id
+                ? { ...l, status: targetStage.name, stageId: targetStage.id }
+                : l
+            )
           );
           router.refresh();
+        } else {
+          // Guardrail triggered or error returned
+          const castRes = res as any;
+          if (castRes?.missingPrerequisites && castRes.missingPrerequisites.length > 0) {
+            setGuardrailAlert({
+              stageName: targetStage.name,
+              missingPrerequisites: castRes.missingPrerequisites,
+              lead,
+            });
+          } else {
+            alert(res?.error || "Failed to advance stage.");
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to advance stage:", err);
       }
     });
@@ -193,7 +308,7 @@ export default function AdmissionsPipeline({
       });
 
       if (res && res.success) {
-        setFeeModalToast({ type: "success", text: `Bank details sent successfully to ${targetEmail}` });
+        setFeeModalToast({ type: "success", text: `Bank details dispatched to ${targetEmail}` });
       } else {
         setFeeModalToast({ type: "error", text: res?.error || "Failed to dispatch email." });
       }
@@ -217,7 +332,6 @@ export default function AdmissionsPipeline({
       });
 
       if (res && res.success) {
-        // Update local state
         setLocalLeads((prev) =>
           prev.map((l) => {
             if (l.id === feeModalLead.id) {
@@ -232,7 +346,7 @@ export default function AdmissionsPipeline({
         setTimeout(() => {
           setFeeModalLead(null);
           router.refresh();
-        }, 1200);
+        }, 1000);
       } else {
         setFeeModalToast({ type: "error", text: res?.error || "Failed to update payment status." });
       }
@@ -243,45 +357,313 @@ export default function AdmissionsPipeline({
     }
   };
 
-  return (
-    <div className="space-y-4 w-full">
-      {/* 1. TABS: Clean pill with blue active underline */}
-      <div className="flex items-center gap-6 border-b border-slate-200 dark:border-zinc-800">
-        <button
-          type="button"
-          onClick={() => setMainTab("leads")}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
-            mainTab === "leads"
-              ? "text-blue-600 dark:text-blue-400 font-extrabold"
-              : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-          }`}
-        >
-          <span>Admission Leads (Kanban)</span>
-          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-            • {localLeads.length}
-          </span>
-          {mainTab === "leads" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
-          )}
-        </button>
+  // Candidate Data-Dense Card Render Helper
+  const renderApplicantCard = (lead: LeadWithTier, sIdx: number) => {
+    const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
+    const leadDocs = (lead.documents as any) || {};
+    const isFeePaid = Boolean(leadDocs.formFeePaid);
+    const initials = getInitials(lead.applicantName);
 
-        <button
-          type="button"
-          onClick={() => setMainTab("register")}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
-            mainTab === "register"
-              ? "text-blue-600 dark:text-blue-400 font-extrabold"
-              : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-          }`}
-        >
-          <span>Admissions Register (Live)</span>
-          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
-            Live
-          </span>
-          {mainTab === "register" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+    // Document checklist metrics
+    const hasBirthCert = Boolean(lead.birthCertificateUrl || leadDocs.birthCertificate || leadDocs.birthCert);
+    const hasPassport = Boolean(lead.passportPhotoUrl || leadDocs.passportPhoto || leadDocs.passport);
+    const hasAcademicResults = Boolean(lead.academicResultsUrl || leadDocs.academicResults);
+    const totalRequiredDocs = 3;
+    const uploadedDocsCount = (hasBirthCert ? 1 : 0) + (hasPassport ? 1 : 0) + (hasAcademicResults ? 1 : 0);
+
+    // Age calculation helper
+    const dobStr = leadDocs.dateOfBirth;
+    let candidateAge: number | null = null;
+    if (dobStr) {
+      const birth = new Date(dobStr);
+      if (!isNaN(birth.getTime())) {
+        candidateAge = Math.abs(new Date(Date.now() - birth.getTime()).getUTCFullYear() - 1970);
+      }
+    }
+
+    // Stage constraint alert check for this card
+    const targetStage = stages[sIdx + 1];
+    const targetMinAge = targetStage?.constraints?.min_age;
+    const isUnderage = Boolean(targetMinAge && candidateAge !== null && candidateAge < targetMinAge);
+
+    const dateFormatted = new Date(lead.createdAt).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    return (
+      <div
+        key={lead.id}
+        onClick={() => {
+          setSelectedLead(lead);
+          setIsDossierOpen(true);
+        }}
+        className="p-3.5 sm:p-4 bg-white dark:bg-zinc-900 shadow-2xs hover:shadow-md rounded-xl border border-slate-200/90 dark:border-zinc-800 transition-all cursor-pointer space-y-3 w-full max-w-full overflow-hidden"
+      >
+        {/* Card Header: Avatar + FULL NAME (break-words) + Micro-badges */}
+        <div className="flex items-start gap-2.5 w-full">
+          <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs flex items-center justify-center shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="font-extrabold text-slate-900 dark:text-zinc-50 text-sm leading-snug break-words">
+              {lead.applicantName}
+            </h4>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-zinc-400">
+                {appNo}
+              </span>
+              {/* Assigned Academic Tier Text Pill */}
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                {lead.tier?.name || activeTrack?.tierType || "PRIMARY"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Micro-Badges Bar: Age Warning & Missing File Indicators */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          {/* Age Marker */}
+          {candidateAge !== null && (
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1 ${
+                isUnderage
+                  ? "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-amber-300"
+                  : "bg-slate-50 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
+              }`}
+            >
+              {isUnderage && <AlertTriangle className="w-3 h-3 text-amber-600 animate-pulse" />}
+              <span>Age {candidateAge} yrs</span>
+            </span>
           )}
-        </button>
+
+          {/* Missing Document Indicators */}
+          {!hasBirthCert && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60">
+              Missing Birth Cert
+            </span>
+          )}
+
+          {uploadedDocsCount === totalRequiredDocs && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-0.5">
+              <Check className="w-3 h-3" />
+              <span>Docs 3/3</span>
+            </span>
+          )}
+        </div>
+
+        {/* Target Grade + Date */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800/80 pt-2.5">
+          <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-zinc-200">
+            <GraduationCap className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="truncate">{lead.targetGrade || "Class Pending"}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
+            <span>{dateFormatted}</span>
+          </div>
+        </div>
+
+        {/* Parent Phone */}
+        {(lead.parentPhone || lead.parentContact) && (
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+            <span className="truncate">{lead.parentPhone || lead.parentContact}</span>
+          </div>
+        )}
+
+        {/* Bottom Row: Fee Badge + Advance Action */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
+          <div>
+            {isFeePaid ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <Check className="w-3 h-3" />
+                <span>Paid ✓</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFeeModalLead(lead);
+                  setFeeModalToast(null);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition cursor-pointer"
+                title="Click to view bank details and payment action"
+              >
+                <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                <span>⏳ Fee Pending</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            {canMutate && sIdx < stages.length - 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStageAdvance(lead, sIdx);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 text-slate-700 dark:text-zinc-200 font-bold text-xs transition flex items-center gap-1 cursor-pointer border border-slate-200/80 dark:border-zinc-700"
+                title={`Advance to ${stages[sIdx + 1]?.name}`}
+              >
+                <span>Advance</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {sIdx >= stages.length - 1 && (
+              <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Enrolled</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Interactive Empty State inside stage column
+  const renderInteractiveEmptyState = (stage: PipelineStageConfig) => {
+    const hasPaymentRule = Boolean(stage.constraints?.require_payment);
+    const hasBirthCertRule = Boolean(stage.constraints?.require_birth_cert);
+
+    const rules = [];
+    if (hasPaymentRule) rules.push("Fee Payment Verified");
+    if (hasBirthCertRule) rules.push("Birth Certificate Required");
+
+    return (
+      <div className="border-dashed border-2 border-slate-300 dark:border-zinc-700 rounded-xl p-5 flex flex-col items-center justify-center text-center space-y-2.5 bg-slate-50/50 dark:bg-zinc-900/30 hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
+        <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-slate-400 dark:text-zinc-500">
+          <Users className="w-4 h-4" />
+        </div>
+        <div>
+          <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+            No Candidates in Stage
+          </h4>
+          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
+            {rules.length > 0 ? `Rules: ${rules.join(", ")}` : "Ready for incoming candidate progression"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1 w-full">
+          <button
+            type="button"
+            onClick={() => setIsInquiryModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200/80 dark:border-blue-800 transition cursor-pointer"
+          >
+            + Log Candidate
+          </button>
+
+          {isTenantAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStageForConfig(stage);
+                setIsConfigModalOpen(true);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold border border-slate-200 dark:border-zinc-700 transition flex items-center gap-1 cursor-pointer"
+              title="Configure entry guardrails for this stage"
+            >
+              <Settings className="w-3 h-3 text-slate-500" />
+              <span>Configure Stage Trigger</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setMainTab("register")}
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 text-xs font-medium border border-slate-200 dark:border-zinc-700 transition cursor-pointer"
+          >
+            Import Class Roster
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4 w-full max-w-full overflow-hidden">
+      {/* 1. TOP NAVIGATION & WORKSPACE TABS */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-2">
+        {/* Main Tab Pill */}
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={() => setMainTab("leads")}
+            className={`pb-2 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
+              mainTab === "leads"
+                ? "text-blue-600 dark:text-blue-400 font-extrabold"
+                : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
+          >
+            <span>Admission Pipeline (Kanban)</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+              • {filteredLeads.length}
+            </span>
+            {mainTab === "leads" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainTab("register")}
+            className={`pb-2 text-sm font-bold flex items-center gap-2 relative transition cursor-pointer ${
+              mainTab === "register"
+                ? "text-blue-600 dark:text-blue-400 font-extrabold"
+                : "text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
+          >
+            <span>Admissions Register</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+              Live
+            </span>
+            {mainTab === "register" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+            )}
+          </button>
+        </div>
+
+        {/* Dynamic Multi-Track Selector (Nursery, Primary, Secondary, Tertiary) */}
+        {tracks && tracks.length > 0 && mainTab === "leads" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Track:</span>
+            </span>
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200 dark:border-zinc-700">
+              {tracks.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTrackId(t.id)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTrack?.id === t.id
+                      ? "bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+
+            {isTenantAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsCreateTrackModalOpen(true)}
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 text-xs font-bold transition cursor-pointer"
+                title="Create New Admission Track (Tenant Admin)"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {mainTab === "register" ? (
@@ -293,11 +675,10 @@ export default function AdmissionsPipeline({
         />
       ) : (
         <>
-          {/* 2. TOOLBAR: ONE row flex - Search + Select All Stages + + Log Walk-in Inquiry button */}
-          <div className="bg-white dark:bg-zinc-900 p-3 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
-            <div className="flex flex-1 items-center gap-3 w-full">
-              {/* Search input with icon */}
-              <div className="relative flex-1 max-w-md">
+          {/* 2. TOOLBAR: Search + Filter + Actions */}
+          <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
+            <div className="flex flex-1 items-center gap-3 w-full flex-wrap sm:flex-nowrap">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -308,180 +689,173 @@ export default function AdmissionsPipeline({
                 />
               </div>
 
-              {/* Select All Stages dropdown */}
               <select
-                value={selectedStage}
-                onChange={(e) => setSelectedStage(e.target.value)}
+                value={selectedStageFilter}
+                onChange={(e) => setSelectedStageFilter(e.target.value)}
                 className="px-3 py-2 text-xs sm:text-sm font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-zinc-200 shadow-2xs shrink-0"
               >
-                <option value="ALL">All Stages ({STAGES.length})</option>
-                {STAGES.map((s) => (
+                <option value="ALL">All Stages ({stages.length})</option>
+                {stages.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.label}
+                    {s.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* + Log Walk-in Inquiry blue button */}
-            <button
-              type="button"
-              onClick={() => setIsInquiryModalOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs sm:text-sm transition shadow-sm cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Log Walk-in Inquiry</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {isTenantAdmin && activeTrack && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStageForConfig(stages[0] || null);
+                    setIsConfigModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                  title="Configure Stage Constraints & Rules"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Stage Rules</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsInquiryModalOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs sm:text-sm transition shadow-sm cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Log Walk-in Inquiry</span>
+              </button>
+            </div>
           </div>
 
-          {/* 3. PIPELINE KANBAN: flex gap-4 overflow-x-auto, min-w-[320px] per column, FULL NAME */}
-          <div className="flex gap-4 overflow-x-auto pb-6 pt-1 w-full items-start">
-            {STAGES.map((stage, sIdx) => {
-              const stageLeads = filteredLeads.filter((l) => leadMatchesStage(l.status, stage.id));
+          {/* ========================================================================= */}
+          {/* STEP 4: MOBILE & TABLET VIEWPORT RESPONSIVENESS SWAP                       */}
+          {/* ========================================================================= */}
+
+          {/* 4A. MOBILE VIEW (<768px): Sticky Top Stage Navigation Bar + Single Responsive Column */}
+          <div className="md:hidden space-y-3 w-full">
+            {/* Sticky Top Stage Navigation Pills */}
+            <div className="sticky top-0 z-20 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md -mx-2 px-2 py-2 border-b border-slate-200 dark:border-zinc-800 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+              {stages.map((stage, idx) => {
+                const count = filteredLeads.filter((l) => leadMatchesStage(l, stage)).length;
+                const isActive = (mobileActiveStageId || stages[0]?.id) === stage.id;
+
+                return (
+                  <button
+                    key={stage.id}
+                    type="button"
+                    onClick={() => setMobileActiveStageId(stage.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200"
+                    }`}
+                  >
+                    <span>{stage.name}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Single Mobile Column of Cards */}
+            {(() => {
+              const activeStage =
+                stages.find((s) => s.id === (mobileActiveStageId || stages[0]?.id)) ||
+                stages[0];
+              if (!activeStage) return null;
+
+              const stageIndex = stages.findIndex((s) => s.id === activeStage.id);
+              const stageLeads = filteredLeads.filter((l) => leadMatchesStage(l, activeStage));
+
+              return (
+                <div className="p-3 bg-slate-100/70 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3 w-full">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-800">
+                    <h3 className="font-extrabold text-xs uppercase tracking-wider text-slate-800 dark:text-zinc-200">
+                      {activeStage.name} ({stageLeads.length})
+                    </h3>
+                    {isTenantAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStageForConfig(activeStage);
+                          setIsConfigModalOpen(true);
+                        }}
+                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Edit Rules
+                      </button>
+                    )}
+                  </div>
+
+                  {stageLeads.length > 0 ? (
+                    <div className="space-y-3">
+                      {stageLeads.map((lead) => renderApplicantCard(lead, stageIndex))}
+                    </div>
+                  ) : (
+                    renderInteractiveEmptyState(activeStage)
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* 4B. TABLET & DESKTOP VIEW (>=768px): Fluid Horizontal Panning Kanban Board */}
+          <div className="hidden md:flex gap-4 overflow-x-auto pb-6 pt-1 w-full items-start">
+            {stages.map((stage, sIdx) => {
+              const stageLeads = filteredLeads.filter((l) => leadMatchesStage(l, stage));
+              const hasConstraints =
+                stage.constraints &&
+                Object.values(stage.constraints).some(Boolean);
 
               return (
                 <div
                   key={stage.id}
-                  className="min-w-[320px] max-w-[320px] bg-[#f8f9fa] dark:bg-zinc-800/50 rounded-xl p-3 border border-slate-200/90 dark:border-zinc-800 flex flex-col gap-3 shrink-0"
+                  className="min-w-[320px] max-w-[340px] bg-[#f8f9fa] dark:bg-zinc-900/50 rounded-xl p-3 border border-slate-200/90 dark:border-zinc-800 flex flex-col gap-3 shrink-0"
                 >
-                  {/* Column Header with count badge + color dot */}
+                  {/* Column Header */}
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-700">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2.5 h-2.5 rounded-full ${stage.dotColor} shrink-0`}></span>
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-zinc-200 whitespace-nowrap">
-                        {stage.label}
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: stage.color || "#3b82f6" }}
+                      />
+                      <h3
+                        className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-zinc-200 truncate"
+                        title={stage.name}
+                      >
+                        {stage.name}
                       </h3>
                     </div>
-                    <span className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 px-2 py-0.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-300 shadow-2xs shrink-0">
-                      {stageLeads.length}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {hasConstraints && (
+                        <span
+                          className="w-2 h-2 rounded-full bg-amber-500"
+                          title="Stage constraints and prerequisites active"
+                        />
+                      )}
+                      <span className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 px-2 py-0.5 rounded-full text-xs font-bold text-slate-700 dark:text-zinc-300 shadow-2xs">
+                        {stageLeads.length}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Cards inside column */}
+                  {/* Cards List or Interactive Empty State */}
                   <div className="space-y-3 min-h-[350px]">
                     {stageLeads.length > 0 ? (
-                      stageLeads.map((lead) => {
-                        const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
-                        const leadDocs = (lead.documents as any) || {};
-                        const isFeePaid = Boolean(leadDocs.formFeePaid);
-                        const initials = getInitials(lead.applicantName);
-                        const docCount = Object.keys(leadDocs).filter((k) => k !== "formFeePaid" && k !== "passwordHash").length;
-                        const dateFormatted = new Date(lead.createdAt).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        });
-
-                        return (
-                          <div
-                            key={lead.id}
-                            onClick={() => {
-                              setSelectedLead(lead);
-                              setIsDossierOpen(true);
-                            }}
-                            className="p-4 bg-white dark:bg-zinc-900 shadow-sm rounded-lg border border-slate-200/90 dark:border-zinc-800 hover:shadow-md transition cursor-pointer space-y-3"
-                          >
-                            {/* Card Top: Avatar + FULL NAME + App No */}
-                            <div className="flex items-start gap-2.5">
-                              <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs flex items-center justify-center shrink-0">
-                                {initials}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                {/* FULL NAME - NO TRUNCATION */}
-                                <h4 className="font-extrabold text-slate-900 dark:text-zinc-50 text-sm leading-snug break-words">
-                                  {lead.applicantName}
-                                </h4>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-zinc-400">
-                                    {appNo}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Class + Date Info */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800/80 pt-2.5">
-                              <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-zinc-200">
-                                <GraduationCap className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                <span className="truncate">{lead.targetGrade || "Class Pending"}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
-                                <Calendar className="w-3.5 h-3.5 shrink-0" />
-                                <span>{dateFormatted}</span>
-                              </div>
-                            </div>
-
-                            {/* Parent Phone */}
-                            {(lead.parentPhone || lead.parentContact) && (
-                              <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span className="truncate">{lead.parentPhone || lead.parentContact}</span>
-                              </div>
-                            )}
-
-                            {/* Bottom Row: Fee Badge + Actions */}
-                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
-                              {/* Fee Badge */}
-                              <div>
-                                {isFeePaid ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                                    <Check className="w-3 h-3" />
-                                    <span>Paid ✓</span>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setFeeModalLead(lead);
-                                      setFeeModalToast(null);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition cursor-pointer"
-                                    title="Click to view bank details and payment action"
-                                  >
-                                    <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-                                    <span>⏳ Pending</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Dossier & Advance action buttons */}
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
-                                  <FileCheck className="w-3.5 h-3.5 text-blue-500" />
-                                  <span>{docCount}</span>
-                                </span>
-
-                                {canMutate && sIdx < STAGES.length - 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStageAdvance(lead.id, lead.status);
-                                    }}
-                                    className="px-2 py-1 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 text-slate-700 dark:text-zinc-300 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
-                                    title={`Advance to ${STAGES[sIdx + 1].label}`}
-                                  >
-                                    <span>Advance</span>
-                                    <ArrowRight className="w-3 h-3" />
-                                  </button>
-                                )}
-
-                                {sIdx >= STAGES.length - 1 && (
-                                  <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Enrolled</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
+                      stageLeads.map((lead) => renderApplicantCard(lead, sIdx))
                     ) : (
-                      <div className="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-zinc-700 rounded-lg text-xs text-slate-400 dark:text-zinc-500">
-                        No candidates in this stage
-                      </div>
+                      renderInteractiveEmptyState(stage)
                     )}
                   </div>
                 </div>
@@ -491,11 +865,378 @@ export default function AdmissionsPipeline({
         </>
       )}
 
-      {/* FORM FEE PAYMENT MODAL: Zenith Bank Read-only + Send to Email + Mark Paid */}
+      {/* ========================================================================= */}
+      {/* STAGE GUARDRAIL TRIGGER ALERT MODAL                                       */}
+      {/* ========================================================================= */}
+      {guardrailAlert && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-rose-200 dark:border-rose-900/60 max-w-md w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                  Stage Guardrail Triggered
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Prerequisites required for <strong>{guardrailAlert.stageName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGuardrailAlert(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl space-y-2 text-xs">
+              <p className="font-bold text-rose-900 dark:text-rose-200">
+                Cannot advance {guardrailAlert.lead.applicantName}. The following guardrails failed:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-rose-800 dark:text-rose-300">
+                {guardrailAlert.missingPrerequisites.map((req, i) => (
+                  <li key={i}>{req}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setGuardrailAlert(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition"
+              >
+                Dismiss
+              </button>
+              {guardrailAlert.missingPrerequisites.some((r) => r.toLowerCase().includes("fee") || r.toLowerCase().includes("payment")) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const lead = guardrailAlert.lead;
+                    setGuardrailAlert(null);
+                    setFeeModalLead(lead);
+                  }}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                >
+                  Settle Form Fee Now
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CONFIGURE STAGE RULES MODAL (TENANT ADMIN ONLY)                           */}
+      {/* ========================================================================= */}
+      {isConfigModalOpen && selectedStageForConfig && isTenantAdmin && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 max-w-lg w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                    Configure Stage Guardrails
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Tenant Admin Pipeline Rules ({activeTrack?.name})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfigModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = (formData.get("name") as string) || selectedStageForConfig.name;
+                const reqPayment = formData.get("require_payment") === "on";
+                const reqBirthCert = formData.get("require_birth_cert") === "on";
+                const reqPassport = formData.get("require_passport") === "on";
+                const reqResults = formData.get("require_academic_results") === "on";
+                const minAgeVal = Number(formData.get("min_age")) || 0;
+
+                const constraints = {
+                  require_payment: reqPayment,
+                  require_birth_cert: reqBirthCert,
+                  require_passport: reqPassport,
+                  require_academic_results: reqResults,
+                  min_age: minAgeVal > 0 ? minAgeVal : undefined,
+                };
+
+                const res = await configureAdmissionStageAction({
+                  schoolId,
+                  schoolDomain: schoolDomain || "",
+                  stageId: selectedStageForConfig.id,
+                  name,
+                  constraints,
+                });
+
+                if (res?.success) {
+                  setIsConfigModalOpen(false);
+                  router.refresh();
+                } else {
+                  alert(res?.error || "Failed to update stage rules.");
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  Stage Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={selectedStageForConfig.name}
+                  required
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                />
+              </div>
+
+              <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <span className="font-extrabold text-slate-900 dark:text-white block uppercase tracking-wider text-[11px]">
+                  Automated Gatekeeper Constraints
+                </span>
+
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="require_payment"
+                    defaultChecked={Boolean(selectedStageForConfig.constraints?.require_payment)}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                      Require Form Fee Payment Verification
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Candidates must be settled as PAID before entering this stage.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="require_birth_cert"
+                    defaultChecked={Boolean(selectedStageForConfig.constraints?.require_birth_cert)}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                      Require Birth Certificate Upload
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Candidate dossier must contain an unrejected birth certificate.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="require_passport"
+                    defaultChecked={Boolean(selectedStageForConfig.constraints?.require_passport)}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                      Require Passport Photograph
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Candidate must have a valid passport photograph attached.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="require_academic_results"
+                    defaultChecked={Boolean(selectedStageForConfig.constraints?.require_academic_results)}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                      Require Academic Results / Transcripts
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Previous academic report cards or transcript required.
+                    </span>
+                  </div>
+                </label>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Minimum Age Threshold (Years)
+                  </label>
+                  <input
+                    type="number"
+                    name="min_age"
+                    min="0"
+                    max="30"
+                    defaultValue={selectedStageForConfig.constraints?.min_age || ""}
+                    placeholder="e.g. 5 (Leave blank if no minimum age)"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsConfigModalOpen(false)}
+                  className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-xs"
+                >
+                  Save Stage Rules
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CREATE NEW ADMISSION TRACK MODAL (TENANT ADMIN ONLY)                      */}
+      {/* ========================================================================= */}
+      {isCreateTrackModalOpen && isTenantAdmin && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 max-w-md w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                    Create Admission Track
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Define distinct workflow for educational tier
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateTrackModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get("name") as string;
+                const tierType = formData.get("tierType") as any;
+                const description = formData.get("description") as string;
+
+                const res = await createAdmissionTrackAction({
+                  schoolId,
+                  schoolDomain: schoolDomain || "",
+                  name,
+                  tierType,
+                  description,
+                });
+
+                if (res?.success && res.track) {
+                  setTracks((prev) => [...prev, res.track as any]);
+                  setActiveTrackId(res.track.id);
+                  setIsCreateTrackModalOpen(false);
+                  router.refresh();
+                } else {
+                  alert(res?.error || "Failed to create track.");
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  Track Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="e.g. Senior Secondary Science Track"
+                  required
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  Academic Tier Type
+                </label>
+                <select
+                  name="tierType"
+                  defaultValue="SECONDARY"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                >
+                  <option value="NURSERY">Nursery / Daycare</option>
+                  <option value="PRIMARY">Primary School</option>
+                  <option value="SECONDARY">Secondary School</option>
+                  <option value="TERTIARY">Tertiary / University</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  placeholder="Target applicant population and curriculum criteria..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateTrackModalOpen(false)}
+                  className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shadow-xs"
+                >
+                  Create Pipeline Track
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FORM FEE PAYMENT MODAL */}
       {feeModalLead && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 max-w-lg w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
@@ -519,7 +1260,6 @@ export default function AdmissionsPipeline({
               </button>
             </div>
 
-            {/* Notification alert */}
             {feeModalToast && (
               <div
                 className={`p-3 rounded-xl text-xs font-bold ${
@@ -532,7 +1272,6 @@ export default function AdmissionsPipeline({
               </div>
             )}
 
-            {/* Read-Only Central Bursar Account Banner */}
             <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/40 text-[11px] font-bold text-amber-900 dark:text-amber-300">
               <span className="flex items-center gap-1.5">
                 <Lock className="w-3 h-3 text-amber-600 shrink-0" />
@@ -541,7 +1280,6 @@ export default function AdmissionsPipeline({
               <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono">READ-ONLY</span>
             </div>
 
-            {/* Bank Details Grid */}
             <div className="bg-slate-50 dark:bg-zinc-800/50 rounded-xl p-4 border border-slate-200/80 dark:border-zinc-800 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -590,42 +1328,8 @@ export default function AdmissionsPipeline({
                   </span>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 border-t border-slate-200/60 dark:border-zinc-700/60 pt-2.5">
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
-                    Payment Reference / Ref
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-slate-800 dark:text-zinc-200 text-xs">
-                      {`APP-${feeModalLead.id.slice(0, 6).toUpperCase()}`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(`APP-${feeModalLead.id.slice(0, 6).toUpperCase()}`, "ref")}
-                      className="text-slate-400 hover:text-blue-600 transition p-0.5 cursor-pointer"
-                      title="Copy reference"
-                    >
-                      {copiedField === "ref" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
-                    Candidate Name
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-zinc-50 truncate block text-xs">
-                    {feeModalLead.applicantName}
-                  </span>
-                </div>
-              </div>
             </div>
 
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-              Admissions officers cannot edit central bank settings. Tenant administrators configure official accounts in Finance Settings.
-            </p>
-
-            {/* Action Buttons: Close + Send Bank Details to Email + Mark as Paid */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
               <button
                 type="button"

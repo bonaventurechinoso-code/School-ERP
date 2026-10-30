@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization, resolveCanonicalDocuments } from "@/lib/admissions.service";
+import { ensureTenantAdmissionTracks } from "@/lib/admissions-pipeline.service";
 
 function PipelineSkeleton() {
   return (
@@ -59,6 +60,31 @@ export default async function AdmissionsPage({
   const mutateAuth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
   const canMutate = mutateAuth.canMutate;
 
+  const userRole = (
+    session?.role ||
+    session?.user?.role ||
+    (session as any)?.userRole ||
+    ""
+  ).toUpperCase();
+  const staffRole = (
+    session?.staffRole ||
+    session?.user?.staffRole ||
+    ""
+  ).toUpperCase();
+
+  const isTenantAdmin =
+    userRole === "ADMIN" ||
+    userRole === "SCHOOL_ADMIN" ||
+    userRole === "TENANT_ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "SUPERADMIN" ||
+    staffRole.includes("ADMIN") ||
+    staffRole.includes("PRINCIPAL") ||
+    staffRole.includes("DIRECTOR") ||
+    staffRole.includes("HEADMASTER") ||
+    staffRole.includes("HEADMISTRESS") ||
+    staffRole.includes("PROPRIETOR");
+
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: {
@@ -76,6 +102,9 @@ export default async function AdmissionsPage({
       </div>
     );
   }
+
+  // Ensure tenant multi-tier admission tracks & sequential stages are provisioned
+  const tracks = await ensureTenantAdmissionTracks(school.id);
 
   // Resolve active tier from URL searchParams or cookie (TierSwitcher selection)
   const cookieStore = await cookies();
@@ -316,6 +345,8 @@ export default async function AdmissionsPage({
               tiers={school.academicTiers}
               schoolName={school.name}
               canMutate={canMutate}
+              isTenantAdmin={isTenantAdmin}
+              initialTracks={tracks as any}
             />
           );
         })()}

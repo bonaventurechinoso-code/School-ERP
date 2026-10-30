@@ -1,5 +1,14 @@
 "use server";
 
+import {
+  verifyTenantAdminRole,
+  verifyAdmissionsMutatorRole,
+  evaluateStageConstraints,
+  ensureTenantAdmissionTracks,
+  StageConstraints,
+} from "@/lib/admissions-pipeline.service";
+import { AdmissionTierType } from "@prisma/client";
+
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import {
@@ -902,22 +911,55 @@ export async function updateLeadStatusAction(payload: {
   status: string;
   schoolId: string;
   schoolDomain: string;
+  targetStageId?: string;
 }): Promise<AdmissionActionResult> {
-  const { leadId, status, schoolDomain } = payload;
+  const { leadId, status, schoolDomain, targetStageId } = payload;
   try {
     if (!leadId || !status) {
       return { success: false, error: "Missing required parameters." };
     }
     const schoolId = await resolveSchoolId(payload.schoolId);
 
-    // RBAC Permissions Check: Restrict structural status transitions strictly to authorized roles
+    // RBAC Permissions Check: Tenant Admin (own tenant) or Admissions Officer
     const session = await getSession(undefined, schoolDomain);
-    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
-    if (session && !auth.canMutate) {
+    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    if (!auth.authorized) {
       return {
         success: false,
-        error: "403: " + (auth.reason || "Unauthorized: Admissions status transitions are strictly restricted to Registrar, Admissions Officer, or Superadmin roles."),
+        error: auth.reason || "403 Forbidden: Admissions status transitions are strictly restricted to authorized roles.",
       };
+    }
+
+    // STAGE CONSTRAINT GUARDRAIL ENFORCEMENT
+    const existingLead = await basePrisma.admissionLead.findUnique({
+      where: { id: leadId },
+      include: { stage: true, track: { include: { stages: true } } },
+    });
+
+    if (!existingLead || existingLead.schoolId !== schoolId) {
+      return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
+    }
+
+    let targetStage: any = null;
+    if (targetStageId) {
+      targetStage = await basePrisma.admissionStage.findUnique({
+        where: { id: targetStageId },
+        include: { track: true },
+      });
+    } else if (existingLead.track?.stages) {
+      targetStage = existingLead.track.stages.find(
+        (s) => s.name.toUpperCase() === status.toUpperCase()
+      );
+    }
+
+    if (targetStage?.constraints) {
+      const evaluation = evaluateStageConstraints(existingLead, targetStage.constraints as any);
+      if (!evaluation.satisfied) {
+        return {
+          success: false,
+          error: `400 Bad Request: Stage guardrails not met. Missing prerequisites: ${evaluation.missingPrerequisites.join("; ")}`,
+        };
+      }
     }
 
     if (status === "ENROLLED") {
@@ -1721,3 +1763,244 @@ export async function markFormFeePaidAction(payload: {
 }
 
 
+
+
+// =========================================================================
+// ENTERPRISE MULTI-TIER PIPELINE & STAGE GUARDRAIL ACTIONS
+// =========================================================================
+
+/**
+ * Loads or automatically initializes multi-tier tracks and customizable stages for the tenant
+ */
+export async function getTenantAdmissionTracksAction(payload: {
+  schoolId: string;
+  schoolDomain?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const tracks = await ensureTenantAdmissionTracks(schoolId);
+    return { success: true, tracks };
+  } catch (err: any) {
+    console.error("[getTenantAdmissionTracksAction] Error:", err);
+    return { success: false, error: err.message || "Failed to load admission tracks." };
+  }
+}
+
+/**
+ * Creates a new admission track. Restricted exclusively to the Tenant Admin within their own tenantId.
+ */
+export async function createAdmissionTrackAction(payload: {
+  schoolId: string;
+  schoolDomain: string;
+  name: string;
+  tierType: AdmissionTierType;
+  description?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: auth.reason || "403 Forbidden: Only the Tenant Admin can configure admission tracks.",
+      };
+    }
+
+    const track = await basePrisma.admissionTrack.create({
+      data: {
+        tenantId: schoolId,
+        name: payload.name.trim(),
+        tierType: payload.tierType,
+        description: payload.description?.trim() || null,
+        isActive: true,
+      },
+    });
+
+    const defaultStages = [
+      { name: "Inquiry & Prospect Log", sequenceOrder: 0, color: "#94a3b8", constraints: {} },
+      { name: "Documentation & Intake", sequenceOrder: 1, color: "#f59e0b", constraints: { require_birth_cert: true } },
+      { name: "Screening & Assessment", sequenceOrder: 2, color: "#8b5cf6", constraints: { require_payment: true } },
+      { name: "Provisional Offer", sequenceOrder: 3, color: "#3b82f6", constraints: {} },
+      { name: "Matriculated", sequenceOrder: 4, color: "#10b981", constraints: {} },
+    ];
+
+    for (const s of defaultStages) {
+      await basePrisma.admissionStage.create({
+        data: {
+          trackId: track.id,
+          name: s.name,
+          sequenceOrder: s.sequenceOrder,
+          color: s.color,
+          constraints: s.constraints,
+        },
+      });
+    }
+
+    const fullTrack = await basePrisma.admissionTrack.findUnique({
+      where: { id: track.id },
+      include: { stages: { orderBy: { sequenceOrder: "asc" } } },
+    });
+
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    return { success: true, track: fullTrack };
+  } catch (err: any) {
+    console.error("[createAdmissionTrackAction] Error:", err);
+    return { success: false, error: err.message || "Failed to create admission track." };
+  }
+}
+
+/**
+ * Creates or updates a customizable admission stage with stage constraints.
+ * Restricted to the Tenant Admin within their own tenantId.
+ */
+export async function configureAdmissionStageAction(payload: {
+  schoolId: string;
+  schoolDomain: string;
+  stageId?: string;
+  trackId?: string;
+  name?: string;
+  sequenceOrder?: number;
+  constraints?: StageConstraints;
+  color?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: auth.reason || "403 Forbidden: Only the Tenant Admin can configure stage constraints.",
+      };
+    }
+
+    if (payload.stageId) {
+      const existing = await basePrisma.admissionStage.findUnique({
+        where: { id: payload.stageId },
+        include: { track: true },
+      });
+      if (!existing || existing.track.tenantId !== schoolId) {
+        return { success: false, error: "404 Not Found: Stage does not belong to this tenant." };
+      }
+
+      const updated = await basePrisma.admissionStage.update({
+        where: { id: payload.stageId },
+        data: {
+          ...(payload.name ? { name: payload.name.trim() } : {}),
+          ...(typeof payload.sequenceOrder === "number" ? { sequenceOrder: payload.sequenceOrder } : {}),
+          ...(payload.constraints !== undefined ? { constraints: payload.constraints as any } : {}),
+          ...(payload.color ? { color: payload.color } : {}),
+        },
+      });
+
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      return { success: true, stage: updated };
+    } else {
+      if (!payload.trackId || !payload.name) {
+        return { success: false, error: "400 Bad Request: Missing required trackId or stage name." };
+      }
+
+      const track = await basePrisma.admissionTrack.findUnique({
+        where: { id: payload.trackId },
+      });
+      if (!track || track.tenantId !== schoolId) {
+        return { success: false, error: "403 Forbidden: Target track does not belong to this tenant." };
+      }
+
+      const created = await basePrisma.admissionStage.create({
+        data: {
+          trackId: payload.trackId,
+          name: payload.name.trim(),
+          sequenceOrder: payload.sequenceOrder ?? 0,
+          constraints: (payload.constraints || {}) as any,
+          color: payload.color || "#3b82f6",
+        },
+      });
+
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      return { success: true, stage: created };
+    }
+  } catch (err: any) {
+    console.error("[configureAdmissionStageAction] Error:", err);
+    return { success: false, error: err.message || "Failed to configure stage." };
+  }
+}
+
+/**
+ * Transitions candidate to a target stage with automated constraint verification
+ */
+export async function transitionCandidateStageAction(payload: {
+  leadId: string;
+  targetStageId?: string;
+  targetStatus?: string;
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+
+    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: auth.reason || "403 Forbidden: Moving candidates requires Tenant Admin or Admissions Officer privileges.",
+      };
+    }
+
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { id: payload.leadId },
+      include: { tier: true, track: true, stage: true },
+    });
+
+    if (!lead || lead.schoolId !== schoolId) {
+      return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
+    }
+
+    let targetStage: any = null;
+    if (payload.targetStageId) {
+      targetStage = await basePrisma.admissionStage.findUnique({
+        where: { id: payload.targetStageId },
+        include: { track: true },
+      });
+    }
+
+    if (targetStage?.constraints) {
+      const evaluation = evaluateStageConstraints(lead, targetStage.constraints);
+      if (!evaluation.satisfied) {
+        return {
+          success: false,
+          error: `400 Bad Request: Stage guardrails not met. Missing prerequisites: ${evaluation.missingPrerequisites.join("; ")}`,
+          missingPrerequisites: evaluation.missingPrerequisites,
+          targetStageName: targetStage.name,
+        };
+      }
+    }
+
+    const newStatus = payload.targetStatus || targetStage?.name || lead.status;
+
+    const res = await updateLeadStatusAction({
+      leadId: payload.leadId,
+      status: newStatus,
+      targetStageId: targetStage?.id,
+      schoolId,
+      schoolDomain: payload.schoolDomain,
+    });
+
+    if (res.success && targetStage) {
+      await basePrisma.admissionLead.update({
+        where: { id: payload.leadId },
+        data: {
+          stageId: targetStage.id,
+          trackId: targetStage.trackId,
+        },
+      });
+    }
+
+    return res;
+  } catch (err: any) {
+    console.error("[transitionCandidateStageAction] Error:", err);
+    return { success: false, error: err.message || "Failed to transition candidate stage." };
+  }
+}

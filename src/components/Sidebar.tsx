@@ -9,6 +9,8 @@ import {
   GraduationCap,
   ChevronDown,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
@@ -199,6 +201,16 @@ export default function Sidebar({
     });
   }, [pathname, searchParams, navGroups, schoolDomain]);
 
+  // Responsive collapsible state for desktop (icon-only mode) to maximize canvas in Admissions
+  const isAdmissionsModule = Boolean(pathname?.includes("/admissions"));
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (isAdmissionsModule) {
+      setIsCollapsed(true);
+    }
+  }, [isAdmissionsModule]);
+
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => ({
       ...prev,
@@ -219,14 +231,14 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 md:w-72 md:min-w-[18rem] md:max-w-[18rem] h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
+      className={`fixed inset-y-0 left-0 z-40 ${isCollapsed ? "w-72 sm:w-80 md:w-20 md:min-w-[5rem] md:max-w-[5rem]" : "w-72 sm:w-80 md:w-72 md:min-w-[18rem] md:max-w-[18rem]"} h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-all duration-300 ease-in-out md:relative md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
         isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
       }`}
     >
       {/* 1. SINGLE, HIGHLY POLISHED TENANT IDENTITY CARD */}
-      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 dark:bg-zinc-950/80 shrink-0">
+      <div className={`border-b border-slate-800/80 bg-slate-900/80 dark:bg-zinc-950/80 shrink-0 transition-all duration-300 ${isCollapsed ? "p-2.5 sm:p-3" : "p-3.5 sm:p-4"}`}>
         <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`flex items-center gap-3 min-w-0 flex-1 ${isCollapsed ? "md:justify-center" : ""}`}>
             {/* Monogram Avatar with Minimal Status Dot */}
             <div className="relative shrink-0">
               {tenant?.branding?.logoUrl ? (
@@ -249,8 +261,8 @@ export default function Sidebar({
               />
             </div>
 
-            {/* Clean Institution Title without middle-word ellipses */}
-            <div className="min-w-0 flex-1">
+            {/* Clean Institution Title without middle-word ellipses (hidden when collapsed on desktop) */}
+            <div className={`min-w-0 flex-1 ${isCollapsed ? "md:hidden" : ""}`}>
               <span className="block text-xs sm:text-sm font-bold text-white tracking-tight leading-snug line-clamp-2">
                 {cleanSchoolName}
               </span>
@@ -259,6 +271,21 @@ export default function Sidebar({
               </span>
             </div>
           </div>
+
+          {/* Desktop Collapse / Expand Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all shrink-0 cursor-pointer"
+            title={isCollapsed ? "Expand Sidebar (Full Navigation)" : "Collapse Sidebar (Icon-Only Mode)"}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4 text-indigo-400" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </button>
 
           {/* Mobile Close Button */}
           <button
@@ -272,7 +299,8 @@ export default function Sidebar({
 
         {/* Compact Tier Switcher (Rendered only when multiple tiers exist) */}
         {tiers && tiers.length > 1 && (
-          <div className="mt-2.5 pt-2 border-t border-slate-800/60">
+          <div className={`mt-2.5 pt-2 border-t border-slate-800/60 ${isCollapsed ? "md:hidden" : ""}`}>
+
             <TierSwitcher
               tiers={tiers}
               currentTier={currentTier}
@@ -290,7 +318,7 @@ export default function Sidebar({
           return (
             <div key={group.id} className="space-y-1">
               {group.title && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase">
+                <div className={`px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase ${isCollapsed ? "md:hidden" : ""}`}>
                   {group.title}
                 </div>
               )}
@@ -321,11 +349,12 @@ export default function Sidebar({
                       >
                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
                           <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${anyChildActive ? "text-indigo-400" : "text-slate-400"}`} />
-                          <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left">
+                          <span className={`flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left ${isCollapsed ? "md:hidden" : ""}`}>
                             {item.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0 ml-1.5 mt-0.5">
+                        <div className={`flex items-center gap-1.5 shrink-0 ml-1.5 mt-0.5 ${isCollapsed ? "md:hidden" : ""}`}>
+
                           {anyChildActive && (
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
                           )}
@@ -419,6 +448,25 @@ export default function Sidebar({
           );
         })}
       </nav>
+
+      {/* 3. DESKTOP BOTTOM COLLAPSE PILL */}
+      <div className="hidden md:flex items-center justify-center p-2.5 border-t border-slate-800/80 bg-slate-900/60 dark:bg-zinc-950/60 shrink-0">
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors text-xs font-semibold cursor-pointer"
+          title={isCollapsed ? "Expand Sidebar (Full Navigation)" : "Collapse Sidebar (Maximize Canvas Space)"}
+        >
+          {isCollapsed ? (
+            <PanelLeftOpen className="w-4 h-4 text-indigo-400" />
+          ) : (
+            <>
+              <PanelLeftClose className="w-4 h-4" />
+              <span className="truncate">Collapse Sidebar</span>
+            </>
+          )}
+        </button>
+      </div>
     </aside>
   );
 }
