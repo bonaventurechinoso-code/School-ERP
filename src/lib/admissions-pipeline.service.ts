@@ -7,6 +7,8 @@ export interface StageConstraints {
   require_passport?: boolean;
   require_academic_results?: boolean;
   require_jamb?: boolean;
+  require_exam_score?: boolean;
+  min_exam_score?: number;
   min_age?: number;
   [key: string]: any;
 }
@@ -317,6 +319,36 @@ export function evaluateStageConstraints(
     }
   }
 
+  // 7. require_exam_score constraint check
+  if (constraints.require_exam_score) {
+    const minPassingScore =
+      typeof constraints.min_exam_score === "number" ? constraints.min_exam_score : 50;
+    const credsJson = (candidate?.credentialsJson as any) || {};
+    const rawScore =
+      docs.entranceScore ??
+      docs.examScore ??
+      docs.examAggregate ??
+      credsJson.entranceScore ??
+      credsJson.examScore ??
+      candidate?.entranceScore ??
+      candidate?.examScore;
+
+    const numScore = typeof rawScore === "number" ? rawScore : parseFloat(rawScore);
+    const hasValidScore = !isNaN(numScore) && numScore >= minPassingScore;
+
+    if (!hasValidScore) {
+      if (isNaN(numScore)) {
+        missing.push(
+          `Candidate requires an entrance examination score before advancing beyond this stage.`
+        );
+      } else {
+        missing.push(
+          `Entrance examination score (${numScore}) does not meet the minimum passing score (${minPassingScore}).`
+        );
+      }
+    }
+  }
+
   return {
     satisfied: missing.length === 0,
     missingPrerequisites: missing,
@@ -325,23 +357,57 @@ export function evaluateStageConstraints(
 
 /**
  * Initializes standard enterprise multi-tier tracks and customizable stages
- * if the tenant does not yet have any custom tracks configured.
+ * filtered strictly to the tenant's operating tier metadata profile.
  */
 export async function ensureTenantAdmissionTracks(tenantId: string) {
-  const existingCount = await basePrisma.admissionTrack.count({
-    where: { tenantId },
+  // Fetch tenant profile and configured operating academic tiers
+  const school = await basePrisma.school.findUnique({
+    where: { id: tenantId },
+    include: {
+      academicTiers: {
+        orderBy: { level: "asc" },
+      },
+    },
   });
 
-  if (existingCount > 0) {
-    return await basePrisma.admissionTrack.findMany({
-      where: { tenantId, isActive: true },
-      include: {
-        stages: {
-          orderBy: { sequenceOrder: "asc" },
-        },
+  const operatingTiers = new Set<AdmissionTierType>();
+  if (school?.academicTiers && school.academicTiers.length > 0) {
+    for (const t of school.academicTiers) {
+      const lower = t.name.toLowerCase();
+      if (lower.includes("nursery") || lower.includes("daycare") || lower.includes("creche") || lower.includes("early")) {
+        operatingTiers.add(AdmissionTierType.NURSERY);
+      }
+      if (lower.includes("primary") || lower.includes("basic") || lower.includes("elementary")) {
+        operatingTiers.add(AdmissionTierType.PRIMARY);
+      }
+      if (lower.includes("secondary") || lower.includes("high") || lower.includes("jss") || lower.includes("sss") || (lower.includes("college") && !lower.includes("education"))) {
+        operatingTiers.add(AdmissionTierType.SECONDARY);
+      }
+      if (lower.includes("university") || lower.includes("polytechnic") || lower.includes("tertiary") || lower.includes("undergraduate") || lower.includes("education")) {
+        operatingTiers.add(AdmissionTierType.TERTIARY);
+      }
+    }
+  }
+
+  // Fallback if none matched
+  if (operatingTiers.size === 0) {
+    operatingTiers.add(AdmissionTierType.PRIMARY);
+  }
+
+  const existingTracks = await basePrisma.admissionTrack.findMany({
+    where: { tenantId, isActive: true },
+    include: {
+      stages: {
+        orderBy: { sequenceOrder: "asc" },
       },
-      orderBy: { createdAt: "asc" },
-    });
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Filter existing tracks strictly to those matching the tenant's operating tier metadata
+  const matchingExisting = existingTracks.filter((t) => operatingTiers.has(t.tierType));
+  if (matchingExisting.length > 0) {
+    return matchingExisting;
   }
 
   // Seed default tracks for Nursery, Primary, Secondary, and Tertiary
@@ -506,7 +572,10 @@ export async function ensureTenantAdmissionTracks(tenantId: string) {
     },
   ];
 
-  for (const t of tracksToCreate) {
+  const filteredTracksToCreate = tracksToCreate.filter((t) => operatingTiers.has(t.tierType));
+  const toCreate = filteredTracksToCreate.length > 0 ? filteredTracksToCreate : tracksToCreate;
+
+  for (const t of toCreate) {
     const track = await basePrisma.admissionTrack.create({
       data: {
         tenantId,
@@ -530,7 +599,7 @@ export async function ensureTenantAdmissionTracks(tenantId: string) {
     }
   }
 
-  return await basePrisma.admissionTrack.findMany({
+  const allTracks = await basePrisma.admissionTrack.findMany({
     where: { tenantId, isActive: true },
     include: {
       stages: {
@@ -539,5 +608,8 @@ export async function ensureTenantAdmissionTracks(tenantId: string) {
     },
     orderBy: { createdAt: "asc" },
   });
+
+  const finalTracks = allTracks.filter((t) => operatingTiers.has(t.tierType));
+  return finalTracks.length > 0 ? finalTracks : allTracks;
 }
 

@@ -2004,3 +2004,152 @@ export async function transitionCandidateStageAction(payload: {
     return { success: false, error: err.message || "Failed to transition candidate stage." };
   }
 }
+
+/**
+ * Manually record or override offline entrance examination / assessment score
+ * Enables traditional pen-and-paper schools to log exam marks directly.
+ * Automatically fulfills stage constraints (require_exam_score: true).
+ */
+export async function saveManualEntranceScoreAction(payload: {
+  leadId: string;
+  score: number;
+  schoolId: string;
+  schoolDomain?: string;
+  notes?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    if (!auth.authorized) {
+      return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to record exam scores." };
+    }
+
+    const lead = await basePrisma.admissionLead.findUnique({
+      where: { id: payload.leadId },
+    });
+    if (!lead || lead.schoolId !== schoolId) {
+      return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
+    }
+
+    const parsedScore = Number(payload.score);
+    if (isNaN(parsedScore) || parsedScore < 0 || parsedScore > 100) {
+      return { success: false, error: "Invalid entrance score. Please provide a score between 0 and 100." };
+    }
+
+    const docs = (lead.documents as any) || {};
+    docs.entranceScore = parsedScore;
+    docs.examScore = parsedScore;
+    docs.examAggregate = parsedScore;
+    docs.manualScoreEntry = true;
+    docs.examPassed = parsedScore >= 50;
+    docs.scoreRecordedAt = new Date().toISOString();
+
+    const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
+    logs.push({
+      timestamp: new Date().toISOString(),
+      action: "MANUAL_SCORE_OVERRIDE",
+      score: parsedScore,
+      recordedBy: session?.user?.name || session?.email || "Admissions Officer",
+      notes: payload.notes || "Offline Entrance Assessment score recorded",
+    });
+
+    const updated = await basePrisma.admissionLead.update({
+      where: { id: payload.leadId },
+      data: {
+        documents: docs,
+        logs,
+      },
+      include: { tier: true, track: true, stage: true },
+    });
+
+    // Also sync to matching AdmissionRegister record if present
+    const cleanRef = lead.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    const nameParts = (lead.applicantName || "").trim().split(" ");
+    const firstName = nameParts[0] || "Student";
+    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        tenantId: schoolId,
+        OR: [
+          { id: lead.id },
+          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+          ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
+          ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+          { firstName, lastName },
+        ],
+      },
+    });
+
+    if (registerRecord) {
+      const creds =
+        typeof registerRecord.credentialsJson === "object" && registerRecord.credentialsJson !== null
+          ? { ...(registerRecord.credentialsJson as any) }
+          : {};
+      creds.entranceScore = parsedScore;
+      creds.examScore = parsedScore;
+      creds.examPassed = parsedScore >= 50;
+      creds.manualScoreEntry = true;
+
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          credentialsJson: creds,
+        },
+      });
+    }
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+    return { success: true, lead: updated, score: parsedScore };
+  } catch (err: any) {
+    console.error("[saveManualEntranceScoreAction] Error:", err);
+    return { success: false, error: err.message || "Failed to save entrance score." };
+  }
+}
+
+/**
+ * Bulk save offline entrance exam scores for multiple applicants at once
+ */
+export async function bulkSaveManualEntranceScoresAction(payload: {
+  entries: Array<{ leadId: string; score: number }>;
+  schoolId: string;
+  schoolDomain?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    if (!auth.authorized) {
+      return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to record exam scores." };
+    }
+
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const entry of payload.entries) {
+      const res = await saveManualEntranceScoreAction({
+        leadId: entry.leadId,
+        score: entry.score,
+        schoolId,
+        schoolDomain: payload.schoolDomain,
+      });
+      if (res.success) {
+        successCount++;
+      } else {
+        errors.push(res.error || `Failed to save score for lead ${entry.leadId}`);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      savedCount: successCount,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } catch (err: any) {
+    console.error("[bulkSaveManualEntranceScoresAction] Error:", err);
+    return { success: false, error: err.message || "Failed to bulk save entrance scores." };
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useTransition } from "react";
 import {
   Search,
   RefreshCw,
@@ -15,29 +15,56 @@ import {
   Ban,
   UserCheck,
   Users,
+  FileText,
+  SlidersHorizontal,
+  ArrowRight,
+  Edit3,
+  Save,
+  Plus,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import AdmissionRegisterDrawer from "./AdmissionRegisterDrawer";
-import { enrollApplicantFromRegisterAction } from "./actions";
+import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
+import {
+  enrollApplicantFromRegisterAction,
+  enrollApplicantAction,
+  saveManualEntranceScoreAction,
+  bulkSaveManualEntranceScoresAction,
+  transitionCandidateStageAction,
+} from "./actions";
 
-interface AdmissionRegisterRecord {
+export interface UnifiedApplicantRow {
   id: string;
-  tenantId: string;
+  leadId?: string;
+  registerId?: string;
   applicationNo: string;
   firstName: string;
   lastName: string;
+  fullName: string;
   classApplied: string;
   assignedClass?: string;
   parentPhone: string;
   email?: string;
-  credentialsJson?: any;
   status: string;
-  verifiedBy?: string;
-  verifiedAt?: string;
-  admittedAt?: string;
+  stageId?: string;
+  formFeePaid: boolean;
+  entranceScore: number | null;
+  documents?: any;
   createdAt: string;
-  updatedAt: string;
-  formFeePaid?: boolean;
-  convertedFromLead?: boolean;
+  rawLead?: any;
+  rawRegister?: any;
+}
+
+export interface AdmissionRegisterTableProps {
+  schoolId: string;
+  schoolDomain: string;
+  schoolName?: string;
+  canMutate?: boolean;
+  leads?: any[];
+  stages?: any[];
+  activeTrackName?: string;
+  onLeadUpdated?: (updatedLead: any) => void;
 }
 
 export default function AdmissionRegisterTable({
@@ -45,25 +72,36 @@ export default function AdmissionRegisterTable({
   schoolDomain,
   schoolName = "Institution Admissions Desk",
   canMutate = false,
-}: {
-  schoolId: string;
-  schoolDomain: string;
-  schoolName?: string;
-  canMutate?: boolean;
-}) {
-  const [records, setRecords] = useState<AdmissionRegisterRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  leads = [],
+  stages = [],
+  activeTrackName = "",
+  onLeadUpdated,
+}: AdmissionRegisterTableProps) {
+  const [remoteRecords, setRemoteRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [copiedAppNo, setCopiedAppNo] = useState<string | null>(null);
 
-  // Drawer state
-  const [selectedRecord, setSelectedRecord] = useState<AdmissionRegisterRecord | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  // Score editing state
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [scoreInputVal, setScoreInputVal] = useState<string>("");
+  const [savingScoreId, setSavingScoreId] = useState<string | null>(null);
 
-  // Action status message
+  // Bulk Entry Mode for offline test marks
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkScores, setBulkScores] = useState<Record<string, string>>({});
+  const [isSavingBulk, setIsSavingBulk] = useState(false);
+
+  // Drawer state
+  const [selectedRow, setSelectedRow] = useState<UnifiedApplicantRow | null>(null);
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
+  const [isRegisterDrawerOpen, setIsRegisterDrawerOpen] = useState(false);
+
+  // Action feedback
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   const fetchRecords = async () => {
     setLoading(true);
@@ -76,7 +114,7 @@ export default function AdmissionRegisterTable({
       if (res.ok) {
         const json = await res.json();
         const data = Array.isArray(json) ? json : json.data || [];
-        setRecords(data);
+        setRemoteRecords(data);
       }
     } catch (err) {
       console.error("Failed to load admissions register:", err);
@@ -89,6 +127,118 @@ export default function AdmissionRegisterTable({
     fetchRecords();
   }, [schoolId]);
 
+  // UNIFIED DATASET: Merge active track Kanban leads with legacy/direct register records
+  const unifiedRows: UnifiedApplicantRow[] = useMemo(() => {
+    const rows: UnifiedApplicantRow[] = [];
+    const seenAppNos = new Set<string>();
+    const seenIds = new Set<string>();
+
+    // 1. Process active track leads first (Primary source of truth)
+    for (const lead of leads) {
+      const appNo =
+        lead.documents?.applicationNo ||
+        lead.uploadToken?.substring(0, 8).toUpperCase() ||
+        `ADM-${lead.id.substring(0, 6).toUpperCase()}`;
+
+      seenAppNos.add(appNo.toLowerCase());
+      seenIds.add(lead.id);
+
+      const nameParts = (lead.applicantName || "").trim().split(/\s+/);
+      const firstName = nameParts[0] || "Candidate";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      const rawScore =
+        lead.documents?.entranceScore ??
+        lead.documents?.examScore ??
+        lead.documents?.examAggregate ??
+        null;
+      const numScore = rawScore !== null && rawScore !== undefined ? Number(rawScore) : null;
+
+      rows.push({
+        id: lead.id,
+        leadId: lead.id,
+        applicationNo: appNo,
+        firstName,
+        lastName,
+        fullName: lead.applicantName || `${firstName} ${lastName}`,
+        classApplied: lead.targetGrade || "Primary 1",
+        assignedClass: lead.targetGrade,
+        parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+        email: lead.studentEmail || lead.parentEmail || "",
+        status: (lead.status || "INQUIRY").toUpperCase(),
+        stageId: lead.stageId,
+        formFeePaid: Boolean(
+          lead.documents?.formFeePaid ||
+            lead.documents?.feePaid ||
+            lead.status === "APPROVED" ||
+            lead.status === "ENROLLED"
+        ),
+        entranceScore: numScore,
+        documents: lead.documents || {},
+        createdAt: lead.createdAt || new Date().toISOString(),
+        rawLead: lead,
+      });
+    }
+
+    // 2. Append remote register records if they don't already exist in leads
+    for (const reg of remoteRecords) {
+      const appNo = reg.applicationNo || "";
+      if (seenAppNos.has(appNo.toLowerCase()) || seenIds.has(reg.id)) {
+        continue;
+      }
+      seenAppNos.add(appNo.toLowerCase());
+      seenIds.add(reg.id);
+
+      const creds = typeof reg.credentialsJson === "object" && reg.credentialsJson !== null ? reg.credentialsJson : {};
+      const rawScore = creds.entranceScore ?? creds.examScore ?? null;
+      const numScore = rawScore !== null && rawScore !== undefined ? Number(rawScore) : null;
+
+      rows.push({
+        id: reg.id,
+        registerId: reg.id,
+        applicationNo: appNo,
+        firstName: reg.firstName,
+        lastName: reg.lastName,
+        fullName: `${reg.firstName} ${reg.lastName}`,
+        classApplied: reg.classApplied || "Primary 1",
+        assignedClass: reg.assignedClass || reg.classApplied,
+        parentPhone: reg.parentPhone || "N/A",
+        email: reg.email || "",
+        status: (reg.status || "NEW").toUpperCase(),
+        formFeePaid: Boolean(reg.formFeePaid || creds.formFeePaid),
+        entranceScore: numScore,
+        documents: creds,
+        createdAt: reg.createdAt || new Date().toISOString(),
+        rawRegister: reg,
+      });
+    }
+
+    return rows;
+  }, [leads, remoteRecords]);
+
+  // Filtered rows by search and status
+  const filteredRows = useMemo(() => {
+    return unifiedRows.filter((r) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        r.fullName.toLowerCase().includes(q) ||
+        r.applicationNo.toLowerCase().includes(q) ||
+        r.parentPhone.toLowerCase().includes(q) ||
+        r.classApplied.toLowerCase().includes(q);
+
+      const s = r.status;
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        s === statusFilter ||
+        (statusFilter === "DOCS_PENDING" && (s === "APPLIED" || s === "DOCS_PENDING" || s === "NEW")) ||
+        (statusFilter === "INTERVIEW" && (s === "INTERVIEW" || s === "VERIFIED" || s === "SCREENED")) ||
+        (statusFilter === "CONVERTED" && (s === "ENROLLED" || s === "CONVERTED" || s === "ADMITTED"));
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [unifiedRows, searchQuery, statusFilter]);
+
   const handleCopy = (text: string) => {
     if (typeof window !== "undefined") {
       navigator.clipboard.writeText(text);
@@ -97,21 +247,146 @@ export default function AdmissionRegisterTable({
     }
   };
 
-  // Convert to Student action using enterprise atomic handshake
-  const handleAdmit = async (recordId: string) => {
-    if (!canMutate) {
-      setActionMessage({
-        type: "error",
-        text: "Access Denied: Only authorized staff can matriculate students.",
-      });
+  // Save manual entrance assessment score inline
+  const handleSaveScore = async (row: UnifiedApplicantRow, scoreVal: string) => {
+    const parsed = parseFloat(scoreVal);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      setActionMessage({ type: "error", text: "Please provide a valid score between 0 and 100." });
       return;
     }
 
-    setActionLoadingId(recordId);
+    setSavingScoreId(row.id);
     setActionMessage(null);
+
     try {
-      const res = await enrollApplicantFromRegisterAction({
-        registerId: recordId,
+      const res = await saveManualEntranceScoreAction({
+        leadId: row.leadId || row.id,
+        score: parsed,
+        schoolId,
+        schoolDomain,
+        notes: `Offline entrance examination score entered via Admissions Register table`,
+      });
+
+      if (res.success) {
+        setActionMessage({
+          type: "success",
+          text: `Entrance score of ${parsed}% saved successfully for ${row.fullName}.`,
+        });
+
+        if (row.rawLead && onLeadUpdated) {
+          onLeadUpdated({
+            ...row.rawLead,
+            documents: {
+              ...(row.rawLead.documents || {}),
+              entranceScore: parsed,
+              examScore: parsed,
+              examAggregate: parsed,
+              manualScoreEntry: true,
+              examPassed: parsed >= 50,
+            },
+          });
+        }
+
+        setEditingRowId(null);
+        setScoreInputVal("");
+        await fetchRecords();
+      } else {
+        setActionMessage({ type: "error", text: res.error || "Failed to save entrance score." });
+      }
+    } catch (err: any) {
+      console.error("Score save error:", err);
+      setActionMessage({ type: "error", text: err.message || "Failed to save entrance score." });
+    } finally {
+      setSavingScoreId(null);
+    }
+  };
+
+  // Bulk save manual entrance scores for multiple applicants
+  const handleSaveBulkScores = async () => {
+    const entries: Array<{ leadId: string; score: number }> = [];
+
+    for (const [rowId, val] of Object.entries(bulkScores)) {
+      if (val !== undefined && val !== "") {
+        const parsed = parseFloat(val);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+          const matchingRow = unifiedRows.find((r) => r.id === rowId);
+          if (matchingRow) {
+            entries.push({ leadId: matchingRow.leadId || matchingRow.id, score: parsed });
+          }
+        }
+      }
+    }
+
+    if (entries.length === 0) {
+      setActionMessage({ type: "error", text: "No new valid exam scores were entered." });
+      return;
+    }
+
+    setIsSavingBulk(true);
+    setActionMessage(null);
+
+    try {
+      const res = await bulkSaveManualEntranceScoresAction({
+        entries,
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res.success || (res.savedCount && res.savedCount > 0)) {
+        setActionMessage({
+          type: "success",
+          text: `Successfully saved ${res.savedCount || entries.length} offline entrance examination scores.`,
+        });
+
+        // Update parent state
+        if (onLeadUpdated) {
+          for (const e of entries) {
+            const matchingRow = unifiedRows.find((r) => r.leadId === e.leadId || r.id === e.leadId);
+            if (matchingRow && matchingRow.rawLead) {
+              onLeadUpdated({
+                ...matchingRow.rawLead,
+                documents: {
+                  ...(matchingRow.rawLead.documents || {}),
+                  entranceScore: e.score,
+                  examScore: e.score,
+                  examAggregate: e.score,
+                  manualScoreEntry: true,
+                  examPassed: e.score >= 50,
+                },
+              });
+            }
+          }
+        }
+
+        setIsBulkMode(false);
+        setBulkScores({});
+        await fetchRecords();
+      } else {
+        setActionMessage({ type: "error", text: res.errors?.join("; ") || "Failed to bulk save scores." });
+      }
+    } catch (err: any) {
+      console.error("Bulk save score error:", err);
+      setActionMessage({ type: "error", text: err.message || "Bulk score entry failed." });
+    } finally {
+      setIsSavingBulk(false);
+    }
+  };
+
+  // Advance stage quick trigger
+  const handleAdvanceStage = async (row: UnifiedApplicantRow) => {
+    if (!canMutate || !row.leadId) return;
+    const currentIdx = stages.findIndex((s) => s.id === row.stageId || s.name === row.status);
+    if (currentIdx === -1 || currentIdx >= stages.length - 1) return;
+
+    const targetStage = stages[currentIdx + 1];
+    setActionLoadingId(row.id);
+    setActionMessage(null);
+
+    try {
+      const res = await transitionCandidateStageAction({
+        leadId: row.leadId,
+        targetStageId: targetStage.id,
+        targetStatus: targetStage.name,
         schoolId,
         schoolDomain,
       });
@@ -119,137 +394,126 @@ export default function AdmissionRegisterTable({
       if (res.success) {
         setActionMessage({
           type: "success",
-          text: `Applicant enrolled successfully. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
+          text: `${row.fullName} advanced to ${targetStage.name}.`,
         });
-        await fetchRecords();
-        if (selectedRecord && selectedRecord.id === recordId) {
-          setIsDrawerOpen(false);
+        if (row.rawLead && onLeadUpdated) {
+          onLeadUpdated({
+            ...row.rawLead,
+            status: targetStage.name,
+            stageId: targetStage.id,
+          });
         }
+        await fetchRecords();
       } else {
-        setActionMessage({
-          type: "error",
-          text: res.error || "Failed to finalize enrollment.",
+        const missing = (res as any)?.missingPrerequisites;
+        if (missing && missing.length > 0) {
+          setActionMessage({
+            type: "error",
+            text: `Cannot advance to ${targetStage.name}. Prerequisites missing: ${missing.join(", ")}`,
+          });
+        } else {
+          setActionMessage({ type: "error", text: res.error || "Stage transition failed." });
+        }
+      }
+    } catch (err: any) {
+      console.error("Stage transition error:", err);
+      setActionMessage({ type: "error", text: err.message || "Stage transition failed." });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Convert/Admit applicant
+  const handleAdmit = async (row: UnifiedApplicantRow) => {
+    if (!canMutate) {
+      setActionMessage({ type: "error", text: "Access Denied: Only authorized staff can matriculate students." });
+      return;
+    }
+
+    setActionLoadingId(row.id);
+    setActionMessage(null);
+
+    try {
+      if (row.registerId) {
+        const res = await enrollApplicantFromRegisterAction({
+          registerId: row.registerId,
+          schoolId,
+          schoolDomain,
         });
+        if (res.success) {
+          setActionMessage({
+            type: "success",
+            text: `Applicant enrolled successfully. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
+          });
+          await fetchRecords();
+        } else {
+          setActionMessage({ type: "error", text: res.error || "Enrollment failed." });
+        }
+      } else if (row.leadId) {
+        const res = await enrollApplicantAction({
+          leadId: row.leadId,
+          schoolId,
+          schoolDomain,
+        });
+        if (res.success) {
+          setActionMessage({
+            type: "success",
+            text: `Applicant enrolled successfully. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
+          });
+          if (row.rawLead && onLeadUpdated) {
+            onLeadUpdated({ ...row.rawLead, status: "ENROLLED" });
+          }
+          await fetchRecords();
+        } else {
+          setActionMessage({ type: "error", text: res.error || "Enrollment failed." });
+        }
       }
     } catch (err: any) {
-      setActionMessage({
-        type: "error",
-        text: err.message || "Failed to finalize enrollment.",
-      });
+      console.error("Enrollment error:", err);
+      setActionMessage({ type: "error", text: err.message || "Enrollment failed." });
     } finally {
       setActionLoadingId(null);
     }
   };
-
-  // Mark Verified
-  const handleVerify = async (recordId: string) => {
-    if (!canMutate) return;
-    setActionLoadingId(recordId);
-    try {
-      const res = await fetch(`/api/v1/admissions/${recordId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": schoolId,
-        },
-        body: JSON.stringify({ status: "VERIFIED" }),
-      });
-      if (res.ok) {
-        setActionMessage({ type: "success", text: "Applicant documents marked as VERIFIED." });
-        await fetchRecords();
-      }
-    } catch (err: any) {
-      setActionMessage({ type: "error", text: err.message || "Verification failed." });
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  // Reject
-  const handleReject = async (recordId: string) => {
-    if (!canMutate) return;
-    if (!confirm("Are you sure you want to mark this application as REJECTED?")) return;
-    setActionLoadingId(recordId);
-    try {
-      const res = await fetch(`/api/v1/admissions/${recordId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": schoolId,
-        },
-        body: JSON.stringify({ status: "REJECTED" }),
-      });
-      if (res.ok) {
-        setActionMessage({ type: "success", text: "Application marked as REJECTED." });
-        await fetchRecords();
-      }
-    } catch (err: any) {
-      setActionMessage({ type: "error", text: err.message || "Rejection failed." });
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const filteredRecords = useMemo(() => {
-    return records.filter((r) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        r.firstName.toLowerCase().includes(q) ||
-        r.lastName.toLowerCase().includes(q) ||
-        r.applicationNo.toLowerCase().includes(q) ||
-        (r.parentPhone && r.parentPhone.includes(q)) ||
-        (r.classApplied && r.classApplied.toLowerCase().includes(q));
-
-      const s = (r.status || "NEW").toUpperCase();
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        s === statusFilter ||
-        (statusFilter === "DOCS_PENDING" && (s === "NEW" || s === "DOCS_SUBMITTED" || s === "UNDER_REVIEW")) ||
-        (statusFilter === "CONVERTED" && (s === "ADMITTED" || s === "ENROLLED"));
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [records, searchQuery, statusFilter]);
 
   const renderStatusBadge = (status: string) => {
-    const s = (status || "NEW").toUpperCase();
-    if (s === "DOCS_PENDING" || s === "NEW" || s === "DOCS_SUBMITTED" || s === "UNDER_REVIEW") {
+    const s = (status || "INQUIRY").toUpperCase();
+    if (s === "INQUIRY" || s === "NEW") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700">
+          <Clock className="w-3.5 h-3.5 text-slate-500" />
+          <span>Inquiry</span>
+        </span>
+      );
+    }
+    if (s === "DOCS_PENDING" || s === "APPLIED" || s === "DOCS_SUBMITTED" || s === "UNDER_REVIEW") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-          <Clock className="w-3.5 h-3.5" />
+          <Clock className="w-3.5 h-3.5 text-amber-600" />
           <span>Docs Pending</span>
         </span>
       );
     }
-    if (s === "VERIFIED") {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
-          <FileCheck className="w-3.5 h-3.5" />
-          <span>Verified</span>
-        </span>
-      );
-    }
-    if (s === "APPROVED") {
+    if (s === "VERIFIED" || s === "SCREENED" || s === "INTERVIEW" || s === "EXAM") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>Approved</span>
+          <FileCheck className="w-3.5 h-3.5 text-purple-600" />
+          <span>Exam / Screening</span>
         </span>
       );
     }
-    if (s === "REJECTED") {
+    if (s === "APPROVED" || s === "OFFERED" || s === "PROVISIONAL") {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-          <Ban className="w-3.5 h-3.5" />
-          <span>Rejected</span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+          <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+          <span>Offer Given</span>
         </span>
       );
     }
     if (s === "CONVERTED" || s === "ADMITTED" || s === "ENROLLED") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-          <UserCheck className="w-3.5 h-3.5" />
+          <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
           <span>Enrolled</span>
         </span>
       );
@@ -263,41 +527,41 @@ export default function AdmissionRegisterTable({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Alert toast message */}
+      {/* Action Notification Banner */}
       {actionMessage && (
         <div
-          className={`p-3.5 rounded-xl flex items-center justify-between text-xs font-bold ${
+          className={`p-3.5 rounded-xl flex items-center justify-between text-xs font-bold shadow-xs ${
             actionMessage.type === "success"
-              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-              : "bg-rose-50 text-rose-800 border border-rose-200"
+              ? "bg-emerald-50 text-emerald-900 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+              : "bg-rose-50 text-rose-900 border border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800"
           }`}
         >
           <div className="flex items-center gap-2">
             {actionMessage.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
             )}
             <span>{actionMessage.text}</span>
           </div>
           <button
             type="button"
             onClick={() => setActionMessage(null)}
-            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer ml-3"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Toolbar: Search + Stage Filter + Refresh */}
-      <div className="bg-white dark:bg-zinc-900 p-3 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
-        <div className="flex flex-1 items-center gap-3 w-full">
-          <div className="relative flex-1 max-w-md">
+      {/* Spreadsheet Toolbar: Search + Status Filter + Bulk Score Entry Toggle */}
+      <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 w-full">
+        <div className="flex flex-1 items-center gap-3 w-full flex-wrap sm:flex-nowrap">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search live register by candidate, app no, or phone..."
+              placeholder="Search register by candidate name, app no, or phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-800 dark:text-zinc-100"
@@ -309,72 +573,124 @@ export default function AdmissionRegisterTable({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 text-xs sm:text-sm font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-zinc-200 shadow-2xs shrink-0"
           >
-            <option value="ALL">All Statuses</option>
+            <option value="ALL">All Stages ({unifiedRows.length})</option>
+            <option value="INQUIRY">Inquiry</option>
             <option value="DOCS_PENDING">Docs Pending</option>
-            <option value="VERIFIED">Verified</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
+            <option value="INTERVIEW">Exam / Screening</option>
+            <option value="APPROVED">Offer Given</option>
             <option value="CONVERTED">Enrolled</option>
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchRecords}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Bulk offline score mode toggle */}
+          {canMutate && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isBulkMode) {
+                  setIsBulkMode(false);
+                  setBulkScores({});
+                } else {
+                  setIsBulkMode(true);
+                  const initial: Record<string, string> = {};
+                  unifiedRows.forEach((r) => {
+                    if (r.entranceScore !== null) {
+                      initial[r.id] = String(r.entranceScore);
+                    }
+                  });
+                  setBulkScores(initial);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                isBulkMode
+                  ? "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                  : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+              }`}
+              title="Fast Tabular Offline Entrance Exam Score Entry"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{isBulkMode ? "Exit Score Entry" : "Offline Exam Marks Entry"}</span>
+            </button>
+          )}
+
+          {isBulkMode && (
+            <button
+              type="button"
+              onClick={handleSaveBulkScores}
+              disabled={isSavingBulk}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingBulk ? "Saving..." : "Save All Scores"}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={fetchRecords}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
-      {/* Table Container: min-w-[900px] with horizontal overflow to prevent column overlap */}
+      {/* Spreadsheet Data Table */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200/90 dark:border-zinc-800 shadow-sm overflow-hidden w-full">
-        {loading && records.length === 0 ? (
+        {loading && unifiedRows.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-3">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto text-blue-500" />
-            <p className="text-xs sm:text-sm font-semibold">Loading live admissions register...</p>
+            <p className="text-xs sm:text-sm font-semibold">Loading admissions register...</p>
           </div>
-        ) : filteredRecords.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="p-12 text-center text-slate-400 space-y-2">
             <Users className="w-10 h-10 mx-auto text-slate-300 dark:text-zinc-600" />
-            <p className="text-sm font-bold text-slate-600 dark:text-zinc-300">No matching records found</p>
-            <p className="text-xs">Try adjusting your search criteria or filter.</p>
+            <p className="text-sm font-bold text-slate-600 dark:text-zinc-300">No applicants in register</p>
+            <p className="text-xs">No records match the active track or search filter.</p>
           </div>
         ) : (
           <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[900px] text-xs sm:text-sm">
+            <table className="w-full text-left border-collapse min-w-[980px] text-xs sm:text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">Application #</th>
-                  <th className="py-3 px-4">Candidate Name</th>
-                  <th className="py-3 px-4">Class</th>
-                  <th className="py-3 px-4">Parent Contact</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Form Fee</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-3.5">App #</th>
+                  <th className="py-3 px-3.5">Candidate Name</th>
+                  <th className="py-3 px-3.5">Class / Grade</th>
+                  <th className="py-3 px-3.5">Stage / Status</th>
+                  <th className="py-3 px-3.5">
+                    <div className="flex items-center gap-1">
+                      <span>Entrance Score</span>
+                      <span className="text-[10px] lowercase font-normal text-indigo-500">(0-100)</span>
+                    </div>
+                  </th>
+                  <th className="py-3 px-3.5">Form Fee</th>
+                  <th className="py-3 px-3.5">Parent Phone</th>
+                  <th className="py-3 px-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
-                {filteredRecords.map((r) => {
-                  const isFeePaid = Boolean(
-                    r.formFeePaid || (typeof r.credentialsJson === "object" && r.credentialsJson?.formFeePaid)
-                  );
+                {filteredRows.map((r) => {
                   const isActionLoading = actionLoadingId === r.id;
+                  const isSavingThisScore = savingScoreId === r.id;
+                  const isEditingThisRow = editingRowId === r.id || isBulkMode;
+                  const currentScore = r.entranceScore;
+                  const hasPassingScore = currentScore !== null && currentScore >= 50;
 
                   return (
                     <tr
                       key={r.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition"
+                      className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition group"
                     >
                       {/* Application # */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleCopy(r.applicationNo)}
-                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 px-2.5 py-1 rounded-md border border-slate-200 dark:border-zinc-700 hover:border-blue-400 transition cursor-pointer"
-                          title="Copy Application Number"
+                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 px-2 py-0.5 rounded-md border border-slate-200 dark:border-zinc-700 hover:border-blue-400 transition cursor-pointer"
+                          title="Click to copy Application Number"
                         >
                           <span>{r.applicationNo}</span>
                           {copiedAppNo === r.applicationNo ? (
@@ -385,69 +701,171 @@ export default function AdmissionRegisterTable({
                         </button>
                       </td>
 
-                      {/* Candidate Name - FULL NAME without truncation */}
-                      <td className="py-3.5 px-4">
+                      {/* Candidate Name */}
+                      <td className="py-3 px-3.5">
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedRecord(r);
-                            setIsDrawerOpen(true);
+                            setSelectedRow(r);
+                            if (r.rawLead) {
+                              setIsDossierOpen(true);
+                            } else {
+                              setIsRegisterDrawerOpen(true);
+                            }
                           }}
-                          className="font-bold text-slate-900 dark:text-zinc-50 hover:text-blue-600 dark:hover:text-blue-400 transition text-left cursor-pointer text-xs sm:text-sm"
+                          className="font-bold text-slate-900 dark:text-zinc-50 hover:text-blue-600 dark:hover:text-blue-400 transition text-left cursor-pointer flex items-center gap-2"
                         >
-                          {r.firstName} {r.lastName}
+                          <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-black flex items-center justify-center shrink-0">
+                            {r.firstName.slice(0, 1).toUpperCase()}
+                            {r.lastName.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span>{r.fullName}</span>
                         </button>
                       </td>
 
                       {/* Class */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 text-slate-800 dark:text-zinc-200 font-semibold text-xs">
                           <GraduationCap className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                           <span>{r.assignedClass || r.classApplied}</span>
                         </span>
                       </td>
 
-                      {/* Parent Contact */}
-                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-xs text-slate-600 dark:text-zinc-400">
-                        {r.parentPhone}
-                      </td>
+                      {/* Status / Stage */}
+                      <td className="py-3 px-3.5 whitespace-nowrap">{renderStatusBadge(r.status)}</td>
 
-                      {/* Status */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {renderStatusBadge(r.status)}
+                      {/* EDITABLE ENTRANCE SCORE COLUMN */}
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        {isEditingThisRow ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={isBulkMode ? bulkScores[r.id] ?? "" : scoreInputVal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (isBulkMode) {
+                                  setBulkScores((prev) => ({ ...prev, [r.id]: val }));
+                                } else {
+                                  setScoreInputVal(val);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (!isBulkMode) {
+                                  if (e.key === "Enter") handleSaveScore(r, scoreInputVal);
+                                  if (e.key === "Escape") setEditingRowId(null);
+                                }
+                              }}
+                              placeholder="0-100"
+                              className="w-16 px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-zinc-800 border-2 border-indigo-400 rounded-md outline-none text-slate-900 dark:text-zinc-50 text-center focus:ring-2 focus:ring-indigo-500"
+                              autoFocus={!isBulkMode}
+                            />
+                            {!isBulkMode && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={isSavingThisScore}
+                                  onClick={() => handleSaveScore(r, scoreInputVal)}
+                                  className="p-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transition shadow-2xs disabled:opacity-50"
+                                  title="Save Exam Score"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRowId(null)}
+                                  className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : currentScore !== null ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded text-xs font-bold font-mono border inline-flex items-center gap-1 ${
+                                hasPassingScore
+                                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                                  : "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                              }`}
+                            >
+                              {hasPassingScore ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              )}
+                              <span>{currentScore}%</span>
+                            </span>
+                            {canMutate && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingRowId(r.id);
+                                  setScoreInputVal(String(currentScore));
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition p-1 text-slate-400 hover:text-indigo-600 cursor-pointer"
+                                title="Edit Entrance Examination Score"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            {canMutate ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingRowId(r.id);
+                                  setScoreInputVal("");
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Record Score</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Pending</span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Form Fee */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {isFeePaid ? (
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        {r.formFeePaid ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                             <Check className="w-3 h-3" />
                             <span>Paid ✓</span>
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRecord(r);
-                              setIsDrawerOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition cursor-pointer"
-                            title="Click to view bank instructions"
-                          >
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                             <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-                            <span>Pending</span>
-                          </button>
+                            <span>Unpaid</span>
+                          </span>
                         )}
                       </td>
 
+                      {/* Parent Phone */}
+                      <td className="py-3 px-3.5 whitespace-nowrap font-mono text-xs text-slate-600 dark:text-zinc-400">
+                        {r.parentPhone}
+                      </td>
+
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedRecord(r);
-                              setIsDrawerOpen(true);
+                              setSelectedRow(r);
+                              if (r.rawLead) {
+                                setIsDossierOpen(true);
+                              } else {
+                                setIsRegisterDrawerOpen(true);
+                              }
                             }}
                             className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 font-bold text-xs text-slate-700 dark:text-zinc-300 transition flex items-center gap-1 cursor-pointer"
                           >
@@ -455,25 +873,27 @@ export default function AdmissionRegisterTable({
                             <span>Dossier</span>
                           </button>
 
-                          {canMutate && r.status !== "VERIFIED" && r.status !== "ENROLLED" && (
+                          {canMutate && r.status !== "ENROLLED" && (
                             <button
                               type="button"
-                              onClick={() => handleVerify(r.id)}
+                              onClick={() => handleAdvanceStage(r)}
                               disabled={isActionLoading}
-                              className="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-xs transition cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold text-xs transition cursor-pointer flex items-center gap-1"
+                              title="Advance to Next Stage"
                             >
-                              Verify
+                              <span>Advance</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           )}
 
                           {canMutate && r.status !== "ENROLLED" && (
                             <button
                               type="button"
-                              onClick={() => handleAdmit(r.id)}
+                              onClick={() => handleAdmit(r)}
                               disabled={isActionLoading}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
                             >
-                              {isActionLoading ? "Enrolling..." : "Convert"}
+                              {isActionLoading ? "..." : "Admit"}
                             </button>
                           )}
                         </div>
@@ -487,22 +907,41 @@ export default function AdmissionRegisterTable({
         )}
       </div>
 
-      {/* ADMISSION REGISTER DRAWER */}
-      {selectedRecord && (
-        <AdmissionRegisterDrawer
-          applicant={selectedRecord}
-          isOpen={isDrawerOpen}
+      {/* APPLICANT DOSSIER DRAWER (FOR LEADS) */}
+      {selectedRow && selectedRow.rawLead && (
+        <ApplicantDossierDrawer
+          lead={selectedRow.rawLead}
+          isOpen={isDossierOpen}
           onClose={() => {
-            setIsDrawerOpen(false);
-            setSelectedRecord(null);
+            setIsDossierOpen(false);
+            setSelectedRow(null);
+          }}
+          schoolId={schoolId}
+          schoolDomain={schoolDomain}
+          schoolName={schoolName}
+          canMutate={canMutate}
+          onLeadUpdated={fetchRecords}
+        />
+      )}
+
+      {/* ADMISSION REGISTER DRAWER (FOR LEGACY REGISTER ROWS) */}
+      {selectedRow && selectedRow.rawRegister && (
+        <AdmissionRegisterDrawer
+          applicant={selectedRow.rawRegister}
+          isOpen={isRegisterDrawerOpen}
+          onClose={() => {
+            setIsRegisterDrawerOpen(false);
+            setSelectedRow(null);
           }}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
           isAuthorized={canMutate}
-          onVerifyDocs={handleVerify}
-          onAdmit={handleAdmit}
-          onReject={handleReject}
+          onVerifyDocs={async () => {}}
+          onAdmit={async () => {
+            await handleAdmit(selectedRow);
+          }}
+          onReject={async () => {}}
           onRecordUpdated={fetchRecords}
         />
       )}

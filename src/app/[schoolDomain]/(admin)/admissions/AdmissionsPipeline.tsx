@@ -21,6 +21,7 @@ import {
   X,
   Lock,
   FileCheck,
+  FileText,
   Layers,
   Settings,
   AlertTriangle,
@@ -36,6 +37,7 @@ import {
   createAdmissionTrackAction,
   configureAdmissionStageAction,
   transitionCandidateStageAction,
+  saveManualEntranceScoreAction,
 } from "./actions";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import NewInquiryModal from "./NewInquiryModal";
@@ -52,6 +54,8 @@ export interface PipelineStageConfig {
     require_passport?: boolean;
     require_academic_results?: boolean;
     require_jamb?: boolean;
+    require_exam_score?: boolean;
+    min_exam_score?: number;
     min_age?: number;
     [key: string]: any;
   } | null;
@@ -143,14 +147,53 @@ export default function AdmissionsPipeline({
 
   // Tracks State
   const [tracks, setTracks] = useState<PipelineTrackConfig[]>(initialTracks || []);
-  const [activeTrackId, setActiveTrackId] = useState<string>(
-    initialTracks && initialTracks.length > 0 ? initialTracks[0].id : "default"
-  );
+
+  // Filter tracks strictly by the parent school's operating tier metadata
+  const visibleTracks = useMemo(() => {
+    if (!tracks || tracks.length === 0) return [];
+    if (!tiers || tiers.length === 0) return tracks;
+
+    const operatingTiers = new Set<string>();
+    for (const t of tiers) {
+      const lower = t.name.toLowerCase();
+      if (lower.includes("nursery") || lower.includes("daycare") || lower.includes("creche") || lower.includes("early")) {
+        operatingTiers.add("NURSERY");
+      }
+      if (lower.includes("primary") || lower.includes("basic") || lower.includes("elementary")) {
+        operatingTiers.add("PRIMARY");
+      }
+      if (lower.includes("secondary") || lower.includes("high") || lower.includes("jss") || lower.includes("sss") || (lower.includes("college") && !lower.includes("education"))) {
+        operatingTiers.add("SECONDARY");
+      }
+      if (lower.includes("university") || lower.includes("polytechnic") || lower.includes("tertiary") || lower.includes("undergraduate") || lower.includes("education")) {
+        operatingTiers.add("TERTIARY");
+      }
+    }
+
+    if (operatingTiers.size === 0) {
+      operatingTiers.add("PRIMARY");
+    }
+
+    const filtered = tracks.filter((t) => operatingTiers.has(t.tierType));
+    return filtered.length > 0 ? filtered : tracks;
+  }, [tracks, tiers]);
+
+  const [activeTrackId, setActiveTrackId] = useState<string>(() => {
+    if (visibleTracks && visibleTracks.length > 0) return visibleTracks[0].id;
+    if (initialTracks && initialTracks.length > 0) return initialTracks[0].id;
+    return "default";
+  });
+
+  useEffect(() => {
+    if (visibleTracks.length > 0 && !visibleTracks.some((t) => t.id === activeTrackId)) {
+      setActiveTrackId(visibleTracks[0].id);
+    }
+  }, [visibleTracks, activeTrackId]);
 
   // Active track and stages
   const activeTrack = useMemo(() => {
-    return tracks.find((t) => t.id === activeTrackId) || tracks[0] || null;
-  }, [tracks, activeTrackId]);
+    return visibleTracks.find((t) => t.id === activeTrackId) || visibleTracks[0] || null;
+  }, [visibleTracks, activeTrackId]);
 
   const stages: PipelineStageConfig[] = useMemo(() => {
     if (activeTrack && activeTrack.stages && activeTrack.stages.length > 0) {
@@ -158,6 +201,57 @@ export default function AdmissionsPipeline({
     }
     return FALLBACK_STAGES;
   }, [activeTrack]);
+
+  // Offline Entrance Exam Score Editing on Kanban Cards
+  const [editingScoreLeadId, setEditingScoreLeadId] = useState<string | null>(null);
+  const [inlineScoreInput, setInlineScoreInput] = useState<string>("");
+  const [savingCardScoreId, setSavingCardScoreId] = useState<string | null>(null);
+
+  const handleSaveCardScore = async (leadId: string, scoreVal: string) => {
+    const parsed = parseFloat(scoreVal);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      alert("Please enter a valid score between 0 and 100.");
+      return;
+    }
+    setSavingCardScoreId(leadId);
+    try {
+      const res = await saveManualEntranceScoreAction({
+        leadId,
+        score: parsed,
+        schoolId,
+        schoolDomain: schoolDomain || "",
+        notes: "Offline exam mark entered on Kanban card",
+      });
+      if (res.success) {
+        setLocalLeads((prev) =>
+          prev.map((l) => {
+            if (l.id !== leadId) return l;
+            const docs = (l.documents as any) || {};
+            return {
+              ...l,
+              documents: {
+                ...docs,
+                entranceScore: parsed,
+                examScore: parsed,
+                examAggregate: parsed,
+                manualScoreEntry: true,
+                examPassed: parsed >= 50,
+              },
+            };
+          })
+        );
+        setEditingScoreLeadId(null);
+        setInlineScoreInput("");
+      } else {
+        alert(res.error || "Failed to save exam score.");
+      }
+    } catch (err: any) {
+      console.error("Save card score error:", err);
+      alert(err.message || "Failed to save exam score.");
+    } finally {
+      setSavingCardScoreId(null);
+    }
+  };
 
   // Mobile Active Stage Tab (Sticky bar on small screens)
   const [mobileActiveStageId, setMobileActiveStageId] = useState<string>("");
@@ -473,6 +567,121 @@ export default function AdmissionsPipeline({
           </div>
         )}
 
+        {/* Offline Entrance Assessment Score Inline Entry */}
+        {(() => {
+          const currentStage = stages[sIdx];
+          const isAssessmentStage =
+            Boolean(currentStage?.constraints?.require_exam_score) ||
+            (currentStage?.name || "").toUpperCase().includes("EXAM") ||
+            (currentStage?.name || "").toUpperCase().includes("ASSESSMENT") ||
+            (currentStage?.name || "").toUpperCase().includes("SCREENING") ||
+            (currentStage?.name || "").toUpperCase().includes("INTERVIEW") ||
+            (lead.status || "").toUpperCase().includes("INTERVIEW") ||
+            (lead.status || "").toUpperCase().includes("EXAM");
+
+          const docs = (lead.documents as any) || {};
+          const currentScore =
+            docs.entranceScore ?? docs.examScore ?? docs.examAggregate ?? null;
+          const isEditing = editingScoreLeadId === lead.id;
+          const hasScore = currentScore !== null && currentScore !== undefined;
+          const hasPassed = hasScore && Number(currentScore) >= 50;
+
+          if (!isAssessmentStage && !hasScore) return null;
+
+          return (
+            <div
+              className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-indigo-500 shrink-0" />
+                  <span>Entrance Mark:</span>
+                </span>
+
+                {isEditing ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={inlineScoreInput}
+                      onChange={(e) => setInlineScoreInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveCardScore(lead.id, inlineScoreInput);
+                        if (e.key === "Escape") setEditingScoreLeadId(null);
+                      }}
+                      placeholder="0-100"
+                      className="w-14 px-1.5 py-0.5 text-xs font-mono font-bold bg-white dark:bg-zinc-800 border-2 border-indigo-400 rounded outline-none text-slate-900 dark:text-zinc-50 text-center"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={savingCardScoreId === lead.id}
+                      onClick={() => handleSaveCardScore(lead.id, inlineScoreInput)}
+                      className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer transition disabled:opacity-50"
+                    >
+                      {savingCardScoreId === lead.id ? "..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingScoreLeadId(null)}
+                      className="text-slate-400 hover:text-slate-600 text-xs px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : hasScore ? (
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono border inline-flex items-center gap-1 ${
+                        hasPassed
+                          ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                          : "bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                      }`}
+                    >
+                      {hasPassed ? (
+                        <Check className="w-3 h-3 text-emerald-600" />
+                      ) : (
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                      )}
+                      <span>{currentScore}%</span>
+                    </span>
+                    {canMutate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingScoreLeadId(lead.id);
+                          setInlineScoreInput(String(currentScore));
+                        }}
+                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {canMutate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingScoreLeadId(lead.id);
+                          setInlineScoreInput("");
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition cursor-pointer"
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                        <span>Enter Mark</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Bottom Row: Fee Badge + Advance Action */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
           <div>
@@ -628,29 +837,36 @@ export default function AdmissionsPipeline({
           </button>
         </div>
 
-        {/* Dynamic Multi-Track Selector (Nursery, Primary, Secondary, Tertiary) */}
-        {tracks && tracks.length > 0 && mainTab === "leads" && (
+        {/* Dynamic Multi-Track Selector filtered strictly to operating academic tiers */}
+        {visibleTracks && visibleTracks.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 flex items-center gap-1">
               <Layers className="w-3.5 h-3.5 text-indigo-500" />
               <span>Track:</span>
             </span>
-            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200 dark:border-zinc-700">
-              {tracks.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setActiveTrackId(t.id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeTrack?.id === t.id
-                      ? "bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
+            {visibleTracks.length === 1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-950/60 rounded-xl border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span>{visibleTracks[0].name}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200 dark:border-zinc-700">
+                {visibleTracks.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTrackId(t.id)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeTrack?.id === t.id
+                        ? "bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {isTenantAdmin && (
               <button
@@ -672,6 +888,14 @@ export default function AdmissionsPipeline({
           schoolDomain={schoolDomain || ""}
           schoolName={schoolName}
           canMutate={canMutate}
+          leads={filteredLeads}
+          stages={stages}
+          activeTrackName={activeTrack?.name || "Active Track"}
+          onLeadUpdated={(updatedLead) => {
+            setLocalLeads((prev) =>
+              prev.map((l) => (l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
+            );
+          }}
         />
       ) : (
         <>
