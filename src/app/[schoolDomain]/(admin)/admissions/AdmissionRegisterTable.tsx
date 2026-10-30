@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import AdmissionRegisterDrawer from "./AdmissionRegisterDrawer";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import {
   enrollApplicantFromRegisterAction,
@@ -96,7 +95,6 @@ export default function AdmissionRegisterTable({
   // Drawer state
   const [selectedRow, setSelectedRow] = useState<UnifiedApplicantRow | null>(null);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
-  const [isRegisterDrawerOpen, setIsRegisterDrawerOpen] = useState(false);
 
   // Action feedback
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -707,11 +705,7 @@ export default function AdmissionRegisterTable({
                           type="button"
                           onClick={() => {
                             setSelectedRow(r);
-                            if (r.rawLead) {
-                              setIsDossierOpen(true);
-                            } else {
-                              setIsRegisterDrawerOpen(true);
-                            }
+                            setIsDossierOpen(true);
                           }}
                           className="font-bold text-slate-900 dark:text-zinc-50 hover:text-blue-600 dark:hover:text-blue-400 transition text-left cursor-pointer flex items-center gap-2"
                         >
@@ -861,11 +855,7 @@ export default function AdmissionRegisterTable({
                             type="button"
                             onClick={() => {
                               setSelectedRow(r);
-                              if (r.rawLead) {
-                                setIsDossierOpen(true);
-                              } else {
-                                setIsRegisterDrawerOpen(true);
-                              }
+                              setIsDossierOpen(true);
                             }}
                             className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 font-bold text-xs text-slate-700 dark:text-zinc-300 transition flex items-center gap-1 cursor-pointer"
                           >
@@ -907,10 +897,11 @@ export default function AdmissionRegisterTable({
         )}
       </div>
 
-      {/* APPLICANT DOSSIER DRAWER (FOR LEADS) */}
-      {selectedRow && selectedRow.rawLead && (
+      {/* UNIFIED MASTER CANDIDATE DOSSIER DRAWER */}
+      {selectedRow && (
         <ApplicantDossierDrawer
           lead={selectedRow.rawLead}
+          applicant={selectedRow.rawRegister || selectedRow}
           isOpen={isDossierOpen}
           onClose={() => {
             setIsDossierOpen(false);
@@ -921,27 +912,6 @@ export default function AdmissionRegisterTable({
           schoolName={schoolName}
           canMutate={canMutate}
           onLeadUpdated={fetchRecords}
-        />
-      )}
-
-      {/* ADMISSION REGISTER DRAWER (FOR LEGACY REGISTER ROWS) */}
-      {selectedRow && selectedRow.rawRegister && (
-        <AdmissionRegisterDrawer
-          applicant={selectedRow.rawRegister}
-          isOpen={isRegisterDrawerOpen}
-          onClose={() => {
-            setIsRegisterDrawerOpen(false);
-            setSelectedRow(null);
-          }}
-          schoolId={schoolId}
-          schoolDomain={schoolDomain}
-          schoolName={schoolName}
-          isAuthorized={canMutate}
-          onVerifyDocs={async () => {}}
-          onAdmit={async () => {
-            await handleAdmit(selectedRow);
-          }}
-          onReject={async () => {}}
           onRecordUpdated={fetchRecords}
         />
       )}
