@@ -1333,7 +1333,7 @@ export default function StudentTable({
       </div>
 
       {/* MOBILE CARDS VIEW (< md) - Zero Features Dropped */}
-      <div className="md:hidden space-y-3.5">
+      <div className="md:hidden space-y-3.5 w-full max-w-full overflow-hidden">
         {filteredStudents.length === 0 ? (
           <div className="p-8 text-center text-slate-500 dark:text-zinc-500 italic bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
             No students found in the roster matching this filter.
@@ -1342,7 +1342,7 @@ export default function StudentTable({
           filteredStudents.map((student) => (
             <div 
               key={student.id} 
-              className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3 transition-shadow hover:shadow-md"
+              className="p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3 transition-shadow hover:shadow-md w-full max-w-full overflow-hidden"
             >
               {/* Card Header: Checkbox, Name, and Status Selector */}
               <div className="flex items-start justify-between gap-3">
@@ -1435,7 +1435,7 @@ export default function StudentTable({
               )}
 
               {/* Action Buttons Row */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800/60">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60 w-full">
                 <button 
                   onClick={() => setSelectedStudent(student)}
                   className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"

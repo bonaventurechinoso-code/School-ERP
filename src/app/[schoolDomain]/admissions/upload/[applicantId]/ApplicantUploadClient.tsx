@@ -198,21 +198,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-100 flex flex-col justify-between">
       {/* Top Brand Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <header className="bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm sticky top-0 z-30 w-full overflow-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-md shadow-indigo-500/20">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight break-words">
                 {schoolName}
               </h1>
               <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Admissions & Credential Intake</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold border border-emerald-200 dark:border-emerald-800/40">
+          <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold border border-emerald-200 dark:border-emerald-800/40 shrink-0 self-start sm:self-auto">
             <ShieldCheck className="w-4 h-4" />
             <span>Secure Direct Session</span>
           </div>
@@ -220,7 +220,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 flex-1">
+      <main className="max-w-5xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-12 flex-1 overflow-hidden">
         {/* SUCCESS STATE */}
         {isSuccess ? (
           <div className="max-w-2xl mx-auto bg-white dark:bg-zinc-900 rounded-3xl p-8 sm:p-12 shadow-xl border border-emerald-100 dark:border-emerald-900/30 text-center animate-in zoom-in-95 duration-300">

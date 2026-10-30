@@ -372,7 +372,7 @@ export default function PublicApplyClient({
   // If application was successfully submitted, display confirmation view
   if (submittedRef) {
     return (
-      <div className="w-full max-w-xl mx-auto px-4 py-8 animate-in fade-in duration-300">
+      <div className="w-full max-w-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 animate-in fade-in duration-300 overflow-hidden">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-md text-center">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-9 h-9" />
@@ -382,7 +382,7 @@ export default function PublicApplyClient({
             Application Received • INQUIRY Stage
           </span>
 
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white break-words">
             Application Submitted Successfully!
           </h1>
           <p className="text-slate-600 dark:text-slate-300 text-sm mt-2">
@@ -396,7 +396,7 @@ export default function PublicApplyClient({
               Official Application Reference Number
             </span>
             <div className="flex items-center gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold tracking-widest text-indigo-600 dark:text-indigo-400 font-mono">
+              <span className="text-xl sm:text-3xl font-extrabold tracking-wider sm:tracking-widest text-indigo-600 dark:text-indigo-400 font-mono break-all">
                 {submittedRef}
               </span>
               <button
@@ -448,18 +448,18 @@ export default function PublicApplyClient({
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-3 sm:px-6 pt-4 pb-28">
+    <div className="w-full max-w-2xl mx-auto px-3 sm:px-6 pt-4 pb-28 overflow-hidden">
       {/* Top Tenant Header */}
-      <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-200 dark:border-slate-800 w-full">
         <div>
           <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
             Phase 2 Public Portal
           </span>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white break-words">
             {schoolName}
           </h1>
         </div>
-        <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-full border border-indigo-200/60 shrink-0">
+        <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-[11px] sm:text-xs font-semibold rounded-full border border-indigo-200/60 shrink-0 self-start sm:self-auto">
           2026/2027 Admissions
         </span>
       </div>

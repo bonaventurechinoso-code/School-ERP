@@ -1003,7 +1003,7 @@ export default function StaffPortalClient({
       </aside>
 
       {/* 2. Main Content Canvas */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto overflow-x-hidden relative w-full max-w-full">
         {/* Unified Top Navigation / Status Header matching Admin layout */}
         <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-zinc-800/50 flex items-center justify-between gap-2.5 sm:gap-4 w-full px-3.5 sm:px-6 md:px-8 py-2.5 md:py-3.5 shadow-xs flex-shrink-0 sticky top-0 z-20 transition-colors duration-200">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
@@ -1169,7 +1169,7 @@ export default function StaffPortalClient({
         </header>
 
         {/* High-Density Dashboard Canvas Container */}
-        <div className="p-4 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full space-y-6">
+        <div className="p-3.5 sm:p-6 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full max-w-full overflow-hidden space-y-6">
           {/* Access Denied Interception Notice */}
           {isAccessDenied && (
             <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -1198,7 +1198,7 @@ export default function StaffPortalClient({
           {activeTab === "overview" && (
             <div className="space-y-6 animate-in fade-in duration-300">
               {/* Dashboard Client Header */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-zinc-900 p-4 sm:p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs w-full max-w-full overflow-hidden">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-600 dark:text-emerald-400">
@@ -1208,7 +1208,7 @@ export default function StaffPortalClient({
                       {staffRole} • Active Staff
                     </span>
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-zinc-50 truncate">
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-zinc-50 break-words line-clamp-2">
                     Welcome, {staffName}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">

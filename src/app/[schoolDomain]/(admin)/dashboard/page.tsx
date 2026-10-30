@@ -108,9 +108,9 @@ export default async function TenantDashboard({
   const isFinanceAuthorized = isFinanceRole(userRole, staffRole);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-200">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-200 w-full max-w-full overflow-hidden">
       {isSuspended && (
-        <div className="bg-amber-500/10 border border-amber-300 text-amber-900 dark:text-amber-200 dark:border-amber-700/50 p-4 rounded-xl flex items-center justify-between">
+        <div className="bg-amber-500/10 border border-amber-300 text-amber-900 dark:text-amber-200 dark:border-amber-700/50 p-3.5 sm:p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full max-w-full overflow-hidden">
           <div>
             <p className="font-semibold text-sm sm:text-base">Subscription Overdue - Institutional Access Restricted</p>
             <p className="text-xs sm:text-sm text-amber-800 dark:text-amber-300">
@@ -119,7 +119,7 @@ export default async function TenantDashboard({
           </div>
           <a
             href="/dashboard/subscription"
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap ml-4"
+            className="w-full sm:w-auto text-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap ml-0 sm:ml-4"
           >
             Renew Now
           </a>
@@ -144,7 +144,7 @@ export default async function TenantDashboard({
       />
 
       {/* Asynchronous Modular KPI Card Grid with Independent Suspense Boundaries */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-6 w-full max-w-full">
 
         {/* 1. Student Roster Module */}
         <Suspense fallback={<DashboardSkeleton />}>

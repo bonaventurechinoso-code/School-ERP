@@ -78,7 +78,7 @@ export default async function BillingsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 w-full max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 dark:border-zinc-800">
         <div>

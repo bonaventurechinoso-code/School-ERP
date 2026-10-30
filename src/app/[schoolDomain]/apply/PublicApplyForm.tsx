@@ -389,13 +389,13 @@ export default function PublicApplyForm({
     const encoded = encodeURIComponent(submittedAppNo || "");
     const finalTrackUrl = redirectUrl || `/${derivedDomain}/admissions/track/${encoded}`;
     return (
-      <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl p-8 sm:p-12 text-center animate-in fade-in zoom-in-95">
+      <div className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 rounded-3xl shadow-xl p-6 sm:p-12 text-center animate-in fade-in zoom-in-95 w-full max-w-full overflow-hidden">
         <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-950/60 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-6">
           <CheckCircle className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">Application Received!</h2>
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 break-words">Application Received!</h2>
         {submittedAppNo && (
-          <div className="inline-block mt-3 px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-sm border border-indigo-200 dark:border-indigo-800">
+          <div className="inline-block mt-3 px-3 sm:px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs sm:text-sm border border-indigo-200 dark:border-indigo-800 break-all">
             Application No: {submittedAppNo}
           </div>
         )}
@@ -448,7 +448,7 @@ export default function PublicApplyForm({
   const panelStyles = "bg-slate-50/60 dark:bg-zinc-900/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/80 space-y-3";
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center py-4 px-4 max-w-[480px] mx-auto w-full">
+    <div className="min-h-[100dvh] flex flex-col justify-center py-4 px-3 sm:px-4 max-w-[480px] mx-auto w-full">
       <div className="bg-white text-slate-900 dark:bg-zinc-950 dark:text-slate-50 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-300 max-h-[92dvh] overflow-y-auto scrollbar-hide flex flex-col">
         {/* Header Compact */}
         <div className="p-4 text-center bg-slate-900 dark:bg-zinc-950 relative transition-colors duration-300">
@@ -458,7 +458,7 @@ export default function PublicApplyForm({
           <div className="mx-auto w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 shadow-xs bg-white/10 backdrop-blur-xs border border-white/20">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-[22px] font-bold text-white tracking-tight mb-1">
+          <h1 className="text-lg sm:text-[22px] font-bold text-white tracking-tight mb-1 break-words">
             Apply to {schoolName}
           </h1>
           <p className="text-[13px] text-slate-400 dark:text-zinc-400 leading-tight mb-3">

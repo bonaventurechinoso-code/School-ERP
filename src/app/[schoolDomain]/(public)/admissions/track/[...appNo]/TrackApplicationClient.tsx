@@ -350,8 +350,8 @@ export default function TrackApplicationClient({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-100 flex flex-col justify-between">
       {/* BRAND TOP HEADER */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-xs sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <header className="bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-xs sticky top-0 z-30 w-full overflow-hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-xl text-white flex items-center justify-center font-black shadow-md"
@@ -360,14 +360,14 @@ export default function TrackApplicationClient({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight">
+              <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight break-words">
                 {schoolName}
               </h1>
               <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Admissions Tracking &amp; KYC Verification</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold border border-emerald-200 dark:border-emerald-800/40">
+          <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold border border-emerald-200 dark:border-emerald-800/40 shrink-0 self-start sm:self-auto">
             <ShieldCheck className="w-4 h-4" />
             <span>Secure Direct Session</span>
           </div>
@@ -375,15 +375,15 @@ export default function TrackApplicationClient({
       </header>
 
       {/* MAIN CONTAINER */}
-      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 flex-1 space-y-8">
+      <main className="max-w-5xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-12 flex-1 space-y-6 sm:space-y-8 overflow-hidden">
         {/* APPLICANT BIO BANNER */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-900/40 relative overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl border border-indigo-900/40 relative overflow-hidden w-full max-w-full">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 mb-3 flex-wrap">
                 <span>Admissions Tracker</span>
                 <span>&bull;</span>
-                <span className="font-mono">App #{applicant.applicationNo}</span>
+                <span className="font-mono break-all">App #{applicant.applicationNo}</span>
                 <button
                   onClick={handleCopyAppNo}
                   className="hover:text-white transition ml-1"

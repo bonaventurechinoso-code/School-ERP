@@ -79,7 +79,7 @@ export default async function AuditLogsPage({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 w-full max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 dark:border-zinc-800">
         <div>
@@ -151,8 +151,8 @@ export default async function AuditLogsPage({
           <span className="text-xs text-slate-400">Immutable ledger rows</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[650px] text-left text-xs">
             <thead>
               <tr className="bg-slate-50/70 dark:bg-zinc-950/50 border-b border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Action</th>

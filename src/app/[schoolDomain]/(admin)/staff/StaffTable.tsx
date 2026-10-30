@@ -1069,7 +1069,7 @@ export default function StaffTable({
                 placeholder="Search staff by name or email..."
                 value={searchQuery}
                 onChange={handleSearchChange}
-                className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-56 sm:w-64 bg-slate-50/50"
+                className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-64 bg-slate-50/50"
               />
             </div>
 
@@ -1115,7 +1115,7 @@ export default function StaffTable({
             </select>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             {/* DEPARTMENTS BUTTON */}
             <button
               onClick={() => setIsDeptModalOpen(true)}
@@ -1496,9 +1496,9 @@ export default function StaffTable({
       )}
 
       {/* MASTER STAFF TABLE */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden w-full max-w-full">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[700px] text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
                 <th className="p-4">Staff Member & ID</th>

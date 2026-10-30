@@ -398,7 +398,7 @@ export default function SuperAdminTenantsPage() {
       </div>
 
       {/* 2. TOP KPI CARDS ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full">
         <div className="p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wider uppercase">
@@ -557,7 +557,7 @@ export default function SuperAdminTenantsPage() {
       </div>
 
       {/* 4. RESPONSIVE TENANTS CONTAINER (DESKTOP TABLE + MOBILE CARDS) */}
-      <div className="rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden">
+      <div className="rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs overflow-hidden w-full max-w-full">
         {/* DESKTOP VIEW (md+) */}
         <div className="overflow-x-auto">
           <table className="hidden md:table w-full text-left text-sm whitespace-nowrap">
@@ -769,7 +769,7 @@ export default function SuperAdminTenantsPage() {
         </div>
 
         {/* MOBILE STACKED CARDS (<768px) */}
-        <div className="md:hidden grid gap-3 p-3">
+        <div className="md:hidden flex flex-col gap-3 p-2.5 sm:p-3 w-full max-w-full overflow-hidden">
           {loading ? (
             <div className="py-8 text-center text-xs text-slate-400">
               Loading institutional tenants...
@@ -787,34 +787,34 @@ export default function SuperAdminTenantsPage() {
               return (
                 <div
                   key={tenant.id}
-                  className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+                  className="p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3 w-full max-w-full overflow-hidden"
                 >
                   {/* Top Row: School Name + Subdomain + Status Badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-start justify-between gap-2 w-full">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <div
                         className={`w-9 h-9 rounded-full bg-gradient-to-br ${gradient} text-white font-bold text-xs flex items-center justify-center shrink-0`}
                       >
                         {initials}
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-900 dark:text-zinc-100 text-sm truncate">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 dark:text-zinc-100 text-sm truncate" title={tenant.name}>
                           {tenant.name}
                         </div>
-                        <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 truncate">
+                        <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 break-all">
                           /{tenant.subdomain}
                         </div>
                       </div>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0 ml-auto">
                       {tenant.status === "ACTIVE" && (
-                        <span className="bg-green-100 text-green-700 border border-green-200 px-3 py-1 rounded-full text-xs font-bold inline-block">
+                        <span className="bg-green-100 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800 px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold inline-flex items-center gap-1">
                           ● ACTIVE
                         </span>
                       )}
                       {tenant.status === "SUSPENDED" && (
-                        <span className="bg-orange-100 text-orange-700 border border-orange-200 px-3 py-1 rounded-full text-xs font-bold inline-block">
+                        <span className="bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 border border-orange-200 dark:border-orange-800 px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold inline-flex items-center gap-1">
                           ● SUSPENDED
                         </span>
                       )}
@@ -822,7 +822,7 @@ export default function SuperAdminTenantsPage() {
                   </div>
 
                   {/* Stats Row */}
-                  <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-zinc-800/60 px-3 py-1.5 rounded-lg">
+                  <div className="w-full flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-zinc-800/60 px-3 py-1.5 rounded-lg">
                     <span>
                       Students: <strong className="text-slate-800 dark:text-zinc-200">{(tenant.students_count || 0).toLocaleString()}</strong>
                     </span>
@@ -831,11 +831,11 @@ export default function SuperAdminTenantsPage() {
                     </span>
                   </div>
 
-                  {/* 3 Action Buttons in Flex Wrap */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                  {/* 3 Action Buttons in Flex Wrap with full mobile support */}
+                  <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 pt-1 w-full">
                     <Link
                       href={`/${tenant.subdomain}/dashboard`}
-                      className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition"
+                      className="flex-1 sm:flex-none min-w-[120px] justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition text-center whitespace-nowrap"
                     >
                       <span>View as Tenant</span>
                     </Link>
@@ -845,7 +845,7 @@ export default function SuperAdminTenantsPage() {
                         type="button"
                         disabled={isUpdating}
                         onClick={() => handleToggleStatus(tenant)}
-                        className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
+                        className="flex-1 sm:flex-none min-w-[80px] justify-center bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer text-center whitespace-nowrap"
                       >
                         {isUpdating ? "Suspending..." : "Suspend"}
                       </button>
@@ -854,7 +854,7 @@ export default function SuperAdminTenantsPage() {
                         type="button"
                         disabled={isUpdating}
                         onClick={() => handleToggleStatus(tenant)}
-                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer"
+                        className="flex-1 sm:flex-none min-w-[80px] justify-center bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer text-center whitespace-nowrap"
                       >
                         {isUpdating ? "Reactivating..." : "Reactivate"}
                       </button>
@@ -866,7 +866,7 @@ export default function SuperAdminTenantsPage() {
                         setTenantToDelete(tenant);
                         setDeleteConfirmText("");
                       }}
-                      className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                      className="flex-1 sm:flex-none min-w-[75px] justify-center bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer text-center whitespace-nowrap"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Delete</span>

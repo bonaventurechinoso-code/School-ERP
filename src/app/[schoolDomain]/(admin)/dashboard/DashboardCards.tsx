@@ -366,8 +366,8 @@ export async function CollectionBankCard({
   const isConfigured = Boolean(bank?.settlementAccountNumber && bank?.settlementBankName);
 
   return (
-    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div className="flex items-start sm:items-center gap-3.5">
+    <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full max-w-full overflow-hidden">
+      <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
         <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
           <Building2 className="w-5 h-5" />
         </div>
@@ -381,7 +381,7 @@ export async function CollectionBankCard({
             </span>
           </div>
           {isConfigured ? (
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 break-all sm:break-normal">
               <span className="font-semibold text-slate-800 dark:text-zinc-200">
                 {bank?.settlementBankName}
               </span>{" "}
@@ -401,7 +401,7 @@ export async function CollectionBankCard({
 
       <Link
         href={`/${subdomain}/settings/bank`}
-        className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 transition shrink-0"
+        className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 transition shrink-0"
       >
         {isConfigured ? "Edit Bank Settings" : "Setup Bank Account"}
       </Link>
