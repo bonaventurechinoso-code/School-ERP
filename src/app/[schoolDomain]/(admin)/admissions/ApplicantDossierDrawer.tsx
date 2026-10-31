@@ -227,13 +227,36 @@ export default function ApplicantDossierDrawer({
     activeCandidate.parentEmail || activeCandidate.email || activeCandidate.studentEmail || "";
   const cleanPhone = parentPhone.replace(/\D/g, "");
 
+  const receiptUrl =
+    docs.applicationFeeReceiptUrl ||
+    docs.formFeeReceiptUrl ||
+    localCandidate?.applicationFeeReceiptUrl ||
+    activeCandidate?.applicationFeeReceiptUrl ||
+    (docs.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object" ? docs.applicationFeeReceipt.url : null) ||
+    (typeof docs.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null);
+
   const isFeePaid = Boolean(
     docs.formFeePaid ||
       docs.feePaid ||
+      localCandidate?.formFeePaid ||
       activeCandidate.formFeePaid ||
+      docs.formFeeStatus === "PAID" ||
+      localCandidate?.formFeeStatus === "PAID" ||
+      activeCandidate?.formFeeStatus === "PAID" ||
       currentStatus === "APPROVED" ||
       currentStatus === "ENROLLED"
   );
+
+  const isFeePending = Boolean(
+    !isFeePaid &&
+      (docs.formFeeStatus === "PENDING" ||
+        docs.formFeeStatus === "PENDING_VERIFICATION" ||
+        localCandidate?.formFeeStatus === "PENDING" ||
+        activeCandidate?.formFeeStatus === "PENDING" ||
+        Boolean(receiptUrl))
+  );
+
+  const feeState: "UNPAID" | "PENDING" | "PAID" = isFeePaid ? "PAID" : isFeePending ? "PENDING" : "UNPAID";
 
   const bankDetails = {
     bankName: "Zenith Bank",
@@ -419,7 +442,13 @@ export default function ApplicantDossierDrawer({
         setAlertMsg({ type: "success", text: "Application fee verified and marked as PAID ✓" });
         setLocalCandidate((prev: any) => ({
           ...prev,
-          documents: { ...(prev.documents || {}), formFeePaid: true },
+          formFeePaid: true,
+          formFeeStatus: "PAID",
+          documents: {
+            ...(prev?.documents || {}),
+            formFeePaid: true,
+            formFeeStatus: "PAID",
+          },
         }));
         if (onLeadUpdated) onLeadUpdated();
         if (onRecordUpdated) onRecordUpdated();
@@ -915,18 +944,48 @@ export default function ApplicantDossierDrawer({
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
                     Application Fee
                   </h4>
-                  {isFeePaid ? (
+                  {feeState === "PAID" ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300">
                       <Check className="w-3.5 h-3.5" />
-                      <span>Paid ✓</span>
+                      <span>Paid</span>
+                    </span>
+                  ) : feeState === "PENDING" ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300">
+                      <Clock className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                      <span>Pending</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300">
-                      <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                      <span>Pending Payment</span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                      <span>Unpaid</span>
                     </span>
                   )}
                 </div>
+
+                {/* PARENT RECEIPT INSPECTION BANNER */}
+                {receiptUrl && (
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-blue-950 dark:text-blue-200 truncate">
+                          Application Fee Receipt Attached
+                        </p>
+                        <p className="text-[10px] text-blue-700 dark:text-blue-400 truncate">
+                          Proof of payment uploaded by parent for verification
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={receiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-900 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 rounded-md shadow-xs hover:bg-blue-50 dark:hover:bg-zinc-800 shrink-0 transition"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Inspect Receipt</span>
+                    </a>
+                  </div>
+                )}
 
                 <div className="p-3 bg-slate-50 dark:bg-zinc-800/50 rounded-lg text-xs space-y-1.5 font-mono">
                   <div className="flex justify-between">

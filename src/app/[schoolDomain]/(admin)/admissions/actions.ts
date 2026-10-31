@@ -1798,66 +1798,111 @@ export async function markFormFeePaidAction(payload: {
 }) {
   try {
     const session = await getSession();
-    const registerRecord = await basePrisma.admissionRegister.findFirst({
+    let registerRecord = await basePrisma.admissionRegister.findFirst({
       where: {
         OR: [{ id: payload.registerId }, { applicationNo: payload.registerId }],
       },
     });
 
-    if (!registerRecord) {
-      return { success: false, error: "Applicant record not found" };
-    }
-
-    let rawCreds: any = registerRecord.credentialsJson || {};
-    let isArrayCreds = Array.isArray(rawCreds);
-    let credsObj = isArrayCreds ? { documents: rawCreds } : { ...(rawCreds || {}) };
-
-    credsObj.formFeePaid = true;
-    const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
-    const newLog = {
-      fromStatus: registerRecord.status,
-      toStatus: registerRecord.status,
-      action: "FORM_FEE_PAID",
-      changedById: payload.userRole || session?.userId || session?.name || "Admissions Officer",
-      reason: "Application fee marked as PAID via manual bank transfer",
-      createdAt: new Date().toISOString(),
-    };
-    credsObj.statusLogs = [...existingLogs, newLog];
-
-    const updated = await basePrisma.admissionRegister.update({
-      where: { id: registerRecord.id },
-      data: {
-        credentialsJson: credsObj,
-        updatedAt: new Date(),
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          { id: payload.registerId },
+          ...(registerRecord?.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+          ...(registerRecord?.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+        ],
       },
     });
 
-    // Also sync log to linked AdmissionLead if present
-    try {
-      const lead = await basePrisma.admissionLead.findFirst({
-        where: {
-          OR: [
-            { id: payload.registerId },
-            ...(registerRecord.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
-            ...(registerRecord.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
-          ],
+    if (!registerRecord && !lead) {
+      return { success: false, error: "Applicant record not found" };
+    }
+
+    const verifiedBy = payload.userRole || session?.userId || session?.name || "Admissions Officer";
+    const verifiedAt = new Date().toISOString();
+
+    let updated: any = null;
+
+    if (registerRecord) {
+      let rawCreds: any = registerRecord.credentialsJson || {};
+      let isArrayCreds = Array.isArray(rawCreds);
+      let credsObj = isArrayCreds ? { documents: rawCreds } : { ...(rawCreds || {}) };
+
+      credsObj.formFeePaid = true;
+      credsObj.formFeeStatus = "PAID";
+      credsObj.paymentState = "SETTLED";
+      credsObj.formFeeVerifiedAt = verifiedAt;
+      credsObj.formFeeVerifiedBy = verifiedBy;
+
+      const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+      const newLog = {
+        fromStatus: registerRecord.status,
+        toStatus: registerRecord.status,
+        action: "FORM_FEE_PAID",
+        changedById: verifiedBy,
+        reason: "Application fee verified and marked as PAID by Admin",
+        createdAt: verifiedAt,
+      };
+      credsObj.statusLogs = [...existingLogs, newLog];
+
+      updated = await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          credentialsJson: credsObj,
+          updatedAt: new Date(),
         },
       });
-      if (lead) {
-        const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
-        leadLogs.push({
-          timestamp: new Date().toISOString(),
-          action: "FORM_FEE_PAID",
-          note: "Application fee marked as PAID via manual mobile transfer.",
-          operator: payload.userRole || session?.userId || session?.name || "Admissions Officer",
-        });
-        await basePrisma.admissionLead.update({
-          where: { id: lead.id },
-          data: { logs: leadLogs as any },
+    }
+
+    // Also update linked AdmissionLead
+    if (lead) {
+      const leadDocs: any = { ...(lead.documents as any || {}) };
+      leadDocs.formFeePaid = true;
+      leadDocs.formFeeStatus = "PAID";
+      leadDocs.paymentState = "SETTLED";
+      leadDocs.formFeeVerifiedAt = verifiedAt;
+      leadDocs.formFeeVerifiedBy = verifiedBy;
+
+      const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
+      leadLogs.push({
+        timestamp: verifiedAt,
+        action: "FORM_FEE_PAID",
+        note: "Application fee verified and marked as PAID by Admin.",
+        operator: verifiedBy,
+      });
+
+      const updatedLead = await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          documents: leadDocs,
+          logs: leadLogs as any,
+        },
+      });
+      if (!updated) updated = updatedLead;
+    }
+
+    // Update corresponding PaymentReceipt records if any
+    try {
+      const appRef = registerRecord?.applicationNo || (lead as any)?.applicationNo;
+      if (appRef || lead?.id) {
+        await basePrisma.paymentReceipt.updateMany({
+          where: {
+            OR: [
+              ...(appRef ? [{ referenceNo: appRef }] : []),
+              ...(lead?.id ? [{ payerId: lead.id }] : []),
+            ],
+            moduleType: "ADMISSION_FORM_FEE",
+          },
+          data: {
+            status: "VERIFIED",
+            state: "SETTLED",
+            verifiedBy,
+            verifiedAt: new Date(),
+          },
         });
       }
-    } catch (leadErr) {
-      console.warn("[markFormFeePaidAction_leadLogWarn]:", leadErr);
+    } catch (prErr) {
+      console.warn("[markFormFeePaidAction] PaymentReceipt sync note:", prErr);
     }
 
     if (payload.schoolDomain) {

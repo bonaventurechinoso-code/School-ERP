@@ -171,7 +171,45 @@ export default async function ApplicantUploadPage({
     );
   }
 
-  // 4. Render interactive client portal
+  // 4. Determine Fee Payment Finite State (UNPAID -> PENDING -> PAID)
+  const docs = (leadAny.documents as any) || (regCreds?.documents as any) || (regCreds as any) || {};
+  const isPaid = Boolean(
+    docs.formFeePaid === true ||
+    docs.feePaid === true ||
+    leadAny.formFeePaid === true ||
+    regCreds?.formFeePaid === true ||
+    docs.formFeeStatus === "PAID" ||
+    docs.paymentStatus === "PAID" ||
+    docs.paymentState === "SETTLED" ||
+    lead.status === "APPROVED" ||
+    lead.status === "ENROLLED"
+  );
+  const isPending = Boolean(
+    !isPaid && (
+      docs.formFeeStatus === "PENDING" ||
+      docs.formFeeStatus === "PENDING_VERIFICATION" ||
+      docs.paymentState === "PAYMENT_PENDING_REVIEW" ||
+      docs.applicationFeeReceiptUrl ||
+      docs.formFeeReceiptUrl ||
+      docs.paymentReceiptUrl ||
+      docs.applicationFeeReceipt?.url ||
+      docs.paymentReceipt?.url ||
+      (Array.isArray(docs.documents) && docs.documents.some((d: any) =>
+        (d.key === "applicationFeeReceipt" || d.type === "applicationFeeReceipt" || d.key === "paymentReceipt" || d.type === "PAYMENT_RECEIPT")
+      ))
+    )
+  );
+  const feeState: "UNPAID" | "PENDING" | "PAID" = isPaid ? "PAID" : isPending ? "PENDING" : "UNPAID";
+  const existingFeeReceiptUrl =
+    docs.applicationFeeReceiptUrl ||
+    docs.formFeeReceiptUrl ||
+    docs.paymentReceiptUrl ||
+    docs.applicationFeeReceipt?.url ||
+    docs.paymentReceipt?.url ||
+    null;
+  const applicationNo = registerRecord?.applicationNo || (lead as any).applicationNo || `APP-${lead.id.slice(0, 6).toUpperCase()}`;
+
+  // 5. Render interactive client portal
   return (
     <ApplicantUploadClient
       schoolDomain={schoolDomain}
@@ -184,6 +222,9 @@ export default async function ApplicantUploadPage({
       targetGrade={lead.targetGrade}
       tierName={lead.tier?.name || "Standard Tier"}
       status={lead.status}
+      applicationNo={applicationNo}
+      feeState={feeState}
+      existingFeeReceiptUrl={existingFeeReceiptUrl}
       existingDocuments={leadAny.documents || {}}
       existingPassportUrl={leadAny.passportPhotoUrl}
       existingAcademicResultsUrl={leadAny.academicResultsUrl}

@@ -459,7 +459,28 @@ export default function AdmissionsPipeline({
   const renderApplicantCard = (lead: LeadWithTier, sIdx: number) => {
     const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
     const leadDocs = (lead.documents as any) || {};
-    const isFeePaid = Boolean(leadDocs.formFeePaid);
+    const isFeePaid = Boolean(
+      leadDocs.formFeePaid ||
+      leadDocs.feePaid ||
+      leadDocs.formFeeStatus === "PAID" ||
+      lead.status === "APPROVED" ||
+      lead.status === "ENROLLED"
+    );
+    const isFeePending = Boolean(
+      !isFeePaid && (
+        leadDocs.formFeeStatus === "PENDING" ||
+        leadDocs.formFeeStatus === "PENDING_VERIFICATION" ||
+        leadDocs.paymentState === "PAYMENT_PENDING_REVIEW" ||
+        leadDocs.applicationFeeReceiptUrl ||
+        leadDocs.formFeeReceiptUrl ||
+        leadDocs.paymentReceiptUrl ||
+        leadDocs.applicationFeeReceipt?.url ||
+        leadDocs.paymentReceipt?.url ||
+        (Array.isArray(leadDocs.documents) && leadDocs.documents.some((d: any) =>
+          (d.key === "applicationFeeReceipt" || d.type === "applicationFeeReceipt" || d.key === "paymentReceipt" || d.type === "PAYMENT_RECEIPT")
+        ))
+      )
+    );
     const initials = getInitials(lead.applicantName);
 
     // Document checklist metrics
@@ -692,8 +713,22 @@ export default function AdmissionsPipeline({
             {isFeePaid ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                 <Check className="w-3 h-3" />
-                <span>Paid ✓</span>
+                <span>Paid</span>
               </span>
+            ) : isFeePending ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedLead(lead);
+                  setIsDossierOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-950/70 dark:hover:bg-blue-900/80 dark:text-blue-300 border border-blue-300 dark:border-blue-700 transition cursor-pointer shadow-xs"
+                title="Application fee receipt uploaded by parent. Click to inspect dossier & Mark as Paid"
+              >
+                <Clock className="w-3 h-3 text-blue-600 animate-pulse" />
+                <span>Pending</span>
+              </button>
             ) : (
               <button
                 type="button"
@@ -702,11 +737,10 @@ export default function AdmissionsPipeline({
                   setFeeModalLead(lead);
                   setFeeModalToast(null);
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 transition cursor-pointer"
                 title="Click to view bank details and payment action"
               >
-                <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-                <span>⏳ Fee Pending</span>
+                <span>Unpaid</span>
               </button>
             )}
           </div>

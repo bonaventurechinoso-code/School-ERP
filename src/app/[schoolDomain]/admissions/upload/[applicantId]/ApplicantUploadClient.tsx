@@ -15,6 +15,9 @@ import {
   ExternalLink,
   ArrowRight,
   Sparkles,
+  CreditCard,
+  Clock,
+  Check,
 } from "lucide-react";
 
 interface UploadClientProps {
@@ -28,6 +31,15 @@ interface UploadClientProps {
   targetGrade: string;
   tierName: string;
   status: string;
+  applicationNo?: string;
+  feeState?: "UNPAID" | "PENDING" | "PAID";
+  existingFeeReceiptUrl?: string | null;
+  bankDetails?: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    amount: number;
+  };
   existingDocuments: Record<string, any>;
   existingPassportUrl?: string | null;
   existingAcademicResultsUrl?: string | null;
@@ -49,6 +61,15 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     targetGrade,
     tierName,
     status,
+    applicationNo = `APP-${applicantId.slice(0, 6).toUpperCase()}`,
+    feeState = "UNPAID",
+    existingFeeReceiptUrl,
+    bankDetails = {
+      bankName: "Zenith Bank",
+      accountNumber: "1012345678",
+      accountName: `${schoolName} Admissions`,
+      amount: 5000,
+    },
     existingDocuments,
     existingPassportUrl,
     existingAcademicResultsUrl,
@@ -58,19 +79,25 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
   // Selected files state
   const [files, setFiles] = useState<{
+    applicationFeeReceipt: File | null;
     passportPhoto: File | null;
     academicResults: File | null;
     birthCertificate: File | null;
     medicalRecords: File | null;
   }>({
+    applicationFeeReceipt: null,
     passportPhoto: null,
     academicResults: null,
     birthCertificate: null,
     medicalRecords: null,
   });
 
-  const [previews, setPreviews] = useState<{ passportPhoto?: string | null }>({
+  const [previews, setPreviews] = useState<{
+    passportPhoto?: string | null;
+    applicationFeeReceipt?: string | null;
+  }>({
     passportPhoto: existingPassportUrl || null,
+    applicationFeeReceipt: existingFeeReceiptUrl || null,
   });
 
   // UI state
@@ -79,8 +106,11 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, any>>(existingDocuments || {});
+  const [depositorName, setDepositorName] = useState(applicantName);
+  const [transferReference, setTransferReference] = useState("");
 
   // Input refs for clicking dropzones
+  const receiptInputRef = useRef<HTMLInputElement>(null);
   const passportInputRef = useRef<HTMLInputElement>(null);
   const resultsInputRef = useRef<HTMLInputElement>(null);
   const birthInputRef = useRef<HTMLInputElement>(null);
@@ -93,7 +123,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   };
 
   const validateAndSetFile = (
-    field: "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords",
+    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords",
     file: File | null
   ) => {
     setErrorMsg(null);
@@ -119,6 +149,18 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       reader.readAsDataURL(file);
     }
 
+    if (field === "applicationFeeReceipt") {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreviews((prev) => ({ ...prev, applicationFeeReceipt: e.target?.result as string }));
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setPreviews((prev) => ({ ...prev, applicationFeeReceipt: null }));
+      }
+    }
+
     setFiles((prev) => ({ ...prev, [field]: file }));
   };
 
@@ -128,7 +170,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
   const handleDrop = (
     e: React.DragEvent,
-    field: "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords"
+    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords"
   ) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -140,9 +182,14 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     e.preventDefault();
     setErrorMsg(null);
 
-    const hasNewFiles = files.passportPhoto || files.academicResults || files.birthCertificate || files.medicalRecords;
+    const hasNewFiles =
+      files.applicationFeeReceipt ||
+      files.passportPhoto ||
+      files.academicResults ||
+      files.birthCertificate ||
+      files.medicalRecords;
     if (!hasNewFiles) {
-      setErrorMsg("Please select at least one credential document to upload.");
+      setErrorMsg("Please select at least one document or application fee receipt to upload.");
       return;
     }
 
@@ -164,6 +211,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       const formData = new FormData();
       formData.append("token", token);
 
+      if (files.applicationFeeReceipt) {
+        formData.append("applicationFeeReceipt", files.applicationFeeReceipt);
+        formData.append("application_fee_receipt", files.applicationFeeReceipt);
+      }
+      if (depositorName) formData.append("depositorName", depositorName);
+      if (transferReference) formData.append("transferReference", transferReference);
       if (files.passportPhoto) formData.append("passportPhoto", files.passportPhoto);
       if (files.academicResults) formData.append("academicResults", files.academicResults);
       if (files.birthCertificate) formData.append("birthCertificate", files.birthCertificate);
@@ -290,7 +343,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 mb-3">
                     <span>Admissions Intake</span>
                     <span>•</span>
-                    <span>Application #{applicantId.slice(0, 8).toUpperCase()}</span>
+                    <span>Application #{applicationNo}</span>
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight">{applicantName}</h2>
                   <p className="text-indigo-200 text-sm mt-1">
@@ -304,9 +357,25 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     <span className="text-indigo-200">Parent / Guardian:</span>
                     <span className="font-bold">{parentName}</span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-indigo-200">Application Fee:</span>
+                    {feeState === "PAID" ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-[10px] flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Paid
+                      </span>
+                    ) : feeState === "PENDING" ? (
+                      <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30 text-[10px] flex items-center gap-1">
+                        <Clock className="w-3 h-3 animate-pulse" /> Pending Verification
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
+                        Unpaid (₦5,000)
+                      </span>
+                    )}
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-indigo-200">Current Pipeline:</span>
-                    <span className="font-bold text-amber-300">{status}</span>
+                    <span className="font-bold text-slate-100">{status}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-indigo-200">Security Scope:</span>
@@ -330,79 +399,192 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
             {/* Dropzone Grid */}
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* 1. Passport Photograph */}
-                <div
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, "passportPhoto")}
-                  onClick={() => passportInputRef.current?.click()}
-                  className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[220px] bg-white dark:bg-zinc-900 ${
-                    files.passportPhoto || existingPassportUrl
-                      ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
-                      : "border-slate-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-zinc-800/40"
-                  }`}
-                >
-                  <input
-                    ref={passportInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => validateAndSetFile("passportPhoto", e.target.files?.[0] || null)}
-                  />
+                {/* 1. DEDICATED APPLICATION FEE RECEIPT OR PASSPORT PHOTOGRAPH */}
+                {feeState !== "PAID" ? (
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, "applicationFeeReceipt")}
+                    onClick={() => receiptInputRef.current?.click()}
+                    className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
+                      files.applicationFeeReceipt || existingFeeReceiptUrl
+                        ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
+                        : "border-indigo-400 dark:border-indigo-600 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20"
+                    }`}
+                  >
+                    <input
+                      ref={receiptInputRef}
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => validateAndSetFile("applicationFeeReceipt", e.target.files?.[0] || null)}
+                    />
 
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                          1
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs">
+                            <CreditCard className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-slate-900 dark:text-white text-sm">
+                              Upload Application Fee Receipt
+                            </h3>
+                            <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                              Direct Bank Transfer Verification
+                            </p>
+                          </div>
                         </div>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm">Recent Passport Photograph</h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-200">
+                          PDF or Image
+                        </span>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        Image Only
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-4">
-                      Clear color photo of applicant with plain white background (JPG, PNG, WebP &bull; Max 5MB).
-                    </p>
-                  </div>
 
-                  {previews.passportPhoto ? (
-                    <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
-                      <Image
-                        src={previews.passportPhoto}
-                        alt="Passport preview"
-                        width={48}
-                        height={48}
-                        unoptimized
-                        className="w-12 h-12 rounded-lg object-cover border border-slate-200"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
-                          {files.passportPhoto?.name || "Existing Passport Photo"}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {files.passportPhoto ? formatFileSize(files.passportPhoto.size) : "Ready on server"}
-                        </p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-3">
+                        Upload official bank transfer or teller deposit slip (₦{Number(bankDetails.amount).toLocaleString()} &bull; Max 5MB).
+                      </p>
+
+                      {/* Bank Account Quick Reference Banner */}
+                      <div className="p-3 bg-slate-50 dark:bg-zinc-800/60 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 text-[11px] space-y-1 font-mono mb-3">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-sans">Bank:</span>
+                          <strong className="text-slate-800 dark:text-zinc-200">{bankDetails.bankName}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-sans">Account No:</span>
+                          <strong className="text-slate-800 dark:text-zinc-200">{bankDetails.accountNumber}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-sans">Account Name:</span>
+                          <span className="text-slate-700 dark:text-zinc-300">{bankDetails.accountName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-sans">Narration Ref:</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">{applicationNo}</span>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          validateAndSetFile("passportPhoto", null);
-                          setPreviews((p) => ({ ...p, passportPhoto: null }));
-                        }}
-                        className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
                     </div>
-                  ) : (
-                    <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
-                      <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
-                      <p className="text-xs font-semibold">Drop passport photograph here or click to browse</p>
+
+                    {files.applicationFeeReceipt || existingFeeReceiptUrl ? (
+                      <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
+                        <FileCheck className="w-8 h-8 text-emerald-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
+                            {files.applicationFeeReceipt?.name || "Application Fee Receipt Uploaded"}
+                          </p>
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            {files.applicationFeeReceipt
+                              ? formatFileSize(files.applicationFeeReceipt.size)
+                              : feeState === "PENDING"
+                              ? "Uploaded • Under Admissions Review"
+                              : "Ready for verification"}
+                          </p>
+                        </div>
+                        {existingFeeReceiptUrl && (
+                          <a
+                            href={existingFeeReceiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1 shrink-0"
+                          >
+                            View
+                          </a>
+                        )}
+                        {files.applicationFeeReceipt && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              validateAndSetFile("applicationFeeReceipt", null);
+                            }}
+                            className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-3 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
+                        <UploadCloud className="w-8 h-8 mb-1.5 text-indigo-500/80" />
+                        <p className="text-xs font-semibold">Drop payment receipt here or click to browse</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Passport Photograph (Rendered once Fee is Settled) */
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, "passportPhoto")}
+                    onClick={() => passportInputRef.current?.click()}
+                    className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
+                      files.passportPhoto || existingPassportUrl
+                        ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
+                        : "border-slate-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-zinc-800/40"
+                    }`}
+                  >
+                    <input
+                      ref={passportInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => validateAndSetFile("passportPhoto", e.target.files?.[0] || null)}
+                    />
+
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                            1
+                          </div>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm">Recent Passport Photograph</h3>
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          Image Only
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-4">
+                        Clear color photo of applicant with plain white background (JPG, PNG, WebP &bull; Max 5MB).
+                      </p>
                     </div>
-                  )}
-                </div>
+
+                    {previews.passportPhoto ? (
+                      <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
+                        <Image
+                          src={previews.passportPhoto}
+                          alt="Passport preview"
+                          width={48}
+                          height={48}
+                          unoptimized
+                          className="w-12 h-12 rounded-lg object-cover border border-slate-200"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
+                            {files.passportPhoto?.name || "Existing Passport Photo"}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {files.passportPhoto ? formatFileSize(files.passportPhoto.size) : "Ready on server"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            validateAndSetFile("passportPhoto", null);
+                            setPreviews((p) => ({ ...p, passportPhoto: null }));
+                          }}
+                          className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
+                        <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
+                        <p className="text-xs font-semibold">Drop passport photograph here or click to browse</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 2. Previous Academic Results */}
                 <div

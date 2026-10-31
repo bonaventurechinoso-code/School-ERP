@@ -465,6 +465,9 @@ export async function POST(
 
     // 3. Process Uploaded Files
     const fileFields = [
+      { field: "applicationFeeReceipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
+      { field: "application_fee_receipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
+      { field: "paymentReceipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
       { field: "passportPhoto", prefix: "passport", type: "IMAGE", allowedMimes: ALLOWED_IMAGE_MIMES },
       { field: "academicResults", prefix: "academic-results", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
       { field: "birthCertificate", prefix: "birth-certificate", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
@@ -552,11 +555,38 @@ export async function POST(
           savedName = fileName;
         }
 
-        // Map to update columns
+        // Map to update columns & finite state machine flags
         if (item.field === "passportPhoto") updateData.passportPhotoUrl = publicUrl;
         if (item.field === "academicResults") updateData.academicResultsUrl = publicUrl;
         if (item.field === "birthCertificate") updateData.birthCertificateUrl = publicUrl;
         if (item.field === "medicalRecords") updateData.medicalRecordsUrl = publicUrl;
+
+        // Dedicated Application Fee Receipt Mapping (STATE 2: PENDING)
+        if (item.field === "applicationFeeReceipt" || item.field === "application_fee_receipt" || item.field === "paymentReceipt") {
+          currentDocs.applicationFeeReceipt = {
+            url: publicUrl,
+            fileUrl: publicUrl,
+            path: publicUrl,
+            fileName: fileObj.name,
+            savedName,
+            size: fileObj.size,
+            mimeType: fileObj.type,
+            uploadedAt: new Date().toISOString(),
+            status: "PENDING",
+            verified: false,
+          };
+          currentDocs.applicationFeeReceiptUrl = publicUrl;
+          currentDocs.formFeeReceiptUrl = publicUrl;
+          currentDocs.paymentReceiptUrl = publicUrl;
+          currentDocs.formFeeStatus = "PENDING";
+          currentDocs.paymentState = "PAYMENT_PENDING_REVIEW";
+          currentDocs.formFeePaid = false; // Remains false until admin marks as paid
+
+          const depositorName = formData ? formData.get("depositorName")?.toString().trim() : null;
+          const transferReference = formData ? formData.get("transferReference")?.toString().trim() : null;
+          if (depositorName) currentDocs.depositorName = depositorName;
+          if (transferReference) currentDocs.transferReference = transferReference;
+        }
 
         currentDocs[item.field] = {
           url: publicUrl,
@@ -718,9 +748,89 @@ export async function POST(
           credentialsJson: {
             ...currentCreds,
             documents: docsList,
+            formFeeStatus: currentDocs.applicationFeeReceiptUrl ? "PENDING" : currentCreds.formFeeStatus,
+            applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || currentCreds.applicationFeeReceiptUrl,
+            formFeeReceiptUrl: currentDocs.formFeeReceiptUrl || currentCreds.formFeeReceiptUrl,
           },
         },
       });
+    }
+
+    // 5c. Sync Application Fee Receipt to AdmissionRegister & PaymentReceipt if uploaded
+    if (currentDocs.applicationFeeReceiptUrl) {
+      try {
+        const appNo = registerRecord?.applicationNo || (lead as any).applicationNo || `APP-${lead.id.slice(0, 6).toUpperCase()}`;
+        
+        // Ensure AdmissionRegister has PENDING fee status
+        if (!isRegisterOnly) {
+          const reg = await basePrisma.admissionRegister.findFirst({
+            where: {
+              OR: [
+                { id: lead.id },
+                { applicationNo: appNo },
+                ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+                ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+              ],
+            },
+          });
+          if (reg) {
+            const raw = reg.credentialsJson || {};
+            const credsObj: Record<string, any> =
+              typeof raw === "object" && raw !== null && !Array.isArray(raw) ? { ...(raw as any) } : {};
+            credsObj.formFeeStatus = "PENDING";
+            credsObj.formFeePaid = false;
+            credsObj.applicationFeeReceiptUrl = currentDocs.applicationFeeReceiptUrl;
+            credsObj.formFeeReceiptUrl = currentDocs.formFeeReceiptUrl;
+            if (currentDocs.depositorName) credsObj.depositorName = currentDocs.depositorName;
+            if (currentDocs.transferReference) credsObj.transferReference = currentDocs.transferReference;
+
+            const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+            credsObj.statusLogs = [
+              ...existingLogs,
+              {
+                fromStatus: reg.status,
+                toStatus: reg.status,
+                action: "RECEIPT_UPLOADED",
+                changedById: "Parent / Applicant",
+                reason: "Application fee receipt uploaded via public portal - status updated to PENDING verification",
+                createdAt: new Date().toISOString(),
+              },
+            ];
+
+            await basePrisma.admissionRegister.update({
+              where: { id: reg.id },
+              data: {
+                credentialsJson: credsObj,
+                updatedAt: new Date(),
+              },
+            });
+          }
+        }
+
+        // Register in PaymentReceipt for Bursary visibility
+        await basePrisma.paymentReceipt.create({
+          data: {
+            tenantId: schoolId,
+            schoolId,
+            moduleType: "ADMISSION_FORM_FEE",
+            payerType: "APPLICANT",
+            payerId: lead.id,
+            payerName: lead.applicantName,
+            referenceNo: appNo,
+            amount: 5000,
+            paymentMethod: "BANK_TRANSFER",
+            fileUrl: currentDocs.applicationFeeReceiptUrl,
+            fileName: currentDocs.applicationFeeReceipt?.fileName || "application_fee_receipt.jpg",
+            status: "PENDING",
+            state: "PENDING_VERIFICATION",
+            proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
+            depositorName: currentDocs.depositorName || lead.applicantName,
+            transferReference: currentDocs.transferReference || appNo,
+          },
+        });
+      } catch (syncReceiptErr) {
+        console.warn("[UPLOAD_ROUTE] Warning: Could not mirror receipt to PaymentReceipt:", syncReceiptErr);
+      }
     }
 
     // 6. Cache Invalidation & Multi-Tier Path Revalidation
