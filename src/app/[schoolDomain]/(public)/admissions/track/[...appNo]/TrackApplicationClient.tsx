@@ -606,7 +606,12 @@ export default function TrackApplicationClient({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* 1. BIRTH CERTIFICATE */}
               <div
-                onClick={() => birthInputRef.current?.click()}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button, a, input")) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  birthInputRef.current?.click();
+                }}
                 className={`p-5 rounded-2xl border-2 border-dashed transition cursor-pointer flex flex-col justify-between min-h-[160px] ${
                   files.birthCertificate
                     ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -614,11 +619,15 @@ export default function TrackApplicationClient({
                 }`}
               >
                 <input
+                  id="track-birth-upload"
                   ref={birthInputRef}
                   type="file"
-                  accept="application/pdf,image/*"
+                  accept="image/*,application/pdf"
                   className="hidden"
-                  onChange={(e) => handleFileChange("birthCertificate", e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleFileChange("birthCertificate", e.target.files?.[0] || null);
+                  }}
                 />
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -633,15 +642,34 @@ export default function TrackApplicationClient({
                 </div>
                 <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600 dark:text-zinc-300 truncate">
-                    {files.birthCertificate ? files.birthCertificate.name : "Click to select file"}
+                    {files.birthCertificate ? files.birthCertificate.name : "Click or tap to select file"}
                   </span>
-                  {files.birthCertificate && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {files.birthCertificate ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        birthInputRef.current?.click();
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold text-[11px]"
+                    >
+                      Browse
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* 2. PASSPORT PHOTOGRAPH */}
               <div
-                onClick={() => passportInputRef.current?.click()}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button, a, input")) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  passportInputRef.current?.click();
+                }}
                 className={`p-5 rounded-2xl border-2 border-dashed transition cursor-pointer flex flex-col justify-between min-h-[160px] ${
                   files.passportPhoto
                     ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -649,11 +677,15 @@ export default function TrackApplicationClient({
                 }`}
               >
                 <input
+                  id="track-passport-upload"
                   ref={passportInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/*"
                   className="hidden"
-                  onChange={(e) => handleFileChange("passportPhoto", e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleFileChange("passportPhoto", e.target.files?.[0] || null);
+                  }}
                 />
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -668,15 +700,34 @@ export default function TrackApplicationClient({
                 </div>
                 <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600 dark:text-zinc-300 truncate">
-                    {files.passportPhoto ? files.passportPhoto.name : "Click to select image"}
+                    {files.passportPhoto ? files.passportPhoto.name : "Click or tap to select image"}
                   </span>
-                  {files.passportPhoto && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {files.passportPhoto ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        passportInputRef.current?.click();
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold text-[11px]"
+                    >
+                      Browse
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* 3. LAST RESULT */}
               <div
-                onClick={() => resultInputRef.current?.click()}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button, a, input")) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  resultInputRef.current?.click();
+                }}
                 className={`p-5 rounded-2xl border-2 border-dashed transition cursor-pointer flex flex-col justify-between min-h-[160px] ${
                   files.lastResult
                     ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -684,11 +735,15 @@ export default function TrackApplicationClient({
                 }`}
               >
                 <input
+                  id="track-result-upload"
                   ref={resultInputRef}
                   type="file"
-                  accept="application/pdf,image/*"
+                  accept="image/*,application/pdf"
                   className="hidden"
-                  onChange={(e) => handleFileChange("lastResult", e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleFileChange("lastResult", e.target.files?.[0] || null);
+                  }}
                 />
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -703,15 +758,34 @@ export default function TrackApplicationClient({
                 </div>
                 <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600 dark:text-zinc-300 truncate">
-                    {files.lastResult ? files.lastResult.name : "Click to select file"}
+                    {files.lastResult ? files.lastResult.name : "Click or tap to select file"}
                   </span>
-                  {files.lastResult && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {files.lastResult ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        resultInputRef.current?.click();
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold text-[11px]"
+                    >
+                      Browse
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* 4. NIN (NATIONAL IDENTIFICATION NUMBER) */}
               <div
-                onClick={() => ninInputRef.current?.click()}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button, a, input")) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  ninInputRef.current?.click();
+                }}
                 className={`p-5 rounded-2xl border-2 border-dashed transition cursor-pointer flex flex-col justify-between min-h-[160px] ${
                   files.nin
                     ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -719,11 +793,15 @@ export default function TrackApplicationClient({
                 }`}
               >
                 <input
+                  id="track-nin-upload"
                   ref={ninInputRef}
                   type="file"
-                  accept="application/pdf,image/*"
+                  accept="image/*,application/pdf"
                   className="hidden"
-                  onChange={(e) => handleFileChange("nin", e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleFileChange("nin", e.target.files?.[0] || null);
+                  }}
                 />
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -738,9 +816,23 @@ export default function TrackApplicationClient({
                 </div>
                 <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600 dark:text-zinc-300 truncate">
-                    {files.nin ? files.nin.name : "Click to select file"}
+                    {files.nin ? files.nin.name : "Click or tap to select file"}
                   </span>
-                  {files.nin && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {files.nin ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        ninInputRef.current?.click();
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold text-[11px]"
+                    >
+                      Browse
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

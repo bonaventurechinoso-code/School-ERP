@@ -390,7 +390,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
               <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 text-sm flex items-start gap-3 animate-in shake">
                 <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1 font-medium">{errorMsg}</div>
-                <button onClick={() => setErrorMsg(null)} className="text-rose-500 hover:text-rose-700">
+                <button type="button" onClick={() => setErrorMsg(null)} className="text-rose-500 hover:text-rose-700 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -404,7 +404,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   <div
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, "applicationFeeReceipt")}
-                    onClick={() => receiptInputRef.current?.click()}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("button, a, input")) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      receiptInputRef.current?.click();
+                    }}
                     className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
                       files.applicationFeeReceipt || existingFeeReceiptUrl
                         ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -412,11 +417,16 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     }`}
                   >
                     <input
+                      id="receipt-upload"
+                      name="applicationFeeReceipt"
                       ref={receiptInputRef}
                       type="file"
-                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      accept="image/*,application/pdf"
                       className="hidden"
-                      onChange={(e) => validateAndSetFile("applicationFeeReceipt", e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        validateAndSetFile("applicationFeeReceipt", e.target.files?.[0] || null);
+                      }}
                     />
 
                     <div>
@@ -506,7 +516,22 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     ) : (
                       <div className="text-center py-3 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                         <UploadCloud className="w-8 h-8 mb-1.5 text-indigo-500/80" />
-                        <p className="text-xs font-semibold">Drop payment receipt here or click to browse</p>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                          Drop payment receipt here or tap below
+                        </p>
+                        <button
+                          type="button"
+                          id="receipt-picker-trigger"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            receiptInputRef.current?.click();
+                          }}
+                          className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Select Receipt File</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -515,7 +540,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   <div
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, "passportPhoto")}
-                    onClick={() => passportInputRef.current?.click()}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("button, a, input")) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      passportInputRef.current?.click();
+                    }}
                     className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
                       files.passportPhoto || existingPassportUrl
                         ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -523,11 +553,16 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     }`}
                   >
                     <input
+                      id="passport-upload"
+                      name="passportPhoto"
                       ref={passportInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/*"
                       className="hidden"
-                      onChange={(e) => validateAndSetFile("passportPhoto", e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        validateAndSetFile("passportPhoto", e.target.files?.[0] || null);
+                      }}
                     />
 
                     <div>
@@ -580,7 +615,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     ) : (
                       <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                         <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
-                        <p className="text-xs font-semibold">Drop passport photograph here or click to browse</p>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                          Drop passport photograph here or tap below
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            passportInputRef.current?.click();
+                          }}
+                          className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Select Passport Photo</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -590,7 +639,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, "academicResults")}
-                  onClick={() => resultsInputRef.current?.click()}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, a, input")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    resultsInputRef.current?.click();
+                  }}
                   className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[220px] bg-white dark:bg-zinc-900 ${
                     files.academicResults || existingAcademicResultsUrl
                       ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -598,11 +652,16 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   }`}
                 >
                   <input
+                    id="results-upload"
+                    name="academicResults"
                     ref={resultsInputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    accept="image/*,application/pdf"
                     className="hidden"
-                    onChange={(e) => validateAndSetFile("academicResults", e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      validateAndSetFile("academicResults", e.target.files?.[0] || null);
+                    }}
                   />
 
                   <div>
@@ -649,7 +708,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   ) : (
                     <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                       <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
-                      <p className="text-xs font-semibold">Drop PDF or scanned results here</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                        Drop PDF or scanned results here or tap below
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          resultsInputRef.current?.click();
+                        }}
+                        className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Select Results File</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -658,7 +731,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, "birthCertificate")}
-                  onClick={() => birthInputRef.current?.click()}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, a, input")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    birthInputRef.current?.click();
+                  }}
                   className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[220px] bg-white dark:bg-zinc-900 ${
                     files.birthCertificate || existingBirthCertificateUrl
                       ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -666,11 +744,16 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   }`}
                 >
                   <input
+                    id="birth-upload"
+                    name="birthCertificate"
                     ref={birthInputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    accept="image/*,application/pdf"
                     className="hidden"
-                    onChange={(e) => validateAndSetFile("birthCertificate", e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      validateAndSetFile("birthCertificate", e.target.files?.[0] || null);
+                    }}
                   />
 
                   <div>
@@ -717,7 +800,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   ) : (
                     <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                       <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
-                      <p className="text-xs font-semibold">Drop birth certificate or valid ID here</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                        Drop birth certificate or valid ID here or tap below
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          birthInputRef.current?.click();
+                        }}
+                        className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Select Birth Certificate</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -726,7 +823,12 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, "medicalRecords")}
-                  onClick={() => medicalInputRef.current?.click()}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, a, input")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    medicalInputRef.current?.click();
+                  }}
                   className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[220px] bg-white dark:bg-zinc-900 ${
                     files.medicalRecords || existingMedicalRecordsUrl
                       ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
@@ -734,11 +836,16 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   }`}
                 >
                   <input
+                    id="medical-upload"
+                    name="medicalRecords"
                     ref={medicalInputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    accept="image/*,application/pdf"
                     className="hidden"
-                    onChange={(e) => validateAndSetFile("medicalRecords", e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      validateAndSetFile("medicalRecords", e.target.files?.[0] || null);
+                    }}
                   />
 
                   <div>
@@ -785,7 +892,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   ) : (
                     <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                       <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
-                      <p className="text-xs font-semibold">Drop medical documents here (if applicable)</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                        Drop medical documents here or tap below
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          medicalInputRef.current?.click();
+                        }}
+                        className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Select Medical Record</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -818,8 +939,15 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
                 <button
                   type="submit"
-                  disabled={isUploading || (!files.passportPhoto && !files.academicResults && !files.birthCertificate && !files.medicalRecords)}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center gap-2"
+                  disabled={
+                    isUploading ||
+                    (!files.applicationFeeReceipt &&
+                      !files.passportPhoto &&
+                      !files.academicResults &&
+                      !files.birthCertificate &&
+                      !files.medicalRecords)
+                  }
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isUploading ? (
                     <span>Uploading Documents...</span>

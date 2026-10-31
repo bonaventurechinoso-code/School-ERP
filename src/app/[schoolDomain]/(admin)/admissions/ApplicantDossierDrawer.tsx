@@ -316,6 +316,7 @@ export default function ApplicantDossierDrawer({
           birthCertificate: "birthCertificateUrl",
           medicalRecords: "medicalRecordsUrl",
           ninSlip: "ninSlipUrl",
+          applicationFeeReceipt: "applicationFeeReceiptUrl",
         };
         const col = colMap[docKey];
         return {
@@ -588,8 +589,23 @@ export default function ApplicantDossierDrawer({
     }
   };
 
-  // The 5 Canonical Documents Checklist
+  // The Canonical Statutory & Admissions Documents Checklist
   const kycChecklist = [
+    {
+      key: "applicationFeeReceipt",
+      label: "Application Fee Receipt",
+      mandatory: true,
+      url:
+        receiptUrl ||
+        localCandidate?.applicationFeeReceiptUrl ||
+        activeCandidate?.applicationFeeReceiptUrl ||
+        docs?.applicationFeeReceiptUrl ||
+        docs?.formFeeReceiptUrl ||
+        (docs?.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object"
+          ? docs.applicationFeeReceipt.url || docs.applicationFeeReceipt.fileUrl
+          : null) ||
+        (typeof docs?.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null),
+    },
     {
       key: "passportPhoto",
       label: "Passport Photograph",
@@ -1054,22 +1070,27 @@ export default function ApplicantDossierDrawer({
                 </button>
               </div>
 
-              {/* THE COMPLETE CANONICAL 5-DOCUMENT CHECKLIST */}
+              {/* THE COMPLETE CANONICAL 6-DOCUMENT CHECKLIST */}
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
-                    Statutory KYC Verification Checklist (5)
+                    Statutory &amp; Admissions Verification Checklist ({kycChecklist.length})
                   </h4>
                   <span className="text-xs text-slate-500 dark:text-zinc-400">
-                    4 Mandatory • 1 Statutory NIN
+                    5 Mandatory • 1 Statutory NIN
                   </span>
                 </div>
 
                 <div className="divide-y divide-slate-100 dark:divide-zinc-800 space-y-2">
                   {kycChecklist.map((doc) => {
                     const docRecord = docs?.[doc.key] || {};
-                    const isVerified = docRecord.verified || docRecord.status === "VERIFIED";
-                    const isRejected = docRecord.rejected || docRecord.status === "REJECTED";
+                    const isFeeDoc = doc.key === "applicationFeeReceipt";
+                    const isVerified = isFeeDoc
+                      ? Boolean(isFeePaid || docRecord.verified || docRecord.status === "VERIFIED" || docs.formFeeStatus === "PAID")
+                      : Boolean(docRecord.verified || docRecord.status === "VERIFIED");
+                    const isRejected = isFeeDoc
+                      ? Boolean(docRecord.rejected || docRecord.status === "REJECTED" || docs.formFeeStatus === "REJECTED")
+                      : Boolean(docRecord.rejected || docRecord.status === "REJECTED");
                     const hasFile = Boolean(doc.url);
 
                     return (
@@ -1135,6 +1156,7 @@ export default function ApplicantDossierDrawer({
                               type="button"
                               onClick={() => window.open(doc.url, "_blank", "noopener,noreferrer")}
                               className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
+                              title={`View ${doc.label}`}
                             >
                               <ExternalLink className="w-3 h-3 text-slate-400" />
                               <span>View</span>
@@ -1163,7 +1185,12 @@ export default function ApplicantDossierDrawer({
                               <button
                                 type="button"
                                 disabled={isVerified}
-                                onClick={() => handleSetDocumentStatus(doc.key, "VERIFIED")}
+                                onClick={async () => {
+                                  if (doc.key === "applicationFeeReceipt") {
+                                    await handleMarkAsPaid();
+                                  }
+                                  handleSetDocumentStatus(doc.key, "VERIFIED");
+                                }}
                                 className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
                                   isVerified
                                     ? "bg-emerald-600 text-white cursor-default"

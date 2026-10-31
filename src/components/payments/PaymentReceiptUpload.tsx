@@ -494,7 +494,10 @@ export default function PaymentReceiptUpload({
               <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1.5">
                 Upload Payment Proof (JPG, PNG, PDF) *
               </label>
-              <label className="relative flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-2xl hover:border-indigo-500 hover:bg-slate-50 dark:hover:bg-zinc-800/50 cursor-pointer transition">
+              <label
+                htmlFor="receipt-upload"
+                className="relative flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-2xl hover:border-indigo-500 hover:bg-slate-50 dark:hover:bg-zinc-800/50 cursor-pointer transition"
+              >
                 <UploadCloud className="w-8 h-8 text-indigo-500 mb-2" />
                 <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                   {file ? file.name : "Click to select or drag receipt slip here"}
@@ -503,6 +506,7 @@ export default function PaymentReceiptUpload({
                   Supports Images (PNG, JPG) and PDF documents up to 10MB
                 </span>
                 <input
+                  id="receipt-upload"
                   type="file"
                   accept="image/*,application/pdf"
                   onChange={handleFileChange}
