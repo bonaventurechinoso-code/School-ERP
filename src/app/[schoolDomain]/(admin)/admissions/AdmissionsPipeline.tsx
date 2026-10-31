@@ -29,6 +29,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
@@ -282,6 +283,9 @@ export default function AdmissionsPipeline({
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isCreateTrackModalOpen, setIsCreateTrackModalOpen] = useState(false);
   const [selectedStageForConfig, setSelectedStageForConfig] = useState<PipelineStageConfig | null>(null);
+  const [configModalToast, setConfigModalToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [pipelineToast, setPipelineToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Form Fee Dialog State (for manual mobile bank transfer)
   const [feeModalLead, setFeeModalLead] = useState<LeadWithTier | null>(null);
@@ -882,6 +886,25 @@ export default function AdmissionsPipeline({
         )}
       </div>
 
+      {pipelineToast && (
+        <div
+          className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all animate-in fade-in ${
+            pipelineToast.type === "success"
+              ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+              : "bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+          }`}
+        >
+          <span>{pipelineToast.text}</span>
+          <button
+            type="button"
+            onClick={() => setPipelineToast(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-0.5 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {mainTab === "register" ? (
         <AdmissionRegisterTable
           schoolId={schoolId}
@@ -1062,6 +1085,20 @@ export default function AdmissionsPipeline({
                       </h3>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {isTenantAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedStageForConfig(stage);
+                            setConfigModalToast(null);
+                            setIsConfigModalOpen(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 rounded-md transition cursor-pointer"
+                          title="Configure Stage Gatekeeper Rules"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {hasConstraints && (
                         <span
                           className="w-2 h-2 rounded-full bg-amber-500"
@@ -1185,35 +1222,85 @@ export default function AdmissionsPipeline({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                setIsSavingConfig(true);
+                setConfigModalToast(null);
+
                 const formData = new FormData(e.currentTarget);
                 const name = (formData.get("name") as string) || selectedStageForConfig.name;
                 const reqPayment = formData.get("require_payment") === "on";
                 const reqBirthCert = formData.get("require_birth_cert") === "on";
                 const reqPassport = formData.get("require_passport") === "on";
                 const reqResults = formData.get("require_academic_results") === "on";
+                const reqExamScore = formData.get("require_exam_score") === "on";
+                const minExamScoreRaw = formData.get("min_exam_score");
+                const minExamScoreVal =
+                  minExamScoreRaw !== null && minExamScoreRaw !== ""
+                    ? Number(minExamScoreRaw)
+                    : undefined;
                 const minAgeVal = Number(formData.get("min_age")) || 0;
 
-                const constraints = {
+                const constraints: PipelineStageConfig["constraints"] = {
                   require_payment: reqPayment,
                   require_birth_cert: reqBirthCert,
                   require_passport: reqPassport,
                   require_academic_results: reqResults,
+                  require_exam_score: reqExamScore,
+                  min_exam_score:
+                    typeof minExamScoreVal === "number" && !isNaN(minExamScoreVal)
+                      ? minExamScoreVal
+                      : undefined,
                   min_age: minAgeVal > 0 ? minAgeVal : undefined,
                 };
 
-                const res = await configureAdmissionStageAction({
-                  schoolId,
-                  schoolDomain: schoolDomain || "",
-                  stageId: selectedStageForConfig.id,
-                  name,
-                  constraints,
-                });
+                try {
+                  const res = await configureAdmissionStageAction({
+                    schoolId,
+                    schoolDomain: schoolDomain || "",
+                    stageId: selectedStageForConfig.id,
+                    name,
+                    constraints,
+                  });
 
-                if (res?.success) {
-                  setIsConfigModalOpen(false);
-                  router.refresh();
-                } else {
-                  alert(res?.error || "Failed to update stage rules.");
+                  if (res?.success) {
+                    // Update local track state immediately so UI updates without full refresh
+                    setTracks((prevTracks) =>
+                      prevTracks.map((tr) => ({
+                        ...tr,
+                        stages: tr.stages.map((st) =>
+                          st.id === selectedStageForConfig.id
+                            ? { ...st, name, constraints }
+                            : st
+                        ),
+                      }))
+                    );
+
+                    setConfigModalToast({
+                      type: "success",
+                      text: `Stage "${name}" gatekeeper rules updated successfully.`,
+                    });
+                    setPipelineToast({
+                      type: "success",
+                      text: `Stage "${name}" rules updated successfully.`,
+                    });
+
+                    setTimeout(() => {
+                      setIsConfigModalOpen(false);
+                      setConfigModalToast(null);
+                      router.refresh();
+                    }, 700);
+                  } else {
+                    setConfigModalToast({
+                      type: "error",
+                      text: res?.error || "Failed to update stage rules.",
+                    });
+                  }
+                } catch (err: any) {
+                  setConfigModalToast({
+                    type: "error",
+                    text: err.message || "Failed to update stage rules.",
+                  });
+                } finally {
+                  setIsSavingConfig(false);
                 }
               }}
               className="space-y-4 text-xs"
@@ -1304,35 +1391,92 @@ export default function AdmissionsPipeline({
                   </div>
                 </label>
 
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    Minimum Age Threshold (Years)
-                  </label>
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50 border border-slate-200/80 dark:border-zinc-700 cursor-pointer">
                   <input
-                    type="number"
-                    name="min_age"
-                    min="0"
-                    max="30"
-                    defaultValue={selectedStageForConfig.constraints?.min_age || ""}
-                    placeholder="e.g. 5 (Leave blank if no minimum age)"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                    type="checkbox"
+                    name="require_exam_score"
+                    defaultChecked={Boolean(selectedStageForConfig.constraints?.require_exam_score)}
+                    className="w-4 h-4 rounded text-blue-600"
                   />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                      Require Entrance Exam / Assessment Score
+                    </span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Candidate dossier must record a verified entrance examination score before advancing.
+                    </span>
+                  </div>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                      Minimum Exam Score (0-100)
+                    </label>
+                    <input
+                      type="number"
+                      name="min_exam_score"
+                      min="0"
+                      max="100"
+                      defaultValue={selectedStageForConfig.constraints?.min_exam_score ?? 50}
+                      placeholder="e.g. 50"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                      Minimum Age Threshold (Years)
+                    </label>
+                    <input
+                      type="number"
+                      name="min_age"
+                      min="0"
+                      max="30"
+                      defaultValue={selectedStageForConfig.constraints?.min_age || ""}
+                      placeholder="e.g. 5 (Leave blank if none)"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {configModalToast && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold transition-all animate-in fade-in ${
+                    configModalToast.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                      : "bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                  }`}
+                >
+                  {configModalToast.text}
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
                 <button
                   type="button"
-                  onClick={() => setIsConfigModalOpen(false)}
-                  className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 transition"
+                  onClick={() => {
+                    setIsConfigModalOpen(false);
+                    setConfigModalToast(null);
+                  }}
+                  className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-xs"
+                  disabled={isSavingConfig}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  Save Stage Rules
+                  {isSavingConfig ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Stage Rules</span>
+                  )}
                 </button>
               </div>
             </form>

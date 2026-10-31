@@ -3,6 +3,7 @@
 import {
   verifyTenantAdminRole,
   verifyAdmissionsMutatorRole,
+  isSessionMatchingTenant,
   evaluateStageConstraints,
   ensureTenantAdmissionTracks,
   StageConstraints,
@@ -922,7 +923,7 @@ export async function updateLeadStatusAction(payload: {
 
     // RBAC Permissions Check: Tenant Admin (own tenant) or Admissions Officer
     const session = await getSession(undefined, schoolDomain);
-    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
       return {
         success: false,
@@ -1799,7 +1800,7 @@ export async function createAdmissionTrackAction(payload: {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
-    const auth = verifyTenantAdminRole(session, schoolId);
+    const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
       return {
         success: false,
@@ -1867,7 +1868,7 @@ export async function configureAdmissionStageAction(payload: {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
-    const auth = verifyTenantAdminRole(session, schoolId);
+    const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
       return {
         success: false,
@@ -1880,8 +1881,13 @@ export async function configureAdmissionStageAction(payload: {
         where: { id: payload.stageId },
         include: { track: true },
       });
-      if (!existing || existing.track.tenantId !== schoolId) {
-        return { success: false, error: "404 Not Found: Stage does not belong to this tenant." };
+      if (!existing) {
+        return { success: false, error: "404 Not Found: Stage not found." };
+      }
+
+      const isStageOwner = await isSessionMatchingTenant(session, existing.track.tenantId);
+      if (!isStageOwner && !auth.isGlobalSuperAdmin) {
+        return { success: false, error: "403 Forbidden: Stage does not belong to your school pipeline." };
       }
 
       const updated = await basePrisma.admissionStage.update({
@@ -1904,8 +1910,13 @@ export async function configureAdmissionStageAction(payload: {
       const track = await basePrisma.admissionTrack.findUnique({
         where: { id: payload.trackId },
       });
-      if (!track || track.tenantId !== schoolId) {
-        return { success: false, error: "403 Forbidden: Target track does not belong to this tenant." };
+      if (!track) {
+        return { success: false, error: "404 Not Found: Target track not found." };
+      }
+
+      const isTrackOwner = await isSessionMatchingTenant(session, track.tenantId);
+      if (!isTrackOwner && !auth.isGlobalSuperAdmin) {
+        return { success: false, error: "403 Forbidden: Target track does not belong to your school." };
       }
 
       const created = await basePrisma.admissionStage.create({
@@ -1941,7 +1952,7 @@ export async function transitionCandidateStageAction(payload: {
     const schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
 
-    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
       return {
         success: false,
@@ -2020,7 +2031,7 @@ export async function saveManualEntranceScoreAction(payload: {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
-    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
       return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to record exam scores." };
     }
@@ -2121,7 +2132,7 @@ export async function bulkSaveManualEntranceScoresAction(payload: {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
-    const auth = verifyAdmissionsMutatorRole(session, schoolId);
+    const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
       return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to record exam scores." };
     }

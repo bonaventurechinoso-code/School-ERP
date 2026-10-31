@@ -27,10 +27,89 @@ export interface AuthValidationResult {
  * Crucial Tenancy Tenet: Tenant Admins are NOT platform Super Admins.
  * Tenant Admins are strictly scoped to their own tenant_id.
  */
-export function verifyTenantAdminRole(
+/**
+ * Helper to safely verify whether session's tenant matches the target tenant.
+ * Accounts for UUID vs. Subdomain slug representations.
+ */
+export async function isSessionMatchingTenant(
   session: any,
   targetTenantId: string
-): AuthValidationResult {
+): Promise<boolean> {
+  if (!targetTenantId) return false;
+
+  const sessionTenantId = (
+    session?.tenantId ||
+    session?.user?.tenantId ||
+    session?.tenant_id ||
+    session?.user?.tenant_id ||
+    session?.schoolId ||
+    session?.user?.schoolId ||
+    ""
+  )
+    .toString()
+    .trim();
+
+  const sessionDomain = (
+    session?.schoolDomain ||
+    session?.user?.schoolDomain ||
+    ""
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  const target = targetTenantId.toString().trim();
+  const targetLower = target.toLowerCase();
+
+  // Fast path 1: Direct UUID / ID match
+  if (sessionTenantId && sessionTenantId.toLowerCase() === targetLower) {
+    return true;
+  }
+
+  // Fast path 2: Direct subdomain match
+  if (sessionDomain && sessionDomain === targetLower) {
+    return true;
+  }
+
+  // Fallback path: Query database to resolve target and session tenant identifiers
+  try {
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [{ id: target }, { subdomain: target }, { slug: target }],
+      },
+      select: { id: true, subdomain: true, slug: true },
+    });
+
+    if (school) {
+      const schoolIdLower = school.id.toLowerCase();
+      const schoolSubdomainLower = (school.subdomain || "").toLowerCase();
+      const schoolSlugLower = (school.slug || "").toLowerCase();
+
+      if (
+        (sessionTenantId && sessionTenantId.toLowerCase() === schoolIdLower) ||
+        (sessionDomain &&
+          (sessionDomain === schoolSubdomainLower ||
+            sessionDomain === schoolSlugLower))
+      ) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("[isSessionMatchingTenant] Database lookup warning:", err);
+  }
+
+  return false;
+}
+
+/**
+ * Validates whether the caller has Tenant Admin authority for the target tenant.
+ * Crucial Tenancy Tenet: Tenant Admins are NOT platform Super Admins.
+ * Tenant Admins are strictly scoped to their own tenant_id.
+ */
+export async function verifyTenantAdminRole(
+  session: any,
+  targetTenantId: string
+): Promise<AuthValidationResult> {
   if (!session) {
     return {
       authorized: false,
@@ -80,9 +159,8 @@ export function verifyTenantAdminRole(
 
   // Cross-tenant protection: Ensure tenant admin belongs to this tenant
   if (!isGlobalSuperAdmin) {
-    const callerTenantId =
-      session.schoolId || session.schoolDomain || (session as any).tenantId;
-    if (callerTenantId && targetTenantId && callerTenantId !== targetTenantId) {
+    const isMatching = await isSessionMatchingTenant(session, targetTenantId);
+    if (!isMatching) {
       return {
         authorized: false,
         status: 403,
@@ -103,10 +181,10 @@ export function verifyTenantAdminRole(
 /**
  * Validates whether caller has either Tenant Admin or Admissions Officer authority for candidate transitions.
  */
-export function verifyAdmissionsMutatorRole(
+export async function verifyAdmissionsMutatorRole(
   session: any,
   targetTenantId: string
-): AuthValidationResult {
+): Promise<AuthValidationResult> {
   if (!session) {
     return {
       authorized: false,
@@ -163,9 +241,8 @@ export function verifyAdmissionsMutatorRole(
 
   // Cross-tenant protection
   if (!isGlobalSuperAdmin) {
-    const callerTenantId =
-      session.schoolId || session.schoolDomain || (session as any).tenantId;
-    if (callerTenantId && targetTenantId && callerTenantId !== targetTenantId) {
+    const isMatching = await isSessionMatchingTenant(session, targetTenantId);
+    if (!isMatching) {
       return {
         authorized: false,
         status: 403,

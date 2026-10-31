@@ -4,6 +4,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import {
   verifyTenantAdminRole,
   verifyAdmissionsMutatorRole,
+  isSessionMatchingTenant,
   evaluateStageConstraints,
   ensureTenantAdmissionTracks,
 } from "@/lib/admissions-pipeline.service";
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
     // Guardrail: Stage Constraint Verification
     // =========================================================================
     if (action === "TRANSITION_STAGE") {
-      const auth = verifyAdmissionsMutatorRole(session, targetTenantId);
+      const auth = await verifyAdmissionsMutatorRole(session, targetTenantId);
       if (!auth.authorized) {
         return NextResponse.json(
           { error: auth.reason || "403 Forbidden: Insufficient admissions privileges." },
@@ -230,7 +231,7 @@ export async function POST(req: NextRequest) {
     // Permitted: Tenant Admin ONLY (within own tenantId)
     // =========================================================================
     if (action === "CREATE_TRACK") {
-      const auth = verifyTenantAdminRole(session, targetTenantId);
+      const auth = await verifyTenantAdminRole(session, targetTenantId);
       if (!auth.authorized) {
         return NextResponse.json(
           { error: auth.reason || "403 Forbidden: Only the Tenant Admin can create admission tracks." },
@@ -294,7 +295,7 @@ export async function POST(req: NextRequest) {
     // Permitted: Tenant Admin ONLY
     // =========================================================================
     if (action === "CONFIGURE_STAGE") {
-      const auth = verifyTenantAdminRole(session, targetTenantId);
+      const auth = await verifyTenantAdminRole(session, targetTenantId);
       if (!auth.authorized) {
         return NextResponse.json(
           { error: auth.reason || "403 Forbidden: Only the Tenant Admin can configure stage constraints." },
@@ -311,10 +312,18 @@ export async function POST(req: NextRequest) {
           include: { track: true },
         });
 
-        if (!existing || existing.track.tenantId !== targetTenantId) {
+        if (!existing) {
           return NextResponse.json(
-            { error: "404 Not Found: Admission stage does not exist in your tenant pipeline." },
+            { error: "404 Not Found: Admission stage does not exist." },
             { status: 404 }
+          );
+        }
+
+        const isStageOwner = await isSessionMatchingTenant(session, existing.track.tenantId);
+        if (!isStageOwner && !auth.isGlobalSuperAdmin) {
+          return NextResponse.json(
+            { error: "403 Forbidden: Stage does not belong to your tenant pipeline." },
+            { status: 403 }
           );
         }
 
@@ -342,9 +351,17 @@ export async function POST(req: NextRequest) {
           where: { id: trackId },
         });
 
-        if (!track || track.tenantId !== targetTenantId) {
+        if (!track) {
           return NextResponse.json(
-            { error: "403 Forbidden: Target track not found or cross-tenant manipulation attempted." },
+            { error: "404 Not Found: Target track does not exist." },
+            { status: 404 }
+          );
+        }
+
+        const isTrackOwner = await isSessionMatchingTenant(session, track.tenantId);
+        if (!isTrackOwner && !auth.isGlobalSuperAdmin) {
+          return NextResponse.json(
+            { error: "403 Forbidden: Target track does not belong to your tenant." },
             { status: 403 }
           );
         }
