@@ -115,7 +115,7 @@ export async function PATCH(
         toStatus: registerRecord?.status || "VERIFIED",
         action: "FORM_FEE_PAID",
         changedById: userRole || "Admissions Officer",
-        reason: "Form fee marked as PAID via manual bank transfer",
+        reason: "Application fee marked as PAID via manual bank transfer",
         createdAt: new Date().toISOString(),
       };
       credsObj.statusLogs = [...existingLogs, newLog];
@@ -144,7 +144,7 @@ export async function PATCH(
           leadLogs.push({
             timestamp: new Date().toISOString(),
             action: "FORM_FEE_PAID",
-            note: "Form fee marked as PAID via manual mobile transfer.",
+            note: "Application fee marked as PAID via manual mobile transfer.",
             operator: userRole || "Admissions Officer",
           });
           await basePrisma.admissionLead.update({
@@ -156,7 +156,7 @@ export async function PATCH(
         console.warn("[PATCH_ADMISSION_FORM_FEE_LEAD_LOG_WARN]:", leadLogErr);
       }
 
-      return NextResponse.json({ success: true, data: updated, message: "Form fee marked as PAID" });
+      return NextResponse.json({ success: true, data: updated, message: "Application fee marked as PAID" });
     }
 
     return NextResponse.json({ error: "No valid update operation provided" }, { status: 400 });

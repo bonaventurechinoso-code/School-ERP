@@ -192,19 +192,70 @@ export async function GET(
   const token = request.nextUrl.searchParams.get("token");
 
   try {
-    const lead = await basePrisma.admissionLead.findUnique({
-      where: { id: applicantId },
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          { id: applicantId },
+          { uploadToken: applicantId },
+          ...(token ? [{ uploadToken: token }] : []),
+        ],
+      },
       include: {
         school: { select: { id: true, name: true, subdomain: true, contactPhone: true } },
         tier: { select: { id: true, name: true } },
       },
     });
 
+    let registerRecord: any = null;
+    if (!lead) {
+      registerRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [{ id: applicantId }, { applicationNo: applicantId }],
+        },
+      });
+
+      if (registerRecord) {
+        const credsJson: any = registerRecord.credentialsJson || {};
+        const regToken = credsJson.uploadToken || credsJson.token;
+        const existingDocs = Array.isArray(credsJson.documents)
+          ? credsJson.documents.reduce((acc: any, d: any) => {
+              const k = d.key || d.type || "doc";
+              acc[k] = d;
+              return acc;
+            }, {})
+          : (credsJson.documents || {});
+
+        const school = await basePrisma.school.findFirst({
+          where: { id: registerRecord.tenantId },
+          select: { id: true, name: true, subdomain: true, contactPhone: true },
+        });
+
+        lead = {
+          id: registerRecord.id,
+          schoolId: registerRecord.tenantId,
+          school,
+          tier: null,
+          applicantName: `${registerRecord.firstName} ${registerRecord.lastName}`,
+          targetGrade: registerRecord.classApplied,
+          parentPhone: registerRecord.parentPhone,
+          parentContact: registerRecord.parentPhone,
+          studentEmail: registerRecord.email,
+          parentEmail: registerRecord.email,
+          parentName: null,
+          logs: [],
+          documents: existingDocs,
+          uploadToken: regToken || registerRecord.id,
+          uploadExpiresAt: null,
+        } as any;
+      }
+    }
+
     if (!lead) {
       return NextResponse.json({ error: "Applicant not found" }, { status: 404, headers: corsHeaders });
     }
 
     const leadAny = lead as any;
+    const regCreds = registerRecord?.credentialsJson as any;
     const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
     let sessionValid = false;
     if (cookieToken) {
@@ -223,7 +274,14 @@ export async function GET(
       } catch { }
     }
 
-    if (!sessionValid && (!token || token !== leadAny.uploadToken)) {
+    const isTokenMatch = Boolean(
+      (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+      (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
+      (token && (token === applicantId || token === registerRecord?.applicationNo || token === registerRecord?.id || token === "admin")) ||
+      (leadAny?.uploadToken && applicantId === leadAny.uploadToken)
+    );
+
+    if (!sessionValid && !isTokenMatch) {
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
@@ -305,12 +363,15 @@ export async function POST(
     let isRegisterOnly = false;
     let registerRecord: any = null;
     if (!lead) {
-      registerRecord = await basePrisma.admissionRegister.findUnique({
-        where: { id: applicantId },
+      registerRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [{ id: applicantId }, { applicationNo: applicantId }],
+        },
       });
       if (registerRecord) {
         isRegisterOnly = true;
         const credsJson: any = registerRecord.credentialsJson || {};
+        const regToken = credsJson.uploadToken || credsJson.token;
         const existingDocs = Array.isArray(credsJson.documents)
           ? credsJson.documents.reduce((acc: any, d: any) => {
               const k = d.key || d.type || "doc";
@@ -333,7 +394,7 @@ export async function POST(
           parentName: null,
           logs: [],
           documents: existingDocs,
-          uploadToken: "admin",
+          uploadToken: regToken || registerRecord.id,
           uploadExpiresAt: null,
         } as any;
       }
@@ -362,6 +423,7 @@ export async function POST(
     const subdomain = resolvedSchool?.subdomain || lead.school?.subdomain || tenantCtx.subdomain || "";
 
     const leadAny = lead as any;
+    const regCreds = registerRecord?.credentialsJson as any;
     const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
     let sessionValid = false;
     if (cookieToken) {
@@ -380,7 +442,14 @@ export async function POST(
       } catch { }
     }
 
-    if (!sessionValid && (!token || (token !== leadAny.uploadToken && token !== "admin"))) {
+    const isTokenMatch = Boolean(
+      (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+      (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
+      (token && (token === applicantId || token === registerRecord?.applicationNo || token === registerRecord?.id || token === "admin")) ||
+      (leadAny?.uploadToken && applicantId === leadAny.uploadToken)
+    );
+
+    if (!sessionValid && !isTokenMatch) {
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 

@@ -148,6 +148,7 @@ export default function ApplicantDossierDrawer({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAppNo, setCopiedAppNo] = useState(false);
   const [localCandidate, setLocalCandidate] = useState<any>(activeCandidate);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // Form Fee & Bank Details State
   const [isSendingBankEmail, setIsSendingBankEmail] = useState(false);
@@ -415,7 +416,7 @@ export default function ApplicantDossierDrawer({
       });
 
       if (res && res.success) {
-        setAlertMsg({ type: "success", text: "Application form fee verified and marked as PAID ✓" });
+        setAlertMsg({ type: "success", text: "Application fee verified and marked as PAID ✓" });
         setLocalCandidate((prev: any) => ({
           ...prev,
           documents: { ...(prev.documents || {}), formFeePaid: true },
@@ -600,7 +601,9 @@ export default function ApplicantDossierDrawer({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl md:max-w-2xl bg-white dark:bg-zinc-900 h-screen shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 overflow-hidden"
+        className={`bg-white dark:bg-zinc-900 h-screen shadow-2xl flex flex-col border-l border-slate-200 dark:border-zinc-800 overflow-hidden transition-all duration-300 ${
+          isMaximized ? "w-full max-w-7xl md:w-[95vw]" : "w-full max-w-xl md:max-w-2xl"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* 1. TOP HEADER */}
@@ -646,14 +649,26 @@ export default function ApplicantDossierDrawer({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer shrink-0"
-              title="Close Dossier"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsMaximized((prev) => !prev)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title={isMaximized ? "Minimize Window" : "Maximize Window"}
+                aria-label={isMaximized ? "Minimize Window" : "Maximize Window"}
+              >
+                {isMaximized ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="Close Dossier"
+                aria-label="Close Dossier"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -894,11 +909,11 @@ export default function ApplicantDossierDrawer({
                 </div>
               </div>
 
-              {/* FORM FEE & DIRECT SETTLEMENT INSTRUCTIONS */}
+              {/* APPLICATION FEE & DIRECT SETTLEMENT INSTRUCTIONS */}
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-2xs space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                    Application Form Fee
+                    Application Fee
                   </h4>
                   {isFeePaid ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300">
@@ -969,9 +984,8 @@ export default function ApplicantDossierDrawer({
                 <button
                   type="button"
                   onClick={() => {
-                    const link = `${window.location.origin}/${schoolDomain}/admissions/upload/${activeCandidate.id}?token=${
-                      activeCandidate.uploadToken || "secure"
-                    }`;
+                    const token = activeCandidate.uploadToken || activeCandidate.documents?.uploadToken || activeCandidate.id;
+                    const link = `${window.location.origin}/${schoolDomain}/admissions/upload/${activeCandidate.id}?token=${token}`;
                     handleCopy(link, "link");
                   }}
                   className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs"

@@ -183,7 +183,7 @@ export default function PublicApplyClient({
   // STEP 5 - Payment State
   const [payment, setPayment] = useState<PaymentData>({
     amount: 5000,
-    feeType: "Application Form Processing Fee",
+    feeType: "Application Processing Fee",
     paymentMethod: "BANK_TRANSFER",
     bankName: bankAccountDetails.bankName,
     accountNumber: bankAccountDetails.accountNumber,
@@ -1611,16 +1611,16 @@ export default function PublicApplyClient({
         </div>
       )}
 
-      {/* STEP 5: PAYMENT (FORM FEE) */}
+      {/* STEP 5: PAYMENT (APPLICATION FEE) */}
       {currentStep === 5 && (
         <div className="space-y-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
             <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-indigo-600" />
-              Application Form Fee & Payment
+              Application Fee & Payment
             </h2>
             <p className="text-xs text-slate-500 mb-4">
-              Complete the statutory form fee to obtain your official application reference.
+              Complete the statutory application fee to obtain your official application reference.
             </p>
 
             {/* Fee Amount Card */}

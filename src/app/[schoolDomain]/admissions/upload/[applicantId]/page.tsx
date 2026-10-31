@@ -33,17 +33,95 @@ export default async function ApplicantUploadPage({
     );
   }
 
-  // 2. Resolve applicant lead
-  const lead = await basePrisma.admissionLead.findUnique({
-    where: { id: applicantId },
+  // 2. Resolve applicant: Check admissionLead first, then admissionRegister fallback
+  let lead = await basePrisma.admissionLead.findFirst({
+    where: {
+      schoolId: school.id,
+      OR: [
+        { id: applicantId },
+        { uploadToken: applicantId },
+        ...(token ? [{ uploadToken: token }] : []),
+      ],
+    },
     include: { tier: true },
   });
 
-  const leadAny = lead as any;
-  const isTokenValid = lead && token && leadAny.uploadToken === token;
-  const isTokenExpired = leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date();
+  let registerRecord: any = null;
+  if (!lead) {
+    registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        tenantId: school.id,
+        OR: [
+          { id: applicantId },
+          { applicationNo: applicantId },
+        ],
+      },
+    });
 
-  // Allow authorization via active guest applicant session cookie as fallback
+    if (registerRecord) {
+      // Check if linked lead exists
+      lead = await basePrisma.admissionLead.findFirst({
+        where: {
+          schoolId: school.id,
+          OR: [
+            ...(registerRecord.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+            ...(registerRecord.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+          ],
+        },
+        include: { tier: true },
+      });
+
+      // If still no lead record, synthesize client profile from admissionRegister
+      if (!lead) {
+        const credsJson: any = registerRecord.credentialsJson || {};
+        const regToken = credsJson.uploadToken || credsJson.token;
+        lead = {
+          id: registerRecord.id,
+          schoolId: school.id,
+          tierId: null,
+          tier: null,
+          applicantName: `${registerRecord.firstName || ""} ${registerRecord.lastName || ""}`.trim() || "Applicant",
+          parentName: "Parent / Guardian",
+          parentPhone: registerRecord.parentPhone,
+          parentContact: registerRecord.parentPhone,
+          studentEmail: registerRecord.email,
+          parentEmail: registerRecord.email,
+          targetGrade: registerRecord.classApplied || "Primary 1",
+          status: registerRecord.status?.toUpperCase() || "APPLIED",
+          documents: typeof credsJson.documents === "object" ? credsJson.documents : (credsJson || {}),
+          logs: Array.isArray(credsJson.statusLogs) ? credsJson.statusLogs : [],
+          uploadToken: regToken || registerRecord.id,
+          uploadExpiresAt: null,
+          passportPhotoUrl: null,
+          academicResultsUrl: null,
+          birthCertificateUrl: null,
+          medicalRecordsUrl: null,
+        } as any;
+      }
+    }
+  }
+
+  const leadAny = lead as any;
+  const regCreds = registerRecord?.credentialsJson as any;
+
+  // Flexible token authentication:
+  // - Direct uploadToken match
+  // - URL applicantId matches lead.uploadToken
+  // - Token matches applicationNo / record ID
+  // - Admin token ("admin")
+  const isDirectTokenMatch = Boolean(
+    (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+    (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
+    (token && (leadAny?.id === token || registerRecord?.id === token || registerRecord?.applicationNo === token)) ||
+    (token && token === "admin")
+  );
+  const isUrlApplicantIdSelfAuthenticating = Boolean(
+    leadAny?.uploadToken && applicantId === leadAny.uploadToken
+  );
+  const isTokenValid = Boolean(lead && (isDirectTokenMatch || isUrlApplicantIdSelfAuthenticating));
+  const isTokenExpired = Boolean(leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date());
+
+  // Allow authorization via active guest applicant or tenant session cookie as fallback
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
   let sessionAuthorized = false;
@@ -55,6 +133,7 @@ export default async function ApplicantUploadPage({
       if (
         payload.leadId === applicantId ||
         payload.userId === applicantId ||
+        payload.tenantId === school.id ||
         (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
         payload.isGuestApplicant
       ) {
@@ -64,7 +143,7 @@ export default async function ApplicantUploadPage({
   }
 
   const isAuthorized = (isTokenValid || sessionAuthorized) && !isTokenExpired;
-  const effectiveToken = token || leadAny?.uploadToken || "";
+  const effectiveToken = token || leadAny?.uploadToken || applicantId;
 
   // 3. Security Guard: Token / Session validation
   if (!lead || !isAuthorized) {

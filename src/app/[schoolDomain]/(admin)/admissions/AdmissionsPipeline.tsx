@@ -440,7 +440,7 @@ export default function AdmissionsPipeline({
             return l;
           })
         );
-        setFeeModalToast({ type: "success", text: "Form fee marked as PAID successfully." });
+        setFeeModalToast({ type: "success", text: "Application fee marked as PAID successfully." });
         setTimeout(() => {
           setFeeModalLead(null);
           router.refresh();
@@ -1162,7 +1162,7 @@ export default function AdmissionsPipeline({
                   }}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
                 >
-                  Settle Form Fee Now
+                  Settle Application Fee Now
                 </button>
               )}
             </div>
@@ -1312,7 +1312,7 @@ export default function AdmissionsPipeline({
                   />
                   <div>
                     <span className="font-bold text-slate-800 dark:text-zinc-200 block">
-                      Require Form Fee Payment Verification
+                      Require Application Fee Payment Verification
                     </span>
                     <span className="text-[11px] text-slate-400 block">
                       Candidates must be settled as PAID before entering this stage.
@@ -1592,7 +1592,7 @@ export default function AdmissionsPipeline({
                 </div>
                 <div>
                   <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
-                    Form Fee Payment Action
+                    Application Fee Payment Action
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
                     Manual Mobile Transfer Bank Instructions
@@ -1669,7 +1669,7 @@ export default function AdmissionsPipeline({
                 </div>
                 <div>
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
-                    Form Fee Amount
+                    Application Fee Amount
                   </span>
                   <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
                     ₦{Number(bankDetails.formFeeAmount).toLocaleString()}

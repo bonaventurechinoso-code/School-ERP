@@ -567,7 +567,7 @@ export default function PaymentReceiptUpload({
 function titleForModule(mod: string): string {
   switch (mod) {
     case "ADMISSION_FORM_FEE":
-      return "Application Form Fee";
+      return "Application Fee";
     case "TUITION":
       return "School Tuition Fee";
     case "PLATFORM_SUBSCRIPTION":

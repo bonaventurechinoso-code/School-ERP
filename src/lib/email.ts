@@ -226,7 +226,7 @@ export async function sendPaymentInstructionEmail(params: PaymentInstructionEmai
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
         <div style="border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 20px;">
-          <h2 style="color: #1e293b; margin: 0; font-size: 20px;">Application Form Fee Payment Details</h2>
+          <h2 style="color: #1e293b; margin: 0; font-size: 20px;">Application Fee Payment Details</h2>
           <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">${params.schoolName || "Institution Admissions Desk"}</p>
         </div>
 

@@ -1316,7 +1316,7 @@ export default function BursarPortalClient({
                       <div className="p-3.5 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/60 text-xs text-cyan-800 dark:text-cyan-300">
                         <p className="font-bold">Bursary Cross-Reference Checklist</p>
                         <p className="mt-0.5 text-[11px] text-cyan-700 dark:text-cyan-400/90 leading-relaxed">
-                          Confirm that the candidate&apos;s registration deposit or application form fee matches the official tenant account records before validating clearance for formal matriculation.
+                          Confirm that the candidate&apos;s registration deposit or application fee matches the official tenant account records before validating clearance for formal matriculation.
                         </p>
                       </div>
                     </div>

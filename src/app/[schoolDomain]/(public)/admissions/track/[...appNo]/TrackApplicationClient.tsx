@@ -768,7 +768,7 @@ export default function TrackApplicationClient({
           </form>
         </div>
 
-        {/* UNIVERSAL BURSARY FORM FEE PAYMENT RECEIPT UPLOAD */}
+        {/* UNIVERSAL BURSARY APPLICATION FEE PAYMENT RECEIPT UPLOAD */}
         <PaymentReceiptUpload
           moduleType="ADMISSION_FORM_FEE"
           payerType="APPLICANT"
@@ -778,7 +778,7 @@ export default function TrackApplicationClient({
           referenceNo={applicant.applicationNo}
           tenantId={schoolId || schoolDomain}
           schoolId={schoolId}
-          title="Application Form Fee Payment Receipt"
+          title="Application Fee Payment Receipt"
           subtitle={`Submit official bank transfer proof for ${applicant.firstName} ${applicant.lastName} (${applicant.applicationNo})`}
         />
       </main>

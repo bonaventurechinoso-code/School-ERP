@@ -39,7 +39,7 @@ export interface ModuleDefinition {
 export const ALL_MODULE_TYPES: ModuleDefinition[] = [
   {
     moduleType: "ADMISSION_FORM_FEE",
-    defaultTitle: "Application Form Fee",
+    defaultTitle: "Application Fee",
     defaultAmount: 5000,
     defaultEnabled: true,
     category: "ADMISSIONS",
@@ -316,7 +316,7 @@ export async function createPaymentReceipt(params: CreateReceiptParams) {
     await logAdmissionAuditTimeline(
       params.referenceNo,
       "Payment Receipt Uploaded (PENDING_VERIFICATION)",
-      `Proof of payment for Form Fee (₦${Number(params.amount).toLocaleString()}, Ref: ${effectiveTransferRef}, Depositor: ${effectiveDepositorName}) uploaded. Status: PAYMENT_PENDING_REVIEW.`
+      `Proof of payment for Application Fee (₦${Number(params.amount).toLocaleString()}, Ref: ${effectiveTransferRef}, Depositor: ${effectiveDepositorName}) uploaded. Status: PAYMENT_PENDING_REVIEW.`
     );
   }
 
@@ -605,7 +605,7 @@ async function markAdmissionFormFeePaid(applicationNo: string, verifiedBy: strin
         fromStatus: register.status,
         toStatus: register.status,
         changedById: verifiedBy,
-        reason: "Form fee payment receipt verified by Bursar (Universal Receipt)",
+        reason: "Application fee payment receipt verified by Bursar (Universal Receipt)",
         createdAt: new Date().toISOString(),
       });
       creds.statusLogs = logs;

@@ -778,7 +778,7 @@ export default function AdmissionRegisterTable({
                       <span className="text-[10px] lowercase font-normal text-indigo-500">(0-100)</span>
                     </div>
                   </th>
-                  <th className="py-3 px-3.5">Form Fee</th>
+                  <th className="py-3 px-3.5">Application Fee</th>
                   <th className="py-3 px-3.5">Parent Phone</th>
                   <th className="py-3 px-3.5 text-right">Actions</th>
                 </tr>

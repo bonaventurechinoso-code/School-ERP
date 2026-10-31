@@ -327,7 +327,7 @@ export default function BursarReceiptsHub({
                 ))
               ) : (
                 <>
-                  <option value="ADMISSION_FORM_FEE">Admission Form Fee</option>
+                  <option value="ADMISSION_FORM_FEE">Application Fee</option>
                   <option value="PLATFORM_SUBSCRIPTION">Platform Subscription</option>
                   <option value="TUITION">Tuition / School Fees</option>
                   <option value="RESULT_CHECKING_FEE">Result Checking Fee</option>

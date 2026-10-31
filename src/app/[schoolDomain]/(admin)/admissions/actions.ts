@@ -1655,7 +1655,71 @@ export async function sendBankDetailsEmailAction(payload: {
 
     const targetEmail = payload.guardianEmail?.trim() || "bonaveeict@gmail.com";
 
-    // 1. Call existing email function in src/lib/email.ts
+    // 1. Resolve applicant record (AdmissionRegister or AdmissionLead)
+    const registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [{ id: payload.registerId }, { applicationNo: payload.registerId }],
+      },
+    });
+
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          { id: payload.registerId },
+          ...(registerRecord?.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+          ...(registerRecord?.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+        ],
+      },
+    });
+
+    // 2. Ensure or generate secure upload token for applicant credentials submission
+    let uploadToken = (lead as any)?.uploadToken;
+    const isTokenExpired = (lead as any)?.uploadExpiresAt && new Date((lead as any).uploadExpiresAt) < new Date();
+
+    if (!uploadToken || isTokenExpired) {
+      uploadToken = crypto.randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // 30-day upload window
+
+      if (lead) {
+        try {
+          await basePrisma.admissionLead.update({
+            where: { id: lead.id },
+            data: {
+              uploadToken,
+              uploadExpiresAt: expiresAt,
+            } as any,
+          });
+          (lead as any).uploadToken = uploadToken;
+          (lead as any).uploadExpiresAt = expiresAt;
+        } catch (tokenUpdateErr) {
+          console.warn("[sendBankDetailsEmailAction] Warning: Could not persist uploadToken to lead:", tokenUpdateErr);
+        }
+      }
+    }
+
+    // Fallback: If no lead exists, persist uploadToken in registerRecord.credentialsJson
+    if (!uploadToken) {
+      const regCreds: any = registerRecord?.credentialsJson || {};
+      uploadToken = regCreds.uploadToken || crypto.randomUUID();
+      if (registerRecord && !regCreds.uploadToken) {
+        try {
+          regCreds.uploadToken = uploadToken;
+          await basePrisma.admissionRegister.update({
+            where: { id: registerRecord.id },
+            data: { credentialsJson: regCreds },
+          });
+        } catch (regTokenErr) {
+          console.warn("[sendBankDetailsEmailAction] Warning: Could not persist uploadToken to register:", regTokenErr);
+        }
+      }
+    }
+
+    const effectiveTargetId = lead?.id || registerRecord?.id || payload.registerId;
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const uploadUrl = `${baseUrl}/${payload.schoolDomain}/admissions/upload/${effectiveTargetId}?token=${uploadToken}`;
+
+    // 3. Dispatch Payment Instruction Email
     await sendPaymentInstructionEmail({
       to: targetEmail,
       applicantName: payload.applicantName,
@@ -1664,19 +1728,13 @@ export async function sendBankDetailsEmailAction(payload: {
       bankName: payload.bankName,
       accountNumber: payload.accountNumber,
       accountName: payload.accountName,
-      narration: `FORM FEE ${payload.applicationNo}`,
-      uploadUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng"}/${payload.schoolDomain}/admissions/upload/${payload.registerId}`,
+      narration: `APPLICATION FEE ${payload.applicationNo}`,
+      uploadUrl,
       schoolName: school?.name || "Institution Admissions Desk",
       schoolId: school?.id || resolvedSchoolId,
     });
 
-    // 2. Log in Audit Timeline in AdmissionRegister credentialsJson.statusLogs
-    const registerRecord = await basePrisma.admissionRegister.findFirst({
-      where: {
-        OR: [{ id: payload.registerId }, { applicationNo: payload.registerId }],
-      },
-    });
-
+    // 4. Log in Audit Timeline in AdmissionRegister credentialsJson.statusLogs
     if (registerRecord) {
       let rawCreds: any = registerRecord.credentialsJson || {};
       let isArrayCreds = Array.isArray(rawCreds);
@@ -1703,15 +1761,6 @@ export async function sendBankDetailsEmailAction(payload: {
 
       // Also sync log to linked AdmissionLead if present
       try {
-        const lead = await basePrisma.admissionLead.findFirst({
-          where: {
-            OR: [
-              { id: payload.registerId },
-              ...(registerRecord.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
-              ...(registerRecord.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
-            ],
-          },
-        });
         if (lead) {
           const leadLogs = Array.isArray(lead.logs) ? (lead.logs as any[]) : [];
           leadLogs.push({
@@ -1740,7 +1789,7 @@ export async function sendBankDetailsEmailAction(payload: {
 }
 
 /**
- * Mark applicant form fee as PAID via manual bank transfer and append timeline audit log
+ * Mark applicant application fee as PAID via manual bank transfer and append timeline audit log
  */
 export async function markFormFeePaidAction(payload: {
   registerId: string;
@@ -1770,7 +1819,7 @@ export async function markFormFeePaidAction(payload: {
       toStatus: registerRecord.status,
       action: "FORM_FEE_PAID",
       changedById: payload.userRole || session?.userId || session?.name || "Admissions Officer",
-      reason: "Form fee marked as PAID via manual bank transfer",
+      reason: "Application fee marked as PAID via manual bank transfer",
       createdAt: new Date().toISOString(),
     };
     credsObj.statusLogs = [...existingLogs, newLog];
@@ -1799,7 +1848,7 @@ export async function markFormFeePaidAction(payload: {
         leadLogs.push({
           timestamp: new Date().toISOString(),
           action: "FORM_FEE_PAID",
-          note: "Form fee marked as PAID via manual mobile transfer.",
+          note: "Application fee marked as PAID via manual mobile transfer.",
           operator: payload.userRole || session?.userId || session?.name || "Admissions Officer",
         });
         await basePrisma.admissionLead.update({
@@ -1819,7 +1868,7 @@ export async function markFormFeePaidAction(payload: {
     return { success: true, applicant: updated };
   } catch (error: any) {
     console.error("[markFormFeePaidAction] Error:", error);
-    return { success: false, error: error?.message || "Failed to mark form fee as paid" };
+    return { success: false, error: error?.message || "Failed to mark application fee as paid" };
   }
 }
 

@@ -295,7 +295,7 @@ export function evaluateStageConstraints(
 
     if (!isFeePaid) {
       missing.push(
-        "Application/Form fee payment must be settled and verified as PAID before advancing."
+        "Application fee payment must be settled and verified as PAID before advancing."
       );
     }
   }
