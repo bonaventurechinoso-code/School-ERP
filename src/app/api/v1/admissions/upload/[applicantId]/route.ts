@@ -305,6 +305,9 @@ export async function GET(
         academicResultsUrl: leadAny.academicResultsUrl || null,
         birthCertificateUrl: leadAny.birthCertificateUrl || null,
         medicalRecordsUrl: leadAny.medicalRecordsUrl || null,
+        applicationFeeReceiptUrl: leadAny.applicationFeeReceiptUrl || leadAny.documents?.applicationFeeReceiptUrl || null,
+        formFeeReceiptUrl: leadAny.formFeeReceiptUrl || leadAny.documents?.formFeeReceiptUrl || null,
+        formFeePaid: Boolean(leadAny.formFeePaid || leadAny.documents?.formFeePaid),
       },
     }, { headers: corsHeaders });
   } catch (err: any) {
@@ -465,13 +468,41 @@ export async function POST(
 
     // 3. Process Uploaded Files
     const fileFields = [
-      { field: "applicationFeeReceipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
-      { field: "application_fee_receipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
-      { field: "paymentReceipt", prefix: "fee-receipt", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
-      { field: "passportPhoto", prefix: "passport", type: "IMAGE", allowedMimes: ALLOWED_IMAGE_MIMES },
-      { field: "academicResults", prefix: "academic-results", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
-      { field: "birthCertificate", prefix: "birth-certificate", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
-      { field: "medicalRecords", prefix: "medical-records", type: "DOC", allowedMimes: ALLOWED_DOC_MIMES },
+      {
+        field: "applicationFeeReceipt",
+        aliases: ["application_fee_receipt", "formFeeReceipt", "form_fee_receipt", "paymentReceipt"],
+        prefix: "fee-receipt",
+        type: "DOC",
+        allowedMimes: ALLOWED_DOC_MIMES,
+      },
+      {
+        field: "passportPhoto",
+        aliases: ["passport_photo", "passport"],
+        prefix: "passport",
+        type: "IMAGE",
+        allowedMimes: ALLOWED_IMAGE_MIMES,
+      },
+      {
+        field: "academicResults",
+        aliases: ["academic_results", "lastResult", "transcript"],
+        prefix: "academic-results",
+        type: "DOC",
+        allowedMimes: ALLOWED_DOC_MIMES,
+      },
+      {
+        field: "birthCertificate",
+        aliases: ["birth_certificate", "birthCert"],
+        prefix: "birth-certificate",
+        type: "DOC",
+        allowedMimes: ALLOWED_DOC_MIMES,
+      },
+      {
+        field: "medicalRecords",
+        aliases: ["medical_records", "medical"],
+        prefix: "medical-records",
+        type: "DOC",
+        allowedMimes: ALLOWED_DOC_MIMES,
+      },
     ];
 
     const currentDocs: any = { ...(leadAny.documents || {}) };
@@ -482,18 +513,24 @@ export async function POST(
 
     for (const item of fileFields) {
       let fileObj: File | null = null;
+      const candidateKeys = [item.field, ...(item.aliases || [])];
 
       if (formData) {
-        const formVal = formData.get(item.field);
-        if (formVal && typeof formVal === "object" && "arrayBuffer" in formVal && (formVal as File).size > 0) {
-          fileObj = formVal as File;
+        for (const k of candidateKeys) {
+          const formVal = formData.get(k);
+          if (formVal && typeof formVal === "object" && "arrayBuffer" in formVal && (formVal as File).size > 0) {
+            fileObj = formVal as File;
+            break;
+          }
         }
       }
 
-      if (!fileObj && streamFallback && streamFallback.files[item.field]) {
-        const streamFile = streamFallback.files[item.field];
-        if (streamFile.size > 0) {
-          fileObj = streamFile.toWebFile();
+      if (!fileObj && streamFallback) {
+        for (const k of candidateKeys) {
+          if (streamFallback.files[k] && streamFallback.files[k].size > 0) {
+            fileObj = streamFallback.files[k].toWebFile();
+            break;
+          }
         }
       }
 
@@ -510,8 +547,9 @@ export async function POST(
         if (!item.allowedMimes.includes(fileObj.type.toLowerCase())) {
           return NextResponse.json(
             {
-              error: `Invalid file type for ${item.field}. Allowed types: ${item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
-                }`,
+              error: `Invalid file type for ${item.field}. Allowed types: ${
+                item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
+              }`,
             },
             { status: 400, headers: corsHeaders }
           );
@@ -562,7 +600,11 @@ export async function POST(
         if (item.field === "medicalRecords") updateData.medicalRecordsUrl = publicUrl;
 
         // Dedicated Application Fee Receipt Mapping (STATE 2: PENDING)
-        if (item.field === "applicationFeeReceipt" || item.field === "application_fee_receipt" || item.field === "paymentReceipt") {
+        if (item.field === "applicationFeeReceipt") {
+          updateData.applicationFeeReceiptUrl = publicUrl;
+          updateData.formFeeReceiptUrl = publicUrl;
+          updateData.formFeePaid = false;
+
           currentDocs.applicationFeeReceipt = {
             url: publicUrl,
             fileUrl: publicUrl,
@@ -582,8 +624,12 @@ export async function POST(
           currentDocs.paymentState = "PAYMENT_PENDING_REVIEW";
           currentDocs.formFeePaid = false; // Remains false until admin marks as paid
 
-          const depositorName = formData ? formData.get("depositorName")?.toString().trim() : null;
-          const transferReference = formData ? formData.get("transferReference")?.toString().trim() : null;
+          const depositorName = formData
+            ? formData.get("depositorName")?.toString().trim()
+            : streamFallback?.fields["depositorName"]?.trim();
+          const transferReference = formData
+            ? formData.get("transferReference")?.toString().trim()
+            : streamFallback?.fields["transferReference"]?.trim();
           if (depositorName) currentDocs.depositorName = depositorName;
           if (transferReference) currentDocs.transferReference = transferReference;
         }
@@ -621,139 +667,163 @@ export async function POST(
 
     // 4. Update Database
     let updatedLead: any = null;
-    if (!isRegisterOnly) {
-      updatedLead = await basePrisma.admissionLead.update({
-        where: { id: lead.id },
-        data: updateData,
-      });
-
-      // 5. Dynamic Tier Database Synchronization
-      try {
-        const targetTier = lead.tier?.name || (lead as any).targetGrade || lead.tierId;
-        const tierDb = await getPrismaClientForTier(schoolId, targetTier);
-        await tierDb.admissionLead.updateMany({
-          where: { id: lead.id, schoolId },
+    try {
+      if (!isRegisterOnly) {
+        updatedLead = await basePrisma.admissionLead.update({
+          where: { id: lead.id },
           data: updateData,
-        }).catch(async () => {
-          await tierDb.admissionLead.update({
-            where: { id: lead.id },
+        });
+
+        // 5. Dynamic Tier Database Synchronization
+        try {
+          const targetTier = lead.tier?.name || (lead as any).targetGrade || lead.tierId;
+          const tierDb = await getPrismaClientForTier(schoolId, targetTier);
+          await tierDb.admissionLead.updateMany({
+            where: { id: lead.id, schoolId },
             data: updateData,
-          }).catch(() => null);
-        });
-      } catch (tierSyncErr) {
-        console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
-      }
-
-      // 5b. Update Global Admission Register audit record & document vault
-      try {
-        const credsList: any[] = [];
-        if (updateData.passportPhotoUrl) {
-          credsList.push({
-            type: "passport",
-            docType: "passportPhoto",
-            key: "passportPhoto",
-            name: "Applicant Passport Photograph",
-            path: updateData.passportPhotoUrl,
-            url: updateData.passportPhotoUrl,
-            fileUrl: updateData.passportPhotoUrl,
-            verified: false,
+          }).catch(async () => {
+            await tierDb.admissionLead.update({
+              where: { id: lead.id },
+              data: updateData,
+            }).catch(() => null);
           });
-        }
-        if (updateData.academicResultsUrl) {
-          credsList.push({
-            type: "result",
-            docType: "academicResults",
-            key: "academicResults",
-            name: "Previous Academic Results",
-            path: updateData.academicResultsUrl,
-            url: updateData.academicResultsUrl,
-            fileUrl: updateData.academicResultsUrl,
-            verified: false,
-          });
-        }
-        if (updateData.birthCertificateUrl) {
-          credsList.push({
-            type: "birth_cert",
-            docType: "birthCertificate",
-            key: "birthCertificate",
-            name: "Birth Certificate / Age Declaration",
-            path: updateData.birthCertificateUrl,
-            url: updateData.birthCertificateUrl,
-            fileUrl: updateData.birthCertificateUrl,
-            verified: false,
-          });
-        }
-        if (updateData.medicalRecordsUrl) {
-          credsList.push({
-            type: "medical",
-            docType: "medicalRecords",
-            key: "medicalRecords",
-            name: "Medical Certificate of Fitness",
-            path: updateData.medicalRecordsUrl,
-            url: updateData.medicalRecordsUrl,
-            fileUrl: updateData.medicalRecordsUrl,
-            verified: false,
-          });
+        } catch (tierSyncErr) {
+          console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
         }
 
-        const nameParts = (lead.applicantName || "").trim().split(" ");
-        const firstName = nameParts[0] || "Student";
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
+        // 5b. Update Global Admission Register audit record & document vault
+        try {
+          const credsList: any[] = [];
+          if (updateData.passportPhotoUrl) {
+            credsList.push({
+              type: "passport",
+              docType: "passportPhoto",
+              key: "passportPhoto",
+              name: "Applicant Passport Photograph",
+              path: updateData.passportPhotoUrl,
+              url: updateData.passportPhotoUrl,
+              fileUrl: updateData.passportPhotoUrl,
+              verified: false,
+            });
+          }
+          if (updateData.academicResultsUrl) {
+            credsList.push({
+              type: "result",
+              docType: "academicResults",
+              key: "academicResults",
+              name: "Previous Academic Results",
+              path: updateData.academicResultsUrl,
+              url: updateData.academicResultsUrl,
+              fileUrl: updateData.academicResultsUrl,
+              verified: false,
+            });
+          }
+          if (updateData.birthCertificateUrl) {
+            credsList.push({
+              type: "birth_cert",
+              docType: "birthCertificate",
+              key: "birthCertificate",
+              name: "Birth Certificate / Age Declaration",
+              path: updateData.birthCertificateUrl,
+              url: updateData.birthCertificateUrl,
+              fileUrl: updateData.birthCertificateUrl,
+              verified: false,
+            });
+          }
+          if (updateData.medicalRecordsUrl) {
+            credsList.push({
+              type: "medical",
+              docType: "medicalRecords",
+              key: "medicalRecords",
+              name: "Medical Certificate of Fitness",
+              path: updateData.medicalRecordsUrl,
+              url: updateData.medicalRecordsUrl,
+              fileUrl: updateData.medicalRecordsUrl,
+              verified: false,
+            });
+          }
+          if (updateData.applicationFeeReceiptUrl) {
+            credsList.push({
+              type: "fee_receipt",
+              docType: "applicationFeeReceipt",
+              key: "applicationFeeReceipt",
+              name: "Application Fee Receipt",
+              path: updateData.applicationFeeReceiptUrl,
+              url: updateData.applicationFeeReceiptUrl,
+              fileUrl: updateData.applicationFeeReceiptUrl,
+              verified: false,
+              status: "PENDING",
+            });
+          }
 
-        const { executeLeadToRegisterTransition } = await import(
-          "@/modules/enrollment/enrollment.controller"
-        );
+          const nameParts = (lead.applicantName || "").trim().split(" ");
+          const firstName = nameParts[0] || "Student";
+          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
 
-        await executeLeadToRegisterTransition({
-          tenantId: schoolId,
-          leadId: lead.id,
-          bioData: {
-            firstName,
-            lastName,
-            classApplied: lead.targetGrade || "N/A",
-            parentPhone: lead.parentPhone || lead.parentContact || "N/A",
-            email: lead.studentEmail || lead.parentEmail || null,
-            parentName: lead.parentName || null,
+          const { executeLeadToRegisterTransition } = await import(
+            "@/modules/enrollment/enrollment.controller"
+          );
+
+          await executeLeadToRegisterTransition({
+            tenantId: schoolId,
+            leadId: lead.id,
+            bioData: {
+              firstName,
+              lastName,
+              classApplied: lead.targetGrade || "N/A",
+              parentPhone: lead.parentPhone || lead.parentContact || "N/A",
+              email: lead.studentEmail || lead.parentEmail || null,
+              parentName: lead.parentName || null,
+            },
+            credentials: credsList,
+            status: "docs_pending",
+          });
+        } catch (regErr) {
+          console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
+        }
+      } else {
+        // Update AdmissionRegister record directly
+        const currentReg = await basePrisma.admissionRegister.findUnique({ where: { id: applicantId } });
+        const currentCreds: any = currentReg?.credentialsJson || {};
+        let docsList: any[] = Array.isArray(currentCreds.documents) ? [...currentCreds.documents] : [];
+
+        for (const [fKey, docObj] of Object.entries(currentDocs as Record<string, any>)) {
+          docsList = docsList.filter((d: any) => (d.key || d.type || "").toLowerCase() !== fKey.toLowerCase());
+          docsList.push({
+            key: fKey,
+            type: fKey,
+            label: fKey,
+            url: docObj.url,
+            fileUrl: docObj.fileUrl,
+            fileName: docObj.fileName,
+            size: docObj.size,
+            verified: false,
+            status: "UPLOADED",
+          });
+        }
+
+        updatedLead = await basePrisma.admissionRegister.update({
+          where: { id: applicantId },
+          data: {
+            applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || currentReg?.applicationFeeReceiptUrl,
+            formFeeReceiptUrl: currentDocs.formFeeReceiptUrl || currentReg?.formFeeReceiptUrl,
+            formFeePaid: false,
+            credentialsJson: {
+              ...currentCreds,
+              documents: docsList,
+              formFeeStatus: currentDocs.applicationFeeReceiptUrl ? "PENDING" : currentCreds.formFeeStatus,
+              applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || currentCreds.applicationFeeReceiptUrl,
+              formFeeReceiptUrl: currentDocs.formFeeReceiptUrl || currentCreds.formFeeReceiptUrl,
+            },
           },
-          credentials: credsList,
-          status: "docs_pending",
-        });
-      } catch (regErr) {
-        console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
-      }
-    } else {
-      // Update AdmissionRegister record directly
-      const currentReg = await basePrisma.admissionRegister.findUnique({ where: { id: applicantId } });
-      const currentCreds: any = currentReg?.credentialsJson || {};
-      let docsList: any[] = Array.isArray(currentCreds.documents) ? [...currentCreds.documents] : [];
-
-      for (const [fKey, docObj] of Object.entries(currentDocs as Record<string, any>)) {
-        docsList = docsList.filter((d: any) => (d.key || d.type || "").toLowerCase() !== fKey.toLowerCase());
-        docsList.push({
-          key: fKey,
-          type: fKey,
-          label: fKey,
-          url: docObj.url,
-          fileUrl: docObj.fileUrl,
-          fileName: docObj.fileName,
-          size: docObj.size,
-          verified: false,
-          status: "UPLOADED",
         });
       }
-
-      updatedLead = await basePrisma.admissionRegister.update({
-        where: { id: applicantId },
-        data: {
-          credentialsJson: {
-            ...currentCreds,
-            documents: docsList,
-            formFeeStatus: currentDocs.applicationFeeReceiptUrl ? "PENDING" : currentCreds.formFeeStatus,
-            applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || currentCreds.applicationFeeReceiptUrl,
-            formFeeReceiptUrl: currentDocs.formFeeReceiptUrl || currentCreds.formFeeReceiptUrl,
-          },
-        },
-      });
+    } catch (dbUpdateError: any) {
+      console.error("DB Upload Error:", dbUpdateError);
+      return NextResponse.json(
+        { error: dbUpdateError?.message || "Database write error during file upload" },
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // 5c. Sync Application Fee Receipt to AdmissionRegister & PaymentReceipt if uploaded
@@ -800,6 +870,9 @@ export async function POST(
             await basePrisma.admissionRegister.update({
               where: { id: reg.id },
               data: {
+                applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || reg.applicationFeeReceiptUrl,
+                formFeeReceiptUrl: currentDocs.formFeeReceiptUrl || reg.formFeeReceiptUrl,
+                formFeePaid: false,
                 credentialsJson: credsObj,
                 updatedAt: new Date(),
               },

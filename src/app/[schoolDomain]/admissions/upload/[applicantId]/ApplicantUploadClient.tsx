@@ -213,7 +213,6 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
       if (files.applicationFeeReceipt) {
         formData.append("applicationFeeReceipt", files.applicationFeeReceipt);
-        formData.append("application_fee_receipt", files.applicationFeeReceipt);
       }
       if (depositorName) formData.append("depositorName", depositorName);
       if (transferReference) formData.append("transferReference", transferReference);

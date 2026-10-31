@@ -988,12 +988,15 @@ model AdmissionLead {
   offerExpiresAt DateTime?
 
   // Secure Upload Credentials Portal Fields
-  uploadToken         String?         @unique
-  uploadExpiresAt     DateTime?
-  passportPhotoUrl    String?
-  academicResultsUrl  String?
-  birthCertificateUrl String?
-  medicalRecordsUrl   String?
+  uploadToken              String?         @unique
+  uploadExpiresAt          DateTime?
+  applicationFeeReceiptUrl String?         @map("application_fee_receipt_url")
+  formFeeReceiptUrl        String?         @map("form_fee_receipt_url")
+  formFeePaid              Boolean         @default(false) @map("form_fee_paid")
+  passportPhotoUrl         String?
+  academicResultsUrl       String?
+  birthCertificateUrl      String?
+  medicalRecordsUrl        String?
   documents           Json?           @default("{}")
   trackId             String?         @map("track_id")
   track               AdmissionTrack? @relation(fields: [trackId], references: [id], onDelete: SetNull)
@@ -1277,8 +1280,11 @@ model AdmissionRegister {
   parentPhone     String    @map("parent_phone")
   email           String?
   credentialsJson Json?     @map("credentials_json")
-  status          String    @default("new")
-  verifiedBy      String?   @map("verified_by")
+  status                   String    @default("new")
+  formFeePaid              Boolean   @default(false) @map("form_fee_paid")
+  applicationFeeReceiptUrl String?   @map("application_fee_receipt_url")
+  formFeeReceiptUrl        String?   @map("form_fee_receipt_url")
+  verifiedBy               String?   @map("verified_by")
   verifiedAt      DateTime? @map("verified_at")
   admittedAt      DateTime? @map("admitted_at")
   createdAt       DateTime  @default(now()) @map("created_at")
