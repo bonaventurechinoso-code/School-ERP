@@ -23,6 +23,8 @@ import {
   Plus,
   AlertTriangle,
   X,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import {
@@ -31,6 +33,8 @@ import {
   saveManualEntranceScoreAction,
   bulkSaveManualEntranceScoresAction,
   transitionCandidateStageAction,
+  deleteApplicantAction,
+  deduplicateAdmissionsAction,
 } from "./actions";
 
 export interface UnifiedApplicantRow {
@@ -60,10 +64,12 @@ export interface AdmissionRegisterTableProps {
   schoolDomain: string;
   schoolName?: string;
   canMutate?: boolean;
+  isTenantAdmin?: boolean;
   leads?: any[];
   stages?: any[];
   activeTrackName?: string;
   onLeadUpdated?: (updatedLead: any) => void;
+  onLeadDeleted?: (deletedLeadId: string) => void;
 }
 
 export default function AdmissionRegisterTable({
@@ -71,16 +77,23 @@ export default function AdmissionRegisterTable({
   schoolDomain,
   schoolName = "Institution Admissions Desk",
   canMutate = false,
+  isTenantAdmin = false,
   leads = [],
   stages = [],
   activeTrackName = "",
   onLeadUpdated,
+  onLeadDeleted,
 }: AdmissionRegisterTableProps) {
   const [remoteRecords, setRemoteRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [copiedAppNo, setCopiedAppNo] = useState<string | null>(null);
+
+  // Deletion & Deduplication state
+  const [rowToDelete, setRowToDelete] = useState<UnifiedApplicantRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
 
   // Score editing state
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -474,6 +487,94 @@ export default function AdmissionRegisterTable({
     }
   };
 
+  // Auth-Checked Applicant Deletion
+  const handleConfirmDelete = async () => {
+    if (!rowToDelete) return;
+    setIsDeleting(true);
+    setActionMessage(null);
+
+    try {
+      const res = await deleteApplicantAction({
+        applicantId: rowToDelete.id,
+        leadId: rowToDelete.leadId,
+        registerId: rowToDelete.registerId,
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res.success) {
+        setActionMessage({
+          type: "success",
+          text: `Applicant "${rowToDelete.fullName}" was removed from the ledger.`,
+        });
+
+        // Instantly purge from local state
+        setRemoteRecords((prev) =>
+          prev.filter(
+            (r) =>
+              r.id !== rowToDelete.id &&
+              r.id !== rowToDelete.registerId &&
+              r.id !== rowToDelete.leadId
+          )
+        );
+
+        if (onLeadDeleted && (rowToDelete.leadId || rowToDelete.id)) {
+          onLeadDeleted(rowToDelete.leadId || rowToDelete.id);
+        }
+
+        setRowToDelete(null);
+        await fetchRecords();
+      } else {
+        setActionMessage({
+          type: "error",
+          text: res.error || "Failed to delete applicant record.",
+        });
+      }
+    } catch (err: any) {
+      console.error("Delete applicant error:", err);
+      setActionMessage({
+        type: "error",
+        text: err.message || "Failed to delete applicant record.",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Automatic Record Deduplication Engine Trigger
+  const handleDeduplicateRegister = async () => {
+    setIsDeduplicating(true);
+    setActionMessage(null);
+
+    try {
+      const res = await deduplicateAdmissionsAction({
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res.success) {
+        setActionMessage({
+          type: "success",
+          text: res.message || `Deduplication complete: Merged ${res.mergedCount} group(s), purged ${res.purgedCount} redundant row(s).`,
+        });
+        await fetchRecords();
+      } else {
+        setActionMessage({
+          type: "error",
+          text: res.error || "Failed to execute deduplication.",
+        });
+      }
+    } catch (err: any) {
+      console.error("Deduplication error:", err);
+      setActionMessage({
+        type: "error",
+        text: err.message || "Failed to execute deduplication.",
+      });
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
   const renderStatusBadge = (status: string) => {
     const s = (status || "INQUIRY").toUpperCase();
     if (s === "INQUIRY" || s === "NEW") {
@@ -621,6 +722,19 @@ export default function AdmissionRegisterTable({
             >
               <Save className="w-3.5 h-3.5" />
               <span>{isSavingBulk ? "Saving..." : "Save All Scores"}</span>
+            </button>
+          )}
+
+          {canMutate && (
+            <button
+              type="button"
+              onClick={handleDeduplicateRegister}
+              disabled={isDeduplicating || loading}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 font-bold text-xs transition shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Clean up historic duplicate applicant rows within this institution"
+            >
+              <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isDeduplicating ? "animate-spin" : ""}`} />
+              <span>{isDeduplicating ? "Deduplicating..." : "✨ Deduplicate Register"}</span>
             </button>
           )}
 
@@ -886,6 +1000,18 @@ export default function AdmissionRegisterTable({
                               {isActionLoading ? "..." : "Admit"}
                             </button>
                           )}
+
+                          {canMutate && (
+                            <button
+                              type="button"
+                              onClick={() => setRowToDelete(r)}
+                              disabled={isActionLoading}
+                              className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer disabled:opacity-50"
+                              title="Delete Applicant Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -896,6 +1022,67 @@ export default function AdmissionRegisterTable({
           </div>
         )}
       </div>
+
+      {/* DELETE CONFIRMATION DIALOG MODAL */}
+      {rowToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-rose-200 dark:border-rose-900/60 max-w-md w-full p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                  Delete Applicant Record
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                  Are you sure you want to remove <strong>{rowToDelete.fullName}</strong> ({rowToDelete.applicationNo})? This action cannot be undone.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRowToDelete(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+              <span className="font-bold">Permanent removal:</span> This will safely purge the candidate dossier, linked credentials, and progression records from your institution&apos;s admissions register.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setRowToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800 text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Applicant</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* UNIFIED MASTER CANDIDATE DOSSIER DRAWER */}
       {selectedRow && (

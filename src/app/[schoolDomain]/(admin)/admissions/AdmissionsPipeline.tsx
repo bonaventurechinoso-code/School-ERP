@@ -887,6 +887,7 @@ export default function AdmissionsPipeline({
           schoolDomain={schoolDomain || ""}
           schoolName={schoolName}
           canMutate={canMutate}
+          isTenantAdmin={isTenantAdmin}
           leads={filteredLeads}
           stages={stages}
           activeTrackName={activeTrack?.name || "Active Track"}
@@ -894,6 +895,9 @@ export default function AdmissionsPipeline({
             setLocalLeads((prev) =>
               prev.map((l) => (l.id === updatedLead.id ? { ...l, ...updatedLead } : l))
             );
+          }}
+          onLeadDeleted={(deletedId) => {
+            setLocalLeads((prev) => prev.filter((l) => l.id !== deletedId));
           }}
         />
       ) : (

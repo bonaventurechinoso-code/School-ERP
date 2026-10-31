@@ -8,6 +8,10 @@ import {
   ensureTenantAdmissionTracks,
   StageConstraints,
 } from "@/lib/admissions-pipeline.service";
+import {
+  buildDeduplicationCompoundKey,
+  deduplicateTenantAdmissions,
+} from "@/lib/admissions-deduplication.service";
 import { AdmissionTierType } from "@prisma/client";
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
@@ -90,7 +94,63 @@ export async function createAdmissionLeadAction(payload: {
     const schoolId = await resolveSchoolId(payload.schoolId);
 
     // SYSTEM ANTI-DUPLICATE GUARD (DEDUPLICATION):
-    // Compound validation key: [schoolId + Student Name + Parent Phone/Email]
+    // Compound validation key: [schoolId + Candidate Name + Class/Grade + Parent Phone]
+    const targetPhone = payload.parentPhone || payload.parentContact;
+    const targetKey = buildDeduplicationCompoundKey(
+      payload.applicantName,
+      payload.targetGrade,
+      targetPhone
+    );
+
+    // 1. Check active leads in database
+    const existingLeads = await basePrisma.admissionLead.findMany({
+      where: { schoolId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const matchingLead = existingLeads.find((l) => {
+      const k = buildDeduplicationCompoundKey(
+        l.applicantName,
+        l.targetGrade,
+        l.parentPhone || l.parentContact
+      );
+      return k && k === targetKey;
+    });
+
+    if (matchingLead) {
+      // Merge incoming inquiry payload into active lead record to prevent data fracturing
+      const existingLogs = Array.isArray(matchingLead.logs)
+        ? (matchingLead.logs as any[])
+        : [];
+      const updatedLogs = [
+        ...existingLogs,
+        {
+          timestamp: new Date().toISOString(),
+          action: "INQUIRY_DEDUPLICATED_MERGE",
+          note: `Follow-up inquiry registered via ${payload.source || "Walk-In"} merged into active candidate profile.`,
+        },
+      ];
+
+      const mergedLead = await basePrisma.admissionLead.update({
+        where: { id: matchingLead.id },
+        data: {
+          targetGrade: payload.targetGrade.trim() || matchingLead.targetGrade,
+          parentName: payload.parentName?.trim() || matchingLead.parentName,
+          parentContact: payload.parentContact.trim() || matchingLead.parentContact,
+          parentPhone: payload.parentPhone?.trim() || matchingLead.parentPhone,
+          parentEmail: payload.parentEmail?.trim().toLowerCase() || matchingLead.parentEmail,
+          studentEmail: payload.studentEmail?.trim().toLowerCase() || matchingLead.studentEmail,
+          studentPhone: payload.studentPhone?.trim() || matchingLead.studentPhone,
+          logs: updatedLogs as any,
+        },
+        include: { tier: true, track: true, stage: true },
+      });
+
+      await invalidateAdmissionsNamespace(schoolId);
+      safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
+      return { success: true, lead: mergedLead, deduplicated: true };
+    }
+
     const dupCheck = await findDuplicateAdmissionEntry({
       tenantId: schoolId,
       studentName: payload.applicantName.trim(),
@@ -123,7 +183,7 @@ export async function createAdmissionLeadAction(payload: {
           studentPhone: payload.studentPhone?.trim() || dupCheck.leadRecord.studentPhone,
           logs: updatedLogs as any,
         },
-        include: { tier: true },
+        include: { tier: true, track: true, stage: true },
       });
 
       await invalidateAdmissionsNamespace(schoolId);
@@ -2162,5 +2222,151 @@ export async function bulkSaveManualEntranceScoresAction(payload: {
   } catch (err: any) {
     console.error("[bulkSaveManualEntranceScoresAction] Error:", err);
     return { success: false, error: err.message || "Failed to bulk save entrance scores." };
+  }
+}
+
+/**
+ * Safely removes an applicant record from both AdmissionLead and AdmissionRegister.
+ * Restricted strictly to Tenant Admin or Super Admin within their matching schoolId.
+ */
+export async function deleteApplicantAction(payload: {
+  applicantId: string;
+  leadId?: string;
+  registerId?: string;
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = await verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: auth.reason || "403 Forbidden: Only the Tenant Admin can delete applicant records.",
+      };
+    }
+
+    const targetId = payload.applicantId || payload.leadId || payload.registerId;
+    if (!targetId) {
+      return { success: false, error: "400 Bad Request: Missing applicant identifier." };
+    }
+
+    // 1. Locate corresponding AdmissionLead if any
+    const lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          { id: targetId },
+          ...(payload.leadId ? [{ id: payload.leadId }] : []),
+        ],
+      },
+    });
+
+    // 2. Locate corresponding AdmissionRegister if any
+    const cleanRef = targetId.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+    const register = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [
+          { id: targetId },
+          ...(payload.registerId ? [{ id: payload.registerId }] : []),
+          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(lead?.studentEmail ? [{ email: lead.studentEmail }] : []),
+          ...(lead?.parentEmail ? [{ email: lead.parentEmail }] : []),
+        ],
+      },
+    });
+
+    if (!lead && !register) {
+      return { success: false, error: "404 Not Found: Applicant record not found in this institution." };
+    }
+
+    // Strict Tenancy Verification
+    if (lead) {
+      const isLeadOwner = await isSessionMatchingTenant(session, lead.schoolId);
+      if (!isLeadOwner && !auth.isGlobalSuperAdmin) {
+        return { success: false, error: "403 Forbidden: Candidate record belongs to another institution." };
+      }
+    }
+    if (register) {
+      const isRegOwner = await isSessionMatchingTenant(session, register.tenantId);
+      if (!isRegOwner && !auth.isGlobalSuperAdmin) {
+        return { success: false, error: "403 Forbidden: Candidate record belongs to another institution." };
+      }
+    }
+
+    // Execute Safe Database Transaction Deletion
+    await basePrisma.$transaction(async (tx) => {
+      if (lead) {
+        // Cascade delete notes
+        await tx.admissionNote.deleteMany({
+          where: { studentLeadId: lead.id },
+        });
+        await tx.admissionLead.delete({
+          where: { id: lead.id },
+        });
+      }
+
+      if (register) {
+        // Remove linked audit trails
+        await tx.admissionAuditTrail.deleteMany({
+          where: { registerId: register.id },
+        });
+        await tx.admissionRegister.delete({
+          where: { id: register.id },
+        });
+      }
+    });
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+
+    return {
+      success: true,
+      applicantId: targetId,
+      message: "Applicant record removed successfully.",
+    };
+  } catch (err: any) {
+    console.error("[deleteApplicantAction] Error:", err);
+    return { success: false, error: err.message || "Failed to delete applicant record." };
+  }
+}
+
+/**
+ * Scans, consolidates, and purges duplicate applicant records within the institution.
+ * Restricted strictly to Tenant Admin or Super Admin within their matching schoolId.
+ */
+export async function deduplicateAdmissionsAction(payload: {
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = await verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: auth.reason || "403 Forbidden: Only the Tenant Admin can execute deduplication.",
+      };
+    }
+
+    const result = await deduplicateTenantAdmissions(schoolId);
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+
+    return {
+      success: true,
+      mergedCount: result.totalMergedGroups,
+      purgedCount: result.totalPurged,
+      details: result,
+      message:
+        result.totalPurged > 0
+          ? `Successfully consolidated ${result.totalMergedGroups} duplicate group(s) and purged ${result.totalPurged} redundant record(s).`
+          : "Admissions register is clean. No duplicate records detected.",
+    };
+  } catch (err: any) {
+    console.error("[deduplicateAdmissionsAction] Error:", err);
+    return { success: false, error: err.message || "Failed to execute deduplication." };
   }
 }
