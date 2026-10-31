@@ -739,60 +739,36 @@ export default function AdmissionsPipeline({
     );
   };
 
-  // Interactive Empty State inside stage column
+  // Streamlined Enterprise Empty State inside stage column
   const renderInteractiveEmptyState = (stage: PipelineStageConfig) => {
-    const hasPaymentRule = Boolean(stage.constraints?.require_payment);
-    const hasBirthCertRule = Boolean(stage.constraints?.require_birth_cert);
-
-    const rules = [];
-    if (hasPaymentRule) rules.push("Fee Payment Verified");
-    if (hasBirthCertRule) rules.push("Birth Certificate Required");
+    const rules: string[] = [];
+    if (stage.constraints?.require_payment) rules.push("Fee Payment Verified");
+    if (stage.constraints?.require_birth_cert) rules.push("Birth Certificate Required");
+    if (stage.constraints?.require_passport) rules.push("Passport Photo");
+    if (stage.constraints?.require_academic_results) rules.push("Transcripts Required");
+    if (stage.constraints?.require_exam_score) {
+      rules.push(
+        stage.constraints.min_exam_score
+          ? `Min Exam Score: ${stage.constraints.min_exam_score}%`
+          : "Exam Score Required"
+      );
+    }
+    if (stage.constraints?.min_age) rules.push(`Min Age: ${stage.constraints.min_age} yrs`);
 
     return (
-      <div className="border-dashed border-2 border-slate-300 dark:border-zinc-700 rounded-xl p-5 flex flex-col items-center justify-center text-center space-y-2.5 bg-slate-50/50 dark:bg-zinc-900/30 hover:border-blue-400 dark:hover:border-blue-600 transition-colors">
-        <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-slate-400 dark:text-zinc-500">
-          <Users className="w-4 h-4" />
+      <div className="border border-dashed border-slate-200 dark:border-zinc-800 rounded-xl py-6 px-3 flex flex-col items-center justify-center text-center space-y-2 bg-slate-50/40 dark:bg-zinc-900/20">
+        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800/70 flex items-center justify-center text-slate-400 dark:text-zinc-500">
+          <Users className="w-3.5 h-3.5" />
         </div>
-        <div>
-          <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-bold text-slate-600 dark:text-zinc-300">
             No Candidates in Stage
           </h4>
-          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
-            {rules.length > 0 ? `Rules: ${rules.join(", ")}` : "Ready for incoming candidate progression"}
+          <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-normal max-w-[260px]">
+            {rules.length > 0
+              ? `Rules: ${rules.join(", ")}`
+              : "Ready for incoming candidate progression"}
           </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1 w-full">
-          <button
-            type="button"
-            onClick={() => setIsInquiryModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200/80 dark:border-blue-800 transition cursor-pointer"
-          >
-            + Log Candidate
-          </button>
-
-          {isTenantAdmin && (
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedStageForConfig(stage);
-                setIsConfigModalOpen(true);
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold border border-slate-200 dark:border-zinc-700 transition flex items-center gap-1 cursor-pointer"
-              title="Configure entry guardrails for this stage"
-            >
-              <Settings className="w-3 h-3 text-slate-500" />
-              <span>Configure Stage Trigger</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setMainTab("register")}
-            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 text-xs font-medium border border-slate-200 dark:border-zinc-700 transition cursor-pointer"
-          >
-            Import Class Roster
-          </button>
         </div>
       </div>
     );
