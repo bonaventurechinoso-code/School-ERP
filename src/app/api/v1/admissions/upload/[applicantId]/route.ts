@@ -24,7 +24,7 @@ const ALLOWED_DOC_MIMES = [
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-tenant-id, tenant-id, x-school-id, x-school-domain",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-applicant-token, x-upload-token, x-session-token, x-tenant-id, tenant-id, x-school-id, x-school-domain",
 };
 
 export async function OPTIONS() {
@@ -346,7 +346,12 @@ export async function POST(
       }
     }
 
-    const token =
+    let token =
+      request.headers.get("x-applicant-token") ||
+      request.headers.get("x-upload-token") ||
+      (request.headers.get("authorization")?.startsWith("Bearer ")
+        ? request.headers.get("authorization")!.substring(7).trim()
+        : null) ||
       (formData ? (formData.get("token") as string) : null) ||
       streamFallback?.fields["token"] ||
       request.nextUrl.searchParams.get("token");

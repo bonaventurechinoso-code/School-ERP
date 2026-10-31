@@ -223,6 +223,11 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
       const res = await fetch(`/api/v1/admissions/upload/${applicantId}?token=${token}`, {
         method: "POST",
+        headers: {
+          "x-applicant-token": token,
+          "x-upload-token": token,
+          "Authorization": `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -334,51 +339,50 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
         ) : (
           /* FORM UPLOAD VIEW */
           <div className="space-y-8">
-            {/* Applicant Context Card */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-900/30 relative overflow-hidden">
-              <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 mb-3">
-                    <span>Admissions Intake</span>
-                    <span>•</span>
-                    <span>Application #{applicationNo}</span>
+            {/* Applicant Context Card - Compact Responsive Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl px-4 py-3.5 sm:px-6 sm:py-4 shadow-lg border border-indigo-900/40 relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none -mr-16 -mt-16"></div>
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 text-[11px] font-bold border border-indigo-500/30">
+                      <span>Application #{applicationNo}</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">&bull;</span>
+                    <span className="text-[11px] text-indigo-200 font-medium">
+                      Class: <strong className="text-white">{targetGrade}</strong> ({tierName})
+                    </span>
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight">{applicantName}</h2>
-                  <p className="text-indigo-200 text-sm mt-1">
-                    Target Class: <strong className="text-white">{targetGrade}</strong> &bull; Tier:{" "}
-                    <strong className="text-white">{tierName}</strong>
-                  </p>
+                  <h2 className="text-lg sm:text-xl font-black tracking-tight truncate">{applicantName}</h2>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 text-xs space-y-1.5 shrink-0 min-w-[240px]">
-                  <div className="flex justify-between">
-                    <span className="text-indigo-200">Parent / Guardian:</span>
-                    <span className="font-bold">{parentName}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-indigo-200">Application Fee:</span>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/10">
+                  <div className="bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/15 flex items-center gap-1.5">
+                    <span className="text-indigo-200 text-[11px]">Fee:</span>
                     {feeState === "PAID" ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-[10px] flex items-center gap-1">
+                      <span className="text-emerald-300 font-bold text-[11px] flex items-center gap-1">
                         <Check className="w-3 h-3" /> Paid
                       </span>
                     ) : feeState === "PENDING" ? (
-                      <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30 text-[10px] flex items-center gap-1">
-                        <Clock className="w-3 h-3 animate-pulse" /> Pending Verification
+                      <span className="text-blue-300 font-bold text-[11px] flex items-center gap-1">
+                        <Clock className="w-3 h-3 animate-pulse" /> Pending
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[10px]">
+                      <span className="text-amber-300 font-bold text-[11px]">
                         Unpaid (₦5,000)
                       </span>
                     )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-indigo-200">Current Pipeline:</span>
-                    <span className="font-bold text-slate-100">{status}</span>
+
+                  <div className="bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/15 flex items-center gap-1.5">
+                    <span className="text-indigo-200 text-[11px]">Parent:</span>
+                    <span className="font-bold text-[11px] text-slate-100 max-w-[120px] truncate">{parentName}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-indigo-200">Security Scope:</span>
-                    <span className="font-bold text-emerald-300">Verified Token</span>
+
+                  <div className="bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/15 flex items-center gap-1.5">
+                    <span className="font-bold text-emerald-300 text-[11px] flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Verified Token
+                    </span>
                   </div>
                 </div>
               </div>
@@ -449,28 +453,8 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       </div>
 
                       <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-3">
-                        Upload official bank transfer or teller deposit slip (₦{Number(bankDetails.amount).toLocaleString()} &bull; Max 5MB).
+                        Upload your official bank payment receipt or electronic transfer slip (Max 5MB).
                       </p>
-
-                      {/* Bank Account Quick Reference Banner */}
-                      <div className="p-3 bg-slate-50 dark:bg-zinc-800/60 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 text-[11px] space-y-1 font-mono mb-3">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500 font-sans">Bank:</span>
-                          <strong className="text-slate-800 dark:text-zinc-200">{bankDetails.bankName}</strong>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500 font-sans">Account No:</span>
-                          <strong className="text-slate-800 dark:text-zinc-200">{bankDetails.accountNumber}</strong>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500 font-sans">Account Name:</span>
-                          <span className="text-slate-700 dark:text-zinc-300">{bankDetails.accountName}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500 font-sans">Narration Ref:</span>
-                          <span className="text-amber-600 dark:text-amber-400 font-bold">{applicationNo}</span>
-                        </div>
-                      </div>
                     </div>
 
                     {files.applicationFeeReceipt || existingFeeReceiptUrl ? (
