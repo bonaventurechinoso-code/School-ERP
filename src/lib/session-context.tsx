@@ -135,7 +135,8 @@ export function SessionProvider({
         path.includes("/register") ||
         path.includes("/apply") ||
         path.includes("/access-denied") ||
-        path.includes("/trial-expired");
+        path.includes("/trial-expired") ||
+        path.includes("/admissions/upload");
       if (isPublic && !getAuthToken() && !getStoredSession()) {
         hasFetchedRef.current = true;
         setLoading(false);
@@ -147,7 +148,16 @@ export function SessionProvider({
     hasFetchedRef.current = true;
 
     try {
-      const res = await customFetch("/api/v1/auth/session", {
+      let sessionUrl = "/api/v1/auth/session";
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryToken = urlParams.get("token");
+        if (queryToken) {
+          sessionUrl += `?token=${encodeURIComponent(queryToken)}`;
+        }
+      }
+
+      const res = await customFetch(sessionUrl, {
         method: "GET",
       });
 

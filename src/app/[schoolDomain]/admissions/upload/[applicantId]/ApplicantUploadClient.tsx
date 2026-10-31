@@ -62,7 +62,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     tierName,
     status,
     applicationNo = `APP-${applicantId.slice(0, 6).toUpperCase()}`,
-    feeState = "UNPAID",
+    feeState: initialFeeState = "UNPAID",
     existingFeeReceiptUrl,
     bankDetails = {
       bankName: "Zenith Bank",
@@ -106,6 +106,8 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, any>>(existingDocuments || {});
+  const [feeState, setFeeState] = useState<"UNPAID" | "PENDING" | "PAID">(initialFeeState);
+  const [feeReceiptUrl, setFeeReceiptUrl] = useState<string | null>(existingFeeReceiptUrl || null);
   const [depositorName, setDepositorName] = useState(applicantName);
   const [transferReference, setTransferReference] = useState("");
 
@@ -240,6 +242,21 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
       setUploadProgress(100);
       setUploadedDocs(data.documents || {});
+
+      // If application fee receipt was uploaded or returned, update state to PENDING immediately
+      if (files.applicationFeeReceipt || data.documents?.applicationFeeReceipt || data.documents?.applicationFeeReceiptUrl) {
+        setFeeState((prev) => (prev === "PAID" ? "PAID" : "PENDING"));
+        const newReceiptUrl =
+          data.documents?.applicationFeeReceipt?.url ||
+          data.documents?.applicationFeeReceiptUrl ||
+          data.documents?.formFeeReceiptUrl ||
+          previews.applicationFeeReceipt ||
+          null;
+        if (newReceiptUrl) {
+          setFeeReceiptUrl(newReceiptUrl);
+        }
+      }
+
       setTimeout(() => {
         setIsUploading(false);
         setIsSuccess(true);
@@ -414,7 +431,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       receiptInputRef.current?.click();
                     }}
                     className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
-                      files.applicationFeeReceipt || existingFeeReceiptUrl
+                      files.applicationFeeReceipt || feeReceiptUrl
                         ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
                         : "border-indigo-400 dark:border-indigo-600 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20"
                     }`}
@@ -457,7 +474,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       </p>
                     </div>
 
-                    {files.applicationFeeReceipt || existingFeeReceiptUrl ? (
+                    {files.applicationFeeReceipt || feeReceiptUrl ? (
                       <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
                         <FileCheck className="w-8 h-8 text-emerald-600 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -472,9 +489,9 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                               : "Ready for verification"}
                           </p>
                         </div>
-                        {existingFeeReceiptUrl && (
+                        {feeReceiptUrl && (
                           <a
-                            href={existingFeeReceiptUrl}
+                            href={feeReceiptUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}

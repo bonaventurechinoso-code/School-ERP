@@ -89,7 +89,7 @@ function isSuperAdminPath(lowerPath: string): boolean {
   );
 }
 
-function isPublicRoute(pathname: string): boolean {
+function isPublicRoute(pathname: string, req?: NextRequest): boolean {
   const lowerPath = pathname.toLowerCase();
 
   // Never allow super-admin or admin paths to be treated as public
@@ -126,6 +126,21 @@ function isPublicRoute(pathname: string): boolean {
   // 4. Public API routes
   if (firstSegment === "api") {
     const apiPath = "/" + segments.join("/");
+    // Allow applicant /auth/session or /admissions/* when request includes an applicant/upload token
+    if (
+      req &&
+      (apiPath === "/api/v1/auth/session" ||
+        apiPath === "/api/auth/session" ||
+        apiPath.startsWith("/api/admissions/") ||
+        apiPath.startsWith("/api/v1/admissions/")) &&
+      Boolean(
+        req.nextUrl.searchParams.get("token") ||
+        req.headers.get("x-applicant-token") ||
+        req.headers.get("x-upload-token")
+      )
+    ) {
+      return true;
+    }
     if (
       apiPath.startsWith("/api/uploads") ||
       apiPath.startsWith("/api/auth") ||
@@ -279,7 +294,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 1. Allow unauthenticated access ONLY to explicitly public routes
-  if (isPublicRoute(pathname)) {
+  if (isPublicRoute(pathname, req)) {
     return NextResponse.next();
   }
 

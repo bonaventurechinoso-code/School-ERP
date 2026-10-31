@@ -124,12 +124,17 @@ export async function customFetch(
       path.includes("/register") ||
       path.includes("/apply") ||
       path.includes("/access-denied") ||
-      path.includes("/trial-expired");
+      path.includes("/trial-expired") ||
+      path.includes("/admissions/upload");
     if (isUnauthRoute && !getAuthToken()) {
-      return new Response(
-        JSON.stringify({ success: false, authenticated: false, session: null }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryToken = urlParams.get("token");
+      if (!queryToken) {
+        return new Response(
+          JSON.stringify({ success: false, authenticated: false, session: null }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
     }
   }
 
