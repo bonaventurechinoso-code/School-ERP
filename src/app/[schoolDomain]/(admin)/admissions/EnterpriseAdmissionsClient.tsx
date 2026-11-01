@@ -87,6 +87,15 @@ export interface SerializedApplication {
     proofOfPaymentUrl?: string | null;
     createdAt: string | Date;
   }[];
+  auditTrails?: {
+    id: string;
+    action: string;
+    actorId?: string | null;
+    fromStage?: string | null;
+    toStage?: string | null;
+    ipAddress?: string | null;
+    createdAt: string | Date;
+  }[];
   metadata: any;
   createdAt: string | Date;
 }

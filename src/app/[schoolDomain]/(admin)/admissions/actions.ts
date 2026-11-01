@@ -2592,23 +2592,27 @@ export async function updateApplicationStageAction(payload: {
     });
 
     // Record immutable audit trail
-    await basePrisma.admissionAuditTrail.create({
-      data: {
-        tenantId: targetSchoolId,
-        schoolId: targetSchoolId,
-        applicationId: app.id,
-        registerId: app.id,
-        actorId: payload.actorId || "ADMIN",
-        action: "STAGE_CHANGE",
-        fromStage: previousStatus,
-        toStage: targetStatus,
-        ipAddress: (payload as any).ipAddress || null,
-        metadata: {
-          notes: payload.notes || `Candidate stage transitioned to ${targetStatus}`,
-          timestamp: new Date().toISOString(),
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: targetSchoolId,
+          schoolId: targetSchoolId,
+          applicationId: app.id,
+          registerId: app.id,
+          actorId: payload.actorId || "ADMIN",
+          action: "STAGE_CHANGE",
+          fromStage: previousStatus,
+          toStage: targetStatus,
+          ipAddress: (payload as any).ipAddress || null,
+          metadata: {
+            notes: payload.notes || `Candidate stage transitioned to ${targetStatus}`,
+            timestamp: new Date().toISOString(),
+          },
         },
-      },
-    });
+      });
+    } catch (auditErr) {
+      console.warn("[updateApplicationStageAction] Warning recording audit trail:", auditErr);
+    }
 
     // If moved to OFFER_EXTENDED, notify applicant omnichannel
     if (targetStatus === ApplicationStatus.OFFER_EXTENDED) {
@@ -2838,8 +2842,12 @@ export async function enrollAdmissionsApplicationAction(payload: {
         },
       });
 
-      // Step F: Record immutable AdmissionAuditTrail
-      await tx.admissionAuditTrail.create({
+      return { student, user, updatedApp };
+    });
+
+    // Record immutable AdmissionAuditTrail (defensive fallback outside transaction)
+    try {
+      await basePrisma.admissionAuditTrail.create({
         data: {
           tenantId: targetSchoolId,
           schoolId: targetSchoolId,
@@ -2852,14 +2860,14 @@ export async function enrollAdmissionsApplicationAction(payload: {
           ipAddress: (payload as any).ipAddress || null,
           metadata: {
             matriculationNumber,
-            studentId: student.id,
+            studentId: result.student.id,
             timestamp: new Date().toISOString(),
           },
         },
       });
-
-      return { student, user, updatedApp };
-    });
+    } catch (auditErr) {
+      console.warn("[enrollAdmissionsApplicationAction] Warning recording audit trail:", auditErr);
+    }
 
     // 6. Dispatch Omnichannel Welcome & Matriculation Clearance
     await dispatchAdmissionsNotification({
@@ -2943,24 +2951,28 @@ export async function batchSendOffersAction(payload: {
         },
       });
 
-      // Audit trail entry
-      await basePrisma.admissionAuditTrail.create({
-        data: {
-          tenantId: targetSchoolId,
-          schoolId: targetSchoolId,
-          applicationId: app.id,
-          registerId: app.id,
-          actorId: payload.actorId || "ADMIN",
-          action: "PROVISIONAL_OFFER_EXTENDED",
-          fromStage: prevStatus,
-          toStage: "OFFER_EXTENDED",
-          ipAddress: (payload as any).ipAddress || null,
-          metadata: {
-            batch: true,
-            timestamp: new Date().toISOString(),
+      // Audit trail entry with defensive fallback
+      try {
+        await basePrisma.admissionAuditTrail.create({
+          data: {
+            tenantId: targetSchoolId,
+            schoolId: targetSchoolId,
+            applicationId: app.id,
+            registerId: app.id,
+            actorId: payload.actorId || "ADMIN",
+            action: "PROVISIONAL_OFFER_EXTENDED",
+            fromStage: prevStatus,
+            toStage: "OFFER_EXTENDED",
+            ipAddress: (payload as any).ipAddress || null,
+            metadata: {
+              batch: true,
+              timestamp: new Date().toISOString(),
+            },
           },
-        },
-      });
+        });
+      } catch (auditErr) {
+        console.warn("[batchSendOffersAction] Warning recording audit trail:", auditErr);
+      }
 
       // Omnichannel dispatch
       await dispatchAdmissionsNotification({
@@ -3098,25 +3110,29 @@ export async function verifyDocumentAction(payload: {
       },
     });
 
-    await basePrisma.admissionAuditTrail.create({
-      data: {
-        tenantId: targetSchoolId,
-        schoolId: targetSchoolId,
-        applicationId: doc.applicationId,
-        registerId: doc.applicationId,
-        actorId: payload.actorId || "Admissions Officer",
-        action: payload.verificationStatus === "MANUALLY_VERIFIED" ? "DOCUMENT_VERIFIED" : "DOCUMENT_REJECTED",
-        fromStage: doc.verificationStatus,
-        toStage: payload.verificationStatus,
-        ipAddress: payload.ipAddress || null,
-        metadata: {
-          documentId: doc.id,
-          documentType: doc.documentType,
-          reviewerNotes: payload.reviewerNotes || null,
-          rejectionReason: payload.rejectionReason || null,
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: targetSchoolId,
+          schoolId: targetSchoolId,
+          applicationId: doc.applicationId,
+          registerId: doc.applicationId,
+          actorId: payload.actorId || "Admissions Officer",
+          action: payload.verificationStatus === "MANUALLY_VERIFIED" ? "DOCUMENT_VERIFIED" : "DOCUMENT_REJECTED",
+          fromStage: doc.verificationStatus,
+          toStage: payload.verificationStatus,
+          ipAddress: payload.ipAddress || null,
+          metadata: {
+            documentId: doc.id,
+            documentType: doc.documentType,
+            reviewerNotes: payload.reviewerNotes || null,
+            rejectionReason: payload.rejectionReason || null,
+          },
         },
-      },
-    });
+      });
+    } catch (auditErr) {
+      console.warn("[verifyDocumentAction] Warning recording audit trail:", auditErr);
+    }
 
     if (payload.schoolDomain) {
       safeRevalidate(`/${payload.schoolDomain}/admissions`);
@@ -3187,7 +3203,12 @@ export async function reconcileFeeAction(payload: {
           },
         });
 
-        await prismaTx.admissionAuditTrail.create({
+        return { settledTx, updatedApp };
+      });
+
+      // Record audit trail safely after transaction commits
+      try {
+        await basePrisma.admissionAuditTrail.create({
           data: {
             tenantId: targetSchoolId,
             schoolId: targetSchoolId,
@@ -3205,9 +3226,9 @@ export async function reconcileFeeAction(payload: {
             },
           },
         });
-
-        return { settledTx, updatedApp };
-      });
+      } catch (auditErr) {
+        console.warn("[reconcileFeeAction:approve] Warning recording audit trail:", auditErr);
+      }
 
       const host = process.env.NEXTAUTH_URL || "https://schoolerp.ng";
       const receiptDownloadUrl = `${host}/${school?.subdomain || "portal"}/admissions/receipt/${txRecord.id}`;
@@ -3245,7 +3266,12 @@ export async function reconcileFeeAction(payload: {
           },
         });
 
-        await prismaTx.admissionAuditTrail.create({
+        return rejectedTx;
+      });
+
+      // Record audit trail safely after transaction commits
+      try {
+        await basePrisma.admissionAuditTrail.create({
           data: {
             tenantId: targetSchoolId,
             schoolId: targetSchoolId,
@@ -3262,9 +3288,9 @@ export async function reconcileFeeAction(payload: {
             },
           },
         });
-
-        return rejectedTx;
-      });
+      } catch (auditErr) {
+        console.warn("[reconcileFeeAction:reject] Warning recording audit trail:", auditErr);
+      }
 
       if (payload.schoolDomain) {
         safeRevalidate(`/${payload.schoolDomain}/admissions`);

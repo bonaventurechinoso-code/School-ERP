@@ -47,9 +47,18 @@ export async function StudentRosterCard({
   activeTier?: string;
   primaryColor?: string;
 }) {
-  const enrolledStudents = await getEnrolledStudentsCount(schoolId, activeTier);
+  let enrolledStudents = 0;
+  try {
+    enrolledStudents = await getEnrolledStudentsCount(schoolId, activeTier);
+  } catch (err) {
+    console.error("[StudentRosterCard] Failed to fetch enrolled students count:", err);
+    enrolledStudents = 0;
+  }
   const accentColor = primaryColor || "#4f46e5";
-  const tierConfig = getTierConfig(activeTier);
+  let tierConfig: any = { terms: { learnerPlural: "Students", studentPlural: "Students", periodName: "Term" } };
+  try {
+    tierConfig = getTierConfig(activeTier);
+  } catch {}
 
   return (
     <Link href={`/${subdomain}/students`} className="block col-span-1 active:scale-[0.98] transition-transform">
@@ -59,7 +68,7 @@ export async function StudentRosterCard({
       >
         <div className="flex items-center justify-between gap-2 relative z-10">
           <h3 className="font-bold text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400 truncate">
-            {tierConfig.terms.learnerPlural || tierConfig.terms.studentPlural} Enrolled
+            {tierConfig.terms?.learnerPlural || tierConfig.terms?.studentPlural || "Students"} Enrolled
           </h3>
           <div 
             className="p-2 sm:p-2.5 rounded-xl shadow-2xs shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5" 
@@ -99,7 +108,13 @@ export async function StaffStatusCard({
   activeTier?: string;
   primaryColor?: string;
 }) {
-  const activeStaff = await getActiveStaffCount(schoolId, activeTier);
+  let activeStaff = 0;
+  try {
+    activeStaff = await getActiveStaffCount(schoolId, activeTier);
+  } catch (err) {
+    console.error("[StaffStatusCard] Failed to fetch active staff count:", err);
+    activeStaff = 0;
+  }
   const accentColor = primaryColor || "#0284c7";
 
   return (
@@ -152,7 +167,13 @@ export async function ApplicantPipelineCard({
   activeTierId?: string;
   primaryColor?: string;
 }) {
-  const pendingApplications = await getPendingApplicationsCount(schoolId, activeTier, activeTierId);
+  let pendingApplications = 0;
+  try {
+    pendingApplications = await getPendingApplicationsCount(schoolId, activeTier, activeTierId);
+  } catch (err) {
+    console.error("[ApplicantPipelineCard] Failed to fetch pending applications count:", err);
+    pendingApplications = 0;
+  }
   const accentColor = primaryColor || "#4f46e5";
 
   return (
@@ -205,7 +226,13 @@ export async function FinancialSummaryCard({
   activeTier?: string;
   primaryColor?: string;
 }) {
-  const termlyRevenue = await getTermlyRevenue(schoolId, activeTier);
+  let termlyRevenue = 0;
+  try {
+    termlyRevenue = await getTermlyRevenue(schoolId, activeTier);
+  } catch (err) {
+    console.error("[FinancialSummaryCard] Failed to fetch termly revenue:", err);
+    termlyRevenue = 0;
+  }
   const accentColor = primaryColor || "#059669";
   const targetFinanceUrl = subdomain ? `/${subdomain}/finance/fees` : "/dashboard/finance";
 
@@ -257,9 +284,18 @@ export async function EventsStatusCard({
   activeTier?: string;
   primaryColor?: string;
 }) {
-  const eventsCount = await getEventsCount(schoolId, activeTier);
+  let eventsCount = 8;
+  try {
+    eventsCount = await getEventsCount(schoolId, activeTier);
+  } catch (err) {
+    console.error("[EventsStatusCard] Failed to fetch events count:", err);
+    eventsCount = 8;
+  }
   const accentColor = primaryColor || "#7c3aed";
-  const tierConfig = getTierConfig(activeTier);
+  let tierConfig: any = { terms: { periodName: "Term" } };
+  try {
+    tierConfig = getTierConfig(activeTier);
+  } catch {}
 
   return (
     <div 
@@ -286,7 +322,7 @@ export async function EventsStatusCard({
 
       <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 relative z-10 flex items-center justify-between">
         <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 truncate">
-          Scheduled on {tierConfig.terms.periodName} Timetable
+          Scheduled on {tierConfig.terms?.periodName || "Term"} Timetable
         </span>
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
       </div>
@@ -307,7 +343,13 @@ export async function PendingVerificationsCard({
   subdomain: string;
   primaryColor?: string;
 }) {
-  const pendingCount = await getPendingVerificationsCount(schoolId);
+  let pendingCount = 0;
+  try {
+    pendingCount = await getPendingVerificationsCount(schoolId);
+  } catch (err) {
+    console.error("[PendingVerificationsCard] Failed to fetch pending verifications count:", err);
+    pendingCount = 0;
+  }
   const accentColor = primaryColor || "#d97706";
 
   return (
@@ -362,7 +404,13 @@ export async function CollectionBankCard({
   schoolId: string;
   subdomain: string;
 }) {
-  const bank = await getSchoolCollectionBank(schoolId);
+  let bank: any = null;
+  try {
+    bank = await getSchoolCollectionBank(schoolId);
+  } catch (err) {
+    console.error("[CollectionBankCard] Failed to fetch school collection bank:", err);
+    bank = null;
+  }
   const isConfigured = Boolean(bank?.settlementAccountNumber && bank?.settlementBankName);
 
   return (

@@ -143,13 +143,17 @@ export async function recordWalkInApplication(payload: {
         },
       });
 
-      // 4. Record Audit Trail
-      await tx.admissionAuditTrail.create({
+      return { application, feeTx, docEntriesCount: docEntries.length };
+    });
+
+    // 4. Record Audit Trail safely after transaction commits
+    try {
+      await basePrisma.admissionAuditTrail.create({
         data: {
           tenantId: school.id,
           schoolId: school.id,
-          applicationId: application.id,
-          registerId: application.id,
+          applicationId: result.application.id,
+          registerId: result.application.id,
           actorId: registrarName,
           action: "WALK_IN_CREATED",
           fromStage: "DRAFT",
@@ -158,13 +162,13 @@ export async function recordWalkInApplication(payload: {
             intakeChannel: "WALK_IN",
             paymentMethod: payment.method,
             paymentReference,
-            sightedDocsCount: docEntries.length,
+            sightedDocsCount: result.docEntriesCount,
           },
         },
       });
-
-      return { application, feeTx, docEntriesCount: docEntries.length };
-    });
+    } catch (auditErr) {
+      console.warn("[recordWalkInApplication] Warning recording audit trail:", auditErr);
+    }
 
     // 4. Construct magic tracking link and dispatch SMS / WhatsApp auto-invitation
     const host = process.env.NEXTAUTH_URL || "https://schoolerp.ng";

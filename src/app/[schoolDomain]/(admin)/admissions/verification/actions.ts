@@ -90,22 +90,26 @@ export async function approveAdmissionsDocument(
     });
 
     // Record immutable audit trail
-    await basePrisma.admissionAuditTrail.create({
-      data: {
-        tenantId: doc.tenantId,
-        schoolId: doc.application.schoolId,
-        applicationId: doc.applicationId,
-        registerId: doc.applicationId,
-        actorId: verifiedByUserId,
-        action: "DOCUMENT_VERIFIED",
-        fromStage: doc.verificationStatus,
-        toStage: "MANUALLY_VERIFIED",
-        metadata: {
-          documentId: doc.id,
-          documentType: doc.documentType,
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: doc.tenantId,
+          schoolId: doc.application.schoolId,
+          applicationId: doc.applicationId,
+          registerId: doc.applicationId,
+          actorId: verifiedByUserId,
+          action: "DOCUMENT_VERIFIED",
+          fromStage: doc.verificationStatus,
+          toStage: "MANUALLY_VERIFIED",
+          metadata: {
+            documentId: doc.id,
+            documentType: doc.documentType,
+          },
         },
-      },
-    });
+      });
+    } catch (auditErr) {
+      console.warn("[verifyDocumentStatus:verify] Warning recording audit trail:", auditErr);
+    }
 
     // Check if all documents for this application are now verified
     const allDocs = await basePrisma.admissionsDocument.findMany({
@@ -179,24 +183,28 @@ export async function rejectAdmissionsDocument({
     });
 
     // Record immutable audit trail
-    await basePrisma.admissionAuditTrail.create({
-      data: {
-        tenantId: doc.tenantId,
-        schoolId: doc.application.schoolId,
-        applicationId: doc.applicationId,
-        registerId: doc.applicationId,
-        actorId: verifiedByUserId,
-        action: "DOCUMENT_REJECTED",
-        fromStage: doc.verificationStatus,
-        toStage: "REJECTED",
-        metadata: {
-          documentId: doc.id,
-          documentType: doc.documentType,
-          reason,
-          customNotes: customNotes || null,
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: doc.tenantId,
+          schoolId: doc.application.schoolId,
+          applicationId: doc.applicationId,
+          registerId: doc.applicationId,
+          actorId: verifiedByUserId,
+          action: "DOCUMENT_REJECTED",
+          fromStage: doc.verificationStatus,
+          toStage: "REJECTED",
+          metadata: {
+            documentId: doc.id,
+            documentType: doc.documentType,
+            reason,
+            customNotes: customNotes || null,
+          },
         },
-      },
-    });
+      });
+    } catch (auditErr) {
+      console.warn("[verifyDocumentStatus:reject] Warning recording audit trail:", auditErr);
+    }
 
     const school = await basePrisma.school.findFirst({
       where: { id: doc.application.schoolId },

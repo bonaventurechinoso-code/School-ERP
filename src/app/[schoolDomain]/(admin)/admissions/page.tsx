@@ -58,43 +58,98 @@ export default async function AdmissionsPage({
   }
 
   // 3. Query Admissions Applications scoped to tenant
-  const rawApplications = await basePrisma.admissionsApplication.findMany({
-    where: {
-      schoolId: school.id,
-    },
-    include: {
-      documents: {
-        select: {
-          id: true,
-          documentType: true,
-          storageKey: true,
-          verificationStatus: true,
-          rejectionReason: true,
+  // Wrap auditTrails include in try/catch - if table missing, fallback to empty array
+  let rawApplications: any[] = [];
+  try {
+    rawApplications = await basePrisma.admissionsApplication.findMany({
+      where: {
+        schoolId: school.id,
+      },
+      include: {
+        documents: {
+          select: {
+            id: true,
+            documentType: true,
+            storageKey: true,
+            verificationStatus: true,
+            rejectionReason: true,
+          },
+        },
+        feeTransactions: {
+          select: {
+            id: true,
+            paymentMethod: true,
+            amount: true,
+            currency: true,
+            paymentReference: true,
+            paymentStatus: true,
+            proofOfPaymentUrl: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+        },
+        auditTrails: {
+          select: {
+            id: true,
+            action: true,
+            actorId: true,
+            fromStage: true,
+            toStage: true,
+            ipAddress: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 20,
         },
       },
-      feeTransactions: {
-        select: {
-          id: true,
-          paymentMethod: true,
-          amount: true,
-          currency: true,
-          paymentReference: true,
-          paymentStatus: true,
-          proofOfPaymentUrl: true,
-          createdAt: true,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+  } catch (auditErr) {
+    console.warn("[ADMISSIONS] Failed querying applications with auditTrails, falling back without auditTrails:", auditErr);
+    try {
+      rawApplications = await basePrisma.admissionsApplication.findMany({
+        where: {
+          schoolId: school.id,
+        },
+        include: {
+          documents: {
+            select: {
+              id: true,
+              documentType: true,
+              storageKey: true,
+              verificationStatus: true,
+              rejectionReason: true,
+            },
+          },
+          feeTransactions: {
+            select: {
+              id: true,
+              paymentMethod: true,
+              amount: true,
+              currency: true,
+              paymentReference: true,
+              paymentStatus: true,
+              proofOfPaymentUrl: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+          },
         },
         orderBy: { createdAt: "desc" },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+        take: 500,
+      });
+    } catch (fallbackErr) {
+      console.error("[ADMISSIONS] Critical fallback: Failed querying applications:", fallbackErr);
+      rawApplications = [];
+    }
+  }
 
   // Serialize applications for client component
-  const applications: SerializedApplication[] = rawApplications.map((app) => ({
+  const applications: SerializedApplication[] = (rawApplications || []).map((app: any) => ({
     id: app.id,
-    tenantId: app.tenantId,
-    schoolId: app.schoolId,
+    tenantId: app.tenantId || school.id,
+    schoolId: app.schoolId || school.id,
     academicSessionId: app.academicSessionId,
     programId: app.programId,
     applicationNumber: app.applicationNumber,
@@ -105,18 +160,22 @@ export default async function AdmissionsPage({
     email: app.email,
     phoneNumber: app.phoneNumber,
     whatsappNumber: app.whatsappNumber,
-    dateOfBirth: app.dateOfBirth.toISOString().split("T")[0],
+    dateOfBirth: app.dateOfBirth
+      ? app.dateOfBirth instanceof Date
+        ? app.dateOfBirth.toISOString().split("T")[0]
+        : new Date(app.dateOfBirth).toISOString().split("T")[0]
+      : "",
     gender: app.gender,
     status: app.status,
     tierSpecificData: (app.tierSpecificData as any) || {},
-    documents: app.documents.map((d) => ({
+    documents: (app.documents || []).map((d: any) => ({
       id: d.id,
       documentType: d.documentType,
       storageKey: d.storageKey,
       verificationStatus: d.verificationStatus,
       rejectionReason: d.rejectionReason,
     })),
-    feeTransactions: app.feeTransactions.map((t) => ({
+    feeTransactions: (app.feeTransactions || []).map((t: any) => ({
       id: t.id,
       paymentMethod: t.paymentMethod,
       amount: Number(t.amount),
@@ -124,32 +183,55 @@ export default async function AdmissionsPage({
       paymentReference: t.paymentReference,
       paymentStatus: t.paymentStatus,
       proofOfPaymentUrl: t.proofOfPaymentUrl,
-      createdAt: t.createdAt.toISOString(),
+      createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : new Date(t.createdAt).toISOString(),
+    })),
+    auditTrails: (app.auditTrails || []).map((a: any) => ({
+      id: a.id,
+      action: a.action,
+      actorId: a.actorId,
+      fromStage: a.fromStage,
+      toStage: a.toStage,
+      ipAddress: a.ipAddress,
+      createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : new Date(a.createdAt).toISOString(),
     })),
     metadata: (app.metadata as any) || {},
-    createdAt: app.createdAt.toISOString(),
+    createdAt: app.createdAt instanceof Date ? app.createdAt.toISOString() : new Date(app.createdAt).toISOString(),
   }));
 
-  // 4. Query Admission Cycles for session filtering
-  let rawCycles = await basePrisma.admissionCycle.findMany({
-    where: {
-      OR: [{ schoolId: school.id }, { tenantId: school.id }],
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // 4. Query Admission Cycles for session filtering (with tenantId & schoolId scoping and catch fallback)
+  let rawCycles: any[] = [];
+  try {
+    rawCycles = await basePrisma.admissionCycle.findMany({
+      where: {
+        schoolId: school.id,
+      },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+    if (!rawCycles || rawCycles.length === 0) {
+      rawCycles = await basePrisma.admissionCycle.findMany({
+        where: {
+          OR: [{ schoolId: school.id }, { tenantId: school.id }],
+        },
+        orderBy: { createdAt: "desc" },
+      }).catch(() => []);
+    }
+  } catch (cycleErr) {
+    console.warn("[ADMISSIONS] AdmissionCycle table query failed, falling back to empty:", cycleErr);
+    rawCycles = [];
+  }
 
   const currentYear = new Date().getFullYear();
   const defaultSession = `${currentYear}/${currentYear + 1}`;
 
   const cycles: AdmissionCycleItem[] =
-    rawCycles.length > 0
-      ? rawCycles.map((c) => ({
+    rawCycles && rawCycles.length > 0
+      ? rawCycles.map((c: any) => ({
           id: c.id,
           session: c.session || c.academicSession || defaultSession,
           name: c.name || `${c.academicSession || defaultSession} Cycle`,
           tier: String(c.tier),
           applicationFee: c.applicationFee ?? Number(c.applicationFeeAmount) ?? 5000,
-          isActive: c.isActive,
+          isActive: Boolean(c.isActive),
         }))
       : [
           {
@@ -163,35 +245,41 @@ export default async function AdmissionsPage({
         ];
 
   // 5. Query Admissions Fee Transactions for embedded reconciliation
-  const rawTransactions = await basePrisma.admissionsFeeTransaction.findMany({
-    where: {
-      OR: [
-        { tenantId: school.id },
-        { application: { schoolId: school.id } },
-      ],
-    },
-    include: {
-      application: {
-        select: {
-          id: true,
-          applicationNumber: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phoneNumber: true,
-          whatsappNumber: true,
-          programId: true,
-          status: true,
+  let rawTransactions: any[] = [];
+  try {
+    rawTransactions = await basePrisma.admissionsFeeTransaction.findMany({
+      where: {
+        OR: [
+          { tenantId: school.id },
+          { application: { schoolId: school.id } },
+        ],
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            applicationNumber: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            whatsappNumber: true,
+            programId: true,
+            status: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }).catch(() => []);
+  } catch (txErr) {
+    console.warn("[ADMISSIONS] Failed querying fee transactions, defaulting to empty:", txErr);
+    rawTransactions = [];
+  }
 
-  const transactions: SerializedTransaction[] = rawTransactions.map((tx) => ({
+  const transactions: SerializedTransaction[] = (rawTransactions || []).map((tx: any) => ({
     id: tx.id,
-    tenantId: tx.tenantId,
+    tenantId: tx.tenantId || school.id,
     applicationId: tx.applicationId,
     paymentMethod: tx.paymentMethod,
     amount: Number(tx.amount),
@@ -201,18 +289,18 @@ export default async function AdmissionsPage({
     paymentStatus: tx.paymentStatus,
     reconciliationNotes: tx.reconciliationNotes,
     verifiedByUserId: tx.verifiedByUserId,
-    verifiedAt: tx.verifiedAt ? tx.verifiedAt.toISOString() : null,
-    createdAt: tx.createdAt.toISOString(),
+    verifiedAt: tx.verifiedAt ? (tx.verifiedAt instanceof Date ? tx.verifiedAt.toISOString() : new Date(tx.verifiedAt).toISOString()) : null,
+    createdAt: tx.createdAt instanceof Date ? tx.createdAt.toISOString() : new Date(tx.createdAt).toISOString(),
     application: {
-      id: tx.application.id,
-      applicationNumber: tx.application.applicationNumber,
-      firstName: tx.application.firstName,
-      lastName: tx.application.lastName,
-      email: tx.application.email,
-      phoneNumber: tx.application.phoneNumber,
-      whatsappNumber: tx.application.whatsappNumber,
-      programId: tx.application.programId,
-      status: tx.application.status,
+      id: tx.application?.id || "",
+      applicationNumber: tx.application?.applicationNumber || "N/A",
+      firstName: tx.application?.firstName || "",
+      lastName: tx.application?.lastName || "",
+      email: tx.application?.email || "",
+      phoneNumber: tx.application?.phoneNumber || "",
+      whatsappNumber: tx.application?.whatsappNumber || null,
+      programId: tx.application?.programId || "",
+      status: tx.application?.status || "PENDING",
     },
   }));
 

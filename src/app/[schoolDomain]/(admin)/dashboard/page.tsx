@@ -37,10 +37,16 @@ export default async function TenantDashboard({
   const activeTier = searchParams.tier || cookieStore.get("activeTier")?.value || undefined;
 
   // Strict Request-Scoped Server Auth Verification (bound to target tenant)
-  const [school, session] = await Promise.all([
-    getCachedSchool(schoolDomain),
-    getSession(undefined, schoolDomain),
-  ]);
+  let school: any = null;
+  let session: any = null;
+  try {
+    [school, session] = await Promise.all([
+      getCachedSchool(schoolDomain),
+      getSession(undefined, schoolDomain),
+    ]);
+  } catch (authErr) {
+    console.error("[DASHBOARD] Auth/School lookup error:", authErr);
+  }
 
   if (!school) {
     redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
@@ -74,7 +80,7 @@ export default async function TenantDashboard({
         ],
       },
       select: { id: true },
-    });
+    }).catch(() => null);
     const effectiveTenantId = tenant?.id || school.id;
     notifications = await prisma.tenantNotification.findMany({
       where: {
@@ -83,9 +89,10 @@ export default async function TenantDashboard({
       },
       orderBy: { createdAt: "desc" },
       take: 5,
-    });
+    }).catch(() => []);
   } catch (e) {
     console.warn("[DASHBOARD] Notifications fetch error:", e);
+    notifications = [];
   }
 
   const serializedNotifications = notifications.map((n) => ({
