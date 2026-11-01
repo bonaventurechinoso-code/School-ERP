@@ -74,6 +74,9 @@ const TENANT_ID_MODELS = [
   'AdmissionAuditTrail',
   'PaymentReceipt',
   'PaymentSetting',
+  'AdmissionsApplication',
+  'AdmissionsDocument',
+  'AdmissionsFeeTransaction',
 ];
 
 /**
