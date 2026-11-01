@@ -25,8 +25,17 @@ import {
 import {
   approveAdmissionsDocument,
   rejectAdmissionsDocument,
-  DocumentRejectionReason,
 } from "./actions";
+
+export const DocumentRejectionReason = {
+  BLURRY_UNREADABLE: "Blurry or unreadable scan",
+  NAME_MISMATCH: "Name mismatch on certificate",
+  INSUFFICIENT_CREDITS: "Insufficient credits for selected program",
+  EXPIRED_DOCUMENT: "Expired document or invalid issue date",
+  WRONG_DOCUMENT_TYPE: "Incorrect document uploaded for slot",
+  SUSPECTED_TAMPERING: "Suspected digital alteration or incomplete copy",
+  OTHER: "Other institutional compliance reason",
+} as const;
 
 interface DocumentItem {
   id: string;
@@ -651,3 +660,4 @@ export default function VerificationDeskClient({
     </div>
   );
 }
+

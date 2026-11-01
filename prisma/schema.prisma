@@ -1024,11 +1024,11 @@ model AdmissionLead {
   academicResultsUrl       String?
   birthCertificateUrl      String?
   medicalRecordsUrl        String?
-  documents           Json?           @default("{}")
-  trackId             String?         @map("track_id")
-  track               AdmissionTrack? @relation(fields: [trackId], references: [id], onDelete: SetNull)
-  stageId             String?         @map("stage_id")
-  stage               AdmissionStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  documents                Json?           @default("{}")
+  trackId                  String?         @map("track_id")
+  track                    AdmissionTrack? @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  stageId                  String?         @map("stage_id")
+  stage                    AdmissionStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
 
   notes AdmissionNote[]
 
@@ -1298,24 +1298,24 @@ model BonaveeUserSecurity {
 }
 
 model AdmissionRegister {
-  id              String    @id @default(uuid())
-  tenantId        String    @map("tenant_id")
-  applicationNo   String    @unique @map("application_no")
-  firstName       String    @map("first_name")
-  lastName        String    @map("last_name")
-  classApplied    String    @map("class_applied")
-  parentPhone     String    @map("parent_phone")
-  email           String?
-  credentialsJson Json?     @map("credentials_json")
+  id                       String    @id @default(uuid())
+  tenantId                 String    @map("tenant_id")
+  applicationNo            String    @unique @map("application_no")
+  firstName                String    @map("first_name")
+  lastName                 String    @map("last_name")
+  classApplied             String    @map("class_applied")
+  parentPhone              String    @map("parent_phone")
+  email                    String?
+  credentialsJson          Json?     @map("credentials_json")
   status                   String    @default("new")
   formFeePaid              Boolean   @default(false) @map("form_fee_paid")
   applicationFeeReceiptUrl String?   @map("application_fee_receipt_url")
   formFeeReceiptUrl        String?   @map("form_fee_receipt_url")
   verifiedBy               String?   @map("verified_by")
-  verifiedAt      DateTime? @map("verified_at")
-  admittedAt      DateTime? @map("admitted_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  verifiedAt               DateTime? @map("verified_at")
+  admittedAt               DateTime? @map("admitted_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
   // Enterprise Tiering Additions
   tier            InstitutionTier?
@@ -1526,23 +1526,26 @@ enum OfferPaymentStatus {
 }
 
 model AdmissionCycle {
-  id             String          @id @default(cuid())
-  tenantId       String          @map("tenant_id")
-  schoolId       String          @map("school_id")
-  session        String // e.g. 2026/2027
-  tier           InstitutionTier
-  name           String
-  startDate      DateTime        @map("start_date")
-  endDate        DateTime        @map("end_date")
-  applicationFee Int             @default(5000) @map("application_fee")
-  capacity       Int?
-  isActive       Boolean         @default(true) @map("is_active")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid())
+  tenantId             String
+  schoolId             String
+  academicSession      String
+  tier                 String
+  batch                String?
+  applicationFeeAmount Decimal  @default(5000) @db.Decimal(12, 2)
+  activeFrom           DateTime @default(now())
+  activeTo             DateTime @default(now())
+  capacityCap          Int?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
 
-  @@index([tenantId])
-  @@index([schoolId])
-  @@index([tenantId, schoolId, tier])
+  // Compatibility fields
+  session        String?
+  name           String?
+  applicationFee Int?    @default(5000)
+
+  @@unique([tenantId, schoolId, academicSession, tier])
+  @@index([tenantId, schoolId, isActive])
   @@map("admission_cycles")
 }
 
@@ -1615,20 +1618,26 @@ model AdmissionOffer {
 }
 
 model AdmissionAuditTrail {
-  id         String   @id @default(cuid())
-  tenantId   String   @map("tenant_id")
-  registerId String   @map("register_id")
-  actorId    String   @map("actor_id")
-  action     String // e.g. CREATED, DOCS_UPLOADED, VERIFIED, SCREENED, OFFERED, ACCEPTANCE_PAID, ENROLLED
-  fromStage  String?  @map("from_stage")
-  toStage    String?  @map("to_stage")
-  ip         String?
-  metadata   Json?    @default("{}")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id            String                 @id @default(uuid())
+  tenantId      String
+  schoolId      String                 @default("")
+  applicationId String?
+  application   AdmissionsApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actorId       String?
+  action        String
+  fromStage     String?
+  toStage       String?
+  ipAddress     String?
+  metadata      Json?                  @default("{}")
+  createdAt     DateTime               @default(now())
 
-  @@index([tenantId])
+  // Compatibility fields
+  registerId String?
+  ip         String?
+
+  @@index([tenantId, schoolId, applicationId])
+  @@index([applicationId, createdAt])
   @@index([registerId])
-  @@index([tenantId, registerId])
   @@map("admission_audit_trails")
 }
 
@@ -1762,73 +1771,73 @@ model PlatformOwnerBankAccount {
   updatedAt     DateTime @updatedAt
 }
 
-
 // ------------------------------------------------------
 // ENTERPRISE ADMISSIONS MODULE
 // ------------------------------------------------------
 
 model AdmissionsApplication {
-  id                    String                    @id @default(uuid())
-  tenantId              String
-  schoolId              String
-  academicSessionId     String
-  programId             String
-  applicationNumber     String                    @unique
-  intakeChannel         String                    // 'ONLINE_PORTAL' | 'WALK_IN'
-  firstName             String
-  lastName              String
-  middleName            String?
-  email                 String
-  phoneNumber           String
-  whatsappNumber        String?
-  dateOfBirth           DateTime
-  gender                String
-  status                ApplicationStatus         @default(DRAFT)
-  tierSpecificData      Json                      @default("{}") // UTME, O'Level, or K12 Immunization
-  documents             AdmissionsDocument[]
-  feeTransactions       AdmissionsFeeTransaction[]
-  metadata              Json                      @default("{}")
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  id                String                     @id @default(uuid())
+  tenantId          String
+  schoolId          String
+  academicSessionId String
+  programId         String
+  applicationNumber String                     @unique
+  intakeChannel     String // 'ONLINE_PORTAL' | 'WALK_IN'
+  firstName         String
+  lastName          String
+  middleName        String?
+  email             String
+  phoneNumber       String
+  whatsappNumber    String?
+  dateOfBirth       DateTime
+  gender            String
+  status            ApplicationStatus          @default(DRAFT)
+  tierSpecificData  Json                       @default("{}") // UTME, O'Level, or K12 Immunization
+  documents         AdmissionsDocument[]
+  feeTransactions   AdmissionsFeeTransaction[]
+  auditTrails       AdmissionAuditTrail[]
+  metadata          Json                       @default("{}")
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   @@index([tenantId, schoolId, status])
   @@index([applicationNumber])
 }
 
 model AdmissionsDocument {
-  id                    String                @id @default(uuid())
-  tenantId              String
-  applicationId         String
-  application           AdmissionsApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  documentType          String                // 'BIRTH_CERT', 'O_LEVEL_RESULT', 'JAMB_SLIP', etc.
-  storageKey            String
-  fileMimeType          String
-  fileSizeBytes         Int
-  verificationStatus    DocVerificationStatus @default(PENDING)
-  ocrExtractedData      Json?
-  rejectionReason       String?
-  verifiedByUserId      String?
-  verifiedAt            DateTime?
-  createdAt             DateTime              @default(now())
+  id                 String                @id @default(uuid())
+  tenantId           String
+  applicationId      String
+  application        AdmissionsApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  documentType       String // 'BIRTH_CERT', 'O_LEVEL_RESULT', 'JAMB_SLIP', etc.
+  storageKey         String
+  fileMimeType       String
+  fileSizeBytes      Int
+  verificationStatus DocVerificationStatus @default(PENDING)
+  ocrExtractedData   Json?
+  rejectionReason    String?
+  verifiedByUserId   String?
+  verifiedAt         DateTime?
+  createdAt          DateTime              @default(now())
 
   @@index([tenantId, applicationId])
 }
 
 model AdmissionsFeeTransaction {
-  id                    String                @id @default(uuid())
-  tenantId              String
-  applicationId         String
-  application           AdmissionsApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  paymentMethod         PaymentMethod
-  amount                Decimal               @db.Decimal(12, 2)
-  currency              String                @default("NGN")
-  paymentReference      String
-  proofOfPaymentUrl     String?
-  paymentStatus         PaymentStatus         @default(PENDING)
-  reconciliationNotes   String?
-  verifiedByUserId      String?
-  verifiedAt            DateTime?
-  createdAt             DateTime              @default(now())
+  id                  String                @id @default(uuid())
+  tenantId            String
+  applicationId       String
+  application         AdmissionsApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  paymentMethod       PaymentMethod
+  amount              Decimal               @db.Decimal(12, 2)
+  currency            String                @default("NGN")
+  paymentReference    String
+  proofOfPaymentUrl   String?
+  paymentStatus       PaymentStatus         @default(PENDING)
+  reconciliationNotes String?
+  verifiedByUserId    String?
+  verifiedAt          DateTime?
+  createdAt           DateTime              @default(now())
 
   @@unique([tenantId, paymentReference])
   @@index([tenantId, paymentStatus])

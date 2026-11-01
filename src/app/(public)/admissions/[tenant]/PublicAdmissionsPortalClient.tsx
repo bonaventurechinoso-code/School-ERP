@@ -587,7 +587,7 @@ export default function PublicAdmissionsPortalClient({
             {isTertiaryOrHealth ? (
               <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  Tertiary / Health Track: JAMB & O'Level Breakdown
+                  Tertiary / Health Track: JAMB &amp; O&apos;Level Breakdown
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -615,7 +615,7 @@ export default function PublicAdmissionsPortalClient({
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1 block">
-                    O'Level Matrix (WAEC/NECO 5-Credit Core):
+                    O&apos;Level Matrix (WAEC/NECO 5-Credit Core):
                   </label>
                   <div className="space-y-2">
                     {tertiaryData.subjects.map((sub, idx) => (
@@ -932,3 +932,4 @@ export default function PublicAdmissionsPortalClient({
     </div>
   );
 }
+

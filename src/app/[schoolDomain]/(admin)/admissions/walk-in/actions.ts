@@ -143,6 +143,26 @@ export async function recordWalkInApplication(payload: {
         },
       });
 
+      // 4. Record Audit Trail
+      await tx.admissionAuditTrail.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          applicationId: application.id,
+          registerId: application.id,
+          actorId: registrarName,
+          action: "WALK_IN_CREATED",
+          fromStage: "DRAFT",
+          toStage: "SUBMITTED",
+          metadata: {
+            intakeChannel: "WALK_IN",
+            paymentMethod: payment.method,
+            paymentReference,
+            sightedDocsCount: docEntries.length,
+          },
+        },
+      });
+
       return { application, feeTx, docEntriesCount: docEntries.length };
     });
 
@@ -194,3 +214,4 @@ export async function recordWalkInApplication(payload: {
     return { success: false, error: error.message || "Failed to record walk-in intake." };
   }
 }
+

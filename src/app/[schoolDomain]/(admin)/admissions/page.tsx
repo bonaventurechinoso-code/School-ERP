@@ -1,46 +1,22 @@
-import React, { Suspense } from "react";
-import { cookies } from "next/headers";
+import React from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
-import AdmissionsPipeline from "./AdmissionsPipeline";
-import { cacheAside, buildCacheKey } from "@/lib/cache";
-import {
-  Users,
-  FileCheck,
-  Award,
-  Clock,
-  TrendingUp,
-} from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { checkRouteAuthorization, resolveCanonicalDocuments } from "@/lib/admissions.service";
-import { ensureTenantAdmissionTracks } from "@/lib/admissions-pipeline.service";
-
-function PipelineSkeleton() {
-  return (
-    <div className="flex gap-4 overflow-x-auto pb-4 animate-pulse w-full">
-      {[1, 2, 3, 4, 5].map((col) => (
-        <div key={col} className="min-w-[320px] bg-slate-100 dark:bg-zinc-900/50 rounded-xl p-3 h-[550px] border border-slate-200/60 dark:border-zinc-800/60 space-y-3">
-          <div className="h-6 bg-slate-200 dark:bg-zinc-800 rounded-lg w-2/3"></div>
-          <div className="h-28 bg-white dark:bg-zinc-900 rounded-lg p-3 border border-slate-200 dark:border-zinc-800"></div>
-          <div className="h-28 bg-white dark:bg-zinc-900 rounded-lg p-3 border border-slate-200 dark:border-zinc-800"></div>
-        </div>
-      ))}
-    </div>
-  );
-}
+import { checkRouteAuthorization } from "@/lib/admissions.service";
+import EnterpriseAdmissionsClient, {
+  SerializedApplication,
+  SerializedTransaction,
+  AdmissionCycleItem,
+} from "./EnterpriseAdmissionsClient";
 
 export default async function AdmissionsPage({
   params: paramsPromise,
-  searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }>;
-  searchParams?: Promise<{ tier?: string }>;
 }) {
-  const params = await paramsPromise;
-  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+  const { schoolDomain } = await paramsPromise;
 
-  // Server-side RBAC validation
-  const session = await getSession(undefined, params.schoolDomain);
+  // 1. Session and RBAC Authorization
+  const session = await getSession(undefined, schoolDomain);
   const auth = checkRouteAuthorization(session, { resource: "admissions", action: "view" });
 
   if (!auth.allowed) {
@@ -60,33 +36,11 @@ export default async function AdmissionsPage({
   const mutateAuth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
   const canMutate = mutateAuth.canMutate;
 
-  const userRole = (
-    session?.role ||
-    session?.user?.role ||
-    (session as any)?.userRole ||
-    ""
-  ).toUpperCase();
-  const staffRole = (
-    session?.staffRole ||
-    session?.user?.staffRole ||
-    ""
-  ).toUpperCase();
-
-  const isTenantAdmin =
-    userRole === "ADMIN" ||
-    userRole === "SCHOOL_ADMIN" ||
-    userRole === "TENANT_ADMIN" ||
-    userRole === "SUPER_ADMIN" ||
-    userRole === "SUPERADMIN" ||
-    staffRole.includes("ADMIN") ||
-    staffRole.includes("PRINCIPAL") ||
-    staffRole.includes("DIRECTOR") ||
-    staffRole.includes("HEADMASTER") ||
-    staffRole.includes("HEADMISTRESS") ||
-    staffRole.includes("PROPRIETOR");
-
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: params.schoolDomain },
+  // 2. Resolve Target School Institution
+  const school = await basePrisma.school.findFirst({
+    where: {
+      OR: [{ subdomain: schoolDomain }, { slug: schoolDomain }],
+    },
     include: {
       academicTiers: {
         orderBy: { level: "asc" },
@@ -98,259 +52,216 @@ export default async function AdmissionsPage({
     return (
       <div className="p-8 text-center text-slate-500">
         <h2 className="text-xl font-bold text-slate-800">Tenant Not Found</h2>
-        <p>No school registered under domain: {params.schoolDomain}</p>
+        <p>No school registered under domain: {schoolDomain}</p>
       </div>
     );
   }
 
-  // Ensure tenant multi-tier admission tracks & sequential stages are provisioned
-  const tracks = await ensureTenantAdmissionTracks(school.id);
-
-  // Resolve active tier from URL searchParams or cookie (TierSwitcher selection)
-  const cookieStore = await cookies();
-  const rawCookieTier = cookieStore.get("activeTier")?.value;
-  const cookieTier = rawCookieTier ? decodeURIComponent(rawCookieTier) : undefined;
-  const requestedTierParam = searchParams?.tier;
-  const activeCandidate = (requestedTierParam || cookieTier || school.academicTiers[0]?.name || "Primary").trim();
-
-  const candidateLower = activeCandidate.toLowerCase();
-  const candidateSlug = sanitizeTierSlug(activeCandidate);
-
-  let activeTierType: "university" | "polytechnic" | "college_education" | "secondary" | "primary" | "nursery" = "primary";
-  let activeTierDisplayName = "Primary School";
-  let tierBadgeLetter = "P";
-
-  if (candidateSlug === "university" || candidateLower.includes("uni") || candidateLower.includes("undergraduate") || candidateLower.includes("higher")) {
-    activeTierType = "university";
-    activeTierDisplayName = "University";
-    tierBadgeLetter = "U";
-  } else if (candidateSlug === "polytechnic" || candidateLower.includes("poly") || candidateLower.includes("nd & hnd")) {
-    activeTierType = "polytechnic";
-    activeTierDisplayName = "Polytechnic";
-    tierBadgeLetter = "P";
-  } else if (candidateSlug === "college_education" || candidateLower.includes("college") || candidateLower.includes("nce")) {
-    activeTierType = "college_education";
-    activeTierDisplayName = "College of Education";
-    tierBadgeLetter = "C";
-  } else if (candidateSlug === "secondary" || (candidateLower.includes("secondary") && !candidateLower.includes("primary")) || candidateLower.includes("jss") || candidateLower.includes("sss")) {
-    activeTierType = "secondary";
-    activeTierDisplayName = "Secondary School";
-    tierBadgeLetter = "S";
-  } else if (candidateSlug === "primary" || (candidateLower.includes("primary") && !candidateLower.includes("secondary")) || candidateLower.includes("basic")) {
-    activeTierType = "primary";
-    activeTierDisplayName = "Primary School";
-    tierBadgeLetter = "P";
-  } else if (candidateSlug === "nursery" || candidateLower.includes("nursery") || candidateLower.includes("daycare") || candidateLower.includes("creche") || candidateLower.includes("early childhood")) {
-    activeTierType = "nursery";
-    activeTierDisplayName = "Daycare / Nursery";
-    tierBadgeLetter = "N";
-  }
-
-  // Find exact matching academic tier record
-  const activeTierObj = school.academicTiers.find((t) => {
-    const tSlug = sanitizeTierSlug(t.name);
-    const tLower = t.name.toLowerCase();
-
-    if (activeTierType === "university") return tSlug === "university" || tLower.includes("university") || tLower.includes("tertiary");
-    if (activeTierType === "polytechnic") return tSlug === "polytechnic" || tLower.includes("polytechnic");
-    if (activeTierType === "college_education") return tSlug === "college_education" || tLower.includes("college");
-    if (activeTierType === "secondary") return (tSlug === "secondary" || tLower.includes("secondary") || tLower.includes("high school")) && !tLower.includes("primary");
-    if (activeTierType === "primary") return (tSlug === "primary" || tLower.includes("primary") || tLower.includes("basic")) && !tLower.includes("secondary");
-    if (activeTierType === "nursery") return tSlug === "nursery" || tLower.includes("nursery") || tLower.includes("daycare") || tLower.includes("creche");
-    return false;
-  });
-
-  const whereClause: any = { schoolId: school.id };
-  if (activeTierObj) {
-    whereClause.tierId = activeTierObj.id;
-  } else {
-    whereClause.tierId = "non-existent-tier-boundary";
-  }
-
-  const cacheKey = buildCacheKey({
-    tenantId: school.id,
-    table: "admissions",
-    action: "pipeline_tiered",
-    filters: {
-      tierId: activeTierObj?.id || activeTierType,
-      activeTierType,
+  // 3. Query Admissions Applications scoped to tenant
+  const rawApplications = await basePrisma.admissionsApplication.findMany({
+    where: {
+      schoolId: school.id,
     },
-  });
-
-  const leads = await cacheAside({
-    key: cacheKey,
-    ttlSeconds: 60,
-    fetchFn: async () => {
-      return basePrisma.admissionLead.findMany({
-        where: whereClause,
-        include: { tier: true },
+    include: {
+      documents: {
+        select: {
+          id: true,
+          documentType: true,
+          storageKey: true,
+          verificationStatus: true,
+          rejectionReason: true,
+        },
+      },
+      feeTransactions: {
+        select: {
+          id: true,
+          paymentMethod: true,
+          amount: true,
+          currency: true,
+          paymentReference: true,
+          paymentStatus: true,
+          proofOfPaymentUrl: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: "desc" },
-        take: 200,
-      });
+      },
     },
+    orderBy: { createdAt: "desc" },
+    take: 500,
   });
 
-  // KPI Funnel Metrics
-  const inquiryCount = leads.filter((l) => (l.status || "").toUpperCase() === "INQUIRY").length;
-  const appliedCount = leads.filter((l) => (l.status || "").toUpperCase() === "APPLIED" || (l.status || "").toUpperCase() === "DOCS_PENDING").length;
-  const interviewCount = leads.filter((l) => (l.status || "").toUpperCase() === "INTERVIEW" || (l.status || "").toUpperCase() === "VERIFIED").length;
-  const approvedCount = leads.filter((l) => (l.status || "").toUpperCase() === "APPROVED").length;
-  const enrolledCount = leads.filter((l) => (l.status || "").toUpperCase() === "ENROLLED" || (l.status || "").toUpperCase() === "CONVERTED").length;
+  // Serialize applications for client component
+  const applications: SerializedApplication[] = rawApplications.map((app) => ({
+    id: app.id,
+    tenantId: app.tenantId,
+    schoolId: app.schoolId,
+    academicSessionId: app.academicSessionId,
+    programId: app.programId,
+    applicationNumber: app.applicationNumber,
+    intakeChannel: app.intakeChannel,
+    firstName: app.firstName,
+    lastName: app.lastName,
+    middleName: app.middleName,
+    email: app.email,
+    phoneNumber: app.phoneNumber,
+    whatsappNumber: app.whatsappNumber,
+    dateOfBirth: app.dateOfBirth.toISOString().split("T")[0],
+    gender: app.gender,
+    status: app.status,
+    tierSpecificData: (app.tierSpecificData as any) || {},
+    documents: app.documents.map((d) => ({
+      id: d.id,
+      documentType: d.documentType,
+      storageKey: d.storageKey,
+      verificationStatus: d.verificationStatus,
+      rejectionReason: d.rejectionReason,
+    })),
+    feeTransactions: app.feeTransactions.map((t) => ({
+      id: t.id,
+      paymentMethod: t.paymentMethod,
+      amount: Number(t.amount),
+      currency: t.currency,
+      paymentReference: t.paymentReference,
+      paymentStatus: t.paymentStatus,
+      proofOfPaymentUrl: t.proofOfPaymentUrl,
+      createdAt: t.createdAt.toISOString(),
+    })),
+    metadata: (app.metadata as any) || {},
+    createdAt: app.createdAt.toISOString(),
+  }));
+
+  // 4. Query Admission Cycles for session filtering
+  let rawCycles = await basePrisma.admissionCycle.findMany({
+    where: {
+      OR: [{ schoolId: school.id }, { tenantId: school.id }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const currentYear = new Date().getFullYear();
+  const defaultSession = `${currentYear}/${currentYear + 1}`;
+
+  const cycles: AdmissionCycleItem[] =
+    rawCycles.length > 0
+      ? rawCycles.map((c) => ({
+          id: c.id,
+          session: c.session || c.academicSession || defaultSession,
+          name: c.name || `${c.academicSession || defaultSession} Cycle`,
+          tier: String(c.tier),
+          applicationFee: c.applicationFee ?? Number(c.applicationFeeAmount) ?? 5000,
+          isActive: c.isActive,
+        }))
+      : [
+          {
+            id: "default-cycle",
+            session: defaultSession,
+            name: `${defaultSession} General Admissions Cycle`,
+            tier: school.academicTiers[0]?.name || "PRIMARY",
+            applicationFee: 5000,
+            isActive: true,
+          },
+        ];
+
+  // 5. Query Admissions Fee Transactions for embedded reconciliation
+  const rawTransactions = await basePrisma.admissionsFeeTransaction.findMany({
+    where: {
+      OR: [
+        { tenantId: school.id },
+        { application: { schoolId: school.id } },
+      ],
+    },
+    include: {
+      application: {
+        select: {
+          id: true,
+          applicationNumber: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phoneNumber: true,
+          whatsappNumber: true,
+          programId: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  const transactions: SerializedTransaction[] = rawTransactions.map((tx) => ({
+    id: tx.id,
+    tenantId: tx.tenantId,
+    applicationId: tx.applicationId,
+    paymentMethod: tx.paymentMethod,
+    amount: Number(tx.amount),
+    currency: tx.currency,
+    paymentReference: tx.paymentReference,
+    proofOfPaymentUrl: tx.proofOfPaymentUrl,
+    paymentStatus: tx.paymentStatus,
+    reconciliationNotes: tx.reconciliationNotes,
+    verifiedByUserId: tx.verifiedByUserId,
+    verifiedAt: tx.verifiedAt ? tx.verifiedAt.toISOString() : null,
+    createdAt: tx.createdAt.toISOString(),
+    application: {
+      id: tx.application.id,
+      applicationNumber: tx.application.applicationNumber,
+      firstName: tx.application.firstName,
+      lastName: tx.application.lastName,
+      email: tx.application.email,
+      phoneNumber: tx.application.phoneNumber,
+      whatsappNumber: tx.application.whatsappNumber,
+      programId: tx.application.programId,
+      status: tx.application.status,
+    },
+  }));
+
+  // 6. Tenant bank details
+  const bankDetails = {
+    bankName: school.settlementBankName || "Zenith Bank Plc",
+    accountNumber: school.settlementAccountNumber || "1012345678",
+    accountName: school.settlementAccountName || school.name,
+  };
+
+  const academicTiers = school.academicTiers.map((t) => ({
+    id: t.id,
+    name: t.name,
+    level: t.level ?? 1,
+  }));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 w-full min-h-screen flex flex-col">
-      {/* 1. HEADER: Admissions & Enrollment + P badge */}
+    <div className="space-y-6 w-full min-h-screen flex flex-col p-2 sm:p-4">
+      {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
-              Admissions &amp; Enrollment
-            </h1>
-            <span
-              className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-black bg-blue-600 text-white shadow-xs"
-              title={`${activeTierDisplayName} (Tier: ${tierBadgeLetter})`}
-            >
-              {tierBadgeLetter}
-            </span>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
+            Enterprise Admissions Workspace
+          </h1>
           <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm">
-            Track and manage prospective candidates from initial inquiry to entrance assessment and final matriculation.
+            Full lifecycle applicant processing: inquiries, document verification, post-UTME screening, batch provisional offers, fee reconciliation, and matriculation.
           </p>
         </div>
 
-        {/* Active Tier indicator */}
-        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>{activeTierDisplayName}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            <span>{school.name}</span>
           </span>
         </div>
       </header>
 
-      {/* 2. STATS: Top Analytics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 w-full">
-        {/* Card 1: INQUIRY */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              INQUIRY
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
-              {inquiryCount}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              New leads
-            </p>
-          </div>
-        </div>
-
-        {/* Card 2: DOCS PENDING */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              DOCS PENDING
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
-              {appliedCount}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Awaiting docs
-            </p>
-          </div>
-        </div>
-
-        {/* Card 3: SCREENED */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              SCREENED
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <FileCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
-              {interviewCount}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Verified
-            </p>
-          </div>
-        </div>
-
-        {/* Card 4: OFFERS */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              OFFERS
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-600 dark:text-purple-400">
-              <Award className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
-              {approvedCount}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Provisional
-            </p>
-          </div>
-        </div>
-
-        {/* Card 5: MATRICULATED */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 border border-slate-200/80 dark:border-zinc-800 shadow-sm flex flex-col justify-between col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between gap-1 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              MATRICULATED
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-zinc-50">
-              {enrolledCount}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Enrolled - SIS
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. PIPELINE & REGISTER WORKSPACE */}
-      <Suspense fallback={<PipelineSkeleton />}>
-        {(() => {
-          const enhancedLeads = leads.map((l) => ({
-            ...l,
-            resolvedDocuments: resolveCanonicalDocuments(l),
-          }));
-          return (
-            <AdmissionsPipeline
-              leads={enhancedLeads as any}
-              schoolId={school.id}
-              schoolDomain={params.schoolDomain}
-              tiers={school.academicTiers}
-              schoolName={school.name}
-              canMutate={canMutate}
-              isTenantAdmin={isTenantAdmin}
-              initialTracks={tracks as any}
-            />
-          );
-        })()}
-      </Suspense>
+      {/* Enterprise Admissions Client Workspace */}
+      <EnterpriseAdmissionsClient
+        schoolId={school.id}
+        schoolDomain={schoolDomain}
+        schoolName={school.name}
+        initialApplications={applications}
+        initialTransactions={transactions}
+        cycles={cycles}
+        academicTiers={academicTiers}
+        bankDetails={bankDetails}
+        canMutate={canMutate}
+      />
     </div>
   );
 }

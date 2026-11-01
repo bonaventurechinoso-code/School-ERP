@@ -12,7 +12,8 @@ import {
   buildDeduplicationCompoundKey,
   deduplicateTenantAdmissions,
 } from "@/lib/admissions-deduplication.service";
-import { AdmissionTierType } from "@prisma/client";
+import { AdmissionTierType, ApplicationStatus } from "@prisma/client";
+import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
 
 import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
@@ -615,15 +616,52 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
 /**
  * 1-Click Final Matriculation: Converts approved applicant into official Student record
  */
-export async function enrollApplicantAction(payload: {
-  leadId: string;
-  schoolId: string;
-  schoolDomain: string;
-}): Promise<AdmissionActionResult> {
-  const { leadId, schoolDomain } = payload;
+export async function enrollApplicantAction(
+  arg1:
+    | {
+        applicationId?: string;
+        leadId?: string;
+        schoolId: string;
+        tenantId?: string;
+        schoolDomain?: string;
+        tierId?: string;
+        departmentId?: string;
+        classArm?: string;
+        termFeeAmount?: number;
+        actorId?: string;
+        ipAddress?: string;
+      }
+    | string,
+  arg2?: string,
+  arg3?: string
+): Promise<any> {
+  const isObject = typeof arg1 === "object" && arg1 !== null;
+  const leadId = isObject ? arg1.leadId : undefined;
+  const applicationId = isObject ? arg1.applicationId : (typeof arg1 === "string" ? arg1 : undefined);
+  const schoolIdArg = isObject ? arg1.schoolId : (arg2 || "");
+  const tenantIdArg = isObject ? (arg1.tenantId || arg1.schoolId) : (arg3 || arg2 || "");
+
+  // If applicationId is provided or called with string ID, route to Enterprise enrollment
+  if (applicationId || (!leadId && isObject && arg1.applicationId)) {
+    return enrollAdmissionsApplicationAction({
+      applicationId: applicationId || (arg1 as any).applicationId,
+      schoolId: schoolIdArg,
+      tenantId: tenantIdArg,
+      schoolDomain: isObject ? arg1.schoolDomain : undefined,
+      tierId: isObject ? arg1.tierId : undefined,
+      departmentId: isObject ? arg1.departmentId : undefined,
+      classArm: isObject ? arg1.classArm : undefined,
+      termFeeAmount: isObject ? arg1.termFeeAmount : undefined,
+      actorId: isObject ? arg1.actorId : undefined,
+      ipAddress: isObject ? arg1.ipAddress : undefined,
+    });
+  }
+
+  const payload = arg1 as any;
+  const { schoolDomain } = payload;
   try {
     if (!leadId) {
-      return { success: false, error: "leadId is required." };
+      return { success: false, error: "leadId or applicationId is required." };
     }
     const schoolId = await resolveSchoolId(payload.schoolId);
 
@@ -2485,4 +2523,791 @@ export async function deduplicateAdmissionsAction(payload: {
     console.error("[deduplicateAdmissionsAction] Error:", err);
     return { success: false, error: err.message || "Failed to execute deduplication." };
   }
+}
+
+/**
+ * Enterprise Admissions: Update application stage and record immutable audit trail
+ */
+export async function updateApplicationStageAction(payload: {
+  applicationId: string;
+  newStage: string;
+  schoolId: string;
+  schoolDomain?: string;
+  notes?: string;
+  actorId?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+
+    // Scoped query for strict tenant isolation
+    const app = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        id: payload.applicationId,
+        schoolId: targetSchoolId,
+      },
+    });
+
+    if (!app) {
+      return { success: false, error: "Application record not found or belongs to another institution." };
+    }
+
+    // Map colloquial / Kanban stage names to ApplicationStatus
+    let targetStatus: ApplicationStatus = ApplicationStatus.SUBMITTED;
+    const stageUpper = payload.newStage.toUpperCase().replace(/\s+/g, "_");
+
+    if (stageUpper === "INQUIRY" || stageUpper === "DRAFT") {
+      targetStatus = ApplicationStatus.DRAFT;
+    } else if (stageUpper === "DOCS_PENDING" || stageUpper === "PAYMENT_PENDING" || stageUpper === "ACTION_REQUIRED") {
+      targetStatus = ApplicationStatus.PAYMENT_PENDING;
+    } else if (stageUpper === "VERIFIED" || stageUpper === "UNDER_REVIEW" || stageUpper === "SUBMITTED") {
+      targetStatus = ApplicationStatus.UNDER_REVIEW;
+    } else if (stageUpper === "APPROVED" || stageUpper === "OFFER_EXTENDED" || stageUpper === "OFFER_ACCEPTED") {
+      targetStatus = ApplicationStatus.OFFER_EXTENDED;
+    } else if (stageUpper === "REJECTED") {
+      targetStatus = ApplicationStatus.REJECTED;
+    } else if (stageUpper === "CONVERTED" || stageUpper === "ENROLLED") {
+      targetStatus = ApplicationStatus.ENROLLED;
+    } else if (Object.values(ApplicationStatus).includes(stageUpper as any)) {
+      targetStatus = stageUpper as ApplicationStatus;
+    }
+
+    const previousStatus = app.status;
+
+    // Mutate via single update where id (no updateMany)
+    const updated = await basePrisma.admissionsApplication.update({
+      where: { id: app.id },
+      data: {
+        status: targetStatus,
+        metadata: {
+          ...((app.metadata as any) || {}),
+          stageUpdatedBy: payload.actorId || "ADMIN",
+          lastStageTransition: {
+            from: previousStatus,
+            to: targetStatus,
+            at: new Date().toISOString(),
+            notes: payload.notes || null,
+          },
+        },
+      },
+    });
+
+    // Record immutable audit trail
+    await basePrisma.admissionAuditTrail.create({
+      data: {
+        tenantId: targetSchoolId,
+        schoolId: targetSchoolId,
+        applicationId: app.id,
+        registerId: app.id,
+        actorId: payload.actorId || "ADMIN",
+        action: "STAGE_CHANGE",
+        fromStage: previousStatus,
+        toStage: targetStatus,
+        ipAddress: (payload as any).ipAddress || null,
+        metadata: {
+          notes: payload.notes || `Candidate stage transitioned to ${targetStatus}`,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    // If moved to OFFER_EXTENDED, notify applicant omnichannel
+    if (targetStatus === ApplicationStatus.OFFER_EXTENDED) {
+      const school = await basePrisma.school.findFirst({
+        where: { id: targetSchoolId },
+        select: { name: true, subdomain: true },
+      });
+      const host = process.env.NEXTAUTH_URL || "https://schoolerp.ng";
+      await dispatchAdmissionsNotification({
+        tenantId: targetSchoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: app.applicationNumber,
+        recipient: {
+          name: `${app.firstName} ${app.lastName}`,
+          email: app.email,
+          phone: app.phoneNumber,
+          whatsappNumber: app.whatsappNumber || app.phoneNumber,
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl: `${host}/${school?.subdomain || "portal"}/admissions/offer/${app.id}`,
+      }).catch((notifErr) => console.warn("[PROVISIONAL_OFFER_NOTIF_WARN]:", notifErr));
+    }
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return {
+      success: true,
+      application: updated,
+      newStage: targetStatus,
+      message: `Applicant stage successfully updated to ${targetStatus}.`,
+    };
+  } catch (err: any) {
+    console.error("[updateApplicationStageAction] Error:", err);
+    return { success: false, error: err.message || "Failed to update application stage." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Direct atomic in-process matriculation / student enrollment server action
+ */
+export async function enrollAdmissionsApplicationAction(payload: {
+  applicationId: string;
+  schoolId: string;
+  tenantId?: string;
+  schoolDomain?: string;
+  tierId?: string;
+  departmentId?: string;
+  classArm?: string;
+  termFeeAmount?: number;
+  actorId?: string;
+  ipAddress?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+
+    // 1. Retrieve the AdmissionsApplication with tenant scoping
+    const application = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        id: payload.applicationId,
+        schoolId: targetSchoolId,
+      },
+      include: {
+        documents: true,
+      },
+    });
+
+    if (!application) {
+      return { success: false, error: "Admissions application record not found for this tenant." };
+    }
+
+    // 2. Resolve School and Academic Tier
+    const school = await basePrisma.school.findUnique({
+      where: { id: targetSchoolId },
+      include: {
+        academicTiers: { orderBy: { level: "asc" } },
+      },
+    });
+
+    if (!school) {
+      return { success: false, error: "School institution record not found." };
+    }
+
+    const targetTierId = payload.tierId || school.academicTiers[0]?.id;
+    if (!targetTierId) {
+      return { success: false, error: "Academic tier is required for student enrollment." };
+    }
+
+    const targetTier = school.academicTiers.find((t) => t.id === targetTierId) || school.academicTiers[0];
+    const tenantDb = await getPrismaClientForTier(targetSchoolId, targetTier.name);
+
+    // 3. Compute Admission/Matriculation Number via Tenant Formula
+    const year = new Date().getFullYear();
+    const branchPrefix = school.subdomain ? school.subdomain.toUpperCase().slice(0, 4) : "SCH";
+    const programCode = (application.programId || "GEN").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+
+    const studentSequenceCount = await tenantDb.student.count({
+      where: { schoolId: targetSchoolId },
+    });
+    const seqPadded = String(studentSequenceCount + 1).padStart(4, "0");
+    const matriculationNumber = `${branchPrefix}/${year}/${programCode}/${seqPadded}`;
+
+    // 4. Generate Initial User Portal Credentials
+    const rawTempPassword = `Welcome@${Math.floor(1000 + Math.random() * 9000)}`;
+    const hashedPassword = await bcrypt.hash(rawTempPassword, 12);
+    const userEmail =
+      application.email.toLowerCase().trim() ||
+      `${matriculationNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain || "portal"}`;
+
+    const parentData = (application.tierSpecificData as any)?.parent || (application.metadata as any)?.parent || {};
+    const parentName = parentData.name || `${application.lastName} Family`;
+    const parentEmail = parentData.email || application.email;
+    const parentPhone = parentData.phone || application.phoneNumber;
+
+    // 5. Execute Atomic Enrollment Transaction
+    const result = await basePrisma.$transaction(async (tx) => {
+      // Step A: Create or Link User
+      const user = await tx.user.upsert({
+        where: { schoolId_email: { schoolId: targetSchoolId, email: userEmail } },
+        update: {
+          role: "STUDENT",
+          firstName: application.firstName,
+          lastName: application.lastName,
+          status: "ACTIVE",
+          mustChangePassword: true,
+        },
+        create: {
+          schoolId: targetSchoolId,
+          email: userEmail,
+          passwordHash: hashedPassword,
+          role: "STUDENT",
+          firstName: application.firstName,
+          lastName: application.lastName,
+          status: "ACTIVE",
+          mustChangePassword: true,
+        },
+      });
+
+      // Step B: Create Student in target database
+      const student = await tx.student.create({
+        data: {
+          schoolId: targetSchoolId,
+          userId: user.id,
+          tierId: targetTierId,
+          firstName: application.firstName,
+          lastName: application.lastName,
+          email: userEmail,
+          admissionNumber: matriculationNumber,
+          currentClass: payload.classArm || application.programId || "Year 1",
+          dateOfBirth: application.dateOfBirth,
+          status: "ENROLLED",
+          parentName,
+          parentEmail,
+          parentPhone,
+          parentWhatsApp: application.whatsappNumber || parentPhone,
+          feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
+          enrolledAt: new Date(),
+          dynamicFields: {
+            applicationId: application.id,
+            intakeChannel: application.intakeChannel,
+            tierSpecificData: application.tierSpecificData,
+            verifiedDocumentsCount: application.documents.length,
+          },
+        },
+      });
+
+      // Step C: Link Parent
+      if (parentEmail && parentEmail.includes("@")) {
+        const parentUser = await tx.parent.upsert({
+          where: { schoolId_email: { schoolId: targetSchoolId, email: parentEmail.toLowerCase().trim() } },
+          update: {
+            name: parentName,
+            phone: parentPhone,
+          },
+          create: {
+            schoolId: targetSchoolId,
+            name: parentName,
+            email: parentEmail.toLowerCase().trim(),
+            phone: parentPhone,
+            passwordHash: hashedPassword,
+            relationship: parentData.relationship || "Parent",
+          },
+        });
+
+        await tx.studentParent.upsert({
+          where: { studentId_parentId: { studentId: student.id, parentId: parentUser.id } },
+          update: {},
+          create: {
+            schoolId: targetSchoolId,
+            studentId: student.id,
+            parentId: parentUser.id,
+          },
+        });
+      }
+
+      // Step D: Seed Initial Billing Ledger / Term Invoice if specified
+      if (payload.termFeeAmount && Number(payload.termFeeAmount) > 0) {
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 30);
+
+        await tx.invoice.create({
+          data: {
+            schoolId: targetSchoolId,
+            studentId: student.id,
+            amountDue: Number(payload.termFeeAmount),
+            amountPaid: 0,
+            status: "UNPAID",
+            dueDate,
+            description: `1st Term Academic Tuition & Registration Ledger - ${matriculationNumber}`,
+          },
+        });
+      }
+
+      // Step E: Update AdmissionsApplication status to ENROLLED (single record update)
+      const updatedApp = await tx.admissionsApplication.update({
+        where: { id: application.id },
+        data: {
+          status: "ENROLLED",
+          metadata: {
+            ...((application.metadata as any) || {}),
+            enrolledStudentId: student.id,
+            matriculationNumber,
+            enrolledAt: new Date().toISOString(),
+            enrolledBy: payload.actorId || "ADMIN",
+          },
+        },
+      });
+
+      // Step F: Record immutable AdmissionAuditTrail
+      await tx.admissionAuditTrail.create({
+        data: {
+          tenantId: targetSchoolId,
+          schoolId: targetSchoolId,
+          applicationId: application.id,
+          registerId: application.id,
+          actorId: payload.actorId || "ADMIN",
+          action: "ENROLLED",
+          fromStage: application.status,
+          toStage: "ENROLLED",
+          ipAddress: (payload as any).ipAddress || null,
+          metadata: {
+            matriculationNumber,
+            studentId: student.id,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+
+      return { student, user, updatedApp };
+    });
+
+    // 6. Dispatch Omnichannel Welcome & Matriculation Clearance
+    await dispatchAdmissionsNotification({
+      tenantId: targetSchoolId,
+      schoolName: school.name,
+      applicantNumber: application.applicationNumber,
+      recipient: {
+        name: `${application.firstName} ${application.lastName}`,
+        email: userEmail,
+        phone: application.phoneNumber,
+        whatsappNumber: application.whatsappNumber || application.phoneNumber,
+      },
+      event: "ENROLLED",
+      matriculationNumber,
+    }).catch((err) => console.warn("[dispatchAdmissionsNotification:ENROLLED]", err));
+
+    await invalidateStudentNamespace(targetSchoolId);
+    await invalidateAdmissionsNamespace(targetSchoolId);
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return {
+      success: true,
+      matricNo: matriculationNumber,
+      matriculationNumber,
+      studentId: result.student.id,
+      studentName: `${result.student.firstName} ${result.student.lastName}`,
+      userEmail,
+      tempPassword: rawTempPassword,
+      message: `Successfully matriculated as ${matriculationNumber}.`,
+    };
+  } catch (err: any) {
+    console.error("[enrollAdmissionsApplicationAction] Error:", err);
+    return { success: false, error: err.message || "Failed to matriculate student." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Batch Extend Provisional Offers to Selected Candidates
+ */
+export async function batchSendOffersAction(payload: {
+  applicationIds: string[];
+  schoolId: string;
+  schoolDomain?: string;
+  actorId?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    const school = await basePrisma.school.findFirst({
+      where: { id: targetSchoolId },
+      select: { name: true, subdomain: true },
+    });
+    const host = process.env.NEXTAUTH_URL || "https://schoolerp.ng";
+
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const appId of payload.applicationIds) {
+      // Find candidate scoped to tenant
+      const app = await basePrisma.admissionsApplication.findFirst({
+        where: { id: appId, schoolId: targetSchoolId },
+      });
+      if (!app) {
+        errors.push(`App ${appId}: not found or access denied`);
+        continue;
+      }
+
+      const prevStatus = app.status;
+
+      // Update via single id update (NO updateMany)
+      await basePrisma.admissionsApplication.update({
+        where: { id: app.id },
+        data: {
+          status: "OFFER_EXTENDED",
+          metadata: {
+            ...((app.metadata as any) || {}),
+            batchOfferExtendedAt: new Date().toISOString(),
+            extendedBy: payload.actorId || "ADMIN",
+          },
+        },
+      });
+
+      // Audit trail entry
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: targetSchoolId,
+          schoolId: targetSchoolId,
+          applicationId: app.id,
+          registerId: app.id,
+          actorId: payload.actorId || "ADMIN",
+          action: "PROVISIONAL_OFFER_EXTENDED",
+          fromStage: prevStatus,
+          toStage: "OFFER_EXTENDED",
+          ipAddress: (payload as any).ipAddress || null,
+          metadata: {
+            batch: true,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+
+      // Omnichannel dispatch
+      await dispatchAdmissionsNotification({
+        tenantId: targetSchoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: app.applicationNumber,
+        recipient: {
+          name: `${app.firstName} ${app.lastName}`,
+          email: app.email,
+          phone: app.phoneNumber,
+          whatsappNumber: app.whatsappNumber || app.phoneNumber,
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl: `${host}/${school?.subdomain || "portal"}/admissions/offer/${app.id}`,
+      }).catch((e) => console.warn("[batchSendOffersAction notification]", e));
+
+      successCount++;
+    }
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return {
+      success: true,
+      processed: successCount,
+      errors: errors.length > 0 ? errors : undefined,
+      message: `Provisional admission offers extended to ${successCount} candidate(s).`,
+    };
+  } catch (err: any) {
+    console.error("[batchSendOffersAction] Error:", err);
+    return { success: false, error: err.message || "Failed to batch extend offers." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Export JAMB CAPS Candidate CSV
+ */
+export async function exportJambCapsCsvAction(payload: {
+  schoolId: string;
+  programId?: string;
+  sessionId?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+
+    const where: any = { schoolId: targetSchoolId };
+    if (payload.programId && payload.programId !== "ALL") {
+      where.programId = payload.programId;
+    }
+    if (payload.sessionId && payload.sessionId !== "ALL") {
+      where.academicSessionId = payload.sessionId;
+    }
+
+    const applications = await basePrisma.admissionsApplication.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 2000,
+    });
+
+    const headers = [
+      "Registration Number",
+      "Candidate Name",
+      "Program",
+      "JAMB Reg No",
+      "UTME Score",
+      "O'Level Credits",
+      "Status",
+      "Date Applied",
+    ];
+
+    const rows = applications.map((app) => {
+      const tierData = (app.tierSpecificData as any) || {};
+      const regNo = app.applicationNumber || "";
+      const name = `"${app.lastName} ${app.firstName} ${app.middleName || ""}"`.trim();
+      const prog = `"${app.programId || "General"}"`;
+      const jambReg = tierData.jambRegNumber || tierData.jambRegNo || tierData.utmeRegNumber || "N/A";
+      const score = tierData.utmeScore || tierData.postUtmeScore || tierData.examScore || "N/A";
+      const oLevel = tierData.oLevelCredits || tierData.creditCount || "N/A";
+      const status = app.status;
+      const date = new Date(app.createdAt).toISOString().split("T")[0];
+
+      return [regNo, name, prog, jambReg, score, oLevel, status, date].join(",");
+    });
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+
+    return {
+      success: true,
+      csvContent,
+      count: applications.length,
+      filename: `JAMB_CAPS_EXPORT_${new Date().toISOString().slice(0, 10)}.csv`,
+    };
+  } catch (err: any) {
+    console.error("[exportJambCapsCsvAction] Error:", err);
+    return { success: false, error: err.message || "Failed to export JAMB CAPS CSV." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Verify or Reject Document with Audit Logging
+ */
+export async function verifyDocumentAction(payload: {
+  documentId: string;
+  schoolId: string;
+  tenantId?: string;
+  verificationStatus: "MANUALLY_VERIFIED" | "REJECTED";
+  reviewerNotes?: string;
+  rejectionReason?: string;
+  actorId?: string;
+  ipAddress?: string;
+  schoolDomain?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    const doc = await basePrisma.admissionsDocument.findFirst({
+      where: {
+        id: payload.documentId,
+        tenantId: targetSchoolId,
+      },
+      include: { application: true },
+    });
+
+    if (!doc) {
+      return { success: false, error: "Document record not found or access denied." };
+    }
+
+    const updatedDoc = await basePrisma.admissionsDocument.update({
+      where: { id: payload.documentId },
+      data: {
+        verificationStatus: payload.verificationStatus,
+        rejectionReason: payload.rejectionReason || payload.reviewerNotes || null,
+        verifiedByUserId: payload.actorId || "Admissions Officer",
+        verifiedAt: new Date(),
+      },
+    });
+
+    await basePrisma.admissionAuditTrail.create({
+      data: {
+        tenantId: targetSchoolId,
+        schoolId: targetSchoolId,
+        applicationId: doc.applicationId,
+        registerId: doc.applicationId,
+        actorId: payload.actorId || "Admissions Officer",
+        action: payload.verificationStatus === "MANUALLY_VERIFIED" ? "DOCUMENT_VERIFIED" : "DOCUMENT_REJECTED",
+        fromStage: doc.verificationStatus,
+        toStage: payload.verificationStatus,
+        ipAddress: payload.ipAddress || null,
+        metadata: {
+          documentId: doc.id,
+          documentType: doc.documentType,
+          reviewerNotes: payload.reviewerNotes || null,
+          rejectionReason: payload.rejectionReason || null,
+        },
+      },
+    });
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return { success: true, document: updatedDoc };
+  } catch (err: any) {
+    console.error("[verifyDocumentAction] Error:", err);
+    return { success: false, error: err.message || "Failed to verify document." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Reconcile Fee Action (Approve / Reject) with Audit Logging
+ */
+export async function reconcileFeeAction(payload: {
+  transactionId: string;
+  schoolId: string;
+  tenantId?: string;
+  action: "APPROVE" | "REJECT";
+  reconciliationNotes?: string;
+  reason?: string;
+  actorId?: string;
+  ipAddress?: string;
+  schoolDomain?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    const txRecord = await basePrisma.admissionsFeeTransaction.findUnique({
+      where: { id: payload.transactionId },
+      include: { application: true },
+    });
+
+    if (!txRecord) {
+      return { success: false, error: "Payment transaction record not found." };
+    }
+
+    if (txRecord.application.schoolId !== targetSchoolId && txRecord.tenantId !== targetSchoolId) {
+      return { success: false, error: "403 Forbidden: Cross-tenant ledger reconciliation rejected." };
+    }
+
+    const school = await basePrisma.school.findFirst({
+      where: { id: txRecord.application.schoolId },
+      select: { name: true, subdomain: true },
+    });
+
+    if (payload.action === "APPROVE") {
+      const updated = await basePrisma.$transaction(async (prismaTx) => {
+        const settledTx = await prismaTx.admissionsFeeTransaction.update({
+          where: { id: payload.transactionId },
+          data: {
+            paymentStatus: "SETTLED",
+            reconciliationNotes: payload.reconciliationNotes || "Reconciled with institutional bank ledger",
+            verifiedByUserId: payload.actorId || "Bursar Officer",
+            verifiedAt: new Date(),
+          },
+        });
+
+        const updatedApp = await prismaTx.admissionsApplication.update({
+          where: { id: txRecord.applicationId },
+          data: {
+            status: "SUBMITTED",
+            metadata: {
+              ...((txRecord.application.metadata as any) || {}),
+              settledPaymentRef: txRecord.paymentReference,
+              settledAt: new Date().toISOString(),
+            },
+          },
+        });
+
+        await prismaTx.admissionAuditTrail.create({
+          data: {
+            tenantId: targetSchoolId,
+            schoolId: targetSchoolId,
+            applicationId: txRecord.applicationId,
+            registerId: txRecord.applicationId,
+            actorId: payload.actorId || "Bursar Officer",
+            action: "FEE_RECONCILED",
+            fromStage: txRecord.application.status,
+            toStage: "SUBMITTED",
+            ipAddress: payload.ipAddress || null,
+            metadata: {
+              transactionId: txRecord.id,
+              amount: Number(txRecord.amount),
+              paymentReference: txRecord.paymentReference,
+            },
+          },
+        });
+
+        return { settledTx, updatedApp };
+      });
+
+      const host = process.env.NEXTAUTH_URL || "https://schoolerp.ng";
+      const receiptDownloadUrl = `${host}/${school?.subdomain || "portal"}/admissions/receipt/${txRecord.id}`;
+
+      await dispatchAdmissionsNotification({
+        tenantId: txRecord.tenantId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: txRecord.application.applicationNumber,
+        recipient: {
+          name: `${txRecord.application.firstName} ${txRecord.application.lastName}`,
+          email: txRecord.application.email,
+          phone: txRecord.application.phoneNumber,
+          whatsappNumber: txRecord.application.whatsappNumber || txRecord.application.phoneNumber,
+        },
+        event: "PAYMENT_CONFIRMED",
+        paymentReference: txRecord.paymentReference,
+        amountPaid: Number(txRecord.amount),
+        receiptDownloadUrl,
+      }).catch((notifErr) => console.warn("[PAYMENT_CONFIRMED_WARN]:", notifErr));
+
+      if (payload.schoolDomain) {
+        safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      }
+
+      return { success: true, transaction: updated.settledTx, receiptUrl: receiptDownloadUrl };
+    } else {
+      const updated = await basePrisma.$transaction(async (prismaTx) => {
+        const rejectedTx = await prismaTx.admissionsFeeTransaction.update({
+          where: { id: payload.transactionId },
+          data: {
+            paymentStatus: "REJECTED",
+            reconciliationNotes: payload.reason || "Rejected by Bursar",
+            verifiedByUserId: payload.actorId || "Bursar Officer",
+            verifiedAt: new Date(),
+          },
+        });
+
+        await prismaTx.admissionAuditTrail.create({
+          data: {
+            tenantId: targetSchoolId,
+            schoolId: targetSchoolId,
+            applicationId: txRecord.applicationId,
+            registerId: txRecord.applicationId,
+            actorId: payload.actorId || "Bursar Officer",
+            action: "FEE_REJECTED",
+            fromStage: txRecord.application.status,
+            toStage: txRecord.application.status,
+            ipAddress: payload.ipAddress || null,
+            metadata: {
+              transactionId: txRecord.id,
+              reason: payload.reason,
+            },
+          },
+        });
+
+        return rejectedTx;
+      });
+
+      if (payload.schoolDomain) {
+        safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      }
+
+      return { success: true, transaction: updated };
+    }
+  } catch (err: any) {
+    console.error("[reconcileFeeAction] Error:", err);
+    return { success: false, error: err.message || "Failed to reconcile transaction." };
+  }
+}
+
+export async function approveAdmissionsFeeTransaction(args: {
+  transactionId: string;
+  schoolId: string;
+  reconciliationNotes?: string;
+  verifiedByUserId?: string;
+  schoolDomain?: string;
+}) {
+  return reconcileFeeAction({
+    transactionId: args.transactionId,
+    schoolId: args.schoolId,
+    action: "APPROVE",
+    reconciliationNotes: args.reconciliationNotes,
+    actorId: args.verifiedByUserId,
+    schoolDomain: args.schoolDomain,
+  });
+}
+
+export async function rejectAdmissionsFeeTransaction(args: {
+  transactionId: string;
+  schoolId: string;
+  reason: string;
+  verifiedByUserId?: string;
+  schoolDomain?: string;
+}) {
+  return reconcileFeeAction({
+    transactionId: args.transactionId,
+    schoolId: args.schoolId,
+    action: "REJECT",
+    reason: args.reason,
+    actorId: args.verifiedByUserId,
+    schoolDomain: args.schoolDomain,
+  });
 }

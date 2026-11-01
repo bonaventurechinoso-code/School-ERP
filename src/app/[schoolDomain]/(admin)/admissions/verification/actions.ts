@@ -5,15 +5,15 @@ import { revalidatePath } from "next/cache";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
 import { generatePresignedDownloadToken } from "@/lib/storage/admissionsStorage";
 
-export enum DocumentRejectionReason {
-  BLURRY_UNREADABLE = "Blurry or unreadable scan",
-  NAME_MISMATCH = "Name mismatch on certificate",
-  INSUFFICIENT_CREDITS = "Insufficient credits for selected program",
-  EXPIRED_DOCUMENT = "Expired document or invalid issue date",
-  WRONG_DOCUMENT_TYPE = "Incorrect document uploaded for slot",
-  SUSPECTED_TAMPERING = "Suspected digital alteration or incomplete copy",
-  OTHER = "Other institutional compliance reason",
-}
+export type DocumentRejectionReason =
+  | "Blurry or unreadable scan"
+  | "Name mismatch on certificate"
+  | "Insufficient credits for selected program"
+  | "Expired document or invalid issue date"
+  | "Incorrect document uploaded for slot"
+  | "Suspected digital alteration or incomplete copy"
+  | "Other institutional compliance reason"
+  | string;
 
 export async function fetchApplicationsForVerification(schoolId: string) {
   try {
@@ -89,6 +89,24 @@ export async function approveAdmissionsDocument(
       },
     });
 
+    // Record immutable audit trail
+    await basePrisma.admissionAuditTrail.create({
+      data: {
+        tenantId: doc.tenantId,
+        schoolId: doc.application.schoolId,
+        applicationId: doc.applicationId,
+        registerId: doc.applicationId,
+        actorId: verifiedByUserId,
+        action: "DOCUMENT_VERIFIED",
+        fromStage: doc.verificationStatus,
+        toStage: "MANUALLY_VERIFIED",
+        metadata: {
+          documentId: doc.id,
+          documentType: doc.documentType,
+        },
+      },
+    });
+
     // Check if all documents for this application are now verified
     const allDocs = await basePrisma.admissionsDocument.findMany({
       where: { applicationId: doc.applicationId },
@@ -160,6 +178,26 @@ export async function rejectAdmissionsDocument({
       },
     });
 
+    // Record immutable audit trail
+    await basePrisma.admissionAuditTrail.create({
+      data: {
+        tenantId: doc.tenantId,
+        schoolId: doc.application.schoolId,
+        applicationId: doc.applicationId,
+        registerId: doc.applicationId,
+        actorId: verifiedByUserId,
+        action: "DOCUMENT_REJECTED",
+        fromStage: doc.verificationStatus,
+        toStage: "REJECTED",
+        metadata: {
+          documentId: doc.id,
+          documentType: doc.documentType,
+          reason,
+          customNotes: customNotes || null,
+        },
+      },
+    });
+
     const school = await basePrisma.school.findFirst({
       where: { id: doc.application.schoolId },
       select: { name: true, subdomain: true },
@@ -194,3 +232,4 @@ export async function rejectAdmissionsDocument({
     return { success: false, error: error.message || "Failed to reject document." };
   }
 }
+

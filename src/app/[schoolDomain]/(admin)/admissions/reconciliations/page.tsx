@@ -6,5 +6,6 @@ export default async function AdmissionsReconciliationsAliasPage({
   params: Promise<{ schoolDomain: string }>;
 }) {
   const { schoolDomain } = await paramsPromise;
-  redirect(`/${schoolDomain}/finance/admissions-reconciliations`);
+  redirect(`/${schoolDomain}/admissions`);
 }
+
