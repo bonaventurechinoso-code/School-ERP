@@ -475,7 +475,7 @@ export async function POST(
     const fileFields = [
       {
         field: "applicationFeeReceipt",
-        aliases: ["application_fee_receipt", "formFeeReceipt", "form_fee_receipt", "paymentReceipt"],
+        aliases: ["receipt", "application_fee_receipt", "formFeeReceipt", "form_fee_receipt", "paymentReceipt"],
         prefix: "fee-receipt",
         type: "DOC",
         allowedMimes: ALLOWED_DOC_MIMES,
@@ -683,15 +683,10 @@ export async function POST(
         try {
           const targetTier = lead.tier?.name || (lead as any).targetGrade || lead.tierId;
           const tierDb = await getPrismaClientForTier(schoolId, targetTier);
-          await tierDb.admissionLead.updateMany({
-            where: { id: lead.id, schoolId },
+          await tierDb.admissionLead.update({
+            where: { id: lead.id },
             data: updateData,
-          }).catch(async () => {
-            await tierDb.admissionLead.update({
-              where: { id: lead.id },
-              data: updateData,
-            }).catch(() => null);
-          });
+          }).catch(() => null);
         } catch (tierSyncErr) {
           console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
         }
@@ -840,6 +835,7 @@ export async function POST(
         if (!isRegisterOnly) {
           const reg = await basePrisma.admissionRegister.findFirst({
             where: {
+              tenantId: schoolId,
               OR: [
                 { id: lead.id },
                 { applicationNo: appNo },
@@ -934,9 +930,17 @@ export async function POST(
       revalidatePath("/[schoolDomain]/admin/admissions", "page");
     } catch { }
 
+    const finalFeeReceiptUrl =
+      currentDocs.applicationFeeReceiptUrl ||
+      currentDocs.formFeeReceiptUrl ||
+      currentDocs.applicationFeeReceipt?.url ||
+      null;
+
     return NextResponse.json({
       success: true,
       message: "Credentials uploaded successfully",
+      receiptUrl: finalFeeReceiptUrl,
+      status: finalFeeReceiptUrl ? "PENDING" : (updatedLead?.status || "PENDING"),
       documents: currentDocs,
       uploadedCount: uploadedFileList.length,
       lead: updatedLead,

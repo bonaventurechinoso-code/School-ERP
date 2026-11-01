@@ -18,6 +18,7 @@ import {
   CreditCard,
   Clock,
   Check,
+  Loader2,
 } from "lucide-react";
 
 interface UploadClientProps {
@@ -103,6 +104,8 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   // UI state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isReceiptUploading, setIsReceiptUploading] = useState(false);
+  const [receiptSuccessMsg, setReceiptSuccessMsg] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, any>>(existingDocuments || {});
@@ -122,6 +125,60 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const uploadReceiptFile = async (file: File) => {
+    setIsReceiptUploading(true);
+    setErrorMsg(null);
+    setReceiptSuccessMsg(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("receipt", file);
+      formData.append("applicationFeeReceipt", file);
+      formData.append("token", token);
+      formData.append("applicantId", applicantId);
+      if (depositorName) formData.append("depositorName", depositorName);
+      if (transferReference) formData.append("transferReference", transferReference);
+
+      const res = await fetch(`/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: {
+          "x-applicant-token": token,
+          "x-upload-token": token,
+          "Authorization": `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload application fee receipt to server");
+      }
+
+      // Sets fee state strictly from the server's 200 response
+      const serverStatus = data.status === "PAID" ? "PAID" : (data.status || "PENDING");
+      setFeeState(serverStatus as "UNPAID" | "PENDING" | "PAID");
+
+      const serverReceiptUrl =
+        data.receiptUrl ||
+        data.documents?.applicationFeeReceiptUrl ||
+        data.documents?.applicationFeeReceipt?.url ||
+        data.documents?.formFeeReceiptUrl ||
+        null;
+
+      if (serverReceiptUrl) {
+        setFeeReceiptUrl(serverReceiptUrl);
+      }
+      setUploadedDocs(data.documents || {});
+      setFiles((prev) => ({ ...prev, applicationFeeReceipt: file }));
+      setReceiptSuccessMsg("Application fee receipt uploaded successfully. Status: Pending Verification.");
+    } catch (err: any) {
+      console.error("[RECEIPT_AUTO_UPLOAD_ERROR]", err);
+      setErrorMsg(err.message || "Failed to upload receipt. Please try again.");
+    } finally {
+      setIsReceiptUploading(false);
+    }
   };
 
   const validateAndSetFile = (
@@ -161,6 +218,9 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       } else {
         setPreviews((prev) => ({ ...prev, applicationFeeReceipt: null }));
       }
+      // Instantly trigger actual multipart/form-data POST upload to server
+      uploadReceiptFile(file);
+      return;
     }
 
     setFiles((prev) => ({ ...prev, [field]: file }));
@@ -183,6 +243,17 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    const hasPendingFiles =
+      files.passportPhoto ||
+      files.academicResults ||
+      files.birthCertificate ||
+      files.medicalRecords;
+
+    if (!hasPendingFiles && (feeReceiptUrl || feeState === "PENDING")) {
+      setIsSuccess(true);
+      return;
+    }
 
     const hasNewFiles =
       files.applicationFeeReceipt ||
@@ -215,6 +286,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
       if (files.applicationFeeReceipt) {
         formData.append("applicationFeeReceipt", files.applicationFeeReceipt);
+        formData.append("receipt", files.applicationFeeReceipt);
       }
       if (depositorName) formData.append("depositorName", depositorName);
       if (transferReference) formData.append("transferReference", transferReference);
@@ -416,6 +488,17 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
               </div>
             )}
 
+            {/* Receipt Auto-Upload Success Banner */}
+            {receiptSuccessMsg && (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-sm flex items-start gap-3 animate-in fade-in duration-300">
+                <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex-1 font-medium">{receiptSuccessMsg}</div>
+                <button type="button" onClick={() => setReceiptSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-700 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Dropzone Grid */}
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -431,7 +514,9 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       receiptInputRef.current?.click();
                     }}
                     className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
-                      files.applicationFeeReceipt || feeReceiptUrl
+                      isReceiptUploading
+                        ? "border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20"
+                        : feeReceiptUrl || feeState === "PENDING"
                         ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
                         : "border-indigo-400 dark:border-indigo-600 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20"
                     }`}
@@ -474,7 +559,17 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       </p>
                     </div>
 
-                    {files.applicationFeeReceipt || feeReceiptUrl ? (
+                    {isReceiptUploading ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in duration-200">
+                        <Loader2 className="w-9 h-9 animate-spin text-indigo-600 dark:text-indigo-400 mb-2" />
+                        <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+                          Uploading Receipt to Server...
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-1">
+                          Committing payment proof to admissions registry
+                        </p>
+                      </div>
+                    ) : feeReceiptUrl || feeState === "PENDING" ? (
                       <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
                         <FileCheck className="w-8 h-8 text-emerald-600 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -484,9 +579,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                           <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
                             {files.applicationFeeReceipt
                               ? formatFileSize(files.applicationFeeReceipt.size)
-                              : feeState === "PENDING"
-                              ? "Uploaded • Under Admissions Review"
-                              : "Ready for verification"}
+                              : "Uploaded • Under Admissions Review"}
                           </p>
                         </div>
                         {feeReceiptUrl && (
@@ -500,18 +593,17 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                             View
                           </a>
                         )}
-                        {files.applicationFeeReceipt && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              validateAndSetFile("applicationFeeReceipt", null);
-                            }}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            receiptInputRef.current?.click();
+                          }}
+                          className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 shrink-0 cursor-pointer"
+                        >
+                          Replace
+                        </button>
                       </div>
                     ) : (
                       <div className="text-center py-3 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
