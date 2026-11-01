@@ -368,7 +368,7 @@ model AcademicTier {
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  name  String // e.g., "Daycare / Nursery", "Elementary", "High School"
+  name  String // e.g., "Creche / Nursery", "Elementary", "High School"
   level Int? // Optional numeric sort order
 
   // Dedicated Tier Database Reference
@@ -397,7 +397,7 @@ model TenantTierDatabase {
   id            String   @id @default(uuid())
   schoolId      String
   school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  tierName      String // e.g. "DAYCARE", "PRIMARY", "SECONDARY"
+  tierName      String // e.g. "CRECHE", "PRIMARY", "SECONDARY"
   databaseName  String // e.g. "greenwood_primary"
   databaseUrl   String // Full postgres connection string
   status        String   @default("ACTIVE") // ACTIVE, PROVISIONING, FAILED, MAINTENANCE
@@ -829,7 +829,7 @@ model AcademicRecord {
   gradeLetter String?
   isPassed    Boolean? @default(true)
 
-  // Daycare / Nursery Descriptive & Narrative Skills
+  // Creche / Nursery Descriptive & Narrative Skills
   assessmentType    String? @default("NUMERICAL") // "NUMERICAL" or "NARRATIVE"
   narrativeRating   String? // e.g. "EXCELLENT", "DEVELOPING", "NEEDS_IMPROVEMENT"
   skillsEvaluation  Json? // Detailed skills evaluation array/map
@@ -872,7 +872,7 @@ model ReportCard {
   passedSubjects       Int     @default(0)
   failedSubjects       Int     @default(0)
 
-  // Daycare / Nursery Developmental Snapshot
+  // Creche / Nursery Developmental Snapshot
   narrativeSummary      String?
   developmentIndicators Json?
 
@@ -1128,7 +1128,7 @@ model Tenant {
   isImpersonationAllowed     Boolean                     @default(true)
   suspendedReason            String?
   suspendedAt                DateTime?
-  tier                       InstitutionTier             @default(PRIMARY)
+  tier                       SchoolTier                  @default(TERTIARY)
   statusReason               String?
   statusChangedAt            DateTime?
   storageUsedBytes           BigInt                      @default(0)
@@ -1318,7 +1318,7 @@ model AdmissionRegister {
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
   // Enterprise Tiering Additions
-  tier            InstitutionTier?
+  tier            SchoolTier?
   cycleId         String?          @map("cycle_id")
   personalData    Json?            @map("personal_data")
   academicHistory Json?            @map("academic_history")
@@ -1438,14 +1438,11 @@ model PaymentSetting {
 // ENTERPRISE NIGERIAN ADMISSIONS ARCHITECTURE
 // ------------------------------------------------------
 
-enum InstitutionTier {
+enum SchoolTier {
   CRECHE
-  NURSERY
   PRIMARY
   SECONDARY
-  POLYTECHNIC
-  COLLEGE_OF_ED
-  UNIVERSITY
+  TERTIARY
 }
 
 enum ApplicationDocumentType {
@@ -1552,7 +1549,7 @@ model AdmissionCycle {
 model ApplicationFormTemplate {
   id        String          @id @default(cuid())
   tenantId  String          @map("tenant_id")
-  tier      InstitutionTier
+  tier      SchoolTier
   schema    Json // JSONB dynamic steps/fields
   isActive  Boolean         @default(true) @map("is_active")
   createdAt DateTime        @default(now()) @map("created_at")

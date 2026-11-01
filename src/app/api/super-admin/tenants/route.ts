@@ -6,7 +6,7 @@ import { ensureEgedeAndDemoRestored } from "@/lib/tenant-status";
 export const dynamic = "force-dynamic";
 
 const TIER_LABEL_MAP: Record<string, string> = {
-  CRECHE: "Creche / Daycare",
+  CRECHE: "Creche",
   NURSERY: "Nursery / Kindergarten",
   PRIMARY: "Primary School",
   SECONDARY: "Senior Secondary School",

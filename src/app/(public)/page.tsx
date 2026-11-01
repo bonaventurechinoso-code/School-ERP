@@ -64,7 +64,7 @@ function MarketingNavbar() {
                 <div className="absolute top-full left-1/2 -translate-x-1/2 pt-1 w-80 z-50">
                   <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/50 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 p-2 space-y-1">
                     <Link 
-                      href="#daycare" 
+                      href="#creche" 
                       onClick={() => setIsSolutionsOpen(false)}
                       className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
                     >
@@ -72,7 +72,7 @@ function MarketingNavbar() {
                         <Baby className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Daycare & Nursery</p>
+                        <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">Creche & Nursery</p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">Early childhood management tailored for care</p>
                       </div>
                     </Link>
@@ -215,7 +215,7 @@ function MarketingNavbar() {
           {/* Navigation Links */}
           <div className="space-y-1">
             <Link 
-              href="#daycare" 
+              href="#creche" 
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 transition-colors duration-200"
             >
@@ -276,9 +276,9 @@ export default function LandingPage() {
   const [step, setStep] = useState(1);
 
   const institutionTiers = [
-    { id: "creche", name: "Creche / Daycare", group: "Early Childhood" },
+    { id: "creche", name: "Creche", group: "Early Childhood" },
     { id: "kindergarten", name: "Kindergarten", group: "Early Childhood" },
-    { id: "nursery", name: "Nursery School", group: "Early Childhood" },
+    { id: "nursery", name: "Creche", group: "Early Childhood" },
     { id: "primary", name: "Primary School", group: "Basic Education" },
     { id: "jss", name: "Junior Secondary School (JSS)", group: "Basic Education" },
     { id: "sss", name: "Senior Secondary School (SSS)", group: "Post-Basic" },
@@ -507,7 +507,7 @@ export default function LandingPage() {
             {/* Card 1 */}
             <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Basic Education Setup</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Daycares, Nursery, and Primary schools.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Creches, Nursery, and Primary schools.</p>
               <div className="mb-6">
                 <span className="text-4xl font-extrabold text-slate-900 dark:text-white">{isAnnual ? '₦20,000' : '₦25,000'}</span>
                 <span className="text-slate-500 dark:text-slate-400">{isAnnual ? '/yr' : '/mo'}</span>
@@ -611,7 +611,7 @@ export default function LandingPage() {
             <div className="space-y-3">
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Tier Solutions</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link href="#daycare" className="hover:text-blue-400 transition-colors">Daycare & Nursery</Link></li>
+                <li><Link href="#creche" className="hover:text-blue-400 transition-colors">Creche & Nursery</Link></li>
                 <li><Link href="#primary" className="hover:text-blue-400 transition-colors">Primary Education</Link></li>
                 <li><Link href="#secondary" className="hover:text-blue-400 transition-colors">Secondary & High Schools</Link></li>
                 <li><Link href="#higher-ed" className="hover:text-blue-400 transition-colors">Universities & Colleges</Link></li>

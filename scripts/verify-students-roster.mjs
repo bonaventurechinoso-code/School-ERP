@@ -82,11 +82,11 @@ async function verifyStudentsRoster() {
 
   console.log("✅ PASS: Secondary School tier navigation verified.\n");
 
-  // --- TEST 3: Daycare / Nursery Tier Navigation ---
-  console.log("--- TEST 3: Daycare / Nursery Tier (greenwood/students?tier=Daycare+%2F+Nursery) ---");
-  const nurseryRes = await fetch(`${baseUrl}/greenwood/students?tier=Daycare+%2F+Nursery`, {
+  // --- TEST 3: Creche / Nursery Tier Navigation ---
+  console.log("--- TEST 3: Creche / Nursery Tier (greenwood/students?tier=Creche+%2F+Nursery) ---");
+  const nurseryRes = await fetch(`${baseUrl}/greenwood/students?tier=Creche+%2F+Nursery`, {
     headers: {
-      Cookie: `session=${sessionToken}; activeTier=Daycare%20%2F%20Nursery`,
+      Cookie: `session=${sessionToken}; activeTier=Creche%20%2F%20Nursery`,
     },
   });
   console.log(`Nursery Tier HTTP Status: ${nurseryRes.status}`);
@@ -94,13 +94,13 @@ async function verifyStudentsRoster() {
     throw new Error(`FAIL: Nursery tier returned HTTP ${nurseryRes.status}`);
   }
   const nurseryHtml = await nurseryRes.text();
-  const hasNurseryBadge = nurseryHtml.includes("Daycare") || nurseryHtml.includes("Nursery");
-  console.log(`Contains Daycare / Nursery tier badge: ${hasNurseryBadge}`);
+  const hasNurseryBadge = nurseryHtml.includes("Creche") || nurseryHtml.includes("Nursery");
+  console.log(`Contains Creche / Nursery tier badge: ${hasNurseryBadge}`);
   if (!hasNurseryBadge) {
-    throw new Error("FAIL: Daycare / Nursery tier badge missing!");
+    throw new Error("FAIL: Creche / Nursery tier badge missing!");
   }
 
-  console.log("✅ PASS: Daycare / Nursery tier navigation verified.\n");
+  console.log("✅ PASS: Creche / Nursery tier navigation verified.\n");
 
   console.log("=================================================================");
   console.log("  ALL STUDENT ROSTER HTTP CHECKS PASSED (3/3)                     ");

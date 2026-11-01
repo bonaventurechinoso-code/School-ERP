@@ -777,7 +777,7 @@ export default function PublicApplyClient({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {(
                 [
-                  { id: "CRECHE", label: "Creche / Daycare", icon: Baby },
+                  { id: "CRECHE", label: "Creche", icon: Baby },
                   { id: "NURSERY_PRIMARY", label: "Nursery / Primary", icon: School },
                   { id: "SECONDARY", label: "Secondary (JSS/SSS)", icon: BookOpen },
                   { id: "TERTIARY", label: "Tertiary / Higher", icon: GraduationCap },
@@ -814,7 +814,7 @@ export default function PublicApplyClient({
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mb-4">
-                Required for Nigerian Daycare & Creche health compliance.
+                Required for Nigerian Creche health compliance.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">

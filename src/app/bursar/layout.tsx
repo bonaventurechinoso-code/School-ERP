@@ -26,7 +26,7 @@ export default async function BursarLayout({
     settlementBankName: "Access Bank Plc",
     settlementAccountNumber: "0123456789",
     settlementAccountName: "Greenwood Academy - Tuition Account",
-    activeTiers: ["Daycare", "Primary School", "Secondary School"],
+    activeTiers: ["Creche", "Primary School", "Secondary School"],
   };
 
   let pendingVerificationsCount = 0;

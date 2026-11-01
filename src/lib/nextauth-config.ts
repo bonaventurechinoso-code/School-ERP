@@ -57,7 +57,7 @@ export const authOptions: NextAuthOptions = {
           rawPassword === "Password123"
         ) {
           const permissions = getDefaultPermissionsForRole("SCHOOL_ADMIN");
-          const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Daycare/Nursery"];
+          const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Creche/Nursery"];
           return {
             id: "demo-headmaster-user-001",
             userId: "demo-headmaster-user-001",
@@ -178,7 +178,7 @@ export const authOptions: NextAuthOptions = {
               { name: "Primary School" },
               { name: "Secondary School" },
               { name: "Higher Institution" },
-              { name: "Daycare/Nursery" },
+              { name: "Creche/Nursery" },
             ],
           };
         } else if (effectiveDomain) {
@@ -324,7 +324,7 @@ export const authOptions: NextAuthOptions = {
 
           if (isPasswordValid) {
             const permissions = getDefaultPermissionsForRole(user.role);
-            const activeTiers = effectiveSchool?.academicTiers?.map((t: any) => t.name) || ["Daycare / Nursery", "Primary School", "Secondary School"];
+            const activeTiers = effectiveSchool?.academicTiers?.map((t: any) => t.name) || ["Creche / Nursery", "Primary School", "Secondary School"];
             const mustChangePassword = !isUserDemo && Boolean(user.mustChangePassword);
             const assignedTier = mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
 
@@ -425,7 +425,7 @@ export const authOptions: NextAuthOptions = {
               const effectiveRole = staffMember.user?.role || "TEACHER";
               const normalizedRole = normalizeRole(effectiveRole);
               const permissions = getDefaultPermissionsForRole(normalizedRole);
-              const activeTiers = staffSchool?.academicTiers?.map((t: any) => t.name) || ["Daycare / Nursery", "Primary School", "Secondary School"];
+              const activeTiers = staffSchool?.academicTiers?.map((t: any) => t.name) || ["Creche / Nursery", "Primary School", "Secondary School"];
               const assignedTier = staffMember.department?.tier?.name || mapTierTokenToTierName(parsedId.tierToken) || activeTiers[0] || null;
               const isStaffDemo =
                 isDemo ||

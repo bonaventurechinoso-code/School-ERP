@@ -144,7 +144,7 @@ function getStaffAssignmentLabel(tier?: string | null): string {
   // 1. Basic (Nursery/Primary/JSS): Label = "Subject / Class Assigned"
   if (
     norm.includes("NURSERY") ||
-    norm.includes("DAYCARE") ||
+    norm.includes("CRECHE") ||
     norm.includes("CRECHE") ||
     norm.includes("CRÈCHE") ||
     norm.includes("PRE-SCHOOL") ||
@@ -328,9 +328,9 @@ export default function StaffTable({
 
                   // Explicit exclusions: Nursery, Secondary, Higher Education
                   const isNursery =
-                    /daycare|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
+                    /creche|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
                     cTierName.includes("nursery") ||
-                    cTierName.includes("daycare");
+                    cTierName.includes("creche");
                   const isSecondary =
                     /jss|sss|junior|senior|secondary|high school|grade 7|grade 8|grade 9|grade 10|grade 11|grade 12/i.test(cName) ||
                     cTierName.includes("secondary");
@@ -357,9 +357,9 @@ export default function StaffTable({
                   const cName = (c.name || "").trim();
                   const cTierName = (c.tier?.name || "").toLowerCase();
                   return (
-                    /daycare|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
+                    /creche|nursery|creche|crèche|kg|kindergarten|pre-school|early/i.test(cName) ||
                     cTierName.includes("nursery") ||
-                    cTierName.includes("daycare")
+                    cTierName.includes("creche")
                   );
                 })
                 .map((c: any) => ({
@@ -427,7 +427,7 @@ export default function StaffTable({
               /secondary|jss|sss|senior|high/i.test(effectiveTier);
             const isPrimary =
               tierCategory === "PRIMARY" ||
-              /primary|basic|elementary|nursery|daycare/i.test(effectiveTier);
+              /primary|basic|elementary|nursery|creche/i.test(effectiveTier);
 
             if (isSecondary) {
               // 1. SECONDARY TIER: Exclude university course codes unless explicitly higher institution

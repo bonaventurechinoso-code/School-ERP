@@ -35,7 +35,7 @@ export default async function ApplyPage({
       effectiveTiers = (school as any).tierDatabases.map((td: any) => {
         let name = "Secondary School";
         const tn = (td.tierName || "").toUpperCase();
-        if (tn.includes("DAYCARE") || tn.includes("NURSERY")) name = "Daycare / Nursery";
+        if (tn.includes("CRECHE") || tn.includes("NURSERY")) name = "Creche / Nursery";
         else if (tn.includes("PRIMARY")) name = "Primary School";
         else if (tn.includes("TERTIARY") || tn.includes("HIGHER")) name = "Higher Education";
         return {
@@ -55,8 +55,8 @@ export default async function ApplyPage({
       let defaultTierName = "Secondary School";
       if (sName.includes("primary") || sName.includes("basic") || sName.includes("elementary")) {
         defaultTierName = "Primary School";
-      } else if (sName.includes("daycare") || sName.includes("nursery") || sName.includes("creche")) {
-        defaultTierName = "Daycare / Nursery";
+      } else if (sName.includes("creche") || sName.includes("nursery") || sName.includes("creche")) {
+        defaultTierName = "Creche / Nursery";
       } else if (sName.includes("university") || sName.includes("college") || sName.includes("polytechnic")) {
         defaultTierName = "Higher Education";
       }

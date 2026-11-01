@@ -21,7 +21,7 @@ export default async function BursarBankingPage() {
     settlementBankName: "Access Bank Plc",
     settlementAccountNumber: "0123456789",
     settlementAccountName: "Greenwood Academy - Tuition Account",
-    activeTiers: ["Daycare", "Primary School", "Secondary School"],
+    activeTiers: ["Creche", "Primary School", "Secondary School"],
   };
 
   return <BankingDeskClient context={fallbackContext} />;

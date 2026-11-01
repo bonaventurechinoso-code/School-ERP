@@ -155,8 +155,8 @@ export async function seedTierDatabase(options: TierProvisionOptions & { tierDbU
     const upper = tierName.toUpperCase();
     let classNames: string[] = [];
 
-    if (upper.includes("DAYCARE") || upper.includes("NURSERY")) {
-      classNames = ["Crèche / Daycare", "Nursery 1", "Nursery 2", "Kindergarten"];
+    if (upper.includes("CRECHE") || upper.includes("NURSERY")) {
+      classNames = ["Creche", "Nursery 1", "Nursery 2", "Kindergarten"];
     } else if (upper.includes("PRIMARY") && !upper.includes("SECONDARY")) {
       classNames = ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"];
     } else if (upper.includes("SECONDARY") && !upper.includes("PRIMARY")) {

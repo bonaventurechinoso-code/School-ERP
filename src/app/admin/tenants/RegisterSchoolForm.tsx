@@ -8,7 +8,7 @@ import { Plus, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2, Check } from "lu
 import { createSchool } from "../actions";
 
 export const ACADEMIC_TIERS_OPTIONS = [
-  { id: "Creche / Daycare", label: "Creche / Daycare" },
+  { id: "Creche", label: "Creche" },
   { id: "Nursery / Kindergarten", label: "Nursery / Kindergarten" },
   { id: "Primary School", label: "Primary School" },
   { id: "Junior Secondary School", label: "Junior Secondary School" },

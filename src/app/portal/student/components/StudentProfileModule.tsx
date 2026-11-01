@@ -475,7 +475,7 @@ export function StudentProfileModule({
         </div>
       )}
 
-      {/* DAYCARE / NURSERY / PRIMARY: PARENT-ORIENTED DEVELOPMENTAL RATING & PICK-UP LOGS */}
+      {/* CRECHE / NURSERY / PRIMARY: PARENT-ORIENTED DEVELOPMENTAL RATING & PICK-UP LOGS */}
       {isEarlyChildhood && (
         <div className="bg-white dark:bg-zinc-900 rounded-xl p-5 sm:p-6 shadow-sm shadow-slate-200/60 dark:shadow-none border border-slate-200/60 dark:border-zinc-800 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800">

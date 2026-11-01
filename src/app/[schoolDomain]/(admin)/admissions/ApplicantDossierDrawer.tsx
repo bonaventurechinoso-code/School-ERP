@@ -70,11 +70,11 @@ function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
   if (!cls) return fallbackTier || "Secondary School";
   const c = cls.toLowerCase().trim();
   if (
-    ["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) =>
+    ["creche", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) =>
       c.includes(k)
     )
   ) {
-    return "Daycare / Nursery";
+    return "Creche / Nursery";
   }
   if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
     return "Primary School";

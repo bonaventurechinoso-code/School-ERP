@@ -33,7 +33,7 @@ async function verifyMultiTierEnrollmentSync() {
   console.log(`   3. ${secondaryTier.name} (ID: ${secondaryTier.id})`);
 
   // Connect to isolated tier databases
-  const nurseryDb = await getPrismaClientForTier(school.id, "Daycare / Nursery");
+  const nurseryDb = await getPrismaClientForTier(school.id, "Creche / Nursery");
   const primaryDb = await getPrismaClientForTier(school.id, "Primary School");
   const secondaryDb = await getPrismaClientForTier(school.id, "Secondary School");
 
@@ -158,10 +158,10 @@ async function verifyMultiTierEnrollmentSync() {
   }
 
   // =========================================================================
-  // TEST 3: ENROLL APPLICANT INTO DAYCARE / NURSERY
+  // TEST 3: ENROLL APPLICANT INTO CRECHE / NURSERY
   // =========================================================================
   console.log("\n------------------------------------------------------------------");
-  console.log("🧪 TEST 3: Enrolling Applicant designated to DAYCARE / NURSERY");
+  console.log("🧪 TEST 3: Enrolling Applicant designated to CRECHE / NURSERY");
   console.log("------------------------------------------------------------------");
 
   const nurseryApplicantEmail = `tobi.nursery.${Date.now()}@example.com`;
@@ -175,7 +175,7 @@ async function verifyMultiTierEnrollmentSync() {
       parentName: "Segun Adebayo",
       parentEmail: "segun.adebayo@example.com",
       parentContact: "08012121212",
-      targetGrade: "Crèche / Daycare",
+      targetGrade: "Creche",
       source: "Walk-in",
       status: "APPROVED",
     },

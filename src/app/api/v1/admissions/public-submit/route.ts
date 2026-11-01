@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
 
     function deriveTierFromClass(cls: string, fallback?: string): string {
       cls = (cls || "").toLowerCase().trim();
-      if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => cls.includes(k))) {
-        return "Daycare / Nursery";
+      if (["creche", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => cls.includes(k))) {
+        return "Creche / Nursery";
       }
       if (cls.includes("primary") || cls.includes("basic") || cls.includes("elementary")) {
         return "Primary School";
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Determine intended tier name
     let academicTierName = (data.academicTier || "").trim();
-    if (!academicTierName || (derivedTierName !== "Daycare / Nursery" && academicTierName.toLowerCase().includes("daycare"))) {
+    if (!academicTierName || (derivedTierName !== "Creche / Nursery" && academicTierName.toLowerCase().includes("creche"))) {
       academicTierName = derivedTierName;
     }
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     if (!matchedTier && tierId) {
       const explicitTier = school.academicTiers.find((t) => t.id === tierId);
       // If explicit tier is not mismatched with class
-      if (explicitTier && !(explicitTier.name.toLowerCase().includes("daycare") && derivedTierName === "Secondary School")) {
+      if (explicitTier && !(explicitTier.name.toLowerCase().includes("creche") && derivedTierName === "Secondary School")) {
         matchedTier = explicitTier;
       }
     }

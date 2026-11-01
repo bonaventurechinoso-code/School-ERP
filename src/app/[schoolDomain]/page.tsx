@@ -21,9 +21,9 @@ import {
 
 function getTierCurriculumDetails(tierName: string) {
   const upper = tierName.toUpperCase();
-  if (upper.includes("NURSERY") || upper.includes("DAYCARE") || upper.includes("CRECHE") || upper.includes("EARLY")) {
+  if (upper.includes("NURSERY") || upper.includes("CRECHE") || upper.includes("CRECHE") || upper.includes("EARLY")) {
     return {
-      title: tierName || "Daycare & Early Nursery",
+      title: tierName || "Creche & Early Nursery",
       badge: "Ages 0 - 5",
       badgeColor: "bg-pink-50 text-pink-700 border-pink-200",
       description: "A nurturing environment fostering early literacy, psychomotor development, phonics, and play-based cognitive milestones under dedicated caregiver guidance.",
@@ -161,7 +161,7 @@ export default async function PublicGuestPortalPage({
     else if (tierNames.some(t => t.includes("PRIMARY")) && tierNames.some(t => t.includes("SECONDARY"))) preciseTier = "PRIMARY_SECONDARY";
     else if (tierNames.some(t => t.includes("SECONDARY"))) preciseTier = "SECONDARY";
     else if (tierNames.some(t => t.includes("PRIMARY"))) preciseTier = "PRIMARY";
-    else if (tierNames.some(t => t.includes("NURSERY") || t.includes("DAYCARE"))) preciseTier = "NURSERY";
+    else if (tierNames.some(t => t.includes("NURSERY") || t.includes("CRECHE"))) preciseTier = "NURSERY";
   } else {
     if (schoolNameUpper.includes("UNIVERSITY")) preciseTier = "UNIVERSITY";
     else if (schoolNameUpper.includes("POLYTECHNIC")) preciseTier = "POLYTECHNIC";

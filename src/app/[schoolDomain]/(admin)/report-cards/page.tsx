@@ -21,7 +21,7 @@ import StudentReportCardModal, { ReportCardStudentData } from "./StudentReportCa
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
 // -------------------------------------------------------------
 
-// 1. DAYCARE & NURSERY (Early Childhood Care - All Classes)
+// 1. CRECHE & NURSERY (Early Childhood Care - All Classes)
 const NURSERY_SUBJECTS = [
   "Numeracy / Cognitive Skills",
   "Literacy / Phonics",
@@ -240,7 +240,7 @@ function resolveAcademicTierKey(tierName?: string | null, institutionType?: stri
   // 2. Early Childhood / Nursery
   if (
     normalized.includes("NURSERY") ||
-    normalized.includes("DAYCARE") ||
+    normalized.includes("CRECHE") ||
     normalized.includes("PRE SCHOOL") ||
     normalized.includes("PRE-SCHOOL") ||
     normalized.includes("CRECHE") ||

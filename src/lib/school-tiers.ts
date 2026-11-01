@@ -1,5 +1,5 @@
 export const TIER_CLASSES: Record<string, string[]> = {
-  daycare: ["Daycare", "Playgroup"],
+  creche: ["Creche", "Playgroup"],
   nursery: ["Kindergarten", "Nursery 1", "Nursery 2", "Nursery 3"],
   primary: [
     "Primary 1",
@@ -25,7 +25,7 @@ export const TIER_CLASSES: Record<string, string[]> = {
     "SS3",
   ],
   all: [
-    "Daycare",
+    "Creche",
     "Playgroup",
     "Kindergarten",
     "Nursery 1",
@@ -57,11 +57,11 @@ export function getClassesForTier(tier: string): string[] {
     return PRIMARY_ALLOWED_CLASSES;
   }
   if (
-    normalized === "daycare" ||
-    normalized.includes("daycare") ||
+    normalized === "creche" ||
+    normalized.includes("creche") ||
     normalized.includes("creche")
   ) {
-    return TIER_CLASSES.daycare;
+    return TIER_CLASSES.creche;
   }
   if (
     normalized === "nursery" ||
@@ -105,12 +105,12 @@ export const SECONDARY_ALLOWED_CLASSES = [
   "SSS 3",
 ];
 
-export const DAYCARE_ALLOWED_CLASSES = [
-  "Daycare / Creche",
+export const CRECHE_ALLOWED_CLASSES = [
+  "Creche",
 ];
 
 export const COMBINED_ALLOWED_CLASSES = [
-  "Daycare / Creche",
+  "Creche",
   "Nursery 1",
   "Nursery 2",
   "Primary 1",
@@ -131,7 +131,7 @@ export const COMBINED_ALLOWED_CLASSES = [
  * Returns the authoritative class levels allowed for a school tier.
  * Primary tier school = Nursery 1, Nursery 2, Primary 1-6 (8 items max).
  * Secondary tier = JSS 1-3, SSS 1-3 (6 items).
- * Daycare tier = Daycare / Creche.
+ * Creche tier = Creche.
  * Combined / All = All grades.
  */
 export function getAllowedLevelsByTier(tier?: string | null): string[] {
@@ -149,11 +149,11 @@ export function getAllowedLevelsByTier(tier?: string | null): string[] {
   }
 
   if (
-    normalized === "DAYCARE" ||
+    normalized === "CRECHE" ||
     normalized.includes("CRECHE") ||
     normalized.includes("CRÈCHE")
   ) {
-    return DAYCARE_ALLOWED_CLASSES;
+    return CRECHE_ALLOWED_CLASSES;
   }
 
   if (

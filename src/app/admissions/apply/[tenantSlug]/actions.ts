@@ -43,7 +43,7 @@ export async function submitPublicApplicationAction(payload: PublicApplicationPa
 
     switch (payload.tier) {
       case "CRECHE":
-        targetGrade = "Creche / Daycare";
+        targetGrade = "Creche";
         tierKeyword = "CRECHE";
         break;
       case "NURSERY_PRIMARY":
@@ -65,7 +65,7 @@ export async function submitPublicApplicationAction(payload: PublicApplicationPa
     // Find closest matching AcademicTier for this school
     let matchedTier = school.academicTiers.find((t) => {
       const name = t.name.toUpperCase();
-      return name.includes(tierKeyword) || (tierKeyword === "CRECHE" && (name.includes("DAYCARE") || name.includes("NURSERY")));
+      return name.includes(tierKeyword) || (tierKeyword === "CRECHE" && (name.includes("CRECHE") || name.includes("NURSERY")));
     });
 
     if (!matchedTier && school.academicTiers.length > 0) {

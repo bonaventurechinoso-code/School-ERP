@@ -10,7 +10,7 @@ import { createTenantWithAdmin } from "@/lib/tenant-service";
 const execAsync = util.promisify(exec);
 
 const VALID_TIERS = [
-  'Creche / Daycare',
+  'Creche',
   'Nursery / Kindergarten',
   'Primary School',
   'Junior Secondary School',
@@ -24,7 +24,7 @@ const VALID_TIERS = [
   'College of Nursing / Health Sciences',
   'Professional / Postgraduate Institute',
   'NURSERY',
-  'DAYCARE',
+  'CRECHE',
   'PRIMARY',
   'SECONDARY',
   'PRIMARY_SECONDARY'

@@ -3,7 +3,7 @@
  * Dynamically resolved based on the active Academic Tier.
  */
 
-// 1. DAYCARE / NURSERY TIER
+// 1. CRECHE / NURSERY TIER
 export const NURSERY_STAFF_ROLES = [
   "Proprietor / Proprietress",
   "Head Teacher",
@@ -78,7 +78,7 @@ export function resolveStaffTierCategory(tierInput?: string | null): StaffTierCa
 
   if (
     normalized.includes("NURSERY") ||
-    normalized.includes("DAYCARE") ||
+    normalized.includes("CRECHE") ||
     normalized.includes("PRE-SCHOOL") ||
     normalized.includes("CRECHE") ||
     normalized.includes("CRÈCHE") ||
@@ -148,7 +148,7 @@ export function getDefaultRoleForTier(category: StaffTierCategory): string {
 export function getStaffTierBadgeLabel(category: StaffTierCategory): string {
   switch (category) {
     case "NURSERY":
-      return "Daycare / Nursery Tier";
+      return "Creche / Nursery Tier";
     case "SECONDARY":
       return "Secondary School Tier";
     case "TERTIARY":

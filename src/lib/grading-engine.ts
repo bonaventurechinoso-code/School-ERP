@@ -2,7 +2,7 @@
  * Core Grading Engine for K-12 Multi-Tier School ERP
  * 
  * Supports:
- * - Daycare / Nursery: Qualitative, developmental skill-based narrative grading indicators
+ * - Creche / Nursery: Qualitative, developmental skill-based narrative grading indicators
  *   (e.g., Excellent, Developing, Needs Improvement)
  * - Primary & Secondary: Numerical continuous assessment metrics (0-100) mapped to classic
  *   letter grades (A, B, C, etc.) with automatic pass/fail tracking thresholds
@@ -61,7 +61,7 @@ export function resolveGradingTier(tierName?: string, className?: string): Gradi
   const combined = `${tierName || ""} ${className || ""}`.toUpperCase();
 
   if (
-    combined.includes("DAYCARE") ||
+    combined.includes("CRECHE") ||
     combined.includes("NURSERY") ||
     combined.includes("CRÈCHE") ||
     combined.includes("CRECHE") ||
@@ -138,7 +138,7 @@ export function calculateNumericalGrade(
 }
 
 /**
- * Default early childhood developmental domains for Daycare / Nursery
+ * Default early childhood developmental domains for Creche / Nursery
  */
 export const NURSERY_DEVELOPMENTAL_DOMAINS = [
   {
@@ -164,7 +164,7 @@ export const NURSERY_DEVELOPMENTAL_DOMAINS = [
 ];
 
 /**
- * Evaluates developmental skills for Daycare / Nursery and calculates summary feedback.
+ * Evaluates developmental skills for Creche / Nursery and calculates summary feedback.
  */
 export function evaluateNarrativeMilestones(evaluations: SkillEvaluationItem[]): NarrativeGradeResult {
   if (!evaluations || evaluations.length === 0) {

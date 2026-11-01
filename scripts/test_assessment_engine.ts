@@ -9,14 +9,14 @@ import {
 
 console.log("=== UNIT TEST: ASSESSMENT ENGINE ===");
 
-// 1. Daycare / Nursery
-const daycareRes = calculateBonaVeeResult("Daycare / Nursery", {
+// 1. Creche / Nursery
+const crecheRes = calculateBonaVeeResult("Creche / Nursery", {
   observation: 100,
   classwork: 80,
   affective: 90,
 });
-console.log("Daycare / Nursery Result:", daycareRes);
-if (daycareRes.total !== 90) throw new Error(`Daycare total expected 90, got ${daycareRes.total}`);
+console.log("Creche / Nursery Result:", crecheRes);
+if (crecheRes.total !== 90) throw new Error(`Creche total expected 90, got ${crecheRes.total}`);
 
 // 2. Primary School
 const primaryRes = calculateBonaVeeResult("Primary School", {

@@ -80,7 +80,7 @@ export default function Navbar() {
                 <div className="absolute top-full left-1/2 -translate-x-1/2 pt-1 w-80 z-50">
                   <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800/50 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 p-2 space-y-1">
                     <Link
-                      href="#daycare"
+                      href="#creche"
                       onClick={() => setIsSolutionsOpen(false)}
                       className="flex items-start gap-3.5 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-xl transition-colors duration-200 group"
                     >
@@ -89,7 +89,7 @@ export default function Navbar() {
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
-                          Daycare &amp; Nursery
+                          Creche &amp; Nursery
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                           Early childhood management tailored for care

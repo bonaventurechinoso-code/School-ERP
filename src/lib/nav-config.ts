@@ -329,10 +329,10 @@ export function getTenantNavigation(
     ];
   }
 
-  // 2. DAYCARE / NURSERY SCHOOL TIER (Early Childhood Care & Education)
+  // 2. CRECHE / CRECHE TIER (Early Childhood Care & Education)
   if (
     normalized.includes("CAREGIVER") ||
-    normalized.includes("DAYCARE") ||
+    normalized.includes("CRECHE") ||
     normalized.includes("NURSERY") ||
     normalized.includes("EARLY YEARS") ||
     normalized.includes("NANNY") ||
@@ -346,25 +346,25 @@ export function getTenantNavigation(
         title: "EARLY ACADEMICS & CARE",
         items: [
           {
-            id: "daycare-rosters",
+            id: "creche-rosters",
             label: "Classroom Rosters (Infant Lists)",
             href: (d) => `/${d}/portal/staff?tab=rosters`,
             icon: Users,
           },
           {
-            id: "daycare-activity-logs",
+            id: "creche-activity-logs",
             label: "Daily Activity logs (Feeding/Nap schedules)",
             href: (d) => `/${d}/portal/staff?tab=schedule`,
             icon: Calendar,
           },
           {
-            id: "daycare-growth-trackers",
+            id: "creche-growth-trackers",
             label: "Child Growth Trackers (Milestones)",
             href: (d) => `/${d}/portal/staff?tab=gradebook`,
             icon: Award,
           },
           {
-            id: "daycare-health-vitals",
+            id: "creche-health-vitals",
             label: "Immunization & Health Vitals",
             href: (d) => `/${d}/portal/staff?tab=lessons`,
             icon: BookOpen,
@@ -376,25 +376,25 @@ export function getTenantNavigation(
         title: "GUARDIAN ENGINE",
         items: [
           {
-            id: "daycare-circulars",
+            id: "creche-circulars",
             label: "Parent Circulars/Memos",
             href: (d) => `/${d}/portal/staff?tab=circulars`,
             icon: MessageSquare,
           },
           {
-            id: "daycare-dropoff-logs",
+            id: "creche-dropoff-logs",
             label: "Drop-off/Pick-up Logs",
             href: (d) => `/${d}/portal/staff?tab=attendance`,
             icon: Clock,
           },
           {
-            id: "daycare-leave-portals",
+            id: "creche-leave-portals",
             label: "Staff Leave Portals",
             href: (d) => `/${d}/portal/staff?tab=leaves`,
             icon: Briefcase,
           },
           {
-            id: "daycare-profile-settings",
+            id: "creche-profile-settings",
             label: "My Profile Settings",
             href: (d) => `/${d}/portal/staff?tab=profile`,
             icon: User,

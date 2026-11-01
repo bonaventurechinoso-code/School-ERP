@@ -693,7 +693,7 @@ export default function StudentTable({
     if (!tier) return [];
     
     const name = tier.name.toLowerCase();
-    if (name.includes("daycare") || name.includes("nursery")) {
+    if (name.includes("creche") || name.includes("nursery")) {
       return [
         { key: "pottyTrained", label: "Potty Trained?", type: "select", options: ["Yes", "No", "In Progress"] },
         { key: "allergies", label: "Allergies", type: "text" }

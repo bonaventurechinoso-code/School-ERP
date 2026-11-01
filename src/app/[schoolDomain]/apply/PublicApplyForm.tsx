@@ -11,7 +11,7 @@ import { NIGERIAN_UNIVERSITY_HIERARCHY, POLYTECHNIC_HIERARCHY, COLLEGE_HIERARCHY
 import { isClassInTier } from "@/lib/tier-config";
 
 const TIER_CLASSES = {
-  "daycare_nursery": ["Daycare", "Playgroup", "Pre-Nursery", "Nursery 1", "Nursery 2", "Nursery 3"],
+  "creche": ["Creche", "Playgroup", "Pre-Nursery", "Nursery 1", "Nursery 2", "Nursery 3"],
   "primary": ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"],
   "secondary": ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"],
   "higher": ["ND 1", "ND 2", "HND 1", "HND 2", "100 Level", "200 Level", "300 Level", "400 Level"]
@@ -154,27 +154,27 @@ export default function PublicApplyForm({
     }
 
     if (
-      rawTier === "daycare / nursery" ||
-      rawTier.includes("daycare") ||
+      rawTier === "creche / nursery" ||
+      rawTier.includes("creche") ||
       rawTier.includes("nursery") ||
       rawTier.includes("creche") ||
       rawTier.includes("early")
     ) {
-      const defaultDaycare = TIER_CLASSES.daycare_nursery;
+      const defaultCreche = TIER_CLASSES.creche;
       if (Array.isArray(classrooms) && classrooms.length > 0) {
         const matchingCustom = classrooms
           .filter((c: any) => {
             const cName = typeof c === "string" ? c : c?.name;
             const cTierId = typeof c === "object" ? c?.tierId : null;
             if (formData.tierId && cTierId && cTierId === formData.tierId) return true;
-            return isClassInTier(cName || "", "DAYCARE_NURSERY");
+            return isClassInTier(cName || "", "CRECHE");
           })
           .map((c: any) => (typeof c === "string" ? c : c?.name))
           .filter(Boolean);
 
-        return Array.from(new Set([...defaultDaycare, ...matchingCustom]));
+        return Array.from(new Set([...defaultCreche, ...matchingCustom]));
       }
-      return defaultDaycare;
+      return defaultCreche;
     }
 
     if (rawTier.includes("primary") || rawTier.includes("basic") || rawTier.includes("elementary")) {

@@ -110,7 +110,7 @@ export default function StudentReportCardModal({
     tierName.toLowerCase().includes("polytechnic") ||
     tierName.toLowerCase().includes("college") ||
     tierName.toLowerCase().includes("higher");
-  const isNursery = tierName.toLowerCase().includes("nursery") || tierName.toLowerCase().includes("daycare");
+  const isNursery = tierName.toLowerCase().includes("nursery") || tierName.toLowerCase().includes("creche");
   const isPrimary = tierName.toLowerCase().includes("primary") || tierName.toLowerCase().includes("basic");
   const isSecondary = !isHigherEd && !isNursery && !isPrimary;
 
@@ -396,7 +396,7 @@ export default function StudentReportCardModal({
                       </>
                     )}
 
-                    {/* Daycare / Nursery Columns */}
+                    {/* Creche / Nursery Columns */}
                     {isNursery && (
                       <>
                         <th className="px-4 py-3.5 text-center">Observation (40%)</th>
@@ -474,7 +474,7 @@ export default function StudentReportCardModal({
                         </>
                       )}
 
-                      {/* Daycare / Nursery Row Data */}
+                      {/* Creche / Nursery Row Data */}
                       {isNursery && (
                         <>
                           <td className="px-4 py-3 text-center font-mono">{sub.observation ?? "—"}</td>

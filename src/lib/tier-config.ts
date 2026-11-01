@@ -3,7 +3,7 @@
 // ==============================================================================
 
 export type AcademicTierType = 
-  | "DAYCARE_NURSERY" 
+  | "CRECHE" 
   | "PRIMARY" 
   | "SECONDARY" 
   | "TERTIARY";
@@ -41,13 +41,13 @@ export interface TierConfig {
 // ==============================================================================
 
 export const TIER_CONFIG_MATRIX: Record<AcademicTierType, TierConfig> = {
-  DAYCARE_NURSERY: {
-    type: "DAYCARE_NURSERY",
-    label: "Daycare & Nursery",
+  CRECHE: {
+    type: "CRECHE",
+    label: "Creche & Nursery",
     shortLabel: "NURSERY",
     defaultClasses: ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2", "Kindergarten"],
     classAliases: [
-      "creche", "crèche", "nursery", "daycare", "kindergarten", 
+      "creche", "crèche", "nursery", "creche", "kindergarten", 
       "pre-nursery", "playgroup", "toddler", "early"
     ],
     allowedBillingTypes: ["FLAT"],
@@ -64,7 +64,7 @@ export const TIER_CONFIG_MATRIX: Record<AcademicTierType, TierConfig> = {
       learnerPlural: "Pupils",
       curriculumLabel: "Early Learning Modules & Activities",
       rankingMetric: "Developmental Stage & Milestone Assessment",
-      eventsLabel: "Daycare & Care Activities",
+      eventsLabel: "Creche & Care Activities",
     },
   },
   PRIMARY: {
@@ -159,10 +159,10 @@ export function resolveTierType(tierIdentifier?: string | null): AcademicTierTyp
   if (!tierIdentifier) return "PRIMARY";
   const lower = tierIdentifier.toLowerCase().trim();
 
-  // 1. Daycare / Nursery
+  // 1. Creche / Nursery
   if (
     lower.includes("nursery") ||
-    lower.includes("daycare") ||
+    lower.includes("creche") ||
     lower.includes("creche") ||
     lower.includes("crèche") ||
     lower.includes("kindergarten") ||
@@ -170,7 +170,7 @@ export function resolveTierType(tierIdentifier?: string | null): AcademicTierTyp
     lower.includes("playgroup") ||
     lower === "early_childhood"
   ) {
-    return "DAYCARE_NURSERY";
+    return "CRECHE";
   }
 
   // 2. Tertiary / Higher Ed
@@ -259,14 +259,14 @@ export function isClassInTier(className: string, tier?: string | AcademicTierTyp
     return tierType === "SECONDARY";
   }
 
-  // Daycare / Nursery cues
-  const hasDaycareCue = 
+  // Creche / Nursery cues
+  const hasCrecheCue = 
     lower.includes("creche") || lower.includes("crèche") || lower.includes("nursery") || 
-    lower.includes("daycare") || lower.includes("kindergarten") || lower.includes("pre-nursery") ||
+    lower.includes("creche") || lower.includes("kindergarten") || lower.includes("pre-nursery") ||
     lower.includes("playgroup");
   
-  if (hasDaycareCue) {
-    return tierType === "DAYCARE_NURSERY";
+  if (hasCrecheCue) {
+    return tierType === "CRECHE";
   }
 
   // Primary cues
@@ -378,7 +378,7 @@ export function filterInvoicesForTier<T extends {
 }
 
 /**
- * Prunes fee templates according to tier constraints (e.g. stripping credit units from Daycare/Primary).
+ * Prunes fee templates according to tier constraints (e.g. stripping credit units from Creche/Primary).
  */
 export function filterFeeTemplatesForTier<T extends { 
   name: string; 
@@ -398,8 +398,8 @@ export function filterFeeTemplatesForTier<T extends {
 
     const lowerName = template.name.toLowerCase();
 
-    // In Daycare/Nursery: prune university and secondary specific templates
-    if (tierType === "DAYCARE_NURSERY") {
+    // In Creche/Nursery: prune university and secondary specific templates
+    if (tierType === "CRECHE") {
       if (
         lowerName.includes("credit unit") ||
         lowerName.includes("level") ||
@@ -427,7 +427,7 @@ export function filterFeeTemplatesForTier<T extends {
       }
     }
 
-    // In Tertiary: prune daycare/creche/nursery templates
+    // In Tertiary: prune creche/creche/nursery templates
     if (tierType === "TERTIARY") {
       if (
         lowerName.includes("creche") ||

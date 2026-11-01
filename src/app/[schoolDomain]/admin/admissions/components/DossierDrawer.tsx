@@ -59,8 +59,8 @@ export interface DossierApplicant {
 export function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
   if (!cls) return fallbackTier || "Secondary School";
   const c = cls.toLowerCase().trim();
-  if (["daycare", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
-    return "Daycare / Nursery";
+  if (["creche", "playgroup", "pre-nursery", "nursery 1", "nursery 2", "nursery 3", "crèche", "creche"].some((k) => c.includes(k))) {
+    return "Creche / Nursery";
   }
   if (c.includes("primary") || c.includes("basic") || c.includes("elementary")) {
     return "Primary School";
@@ -118,15 +118,15 @@ export default function DossierDrawer({
 
   // A. SINGLE SOURCE OF TRUTH - SYNC SLIP = SCORING = DB:
   const EXAM_SUBJECTS_BY_GRADE: Record<string, string[]> = {
-    "Daycare": ["Observation", "Motor Skills", "Social Interaction"],
+    "Creche": ["Observation", "Motor Skills", "Social Interaction"],
     "Nursery": ["Maths", "English", "General Paper"],
     "Primary": ["Maths", "English", "General Paper", "Verbal Reasoning"],
     "Secondary": ["Maths", "English", "General Paper", "Current Affairs"],
   };
 
   const applicantTarget = (applicant as any)?.targetGrade || applicant?.classApplied || "";
-  const gradeGroup = applicantTarget.includes("Daycare")
-    ? "Daycare"
+  const gradeGroup = applicantTarget.includes("Creche")
+    ? "Creche"
     : applicantTarget.includes("Nursery")
     ? "Nursery"
     : applicantTarget.includes("Secondary") || applicantTarget.includes("JSS") || applicantTarget.includes("SSS")

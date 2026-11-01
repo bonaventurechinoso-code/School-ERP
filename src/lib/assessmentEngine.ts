@@ -2,7 +2,7 @@
  * Unified Localized Nigerian Assessment & Grading Engine
  * 
  * Supports:
- * - Daycare / Nursery: Observation (40%), Classwork (40%), Affective Domain (20%)
+ * - Creche / Nursery: Observation (40%), Classwork (40%), Affective Domain (20%)
  * - Primary School: Assignment (10), Test (20), Project (10), Exam (60)
  * - Secondary School: CA1 (20), CA2 (20), Termly Exam (60) -> WAEC/NECO (A1-F9)
  * - Higher Education (University, Polytechnic, College of Education):
@@ -10,7 +10,7 @@
  */
 
 export type InstitutionalTier =
-  | "Daycare / Nursery"
+  | "Creche / Nursery"
   | "Primary School"
   | "Secondary School"
   | "College of Education"
@@ -18,7 +18,7 @@ export type InstitutionalTier =
   | "University";
 
 export const ACTIVE_INSTITUTIONAL_TIERS: InstitutionalTier[] = [
-  "Daycare / Nursery",
+  "Creche / Nursery",
   "Primary School",
   "Secondary School",
   "College of Education",
@@ -35,7 +35,7 @@ export interface WeightComponent {
 }
 
 export const TIER_DEFAULT_WEIGHTS: Record<InstitutionalTier, WeightComponent[]> = {
-  "Daycare / Nursery": [
+  "Creche / Nursery": [
     { key: "observation", label: "Observation", weight: 40, max: 100, placeholder: "0 - 100" },
     { key: "classwork", label: "Classwork", weight: 40, max: 100, placeholder: "0 - 100" },
     { key: "affective", label: "Affective", weight: 20, max: 100, placeholder: "0 - 100" },
@@ -71,13 +71,13 @@ export const TIER_DEFAULT_WEIGHTS: Record<InstitutionalTier, WeightComponent[]> 
 export function normalizeTierLevel(level: string): InstitutionalTier {
   const norm = (level || "").toUpperCase();
   if (
-    norm.includes("DAYCARE") ||
+    norm.includes("CRECHE") ||
     norm.includes("NURSERY") ||
     norm.includes("CRECHE") ||
     norm.includes("CRÈCHE") ||
     norm.includes("KINDERGARTEN")
   ) {
-    return "Daycare / Nursery";
+    return "Creche / Nursery";
   }
   if (
     norm.includes("PRIMARY") ||
@@ -207,7 +207,7 @@ export function calculateBonaVeeResult(level: string, scores: any) {
   const resolvedLevel = normalizeTierLevel(level);
 
   // 1. Compute Totals based on Tier Weights
-  if (level === "Daycare / Nursery" || resolvedLevel === "Daycare / Nursery") {
+  if (level === "Creche / Nursery" || resolvedLevel === "Creche / Nursery") {
     total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
   } else if (level === "Primary School" || resolvedLevel === "Primary School") {
     total = s.assignment + s.test + s.project + s.exam; // CA1(20) + CA2(20) + Exam(60) map split

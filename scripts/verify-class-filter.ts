@@ -3,16 +3,16 @@ import { getClassOptionsForTier, matchesClass } from "../src/app/[schoolDomain]/
 function runTests() {
   console.log("=== RUNNING CLASS FILTER TESTS ===");
 
-  // 1. Daycare / Nursery
-  const daycareOptions1 = getClassOptionsForTier("Daycare/Nursery");
-  console.log("Daycare/Nursery:", daycareOptions1);
-  if (JSON.stringify(daycareOptions1) !== JSON.stringify(["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"])) {
-    throw new Error("Daycare/Nursery options mismatch");
+  // 1. Creche / Nursery
+  const crecheOptions1 = getClassOptionsForTier("Creche/Nursery");
+  console.log("Creche/Nursery:", crecheOptions1);
+  if (JSON.stringify(crecheOptions1) !== JSON.stringify(["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"])) {
+    throw new Error("Creche/Nursery options mismatch");
   }
 
-  const daycareOptions2 = getClassOptionsForTier("Creche");
-  console.log("Creche:", daycareOptions2);
-  if (JSON.stringify(daycareOptions2) !== JSON.stringify(["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"])) {
+  const crecheOptions2 = getClassOptionsForTier("Creche");
+  console.log("Creche:", crecheOptions2);
+  if (JSON.stringify(crecheOptions2) !== JSON.stringify(["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"])) {
     throw new Error("Creche options mismatch");
   }
 

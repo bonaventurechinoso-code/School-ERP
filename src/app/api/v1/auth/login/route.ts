@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       const demoTenantName = "Demo Evaluation Academy";
       const demoRole = "SCHOOL_ADMIN";
       const demoStaffRole = "Headmaster / Administrator";
-      const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Daycare/Nursery"];
+      const activeTiers = ["Primary School", "Secondary School", "Higher Institution", "Creche/Nursery"];
       const permissions = getDefaultPermissionsForRole("SCHOOL_ADMIN");
       const distinctSessionToken = crypto.randomUUID();
 
@@ -404,7 +404,7 @@ export async function POST(req: Request) {
               { name: "Primary School" },
               { name: "Secondary School" },
               { name: "Higher Institution" },
-              { name: "Daycare/Nursery" },
+              { name: "Creche/Nursery" },
             ],
           }
         : await resolveTenant(targetSchoolCode);

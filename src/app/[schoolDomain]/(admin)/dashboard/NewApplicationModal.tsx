@@ -52,8 +52,8 @@ export default function NewApplicationModal({
       availableClassrooms = ["JSS 1", "JSS 2", "JSS 3", "SS 1", "SS 2", "SS 3"].map(c => ({ id: c, name: c, tierId: formData.tierId }));
     } else if (norm.includes("PRIMARY") || norm.includes("BASIC") || norm.includes("ELEMENTARY")) {
       availableClassrooms = ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"].map(c => ({ id: c, name: c, tierId: formData.tierId }));
-    } else if (norm.includes("NURSERY") || norm.includes("DAYCARE") || norm.includes("EARLY CARE") || norm.includes("CRÈCHE") || norm.includes("CRECHE")) {
-      availableClassrooms = ["Crèche / Daycare", "Playgroup", "Nursery 1", "Nursery 2", "Kindergarten"].map(c => ({ id: c, name: c, tierId: formData.tierId }));
+    } else if (norm.includes("NURSERY") || norm.includes("CRECHE") || norm.includes("EARLY CARE") || norm.includes("CRÈCHE") || norm.includes("CRECHE")) {
+      availableClassrooms = ["Creche", "Playgroup", "Nursery 1", "Nursery 2", "Kindergarten"].map(c => ({ id: c, name: c, tierId: formData.tierId }));
     }
   }
 

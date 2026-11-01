@@ -3,13 +3,13 @@ import { formatTierBadgeCode, sanitizeTierSlug, isHigherEdTier } from "@/lib/ten
 
 /**
  * Classifies any tier string into one of three macro categories:
- * - EARLY_CHILDHOOD: Daycare, Nursery, Creche, Primary, Elementary
+ * - EARLY_CHILDHOOD: Creche, Nursery, Creche, Primary, Elementary
  * - SECONDARY: Junior/Senior Secondary, High School, JSS, SSS, K12
  * - HIGHER_ED: University, Polytechnic, College of Education, Monotechnic
  */
 /**
  * Classifies any tier string into one of three macro categories:
- * - EARLY_CHILDHOOD: Daycare, Nursery, Creche, Kindergarten, Primary, Elementary
+ * - EARLY_CHILDHOOD: Creche, Nursery, Creche, Kindergarten, Primary, Elementary
  * - SECONDARY: Junior/Senior Secondary, High School, JSS, SSS, K12
  * - HIGHER_ED: University, Polytechnic, College of Education, Monotechnic
  */
@@ -21,7 +21,7 @@ export function classifyTierCategory(tierName?: string): TierCategory {
   if (
     upper.includes("KINDERGARTEN") ||
     upper.includes("NURSERY") ||
-    upper.includes("DAYCARE") ||
+    upper.includes("CRECHE") ||
     upper.includes("CRÈCHE") ||
     upper.includes("CRECHE") ||
     upper.includes("PLAYGROUP") ||
@@ -66,7 +66,7 @@ export function formatClassAlignedBadgeCode(className?: string, tierName?: strin
   if (
     classUpper.includes("KINDERGARTEN") ||
     classUpper.includes("NURSERY") ||
-    classUpper.includes("DAYCARE") ||
+    classUpper.includes("CRECHE") ||
     classUpper.includes("CRÈCHE") ||
     classUpper.includes("CRECHE") ||
     classUpper.includes("PLAYGROUP") ||
@@ -133,7 +133,7 @@ export function resolveStudentAcademicTier(params: {
   if (
     classUpper.includes("KINDERGARTEN") ||
     classUpper.includes("NURSERY") ||
-    classUpper.includes("DAYCARE") ||
+    classUpper.includes("CRECHE") ||
     classUpper.includes("CRÈCHE") ||
     classUpper.includes("CRECHE") ||
     classUpper.includes("PLAYGROUP")
@@ -141,9 +141,9 @@ export function resolveStudentAcademicTier(params: {
     // Find matching early childhood tier in tenant tiers
     const matched = available.find(t => {
       const u = t.toUpperCase();
-      return u.includes("NURSERY") || u.includes("DAYCARE") || u.includes("KINDERGARTEN") || u.includes("EARLY");
+      return u.includes("NURSERY") || u.includes("CRECHE") || u.includes("KINDERGARTEN") || u.includes("EARLY");
     });
-    resolvedTierName = matched || "Daycare / Nursery";
+    resolvedTierName = matched || "Creche / Nursery";
   } else if (classUpper.includes("PRIMARY") || classUpper.includes("BASIC") || classUpper.includes("ELEMENTARY")) {
     const matched = available.find(t => {
       const u = t.toUpperCase();
@@ -184,7 +184,7 @@ export function resolveStudentAcademicTier(params: {
   } else if (available.length > 0) {
     resolvedTierName = available[0];
   } else {
-    resolvedTierName = "Daycare / Nursery";
+    resolvedTierName = "Creche / Nursery";
   }
 
   const config = getTierPresentationConfig(resolvedTierName);
@@ -300,7 +300,7 @@ export function getTierPresentationConfig(tierName: string = "Primary School"): 
  * Standard list of tier presets for testing & institutional switching
  */
 export const INSTITUTIONAL_TIER_PRESETS = [
-  { name: "Daycare / Nursery", category: "EARLY_CHILDHOOD" as const, desc: "Creche, Playgroup & Nursery" },
+  { name: "Creche / Nursery", category: "EARLY_CHILDHOOD" as const, desc: "Creche, Playgroup & Nursery" },
   { name: "Primary School", category: "EARLY_CHILDHOOD" as const, desc: "Basic Elementary Classes 1-6" },
   { name: "Secondary School", category: "SECONDARY" as const, desc: "Junior & Senior High School (JSS1 - SSS3)" },
   { name: "College of Education", category: "HIGHER_ED" as const, desc: "Teacher Training & Diploma Studies" },

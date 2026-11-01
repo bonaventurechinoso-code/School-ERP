@@ -31,8 +31,8 @@ interface TierOption {
 
 const AVAILABLE_TIER_OPTIONS: TierOption[] = [
   {
-    id: "DAYCARE",
-    label: "Daycare / Nursery",
+    id: "CRECHE",
+    label: "Creche / Nursery",
     description: "Early childhood care, crèche, playgroup & nursery foundation (Ages 0 - 5)",
     badgeStyle: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
   },
@@ -77,8 +77,8 @@ const AVAILABLE_TIER_OPTIONS: TierOption[] = [
 function matchesTierOption(tierName: string, optionId: string): boolean {
   const norm = (tierName || "").toUpperCase().trim();
   switch (optionId) {
-    case "DAYCARE":
-      return norm.includes("DAYCARE") || norm.includes("NURSERY") || norm.includes("EARLY CARE");
+    case "CRECHE":
+      return norm.includes("CRECHE") || norm.includes("NURSERY") || norm.includes("EARLY CARE");
     case "PRIMARY":
       return (norm === "PRIMARY" || norm === "PRIMARY SCHOOL") && !norm.includes("SECONDARY");
     case "SECONDARY":

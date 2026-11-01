@@ -5,11 +5,11 @@
 
 /**
  * Standardizes a tier name to a clean identifier slug.
- * e.g. "Daycare / Nursery" -> "nursery", "Primary School" -> "primary"
+ * e.g. "Creche / Nursery" -> "nursery", "Primary School" -> "primary"
  */
 export function sanitizeTierSlug(tierName: string): string {
   const upper = (tierName || "").toUpperCase().trim();
-  if (upper.includes("DAYCARE") || upper.includes("NURSERY")) return "nursery";
+  if (upper.includes("CRECHE") || upper.includes("NURSERY")) return "nursery";
   if (upper.includes("PRIMARY") && upper.includes("SECONDARY")) return "primary_secondary";
   if (upper.includes("PRIMARY")) return "primary";
   if (upper.includes("SECONDARY")) return "secondary";
@@ -33,12 +33,12 @@ export function generateTierDbName(subdomain: string, tierName: string): string 
 
 /**
  * Resolves an uppercase short code/identifier for badge display.
- * e.g. "Daycare / Nursery" -> "NURSERY", "Primary School" -> "PRIMARY", "Secondary School" -> "SECONDARY"
+ * e.g. "Creche / Nursery" -> "NURSERY", "Primary School" -> "PRIMARY", "Secondary School" -> "SECONDARY"
  */
 export function formatTierBadgeCode(tierName?: string): string {
   if (!tierName) return "PRIMARY";
   const upper = tierName.toUpperCase().trim();
-  if (upper.includes("DAYCARE") || upper.includes("NURSERY") || upper.includes("CRÈCHE") || upper.includes("CRECHE")) {
+  if (upper.includes("CRECHE") || upper.includes("NURSERY") || upper.includes("CRÈCHE") || upper.includes("CRECHE")) {
     return "NURSERY";
   }
   if (upper.includes("PRIMARY") && upper.includes("SECONDARY")) {
@@ -92,12 +92,12 @@ export function resolveSchoolPrefix(subdomain?: string): string {
 
 /**
  * Resolves a 3-4 letter tier abbreviation for admission number formatting.
- * e.g. "Secondary School" -> "SEC", "Primary School" -> "PRI", "Daycare / Nursery" -> "NUR"
+ * e.g. "Secondary School" -> "SEC", "Primary School" -> "PRI", "Creche / Nursery" -> "NUR"
  */
 export function resolveTierCode(tierName?: string | null, className?: string | null): string {
   const combined = `${tierName || ""} ${className || ""}`.toUpperCase().trim();
   if (
-    combined.includes("DAYCARE") ||
+    combined.includes("CRECHE") ||
     combined.includes("NURSERY") ||
     combined.includes("CRÈCHE") ||
     combined.includes("CRECHE") ||
@@ -217,7 +217,7 @@ export function getExamSubjectsForTier(tierName?: string, targetGrade?: string):
   const t = (tierName || "").toUpperCase().trim();
   const g = (targetGrade || "").toUpperCase().trim();
 
-  if (t.includes("DAYCARE") || t.includes("CRECHE") || t.includes("CRÈCHE") || g.includes("DAYCARE") || g.includes("PLAYGROUP") || g.includes("PRE-NURSERY")) {
+  if (t.includes("CRECHE") || t.includes("CRECHE") || t.includes("CRÈCHE") || g.includes("CRECHE") || g.includes("PLAYGROUP") || g.includes("PRE-NURSERY")) {
     return ["Literacy & Phonics", "Numeracy Skills", "Social & Motor Skills"];
   }
   if (t.includes("NURSERY") || g.includes("NURSERY")) {
@@ -245,8 +245,8 @@ export interface ParsedInstitutionalIdentifier {
 export function mapTierTokenToTierName(tierToken?: string | null): string | null {
   if (!tierToken) return null;
   const t = tierToken.toUpperCase().trim();
-  if (t === "NUR" || t === "CRE" || t === "DAY" || t === "NURSERY" || t === "CRECHE" || t === "DAYCARE" || t === "CRÈCHE") {
-    return "Daycare / Nursery";
+  if (t === "NUR" || t === "CRE" || t === "DAY" || t === "NURSERY" || t === "CRECHE" || t === "CRECHE" || t === "CRÈCHE") {
+    return "Creche / Nursery";
   }
   if (t === "PRI" || t === "ELE" || t === "BAS" || t === "PRIMARY" || t === "BASIC" || t === "ELEMENTARY") {
     return "Primary School";

@@ -114,9 +114,9 @@ export function getTierBadgeConfig(tierName: string) {
   const norm = (tierName || "").trim();
   const upper = norm.toUpperCase();
 
-  if (upper.includes("CRECHE") || upper.includes("DAYCARE")) {
+  if (upper.includes("CRECHE") || upper.includes("CRECHE")) {
     return {
-      label: "Creche / Daycare",
+      label: "Creche",
       style: "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/50",
     };
   }
@@ -567,7 +567,7 @@ export default function TenantsConsoleView({
                 className="bg-slate-50/70 dark:bg-zinc-950/50 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer max-w-[170px] truncate"
               >
                 <option value="ALL">All Academic Tiers</option>
-                <option value="Creche / Daycare">Creche / Daycare</option>
+                <option value="Creche">Creche</option>
                 <option value="Nursery / Kindergarten">Nursery / Kindergarten</option>
                 <option value="Primary School">Primary School</option>
                 <option value="Junior Secondary School">Junior Secondary School</option>

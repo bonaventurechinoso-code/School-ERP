@@ -45,7 +45,7 @@ async function getOrProvisionDemoTenant() {
         welcomeGreeting: "Welcome to Demo School! Explore administrative workflows freely in demo mode.",
         academicTiers: {
           create: [
-            { name: "Daycare / Nursery", level: 1 },
+            { name: "Creche / Nursery", level: 1 },
             { name: "Primary School", level: 2 },
             { name: "Secondary School", level: 3 },
             { name: "Higher Institution / University", level: 4 },
@@ -108,7 +108,7 @@ async function getOrProvisionDemoTenant() {
   if (!tiers || tiers.length === 0) {
     await basePrisma.academicTier.createMany({
       data: [
-        { schoolId: demoSchool.id, name: "Daycare / Nursery", level: 1 },
+        { schoolId: demoSchool.id, name: "Creche / Nursery", level: 1 },
         { schoolId: demoSchool.id, name: "Primary School", level: 2 },
         { schoolId: demoSchool.id, name: "Secondary School", level: 3 },
       ],

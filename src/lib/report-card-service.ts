@@ -79,7 +79,7 @@ export async function resolveStudentTierClient(
   } catch {}
 
   // 3. Check isolated tier databases if tenant uses multi-DB
-  const candidateTiers = ["Primary School", "Secondary School", "Daycare / Nursery"];
+  const candidateTiers = ["Primary School", "Secondary School", "Creche / Nursery"];
   for (const candidate of candidateTiers) {
     try {
       const client = await getPrismaClientForTier(schoolId, candidate);
@@ -114,7 +114,7 @@ export async function resolveClassTierClient(
     tierCategory = resolveGradingTier(explicitTierName, className);
   } else {
     tierCategory = resolveGradingTier(undefined, className);
-    if (tierCategory === "NURSERY") tierName = "Daycare / Nursery";
+    if (tierCategory === "NURSERY") tierName = "Creche / Nursery";
     else if (tierCategory === "SECONDARY") tierName = "Secondary School";
     else tierName = "Primary School";
   }
@@ -149,7 +149,7 @@ export async function saveAcademicRecord(payload: SaveAssessmentPayload) {
   };
 
   if (tierCategory === "NURSERY") {
-    // Daycare / Nursery Narrative Milestone evaluation
+    // Creche / Nursery Narrative Milestone evaluation
     recordData.assessmentType = "NARRATIVE";
     recordData.narrativeRating = payload.narrativeRating || "DEVELOPING";
     recordData.skillsEvaluation = payload.skillsEvaluation ? JSON.parse(JSON.stringify(payload.skillsEvaluation)) : null;

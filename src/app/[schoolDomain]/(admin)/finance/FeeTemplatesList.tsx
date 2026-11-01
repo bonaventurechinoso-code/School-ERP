@@ -43,7 +43,7 @@ export default function FeeTemplatesList({
   const { 
     activeTier, 
     tierConfig, 
-    isDaycare, 
+    isCreche, 
     isPrimary, 
     isSecondary, 
     isTertiary, 
@@ -249,7 +249,7 @@ export default function FeeTemplatesList({
             <input 
               required 
               type="text" 
-              placeholder={isDaycare ? "e.g. 1st Term Tuition & Creche Care" : isTertiary ? "e.g. 1st Semester Faculty Dues" : "e.g. 1st Term Tuition (Junior Secondary)"} 
+              placeholder={isCreche ? "e.g. 1st Term Tuition & Creche Care" : isTertiary ? "e.g. 1st Semester Faculty Dues" : "e.g. 1st Term Tuition (Junior Secondary)"} 
               className="w-full border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm" 
               value={formData.name} 
               onChange={e => setFormData({ ...formData, name: e.target.value })} 

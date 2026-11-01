@@ -87,7 +87,7 @@ export async function POST(req: Request) {
           welcomeGreeting: `Welcome to ${schoolName}! Explore administrative workflows during your 14-day free trial.`,
           academicTiers: {
             create: [
-              { name: "Daycare / Nursery", level: 1 },
+              { name: "Creche / Nursery", level: 1 },
               { name: "Primary School", level: 2 },
               { name: "Secondary School", level: 3 },
             ],
@@ -210,7 +210,7 @@ export async function POST(req: Request) {
       schoolDomain: result.school.subdomain,
       tenantName: result.school.name,
       role: "SCHOOL_ADMIN",
-      activeTiers: ["Daycare / Nursery", "Primary School", "Secondary School"],
+      activeTiers: ["Creche / Nursery", "Primary School", "Secondary School"],
       permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
       userAgent: "Trial Registration",
     });

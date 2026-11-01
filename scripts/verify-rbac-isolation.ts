@@ -17,7 +17,7 @@ async function runRbacVerification() {
     { rawRole: "STUDENT", label: "Enrolled Student" },
   ];
 
-  const sampleTiers = ["Daycare / Nursery", "Primary School", "Secondary School"];
+  const sampleTiers = ["Creche / Nursery", "Primary School", "Secondary School"];
 
   // Helper simulating middleware route isolation logic
   function testMiddlewareGuard(role: string, targetPath: string) {

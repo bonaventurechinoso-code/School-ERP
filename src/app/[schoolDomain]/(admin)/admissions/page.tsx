@@ -8,6 +8,63 @@ import EnterpriseAdmissionsClient, {
   AdmissionCycleItem,
 } from "./EnterpriseAdmissionsClient";
 
+const TIER_CONFIG = {
+  CRECHE: {
+    showPostUTME: false,
+    showOLevel: false,
+    showProgramDept: false,
+    applicantLabel: "Child",
+    programLabel: "GROUP / ROOM",
+    searchPlaceholder: "Search by child name, parent name...",
+    topCards: ["INQUIRIES", "PARENT SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
+    columns: ["CHILD FULL NAME", "APPLICATION NO", "GROUP / ROOM", "AGE", "PARENT NAME", "STATUS", "FEE STATUS"],
+  },
+  PRIMARY: {
+    showPostUTME: false,
+    showOLevel: false,
+    showProgramDept: false,
+    applicantLabel: "Pupil",
+    programLabel: "CLASS",
+    searchPlaceholder: "Search by pupil name...",
+    topCards: ["INQUIRIES", "SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
+    columns: ["PUPIL FULL NAME", "APPLICATION NO", "CLASS", "AGE", "STATUS", "FEE STATUS"],
+  },
+  SECONDARY: {
+    showPostUTME: false,
+    showOLevel: true,
+    showProgramDept: false,
+    applicantLabel: "Student",
+    programLabel: "CLASS / ARM",
+    searchPlaceholder: "Search by student name, application number...",
+    topCards: ["INQUIRIES", "SCREENING & KYC", "EXAMS & INTERVIEWS", "OFFERS EXTENDED", "MATRICULATED"],
+    columns: ["STUDENT FULL NAME", "APPLICATION NO", "CLASS / ARM", "OLEVEL", "STATUS"],
+  },
+  TERTIARY: {
+    showPostUTME: true,
+    showOLevel: true,
+    showProgramDept: true,
+    applicantLabel: "Candidate",
+    programLabel: "PROGRAM / DEPT",
+    searchPlaceholder: "Search by candidate name, application number, JAMB reg...",
+    topCards: ["INQUIRIES", "SCREENING & KYC", "EXAMS & INTERVIEWS", "OFFERS EXTENDED", "MATRICULATED"],
+    columns: ["CANDIDATE FULL NAME", "APPLICATION NO", "PROGRAM / DEPT", "OLEVEL", "SCORE", "STATUS", "FEE STATUS"],
+  },
+};
+
+function getTier(school: any): "CRECHE" | "PRIMARY" | "SECONDARY" | "TERTIARY" {
+  if (school?.tier) {
+    const t = String(school.tier).toUpperCase();
+    if (t === "CRECHE" || t === "PRIMARY" || t === "SECONDARY" || t === "TERTIARY") {
+      return t as any;
+    }
+  }
+  const n = (school?.name || "").toLowerCase();
+  if (n.includes("creche") || n.includes("daycare") || n.includes("crèche") || n.includes("nursery school")) return "CRECHE";
+  if (n.includes("primary") || n.includes("basic") || n.includes("nursery")) return "PRIMARY";
+  if (n.includes("secondary")) return "SECONDARY";
+  return "TERTIARY";
+}
+
 export default async function AdmissionsPage({
   params: paramsPromise,
 }: {
@@ -317,6 +374,9 @@ export default async function AdmissionsPage({
     level: t.level ?? 1,
   }));
 
+  const tier = getTier(school);
+  const tierConfig = TIER_CONFIG[tier as keyof typeof TIER_CONFIG] || TIER_CONFIG.PRIMARY;
+
   return (
     <div className="space-y-6 w-full min-h-screen flex flex-col p-2 sm:p-4">
       {/* Header */}
@@ -343,6 +403,8 @@ export default async function AdmissionsPage({
         schoolId={school.id}
         schoolDomain={schoolDomain}
         schoolName={school.name}
+        tier={tier}
+        tierConfig={tierConfig}
         initialApplications={applications}
         initialTransactions={transactions}
         cycles={cycles}

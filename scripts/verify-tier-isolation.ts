@@ -22,9 +22,9 @@ async function verifyIsolation() {
     console.log(`  - Tier: "${tier.name}" | DB: ${tier.databaseName}`);
   }
 
-  // 1. DAYCARE / NURSERY
-  console.log("\n--- Testing Daycare / Nursery Client ---");
-  const nurseryClient = await getPrismaClientForTier(school.id, "Daycare / Nursery");
+  // 1. CRECHE / NURSERY
+  console.log("\n--- Testing Creche / Nursery Client ---");
+  const nurseryClient = await getPrismaClientForTier(school.id, "Creche / Nursery");
   const nurseryStudents = await nurseryClient.student.findMany({ select: { id: true, firstName: true, lastName: true, currentClass: true } });
   const nurseryClasses = await nurseryClient.classroom.findMany({ select: { name: true } });
   console.log(`✅ Nursery Student Count: ${nurseryStudents.length} (Expected 15)`);
@@ -77,7 +77,7 @@ async function verifyIsolation() {
 
   // 5. TEST DASHBOARD METRICS FOR DIFFERENT TIERS
   console.log("\n--- Testing Dashboard Metrics Tier Switching ---");
-  const nurseryMetrics = await getDashboardMetrics(school.id, "Daycare / Nursery");
+  const nurseryMetrics = await getDashboardMetrics(school.id, "Creche / Nursery");
   console.log(`📊 Nursery Dashboard Metrics: Enrolled Students = ${nurseryMetrics.enrolledStudents}, Classes = ${nurseryMetrics.classrooms.length}`);
 
   const primaryMetrics = await getDashboardMetrics(school.id, "Primary School");

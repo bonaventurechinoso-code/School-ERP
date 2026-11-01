@@ -131,7 +131,7 @@ export default async function TenantLayout({
     else if (hasPrimary && hasSecondary) preciseTier = "PRIMARY_SECONDARY";
     else if (hasPrimary) preciseTier = "PRIMARY";
     else if (hasSecondary) preciseTier = "SECONDARY";
-    else if (tierNames.some(t => t.includes("NURSERY") || t.includes("DAYCARE") || t.includes("EARLY CARE"))) preciseTier = "NURSERY";
+    else if (tierNames.some(t => t.includes("NURSERY") || t.includes("CRECHE") || t.includes("EARLY CARE"))) preciseTier = "NURSERY";
   }
 
   // If user selected an active tier in the switcher, dynamically reflect it in the tenant state
@@ -152,7 +152,7 @@ export default async function TenantLayout({
     } else if (activeUpper.includes("PRIMARY")) {
       preciseTier = "PRIMARY";
       isHigherEd = false;
-    } else if (activeUpper.includes("NURSERY") || activeUpper.includes("DAYCARE") || activeUpper.includes("CRECHE")) {
+    } else if (activeUpper.includes("NURSERY") || activeUpper.includes("CRECHE") || activeUpper.includes("CRECHE")) {
       preciseTier = "NURSERY";
       isHigherEd = false;
     }

@@ -26,7 +26,7 @@ async function runVerification() {
   // K-12 Tiers
   assert(!isHigherEdTier("Primary School"), "Primary School is correctly classified as K-12 (!isHigherEd)");
   assert(!isHigherEdTier("Secondary School"), "Secondary School is correctly classified as K-12 (!isHigherEd)");
-  assert(!isHigherEdTier("Daycare / Nursery"), "Daycare / Nursery is correctly classified as K-12 (!isHigherEd)");
+  assert(!isHigherEdTier("Creche / Nursery"), "Creche / Nursery is correctly classified as K-12 (!isHigherEd)");
   assert(!isHigherEdTier("High School"), "High School is correctly classified as K-12 (!isHigherEd)");
 
   // Higher Ed Tiers
@@ -37,7 +37,7 @@ async function runVerification() {
   // Badge short codes
   assert(formatTierBadgeCode("Primary School") === "PRIMARY", "Primary School formats as PRIMARY");
   assert(formatTierBadgeCode("Secondary School") === "SECONDARY", "Secondary School formats as SECONDARY");
-  assert(formatTierBadgeCode("Daycare / Nursery") === "NURSERY", "Daycare / Nursery formats as NURSERY");
+  assert(formatTierBadgeCode("Creche / Nursery") === "NURSERY", "Creche / Nursery formats as NURSERY");
   assert(formatTierBadgeCode("Higher Ed: University") === "UNIVERSITY", "University formats as UNIVERSITY");
   assert(formatTierBadgeCode("Higher Ed: Polytechnic") === "POLYTECHNIC", "Polytechnic formats as POLYTECHNIC");
 
@@ -52,7 +52,7 @@ async function runVerification() {
     `Secondary Student ID renders as STU-${currentYear}-SECONDARY`
   );
   assert(
-    `STU-${currentYear}-${formatTierBadgeCode("Daycare / Nursery")}` === `STU-${currentYear}-NURSERY`,
+    `STU-${currentYear}-${formatTierBadgeCode("Creche / Nursery")}` === `STU-${currentYear}-NURSERY`,
     `Nursery Student ID renders as STU-${currentYear}-NURSERY`
   );
 

@@ -657,19 +657,19 @@ export default function StaffPortalClient({
     );
   }, [staffRole, activeTierObj]);
 
-  const isDaycare = useMemo(() => {
+  const isCreche = useMemo(() => {
     const roleNorm = (staffRole || "").toUpperCase();
     const tierNorm = (activeTierObj?.name || "").toUpperCase();
     return (
       roleNorm.includes("CAREGIVER") ||
-      roleNorm.includes("DAYCARE") ||
+      roleNorm.includes("CRECHE") ||
       roleNorm.includes("NURSERY") ||
       roleNorm.includes("EARLY YEARS") ||
       roleNorm.includes("NANNY") ||
       roleNorm.includes("CRECHE") ||
       roleNorm.includes("PLAYGROUP") ||
       roleNorm.includes("KINDERGARTEN") ||
-      tierNorm.includes("DAYCARE") ||
+      tierNorm.includes("CRECHE") ||
       tierNorm.includes("NURSERY") ||
       tierNorm.includes("EARLY") ||
       tierNorm.includes("CRECHE") ||
@@ -744,7 +744,7 @@ export default function StaffPortalClient({
       ];
     }
 
-    if (isDaycare) {
+    if (isCreche) {
       return [
         {
           title: "Early Academics & Care",
@@ -832,7 +832,7 @@ export default function StaffPortalClient({
         ],
       },
     ];
-  }, [isTertiary, isDaycare, classStudents.length, initialTimetable.length, initialLeaveRequests.length]);
+  }, [isTertiary, isCreche, classStudents.length, initialTimetable.length, initialLeaveRequests.length]);
 
   const allNavItems = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
 
@@ -1019,12 +1019,12 @@ export default function StaffPortalClient({
                 <h1 className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 dark:text-zinc-400 font-bold truncate">
                   {isTertiary
                     ? "Faculty Academic Workspace"
-                    : isDaycare
-                    ? "Early Childhood & Daycare Caregiver Workspace"
+                    : isCreche
+                    ? "Early Childhood & Creche Caregiver Workspace"
                     : "Staff Educator Workspace"}
                 </h1>
                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
-                  {selectedClass} {isTertiary ? "Course Unit" : isDaycare ? "Care Pod / Playgroup" : "Classroom Workspace"}
+                  {selectedClass} {isTertiary ? "Course Unit" : isCreche ? "Care Pod / Playgroup" : "Classroom Workspace"}
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-zinc-200 truncate">
@@ -1096,7 +1096,7 @@ export default function StaffPortalClient({
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/50 uppercase tracking-wider">
-                            {isTertiary ? "TERTIARY FACULTY / LECTURER" : isDaycare ? "EARLY CHILDHOOD CAREGIVER" : "STAFF EDUCATOR"}
+                            {isTertiary ? "TERTIARY FACULTY / LECTURER" : isCreche ? "EARLY CHILDHOOD CAREGIVER" : "STAFF EDUCATOR"}
                           </span>
                         </div>
                       </div>
@@ -1409,10 +1409,10 @@ export default function StaffPortalClient({
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
               <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                {selectedClass} {isDaycare ? "Infant & Toddler Roster" : isTertiary ? "Course Student Registration Roster" : "Student Directory"}
+                {selectedClass} {isCreche ? "Infant & Toddler Roster" : isTertiary ? "Course Student Registration Roster" : "Student Directory"}
               </h3>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                {classStudents.length} {isDaycare ? "Infants Registered" : "Students Enrolled"}
+                {classStudents.length} {isCreche ? "Infants Registered" : "Students Enrolled"}
               </span>
             </div>
 
@@ -1420,11 +1420,11 @@ export default function StaffPortalClient({
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
                   <tr>
-                    <th className="px-6 py-3.5">{isDaycare ? "Infant / Child Name" : "Student Name"}</th>
-                    <th className="px-6 py-3.5">{isDaycare ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
-                    <th className="px-6 py-3.5">{isDaycare ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
+                    <th className="px-6 py-3.5">{isCreche ? "Infant / Child Name" : "Student Name"}</th>
+                    <th className="px-6 py-3.5">{isCreche ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
+                    <th className="px-6 py-3.5">{isCreche ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
                     <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5">{isDaycare ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
+                    <th className="px-6 py-3.5">{isCreche ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -1473,10 +1473,10 @@ export default function StaffPortalClient({
           <div className="hidden print:block mb-6 text-center border-b border-slate-300 pb-4">
             <h1 className="text-xl font-black uppercase tracking-wide text-black">{schoolName}</h1>
             <p className="text-sm font-semibold text-slate-700">
-              {isDaycare ? "Official Daily Drop-off & Pick-up Custody Register" : "Official Daily Classroom Attendance Register"}
+              {isCreche ? "Official Daily Drop-off & Pick-up Custody Register" : "Official Daily Classroom Attendance Register"}
             </p>
             <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
-              <span><strong>{isDaycare ? "Care Pod / Group:" : "Class / Arm:"}</strong> {selectedClass}</span>
+              <span><strong>{isCreche ? "Care Pod / Group:" : "Class / Arm:"}</strong> {selectedClass}</span>
               <span><strong>Date:</strong> {attendanceDate}</span>
               <span><strong>Caregiver / Staff:</strong> {staffName} ({staffRole})</span>
             </div>
@@ -1486,7 +1486,7 @@ export default function StaffPortalClient({
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  {isDaycare ? "Custody Log Date:" : "Attendance Date:"}
+                  {isCreche ? "Custody Log Date:" : "Attendance Date:"}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -1737,7 +1737,7 @@ export default function StaffPortalClient({
                 ) : (
                   <FileCheck className="w-3.5 h-3.5" />
                 )}
-                <span>{isCompilingReportCards ? "Compiling..." : isDaycare ? "Compile Growth Records" : "Compile Class Report Cards"}</span>
+                <span>{isCompilingReportCards ? "Compiling..." : isCreche ? "Compile Growth Records" : "Compile Class Report Cards"}</span>
               </button>
 
               <button
@@ -1747,7 +1747,7 @@ export default function StaffPortalClient({
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{isPending ? "Persisting Marks..." : isDaycare ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
+                <span>{isPending ? "Persisting Marks..." : isCreche ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
               </button>
             </div>
           </div>
@@ -1896,8 +1896,8 @@ export default function StaffPortalClient({
             </div>
 
             <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/40 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400 font-semibold">
-              <span>{isDaycare ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isDaycare ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
-              <span>{isDaycare ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
+              <span>{isCreche ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isCreche ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
+              <span>{isCreche ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
             </div>
           </div>
         </div>
@@ -1910,14 +1910,14 @@ export default function StaffPortalClient({
         <div className="space-y-6 animate-in fade-in duration-300">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              {isDaycare
+              {isCreche
                 ? "Daily Activity Logs & Care Routine (Feeding / Nap Schedules)"
                 : isTertiary
                 ? "Weekly Lecture & Seminar Timetable"
                 : "Weekly Teaching Timetable"}
             </h3>
             <p className="text-xs text-slate-500 dark:text-zinc-400">
-              {isDaycare
+              {isCreche
                 ? `Scheduled infant feeding times, nap windows, diaper checks, and outdoor sensory sessions for ${selectedClass}.`
                 : `Assigned lecture periods, course codes, and classroom halls for ${staffName}.`}
             </p>
@@ -1936,7 +1936,7 @@ export default function StaffPortalClient({
                       {day}
                     </h4>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                      {periods.length} {isDaycare ? "Care Blocks" : "Periods"}
+                      {periods.length} {isCreche ? "Care Blocks" : "Periods"}
                     </span>
                   </div>
 
@@ -2227,7 +2227,7 @@ export default function StaffPortalClient({
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-emerald-600" />
                 <span>
-                  {isDaycare
+                  {isCreche
                     ? "Immunization Records & Pediatric Health Vitals"
                     : isTertiary
                     ? "Course Outlines & Syllabus Architectures"
@@ -2235,7 +2235,7 @@ export default function StaffPortalClient({
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                {isDaycare
+                {isCreche
                   ? "Maintain pediatric immunization schedules, allergy warning tags, and infant health vital check logs."
                   : isTertiary
                   ? "Structure and publish courseware syllabi, lecture modules, and academic reading lists for faculty appraisal."
@@ -2264,7 +2264,7 @@ export default function StaffPortalClient({
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>{isDaycare ? "Log Health Vital / Vaccine" : isTertiary ? "New Course Outline" : "New Lesson Plan"}</span>
+              <span>{isCreche ? "Log Health Vital / Vaccine" : isTertiary ? "New Course Outline" : "New Lesson Plan"}</span>
             </button>
           </div>
 
@@ -2784,20 +2784,20 @@ export default function StaffPortalClient({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  {isDaycare ? "Parent Circulars & Daycare Bulletins" : "Departmental Circulars & Senate Resolutions"}
+                  {isCreche ? "Parent Circulars & Creche Bulletins" : "Departmental Circulars & Senate Resolutions"}
                 </h2>
                 <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                  {isDaycare ? "Early Childhood Communications" : "Tertiary Academic Registry"}
+                  {isCreche ? "Early Childhood Communications" : "Tertiary Academic Registry"}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                {isDaycare
+                {isCreche
                   ? "Caregiver updates, feeding advisories, pediatric health alerts, and guardian notices."
                   : "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."}
               </p>
             </div>
             <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-              {isDaycare ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
+              {isCreche ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
             </span>
           </div>
 
@@ -2820,16 +2820,16 @@ export default function StaffPortalClient({
             </div>
             <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
               <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                {isDaycare ? "Academic Term" : "Current Semester"}
+                {isCreche ? "Academic Term" : "Current Semester"}
               </p>
               <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                {isDaycare ? "1st Term Care" : "1st Semester"}
+                {isCreche ? "1st Term Care" : "1st Semester"}
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
-            {(isDaycare ? [
+            {(isCreche ? [
               {
                 ref: "DCR/2026/CIRC/04",
                 date: "October 20, 2026",

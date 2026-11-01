@@ -250,12 +250,12 @@ async function verifyReportCardGeneration() {
   console.log(`   - Teacher Remarks: "${secondaryCard?.teacherRemarks}"`);
   console.log(`   - Principal Remarks: "${secondaryCard?.principalRemarks}"`);
 
-  // 4. DAYCARE / NURSERY VERIFICATION
+  // 4. CRECHE / NURSERY VERIFICATION
   console.log("\n============================================");
-  console.log("3. TESTING DAYCARE / NURSERY NARRATIVE SYSTEM");
+  console.log("3. TESTING CRECHE / NURSERY NARRATIVE SYSTEM");
   console.log("============================================");
 
-  const nurseryClient = await getPrismaClientForTier(school.id, "Daycare / Nursery");
+  const nurseryClient = await getPrismaClientForTier(school.id, "Creche / Nursery");
   const nurseryStudents = await nurseryClient.student.findMany({
     where: { schoolId: school.id, currentClass: "Nursery 1" },
     take: 2,
@@ -284,7 +284,7 @@ async function verifyReportCardGeneration() {
     term,
     academicYear,
     className: "Nursery 1",
-    tierName: "Daycare / Nursery",
+    tierName: "Creche / Nursery",
     narrativeRating: "EXCELLENT",
     skillsEvaluation: nurserySkills,
     narrativeFeedback: "A curious and cheerful learner who interacts joyfully in classroom activities.",
@@ -300,7 +300,7 @@ async function verifyReportCardGeneration() {
     term,
     academicYear,
     className: "Nursery 1",
-    tierName: "Daycare / Nursery",
+    tierName: "Creche / Nursery",
   });
 
   console.log(`✅ Nursery Student Report Card:`);

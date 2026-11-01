@@ -38,7 +38,7 @@ import {
 export const BONAVEE_CLASSES_MAP: Record<string, string[]> = {
   NURSERY: [
     "Creche",
-    "Daycare / Nursery",
+    "Creche / Nursery",
     "Nursery 1",
     "Nursery 2",
     "Nursery 3",

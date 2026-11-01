@@ -392,7 +392,7 @@ export async function getTierClient(options: { schoolId: string; tierName: strin
  * it gracefully logs the issue and falls back to the main tenant database client (basePrisma).
  * 
  * @param tenantId The unique School / Tenant ID
- * @param tier The target academic tier (e.g. "NURSERY", "PRIMARY", "SECONDARY", "Daycare / Nursery")
+ * @param tier The target academic tier (e.g. "NURSERY", "PRIMARY", "SECONDARY", "Creche / Nursery")
  */
 export async function getPrismaClientForTier(tenantId: string, tier: string) {
   try {
@@ -417,7 +417,7 @@ export async function getPrismaClientForTier(tenantId: string, tier: string) {
     const upperTier = tier.toUpperCase().trim();
 
     // Check explicit columns
-    if ((upperTier.includes("NURSERY") || upperTier.includes("DAYCARE")) && school?.nurseryDbUrl) {
+    if ((upperTier.includes("NURSERY") || upperTier.includes("CRECHE")) && school?.nurseryDbUrl) {
       tierDbUrl = school.nurseryDbUrl;
     } else if (upperTier.includes("PRIMARY") && !upperTier.includes("SECONDARY") && school?.primaryDbUrl) {
       tierDbUrl = school.primaryDbUrl;

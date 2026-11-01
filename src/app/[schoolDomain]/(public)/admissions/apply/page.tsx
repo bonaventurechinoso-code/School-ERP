@@ -234,7 +234,7 @@ export default function ApplyPage({
               value={formData.targetGrade}
               onChange={(e) => setFormData({ ...formData, targetGrade: e.target.value })}
             >
-              <option value="Creche">Creche / Daycare</option>
+              <option value="Creche">Creche</option>
               <option value="Nursery 1">Nursery 1</option>
               <option value="Nursery 2">Nursery 2</option>
               <option value="Basic 1">Basic 1 (Primary)</option>

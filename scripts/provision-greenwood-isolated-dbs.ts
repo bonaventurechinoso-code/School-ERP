@@ -33,9 +33,9 @@ async function provision() {
   const tierConfigs = [
     {
       tierKey: "NURSERY",
-      tierName: "Daycare / Nursery",
+      tierName: "Creche / Nursery",
       dbName: "greenwood_nursery_db",
-      classes: ["Crèche / Daycare", "Nursery 1", "Nursery 2", "Kindergarten"],
+      classes: ["Creche", "Nursery 1", "Nursery 2", "Kindergarten"],
       studentCount: 15,
       level: 1,
     },

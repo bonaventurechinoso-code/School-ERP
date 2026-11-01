@@ -157,7 +157,7 @@ export default function AdmissionsPipeline({
     const operatingTiers = new Set<string>();
     for (const t of tiers) {
       const lower = t.name.toLowerCase();
-      if (lower.includes("nursery") || lower.includes("daycare") || lower.includes("creche") || lower.includes("early")) {
+      if (lower.includes("nursery") || lower.includes("creche") || lower.includes("creche") || lower.includes("early")) {
         operatingTiers.add("NURSERY");
       }
       if (lower.includes("primary") || lower.includes("basic") || lower.includes("elementary")) {
@@ -1576,7 +1576,7 @@ export default function AdmissionsPipeline({
                   defaultValue="SECONDARY"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none font-semibold"
                 >
-                  <option value="NURSERY">Nursery / Daycare</option>
+                  <option value="NURSERY">Nursery / Creche</option>
                   <option value="PRIMARY">Primary School</option>
                   <option value="SECONDARY">Secondary School</option>
                   <option value="TERTIARY">Tertiary / University</option>

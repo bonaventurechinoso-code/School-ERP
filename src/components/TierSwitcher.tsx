@@ -27,7 +27,7 @@ interface TierSwitcherProps {
  * The complete, authentic spectrum of educational tiers available for trial testing.
  */
 export const COMPLETE_TRIAL_TIERS: TierItem[] = [
-  { id: "tier-nursery", name: "Daycare / Nursery", sublabel: "Early Childhood Care", slug: "nursery" },
+  { id: "tier-nursery", name: "Creche / Nursery", sublabel: "Early Childhood Care", slug: "nursery" },
   { id: "tier-primary", name: "Primary School", sublabel: "Basic 1 - 6", slug: "primary" },
   { id: "tier-secondary", name: "Secondary School", sublabel: "Junior & Senior Secondary", slug: "secondary" },
   { id: "tier-uni", name: "University", sublabel: "Undergraduate & Postgraduate", slug: "university" },
@@ -37,7 +37,7 @@ export const COMPLETE_TRIAL_TIERS: TierItem[] = [
 
 export function getTierStyle(tierName: string, isActive: boolean) {
   const upper = (tierName || "").toUpperCase();
-  if (upper.includes("NURSERY") || upper.includes("DAYCARE")) {
+  if (upper.includes("NURSERY") || upper.includes("CRECHE")) {
     return isActive
       ? "bg-amber-500 text-white border-amber-600 shadow-sm"
       : "bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60";
@@ -160,7 +160,7 @@ export default function TierSwitcher({
           sanitizeTierSlug(ct.name) === sanitizeTierSlug(t.name) ||
           (upper.includes("SECONDARY") && ct.slug === "secondary") ||
           (upper.includes("PRIMARY") && !upper.includes("SECONDARY") && ct.slug === "primary") ||
-          ((upper.includes("NURSERY") || upper.includes("DAYCARE")) && ct.slug === "nursery") ||
+          ((upper.includes("NURSERY") || upper.includes("CRECHE")) && ct.slug === "nursery") ||
           (upper.includes("UNIVERSITY") && ct.slug === "university") ||
           ((upper.includes("POLYTECHNIC") || upper.includes("POLY")) && ct.slug === "polytechnic") ||
           ((upper.includes("COLLEGE") || upper.includes("EDUCATION")) && ct.slug === "college_education")

@@ -60,7 +60,7 @@ interface AnnualBroadsheetClientProps {
 const TIER_CLASSES: Record<string, string[]> = {
   "Secondary School": ["JSS 1", "JSS 2", "JSS 3", "SS 1", "SS 2", "SS 3"],
   "Primary School": ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"],
-  "Daycare / Nursery": ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"],
+  "Creche / Nursery": ["Creche", "Pre-Nursery", "Nursery 1", "Nursery 2"],
   "University": ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level"],
   "Polytechnic": ["ND 1", "ND 2", "HND 1", "HND 2"],
   "College of Education": ["NCE 1", "NCE 2", "NCE 3"],
@@ -356,7 +356,7 @@ export default function AnnualBroadsheetClient({
                 >
                   <option value="Secondary School">Secondary School</option>
                   <option value="Primary School">Primary School</option>
-                  <option value="Daycare / Nursery">Daycare / Nursery</option>
+                  <option value="Creche / Nursery">Creche / Nursery</option>
                   <option value="University">University</option>
                   <option value="Polytechnic">Polytechnic</option>
                   <option value="College of Education">College of Education</option>
@@ -754,7 +754,7 @@ export default function AnnualBroadsheetClient({
 
               {/* Tier Filter Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {["ALL", "Secondary School", "Primary School", "Daycare / Nursery"].map((tier) => (
+                {["ALL", "Secondary School", "Primary School", "Creche / Nursery"].map((tier) => (
                   <button
                     key={tier}
                     type="button"

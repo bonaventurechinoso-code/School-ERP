@@ -25,7 +25,7 @@ type GradingRosterProps = {
 const TIER_CLASSES_MAP: Record<string, string[]> = {
   NURSERY: [
     "Creche",
-    "Daycare / Nursery",
+    "Creche / Nursery",
     "Nursery 1",
     "Nursery 2",
     "Nursery 3",
@@ -71,7 +71,7 @@ function isNurseryClass(cls: string): boolean {
   const norm = cls.toUpperCase();
   return (
     norm.includes("NURSERY") ||
-    norm.includes("DAYCARE") ||
+    norm.includes("CRECHE") ||
     norm.includes("CRECHE") ||
     norm.includes("CRÈCHE") ||
     norm.includes("KINDERGARTEN") ||
@@ -261,7 +261,7 @@ const DEFAULT_MOCK_NURSERY_STUDENTS = [
     admissionNumber: "GW/2026/NUR1/001",
     currentClass: "Nursery 1",
     status: "ENROLLED",
-    tier: { name: "Daycare / Nursery" },
+    tier: { name: "Creche / Nursery" },
     initialScores: { observation: "90", classwork: "85", affective: "95" },
   },
   {
@@ -271,7 +271,7 @@ const DEFAULT_MOCK_NURSERY_STUDENTS = [
     admissionNumber: "GW/2026/NUR1/002",
     currentClass: "Nursery 1",
     status: "ENROLLED",
-    tier: { name: "Daycare / Nursery" },
+    tier: { name: "Creche / Nursery" },
     initialScores: { observation: "85", classwork: "80", affective: "85" },
   },
   {
@@ -281,7 +281,7 @@ const DEFAULT_MOCK_NURSERY_STUDENTS = [
     admissionNumber: "GW/2026/NUR1/003",
     currentClass: "Nursery 1",
     status: "ENROLLED",
-    tier: { name: "Daycare / Nursery" },
+    tier: { name: "Creche / Nursery" },
     initialScores: { observation: "75", classwork: "70", affective: "80" },
   },
   {
@@ -291,7 +291,7 @@ const DEFAULT_MOCK_NURSERY_STUDENTS = [
     admissionNumber: "GW/2026/NUR1/004",
     currentClass: "Nursery 1",
     status: "ENROLLED",
-    tier: { name: "Daycare / Nursery" },
+    tier: { name: "Creche / Nursery" },
     initialScores: { observation: "65", classwork: "60", affective: "70" },
   },
 ];
@@ -387,7 +387,7 @@ export default function GradingRoster({
 
   // Derive active tier category for dynamic column shifting
   const tierCategory: "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY" = useMemo(() => {
-    if (normalizedTier === "Daycare / Nursery") return "NURSERY";
+    if (normalizedTier === "Creche / Nursery") return "NURSERY";
     if (normalizedTier === "Primary School") return "PRIMARY";
     if (normalizedTier === "Secondary School") return "SECONDARY";
     return "TERTIARY";
@@ -944,7 +944,7 @@ export default function GradingRoster({
                         {activeSubjectOrCourse}
                       </td>
 
-                      {/* Tier 1: Daycare / Nursery */}
+                      {/* Tier 1: Creche / Nursery */}
                       {tierCategory === "NURSERY" && (
                         <>
                           <td className="px-4 py-4 text-center whitespace-nowrap">

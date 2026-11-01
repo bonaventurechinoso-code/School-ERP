@@ -280,7 +280,7 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
     const applicantName = lead.applicantName || "Applicant";
     const targetGrade = lead.targetGrade || "Unspecified Grade";
     const tierName = lead.tier?.name || "Standard Tier";
-    const isEarlyYears = tierName.toUpperCase().includes("NURSERY") || tierName.toUpperCase().includes("PRIMARY") || tierName.toUpperCase().includes("DAYCARE");
+    const isEarlyYears = tierName.toUpperCase().includes("NURSERY") || tierName.toUpperCase().includes("PRIMARY") || tierName.toUpperCase().includes("CRECHE");
 
     const messageId = `<inquiry-ack-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${subdomain}.internal>`;
     const subject = `Application Inquiry Acknowledged & Required Credentials - ${tenantName}`;

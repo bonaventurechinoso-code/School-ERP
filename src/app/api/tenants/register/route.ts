@@ -19,7 +19,7 @@ import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 import { createTenantWithAdmin } from "@/lib/tenant-service";
 
 const VALID_TIERS = [
-  'Creche / Daycare',
+  'Creche',
   'Nursery / Kindergarten',
   'Primary School',
   'Junior Secondary School',
@@ -33,7 +33,7 @@ const VALID_TIERS = [
   'College of Nursing / Health Sciences',
   'Professional / Postgraduate Institute',
   'NURSERY',
-  'DAYCARE',
+  'CRECHE',
   'PRIMARY',
   'SECONDARY',
   'PRIMARY_SECONDARY',
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
     // Provision combined tenant if requested
     if (tiers.includes('COMBINED_NURSERY_PRIMARY_SECONDARY')) {
       const subdomains = [
-        { suffix: '-nursery', tier: 'DAYCARE', name: `${schoolName} Nursery` },
+        { suffix: '-nursery', tier: 'CRECHE', name: `${schoolName} Nursery` },
         { suffix: '-primary', tier: 'PRIMARY', name: `${schoolName} Primary` },
         { suffix: '-secondary', tier: 'SECONDARY', name: `${schoolName} Secondary` }
       ];
@@ -240,7 +240,7 @@ export async function POST(request: Request) {
           adminEmail,
           adminPassword: adminPassword || password,
           contactPhone: contactPhone || null,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          tiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
           schoolId: primarySchool.id,
         });
         console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
@@ -258,14 +258,14 @@ export async function POST(request: Request) {
           schoolName,
           subdomain: combinedSubdomain,
           adminEmail,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          tiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
         });
         await sendSuperAdminTenantRegistrationEmail({
           schoolName,
           subdomain: combinedSubdomain,
           adminEmail,
           contactPhone: contactPhone || null,
-          tiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          tiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
           schoolId: primarySchool.id,
         });
       } catch (notifErr) {
@@ -298,7 +298,7 @@ export async function POST(request: Request) {
         tenantName: primarySchool.name,
         role: "TENANT_ADMIN",
         staffRole: "Tenant Administrator",
-        activeTiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+        activeTiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
         permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
         ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
         userAgent: request.headers.get("user-agent"),
@@ -340,7 +340,7 @@ export async function POST(request: Request) {
           tenantName: primarySchool.name,
           role: "TENANT_ADMIN",
           staffRole: "Tenant Administrator",
-          activeTiers: ['DAYCARE', 'PRIMARY', 'SECONDARY'],
+          activeTiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
           permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
           sessionToken: sessionResult.sessionToken,
           token: sessionResult.cookieToken,

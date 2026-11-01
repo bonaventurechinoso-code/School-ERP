@@ -188,7 +188,7 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
 
     if (tiers.length === 0) {
       const defaultTiers = [
-        { name: "Daycare / Nursery", level: 1 },
+        { name: "Creche / Nursery", level: 1 },
         { name: "Primary School", level: 2 },
         { name: "Secondary School", level: 3 },
         { name: "Higher Institution / University", level: 4 },
@@ -216,7 +216,7 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
 
     // Ensure Classrooms exist across all tiers
     const tierClassMap: Record<string, string[]> = {
-      "Daycare / Nursery": ["Crèche", "Nursery 1", "Nursery 2"],
+      "Creche / Nursery": ["Crèche", "Nursery 1", "Nursery 2"],
       "Primary School": ["Primary 1", "Primary 2", "Primary 3", "Primary 4", "Primary 5", "Primary 6"],
       "Secondary School": ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"],
       "Higher Institution / University": ["100 Level", "200 Level", "300 Level", "400 Level"],
@@ -289,7 +289,7 @@ export async function executeDemoCleanup(): Promise<DemoCleanupResult> {
     }
 
     // STEP 3: SEED 50 FRESH DUMMY STUDENTS ACROSS TIERS WITH ANALYTICS
-    // Distribution: Daycare: 10, Primary: 15, Secondary: 15, Higher Ed: 10 (Total: 50)
+    // Distribution: Creche: 10, Primary: 15, Secondary: 15, Higher Ed: 10 (Total: 50)
     const tierDistribution = [
       { tierIndex: 0, count: 10 },
       { tierIndex: 1, count: 15 },

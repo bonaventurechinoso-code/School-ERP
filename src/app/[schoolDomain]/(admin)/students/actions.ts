@@ -884,7 +884,7 @@ export async function graduateTierCohort(
     } else {
       // Automatically determine the highest grade of the active tier
       const t = (tierName || "").toLowerCase();
-      if (t.includes("nursery") || t.includes("daycare") || t.includes("creche") || t.includes("early")) {
+      if (t.includes("nursery") || t.includes("creche") || t.includes("creche") || t.includes("early")) {
         targetClasses = ["Nursery 2", "Pre-Nursery", "Creche"];
       } else if (t.includes("secondary") || t.includes("high") || t.includes("senior") || t.includes("college")) {
         targetClasses = ["SSS 3", "SS 3", "Grade 12"];
@@ -995,11 +995,11 @@ export async function getNextGrade(
     }
   }
 
-  // 2. Daycare / Nursery Tier:
+  // 2. Creche / Nursery Tier:
   // Creche ➔ Pre-Nursery ➔ Nursery 1 ➔ Nursery 2 ➔ Alumni
   if (
     tLower.includes("nursery") ||
-    tLower.includes("daycare") ||
+    tLower.includes("creche") ||
     tLower.includes("creche") ||
     tLower.includes("early") ||
     cLower.includes("nursery") ||
@@ -1342,7 +1342,7 @@ export interface TransitionStudentTierParams {
 
 /**
  * Moves individual students or cohorts across structural academic tiers
- * (e.g. Daycare/Nursery 2 -> Primary 1, or Primary 6 -> JSS 1).
+ * (e.g. Creche/Nursery 2 -> Primary 1, or Primary 6 -> JSS 1).
  */
 export async function transitionStudentTier(
   schoolId: string,

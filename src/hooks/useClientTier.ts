@@ -38,7 +38,7 @@ export function useClientTier(customTierIdentifier?: string | null) {
   return {
     activeTier: resolvedType,
     tierConfig,
-    isDaycare: resolvedType === "DAYCARE_NURSERY",
+    isCreche: resolvedType === "CRECHE",
     isPrimary: resolvedType === "PRIMARY",
     isSecondary: resolvedType === "SECONDARY",
     isTertiary: resolvedType === "TERTIARY",

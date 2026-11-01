@@ -80,7 +80,7 @@ export default async function PublicAdmissionsApplyPage({
   // Derive initial tier from school name or tiers
   const sName = (school.name || "").toLowerCase();
   let initialTier: NigerianTier = "NURSERY_PRIMARY";
-  if (sName.includes("creche") || sName.includes("daycare")) {
+  if (sName.includes("creche") || sName.includes("creche")) {
     initialTier = "CRECHE";
   } else if (sName.includes("secondary") || sName.includes("college") || sName.includes("high")) {
     initialTier = "SECONDARY";
