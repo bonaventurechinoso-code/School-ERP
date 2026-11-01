@@ -99,54 +99,35 @@ export function applyTenantIsolation(client: PrismaClient, schoolId: string, isS
               delete (args as any).where.institutionId;
             }
 
-            // Intercept soft-delete mutation: transform delete into soft-delete update
+            // Permanent Native Database Hard Delete with Strict Multi-Tenant Isolation
             if (operation === 'delete') {
               const modelDelegate = (client as any)[model];
               if (modelDelegate && typeof modelDelegate.findFirst === 'function') {
                 const targetWhere = { ...((args as any).where || {}), [tenantField]: activeTenantId };
+                // Enforce tenant boundary: verify the record belongs strictly to activeTenantId before purging
                 const existing = await modelDelegate.findFirst({ where: targetWhere });
                 if (!existing) {
-                  throw new Error(`403 Forbidden: Candidate record belongs to another institution or does not exist.`);
+                  throw new Error(`403 Forbidden: Record belongs to another institution or does not exist.`);
                 }
 
-                const softDeleteData: any = {};
-                if (model === 'AdmissionLead' || model === 'AdmissionRegister') {
-                  softDeleteData.status = 'DELETED';
-                }
-                try {
-                  return await modelDelegate.update({
-                    where: { id: existing.id },
-                    data: { ...softDeleteData, deletedAt: new Date() },
-                  });
-                } catch {
-                  return await modelDelegate.update({
-                    where: { id: existing.id },
-                    data: softDeleteData,
-                  });
-                }
+                // Clean where to only unique identifier for Prisma's native DELETE command execution
+                const cleanWhere = { ...((args as any).where || {}) };
+                delete cleanWhere[tenantField];
+                delete cleanWhere.institutionId;
+                (args as any).where = cleanWhere;
               }
+              // Execute native database DELETE SQL command
+              return query(args);
             }
 
             if (operation === 'deleteMany') {
-              const modelDelegate = (client as any)[model];
-              if (modelDelegate && typeof modelDelegate.updateMany === 'function') {
-                const targetWhere = { ...((args as any).where || {}), [tenantField]: activeTenantId };
-                const softDeleteData: any = {};
-                if (model === 'AdmissionLead' || model === 'AdmissionRegister') {
-                  softDeleteData.status = 'DELETED';
-                }
-                try {
-                  return await modelDelegate.updateMany({
-                    where: targetWhere,
-                    data: { ...softDeleteData, deletedAt: new Date() },
-                  });
-                } catch {
-                  return await modelDelegate.updateMany({
-                    where: targetWhere,
-                    data: softDeleteData,
-                  });
-                }
-              }
+              // Inject active administrator's tenantId into SQL WHERE clause for native DELETE
+              (args as any).where = {
+                ...((args as any).where || {}),
+                [tenantField]: activeTenantId,
+              };
+              // Execute native database DELETE SQL command
+              return query(args);
             }
 
             if (operation === 'create' || operation === 'createMany') {

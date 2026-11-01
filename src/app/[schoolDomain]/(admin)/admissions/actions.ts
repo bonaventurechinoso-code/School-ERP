@@ -2410,16 +2410,15 @@ export async function deleteApplicantAction(payload: {
       }
     }
 
-    // Execute Safe Database Transaction Soft-Deletion
+    // Execute Safe Database Transaction Permanent Hard Deletion
     await basePrisma.$transaction(async (tx) => {
       if (lead) {
         // Cascade delete notes
         await tx.admissionNote.deleteMany({
           where: { studentLeadId: lead.id },
         });
-        await tx.admissionLead.update({
+        await tx.admissionLead.delete({
           where: { id: lead.id },
-          data: { status: "DELETED" },
         });
       }
 
@@ -2428,9 +2427,8 @@ export async function deleteApplicantAction(payload: {
         await tx.admissionAuditTrail.deleteMany({
           where: { registerId: register.id },
         });
-        await tx.admissionRegister.update({
+        await tx.admissionRegister.delete({
           where: { id: register.id },
-          data: { status: "DELETED" },
         });
       }
     });
