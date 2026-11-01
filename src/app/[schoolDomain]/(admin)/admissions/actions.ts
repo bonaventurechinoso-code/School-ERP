@@ -2346,9 +2346,10 @@ export async function deleteApplicantAction(payload: {
       return { success: false, error: "400 Bad Request: Missing applicant identifier." };
     }
 
-    // 1. Locate corresponding AdmissionLead if any
+    // 1. Locate corresponding AdmissionLead if any within active schoolId
     const lead = await basePrisma.admissionLead.findFirst({
       where: {
+        schoolId,
         OR: [
           { id: targetId },
           ...(payload.leadId ? [{ id: payload.leadId }] : []),
@@ -2356,14 +2357,15 @@ export async function deleteApplicantAction(payload: {
       },
     });
 
-    // 2. Locate corresponding AdmissionRegister if any
+    // 2. Locate corresponding AdmissionRegister if any within active schoolId
     const cleanRef = targetId.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
     const register = await basePrisma.admissionRegister.findFirst({
       where: {
+        tenantId: schoolId,
         OR: [
           { id: targetId },
           ...(payload.registerId ? [{ id: payload.registerId }] : []),
-          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ...(cleanRef && cleanRef.length >= 4 ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
           ...(lead?.studentEmail ? [{ email: lead.studentEmail }] : []),
           ...(lead?.parentEmail ? [{ email: lead.parentEmail }] : []),
         ],
@@ -2371,32 +2373,53 @@ export async function deleteApplicantAction(payload: {
     });
 
     if (!lead && !register) {
+      // Diagnostic check: check if record exists under a different institution
+      const crossLead = await basePrisma.admissionLead.findFirst({
+        where: {
+          OR: [
+            { id: targetId },
+            ...(payload.leadId ? [{ id: payload.leadId }] : []),
+          ],
+        },
+      });
+      const crossRegister = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [
+            { id: targetId },
+            ...(payload.registerId ? [{ id: payload.registerId }] : []),
+          ],
+        },
+      });
+      if (crossLead || crossRegister) {
+        return { success: false, error: "403 Forbidden: Candidate record belongs to another institution." };
+      }
       return { success: false, error: "404 Not Found: Applicant record not found in this institution." };
     }
 
     // Strict Tenancy Verification
     if (lead) {
-      const isLeadOwner = await isSessionMatchingTenant(session, lead.schoolId);
+      const isLeadOwner = lead.schoolId === schoolId || (await isSessionMatchingTenant(session, lead.schoolId));
       if (!isLeadOwner && !auth.isGlobalSuperAdmin) {
         return { success: false, error: "403 Forbidden: Candidate record belongs to another institution." };
       }
     }
     if (register) {
-      const isRegOwner = await isSessionMatchingTenant(session, register.tenantId);
+      const isRegOwner = register.tenantId === schoolId || (await isSessionMatchingTenant(session, register.tenantId));
       if (!isRegOwner && !auth.isGlobalSuperAdmin) {
         return { success: false, error: "403 Forbidden: Candidate record belongs to another institution." };
       }
     }
 
-    // Execute Safe Database Transaction Deletion
+    // Execute Safe Database Transaction Soft-Deletion
     await basePrisma.$transaction(async (tx) => {
       if (lead) {
         // Cascade delete notes
         await tx.admissionNote.deleteMany({
           where: { studentLeadId: lead.id },
         });
-        await tx.admissionLead.delete({
+        await tx.admissionLead.update({
           where: { id: lead.id },
+          data: { status: "DELETED" },
         });
       }
 
@@ -2405,8 +2428,9 @@ export async function deleteApplicantAction(payload: {
         await tx.admissionAuditTrail.deleteMany({
           where: { registerId: register.id },
         });
-        await tx.admissionRegister.delete({
+        await tx.admissionRegister.update({
           where: { id: register.id },
+          data: { status: "DELETED" },
         });
       }
     });

@@ -93,33 +93,105 @@ export function applyTenantIsolation(client: PrismaClient, schoolId: string, isS
             const tenantField = isTenantIdModel ? 'tenantId' : 'schoolId';
             const extraFields = isTenantIdModel && (model as string) === 'AdmissionCycle' ? { schoolId } : {};
 
+            // Normalize institutionId parameter if passed in args to avoid unknown argument errors
+            const activeTenantId = (args as any)?.where?.institutionId || (args as any)?.where?.[tenantField] || schoolId;
+            if ((args as any)?.where?.institutionId) {
+              delete (args as any).where.institutionId;
+            }
+
+            // Intercept soft-delete mutation: transform delete into soft-delete update
+            if (operation === 'delete') {
+              const modelDelegate = (client as any)[model];
+              if (modelDelegate && typeof modelDelegate.findFirst === 'function') {
+                const targetWhere = { ...((args as any).where || {}), [tenantField]: activeTenantId };
+                const existing = await modelDelegate.findFirst({ where: targetWhere });
+                if (!existing) {
+                  throw new Error(`403 Forbidden: Candidate record belongs to another institution or does not exist.`);
+                }
+
+                const softDeleteData: any = {};
+                if (model === 'AdmissionLead' || model === 'AdmissionRegister') {
+                  softDeleteData.status = 'DELETED';
+                }
+                try {
+                  return await modelDelegate.update({
+                    where: { id: existing.id },
+                    data: { ...softDeleteData, deletedAt: new Date() },
+                  });
+                } catch {
+                  return await modelDelegate.update({
+                    where: { id: existing.id },
+                    data: softDeleteData,
+                  });
+                }
+              }
+            }
+
+            if (operation === 'deleteMany') {
+              const modelDelegate = (client as any)[model];
+              if (modelDelegate && typeof modelDelegate.updateMany === 'function') {
+                const targetWhere = { ...((args as any).where || {}), [tenantField]: activeTenantId };
+                const softDeleteData: any = {};
+                if (model === 'AdmissionLead' || model === 'AdmissionRegister') {
+                  softDeleteData.status = 'DELETED';
+                }
+                try {
+                  return await modelDelegate.updateMany({
+                    where: targetWhere,
+                    data: { ...softDeleteData, deletedAt: new Date() },
+                  });
+                } catch {
+                  return await modelDelegate.updateMany({
+                    where: targetWhere,
+                    data: softDeleteData,
+                  });
+                }
+              }
+            }
+
             if (operation === 'create' || operation === 'createMany') {
               if (args.data) {
                 if (Array.isArray(args.data)) {
-                  (args as any).data = (args.data as any[]).map(d => ({ ...d, [tenantField]: schoolId, ...extraFields }));
+                  (args as any).data = (args.data as any[]).map(d => ({ ...d, [tenantField]: activeTenantId, ...extraFields }));
                 } else {
-                  (args as any).data = { ...(args.data as any), [tenantField]: schoolId, ...extraFields };
+                  (args as any).data = { ...(args.data as any), [tenantField]: activeTenantId, ...extraFields };
                 }
               }
             } else if (operation === 'findUnique' || operation === 'findUniqueOrThrow') {
               // Convert findUnique to findFirst with tenant filter to enforce cross-tenant data boundary
               const modelDelegate = (client as any)[model];
               if (modelDelegate && typeof modelDelegate.findFirst === 'function') {
-                const combinedWhere = { ...((args as any).where || {}), [tenantField]: schoolId };
+                const combinedWhere = { ...((args as any).where || {}), [tenantField]: activeTenantId };
                 const res = await modelDelegate.findFirst({
                   ...args,
                   where: combinedWhere,
                 });
                 if (!res && operation === 'findUniqueOrThrow') {
-                  throw new Error(`Record in ${model} not found for tenant ${schoolId}`);
+                  throw new Error(`Record in ${model} not found for tenant ${activeTenantId}`);
                 }
                 return res;
               }
+            } else if (operation === 'update') {
+              // Validate tenant boundary on update by unique ID without passing non-unique filters to update where
+              const modelDelegate = (client as any)[model];
+              const whereId = (args as any).where?.id;
+              if (modelDelegate && whereId && typeof modelDelegate.findFirst === 'function') {
+                const existing = await modelDelegate.findFirst({
+                  where: { id: whereId, [tenantField]: activeTenantId },
+                });
+                if (!existing) {
+                  throw new Error(`403 Forbidden: Candidate record belongs to another institution.`);
+                }
+                const cleanWhere = { ...((args as any).where || {}) };
+                delete cleanWhere[tenantField];
+                delete cleanWhere.institutionId;
+                (args as any).where = cleanWhere;
+              }
             } else {
               if ((args as any).where) {
-                (args as any).where = { ...(args as any).where, [tenantField]: schoolId };
+                (args as any).where = { ...(args as any).where, [tenantField]: activeTenantId };
               } else {
-                (args as any).where = { [tenantField]: schoolId };
+                (args as any).where = { [tenantField]: activeTenantId };
               }
             }
           }

@@ -448,7 +448,7 @@ export async function getAllApplications({
       const activeLeads = await basePrisma.admissionLead.findMany({
         where: {
           schoolId: { in: tenantIdsToMatch },
-          status: { notIn: ["CONVERTED"] },
+          status: { notIn: ["CONVERTED", "DELETED", "deleted"] },
           OR: [
             { status: { in: ["APPLIED", "INTERVIEW", "APPROVED", "ENROLLED"] } },
             { passportPhotoUrl: { not: null } },
@@ -526,6 +526,8 @@ export async function getAllApplications({
       } else {
         where.status = status;
       }
+    } else {
+      where.status = { notIn: ["DELETED", "deleted"] };
     }
 
     const applications = await basePrisma.admissionRegister.findMany({
