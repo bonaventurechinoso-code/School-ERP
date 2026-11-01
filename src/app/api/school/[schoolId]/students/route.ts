@@ -18,6 +18,84 @@ async function resolveSchool(schoolParam: string) {
   });
 }
 
+export async function GET(
+  req: Request,
+  { params: paramsPromise }: { params: Promise<{ schoolId: string }> }
+) {
+  try {
+    const { schoolId: schoolParam } = await paramsPromise;
+    const { searchParams } = new URL(req.url);
+    const className = searchParams.get("class") || searchParams.get("className") || undefined;
+    const status = searchParams.get("status") || "ENROLLED";
+    const tierName = searchParams.get("tier") || "";
+    const limit = Math.min(Number(searchParams.get("limit")) || 25, 100);
+
+    const school = await resolveSchool(schoolParam);
+    if (!school) {
+      return NextResponse.json(
+        { success: false, error: `School not found for identifier '${schoolParam}'.` },
+        { status: 404 }
+      );
+    }
+
+    const { getPrismaClientForTier } = await import("@/lib/tenant-prisma");
+    const tenantDb = await getPrismaClientForTier(school.id, tierName);
+
+    const where: any = {
+      schoolId: school.id,
+      status: { in: [status, status.toUpperCase()] },
+      NOT: {
+        status: { in: ["APPLICANT", "Applicant", "PROSPECT", "Prospect", "INQUIRY", "Inquiry", "SCREENED", "Screened"] },
+      },
+    };
+
+    if (className && className !== "ALL") {
+      where.currentClass = { contains: className.trim(), mode: "insensitive" };
+    }
+
+    const rawStudents = await tenantDb.student.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        tier: { select: { id: true, name: true } },
+      },
+    }).catch(() => []);
+
+    const students = (rawStudents ?? []).map((s: any) => ({
+      id: s?.id,
+      firstName: s?.firstName ?? "",
+      lastName: s?.lastName ?? "",
+      admissionNumber: s?.admissionNumber ?? "",
+      currentClass: s?.currentClass ?? "",
+      feeStatus: s?.feeStatus ?? "UNPAID",
+      status: s?.status ?? "ENROLLED",
+      tier: s?.tier ?? null,
+      parentName: s?.parentName ?? null,
+      parentEmail: s?.parentEmail ?? null,
+      parentPhone: s?.parentPhone ?? null,
+      createdAt: s?.createdAt,
+    }));
+
+    return NextResponse.json({
+      success: true,
+      students,
+      count: students.length,
+    });
+  } catch (error: any) {
+    console.error("[GET_STUDENTS_API_ERROR]:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        students: [],
+        count: 0,
+        error: error?.message || "Failed to retrieve student roster.",
+      },
+      { status: 200 }
+    );
+  }
+}
+
 export async function POST(
   req: Request,
   { params: paramsPromise }: { params: Promise<{ schoolId: string }> }

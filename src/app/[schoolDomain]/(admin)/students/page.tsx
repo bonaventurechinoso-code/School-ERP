@@ -167,9 +167,9 @@ export default async function StudentsPage({
         </div>
       }>
         <StudentTable 
-          students={studentsPagination.items as any}
-          initialNextCursor={studentsPagination.nextCursor}
-          initialHasMore={studentsPagination.hasMore}
+          students={(studentsPagination?.items ?? []) as any}
+          initialNextCursor={studentsPagination?.nextCursor ?? null}
+          initialHasMore={studentsPagination?.hasMore ?? false}
           schoolId={school.id} 
           tiers={school.academicTiers}
           activeTier={activeTierName}

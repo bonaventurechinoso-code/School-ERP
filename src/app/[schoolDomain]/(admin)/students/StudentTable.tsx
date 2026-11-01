@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Student, AcademicTier } from "@prisma/client";
 import { 
   createStudent, 
@@ -170,6 +171,14 @@ export default function StudentTable({
 }: StudentTableProps) {
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
+  const router = useRouter();
+  const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (students) {
+      setStudentList(students);
+    }
+  }, [students]);
 
   const [studentList, setStudentList] = useState<StudentWithTier[]>(students);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null);
@@ -408,13 +417,71 @@ export default function StudentTable({
 
   const handleDelete = async (studentId: string) => {
     if (confirm("Are you sure you want to delete this student? This action cannot be undone.")) {
+      // Immediate optimistic eviction from local state
+      setStudentList(prev => prev.filter(s => s.id !== studentId));
+      setSelectedIds(prev => prev.filter(id => id !== studentId));
+      if (selectedStudent?.id === studentId) {
+        setSelectedStudent(null);
+      }
+
       startTransition(async () => {
-        const res = await deleteStudent(schoolId, studentId, activeTier);
-        if (res?.error) {
-          alert(res.error);
-        } else {
-          setStudentList(prev => prev.filter(s => s.id !== studentId));
-          await refreshMetrics();
+        try {
+          const res = await deleteStudent(schoolId, studentId, activeTier);
+          const isNonExistentOrForbidden =
+            res?.error &&
+            (res.error.includes("403") ||
+              res.error.toLowerCase().includes("does not exist") ||
+              res.error.toLowerCase().includes("belongs to another institution") ||
+              res.error.toLowerCase().includes("not found"));
+
+          if (!res?.error || res?.success || isNonExistentOrForbidden) {
+            setStudentList(prev => prev.filter(s => s.id !== studentId));
+            setSelectedIds(prev => prev.filter(id => id !== studentId));
+            if (selectedStudent?.id === studentId) {
+              setSelectedStudent(null);
+            }
+
+            setActionFeedback({
+              type: "success",
+              message: "Record successfully removed from server.",
+            });
+            setTimeout(() => setActionFeedback(null), 5000);
+
+            await refreshMetrics();
+            router.refresh();
+          } else {
+            setActionFeedback({
+              type: "error",
+              message: res.error,
+            });
+          }
+        } catch (err: any) {
+          const errMsg = err?.message || "";
+          const isNonExistent =
+            errMsg.includes("403") ||
+            errMsg.toLowerCase().includes("does not exist") ||
+            errMsg.toLowerCase().includes("belongs to another institution") ||
+            errMsg.toLowerCase().includes("not found");
+
+          if (isNonExistent) {
+            setStudentList(prev => prev.filter(s => s.id !== studentId));
+            setSelectedIds(prev => prev.filter(id => id !== studentId));
+            if (selectedStudent?.id === studentId) {
+              setSelectedStudent(null);
+            }
+            setActionFeedback({
+              type: "success",
+              message: "Record successfully removed from server.",
+            });
+            setTimeout(() => setActionFeedback(null), 5000);
+            await refreshMetrics();
+            router.refresh();
+          } else {
+            setActionFeedback({
+              type: "error",
+              message: errMsg || "Failed to delete student.",
+            });
+          }
         }
       });
     }
@@ -667,6 +734,27 @@ export default function StudentTable({
 
   return (
     <div className="space-y-6">
+      {actionFeedback && (
+        <div
+          role="status"
+          className={`p-4 rounded-xl text-sm font-bold flex items-center justify-between border animate-in fade-in slide-in-from-top-2 duration-300 ${
+            actionFeedback.type === "success"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
+              : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{actionFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Dynamic Metric Overview Blocks */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">

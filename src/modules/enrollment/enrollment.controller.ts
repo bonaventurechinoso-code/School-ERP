@@ -511,7 +511,9 @@ export async function getAllApplications({
               status: "CONVERTED",
             },
           }),
-        ]);
+        ]).catch((err) => {
+          console.warn("[ENROLLMENT_CONTROLLER] Skip auto-sync for lead " + lead.id + ":", err);
+        });
       }
     } catch (syncErr) {
       console.warn("[ENROLLMENT_CONTROLLER] Auto-sync active leads to admission_registers:", syncErr);
@@ -533,12 +535,12 @@ export async function getAllApplications({
     const applications = await basePrisma.admissionRegister.findMany({
       where,
       orderBy: { createdAt: "desc" },
-    });
+    }).catch(() => []);
 
     const { resolveCanonicalDocuments } = await import("@/lib/admissions.service");
-    return applications.map((app) => ({
+    return (applications ?? []).map((app) => ({
       ...app,
-      resolvedDocuments: resolveCanonicalDocuments(app),
+      resolvedDocuments: resolveCanonicalDocuments ? resolveCanonicalDocuments(app) : [],
     }));
   } catch (err) {
     console.error("[ENROLLMENT_CONTROLLER] getAllApplications error:", err);

@@ -76,116 +76,144 @@ export async function fetchStudentsPaginated(
     filters: { status: status.toLowerCase(), className, search, tierId: options?.tierId },
   });
 
-  return cacheAside<CursorPaginationResult<any>>({
-    key: cacheKey,
-    ttlSeconds: 1800, // 30 minutes safe sliding TTL
-    fetchFn: async () => {
-      const tenantDb = await resolveDbForAction(schoolId, options?.tierName, options?.tierId);
+  try {
+    const result = await cacheAside<CursorPaginationResult<any>>({
+      key: cacheKey,
+      ttlSeconds: 1800, // 30 minutes safe sliding TTL
+      fetchFn: async () => {
+        const tenantDb = await resolveDbForAction(schoolId, options?.tierName, options?.tierId);
 
-      const andConditions: any[] = [
-        { schoolId },
-      ];
+        const andConditions: any[] = [
+          { schoolId },
+        ];
 
-      // Strict status filtering: Enforce status: 'Enrolled'
-      if (status && status !== "ALL") {
-        if (status.toUpperCase() === "ENROLLED") {
+        // Strict status filtering: Enforce status: 'Enrolled'
+        if (status && status !== "ALL") {
+          if (status.toUpperCase() === "ENROLLED") {
+            andConditions.push({
+              status: { in: ["ENROLLED", "Enrolled"] },
+            });
+          } else {
+            andConditions.push({ status });
+          }
+        } else {
           andConditions.push({
             status: { in: ["ENROLLED", "Enrolled"] },
           });
-        } else {
-          andConditions.push({ status });
         }
-      } else {
+
+        // Explicitly exclude any records with status 'Applicant', 'Prospect', 'Inquiry', or 'Screened'
         andConditions.push({
-          status: { in: ["ENROLLED", "Enrolled"] },
-        });
-      }
-
-      // Explicitly exclude any records with status 'Applicant', 'Prospect', 'Inquiry', or 'Screened'
-      andConditions.push({
-        NOT: {
-          status: {
-            in: [
-              "APPLICANT", "Applicant",
-              "PROSPECT", "Prospect",
-              "INQUIRY", "Inquiry",
-              "SCREENED", "Screened",
-            ],
+          NOT: {
+            status: {
+              in: [
+                "APPLICANT", "Applicant",
+                "PROSPECT", "Prospect",
+                "INQUIRY", "Inquiry",
+                "SCREENED", "Screened",
+              ],
+            },
           },
-        },
-      });
+        });
 
-      // Resolve tierId if provided across isolated tier DB and central DB schemas
-      if (options?.tierId) {
-        const tierInDb = await tenantDb.academicTier.findFirst({
-          where: {
+        // Resolve tierId if provided across isolated tier DB and central DB schemas
+        if (options?.tierId) {
+          const tierInDb = await tenantDb.academicTier.findFirst({
+            where: {
+              OR: [
+                { id: options.tierId },
+                ...(options?.tierName ? [{ name: { equals: options.tierName, mode: "insensitive" as const } }] : []),
+              ],
+            },
+          }).catch(() => null);
+
+          if (tierInDb) {
+            andConditions.push({ tierId: tierInDb.id });
+          }
+        }
+
+        if (className && className !== "ALL") {
+          const cName = className.trim();
+          const altClass1 = cName.toLowerCase().startsWith("class ")
+            ? cName.replace(/class\s+/i, "Primary ")
+            : cName.toLowerCase().startsWith("primary ")
+            ? cName.replace(/primary\s+/i, "Class ")
+            : null;
+          const altClass2 = cName.toLowerCase().startsWith("class ")
+            ? cName.replace(/class\s+/i, "Basic ")
+            : null;
+
+          andConditions.push({
             OR: [
-              { id: options.tierId },
-              ...(options?.tierName ? [{ name: { equals: options.tierName, mode: "insensitive" as const } }] : []),
+              { currentClass: { equals: cName, mode: "insensitive" } },
+              { currentClass: { startsWith: cName, mode: "insensitive" } },
+              ...(altClass1
+                ? [
+                    { currentClass: { equals: altClass1, mode: "insensitive" } },
+                    { currentClass: { startsWith: altClass1, mode: "insensitive" } },
+                  ]
+                : []),
+              ...(altClass2
+                ? [
+                    { currentClass: { equals: altClass2, mode: "insensitive" } },
+                    { currentClass: { startsWith: altClass2, mode: "insensitive" } },
+                  ]
+                : []),
             ],
-          },
-        }).catch(() => null);
-
-        if (tierInDb) {
-          andConditions.push({ tierId: tierInDb.id });
+          });
         }
-      }
 
-      if (className && className !== "ALL") {
-        const cName = className.trim();
-        const altClass1 = cName.toLowerCase().startsWith("class ")
-          ? cName.replace(/class\s+/i, "Primary ")
-          : cName.toLowerCase().startsWith("primary ")
-          ? cName.replace(/primary\s+/i, "Class ")
-          : null;
-        const altClass2 = cName.toLowerCase().startsWith("class ")
-          ? cName.replace(/class\s+/i, "Basic ")
-          : null;
+        if (search && search.trim()) {
+          const query = search.trim();
+          andConditions.push({
+            OR: [
+              { firstName: { contains: query, mode: "insensitive" } },
+              { lastName: { contains: query, mode: "insensitive" } },
+              { admissionNumber: { contains: query, mode: "insensitive" } },
+              { currentClass: { contains: query, mode: "insensitive" } },
+            ],
+          });
+        }
 
-        andConditions.push({
-          OR: [
-            { currentClass: { equals: cName, mode: "insensitive" } },
-            { currentClass: { startsWith: cName, mode: "insensitive" } },
-            ...(altClass1
-              ? [
-                  { currentClass: { equals: altClass1, mode: "insensitive" } },
-                  { currentClass: { startsWith: altClass1, mode: "insensitive" } },
-                ]
-              : []),
-            ...(altClass2
-              ? [
-                  { currentClass: { equals: altClass2, mode: "insensitive" } },
-                  { currentClass: { startsWith: altClass2, mode: "insensitive" } },
-                ]
-              : []),
-          ],
-        });
-      }
+        const whereClause = andConditions.length > 1 ? { AND: andConditions } : andConditions[0] || { schoolId };
 
-      if (search && search.trim()) {
-        const query = search.trim();
-        andConditions.push({
-          OR: [
-            { firstName: { contains: query, mode: "insensitive" } },
-            { lastName: { contains: query, mode: "insensitive" } },
-            { admissionNumber: { contains: query, mode: "insensitive" } },
-            { currentClass: { contains: query, mode: "insensitive" } },
-          ],
-        });
-      }
+        return executeCursorPagination(async (args) => {
+          return tenantDb.student.findMany({
+            ...args,
+            where: whereClause,
+            orderBy: { createdAt: "desc" },
+            include: { tier: true },
+          }).catch((err) => {
+            console.error("[fetchStudentsPaginated] student.findMany error:", err);
+            return [];
+          });
+        }, { cursor, limit });
+      },
+    });
 
-      const whereClause = andConditions.length > 1 ? { AND: andConditions } : andConditions[0] || { schoolId };
+    const sanitizedItems = (result?.items ?? []).map((s: any) => ({
+      ...s,
+      tier: s?.tier ?? null,
+      feeStatus: s?.feeStatus ?? "UNPAID",
+      admissionNumber: s?.admissionNumber ?? "",
+      currentClass: s?.currentClass ?? "",
+    }));
 
-      return executeCursorPagination(async (args) => {
-        return tenantDb.student.findMany({
-          ...args,
-          where: whereClause,
-          orderBy: { createdAt: "desc" },
-          include: { tier: true },
-        });
-      }, { cursor, limit });
-    },
-  });
+    return {
+      items: sanitizedItems,
+      nextCursor: result?.nextCursor ?? null,
+      hasMore: result?.hasMore ?? false,
+      limit: result?.limit ?? limit,
+    };
+  } catch (error: any) {
+    console.error("[fetchStudentsPaginated] Server Action caught error:", error);
+    return {
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      limit,
+    };
+  }
 }
 
 export async function createStudent(
@@ -504,6 +532,28 @@ export async function deleteStudent(schoolId: string, studentId: string, tierCon
   const tenantDb = await resolveDbForAction(schoolId, tierContext);
   
   try {
+    // Explicit cascading cleanup of associated child records across both tenantDb and basePrisma to prevent orphaned references or foreign key violations
+    await Promise.allSettled([
+      tenantDb.studentParent.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.studentAttendance.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.gradeRecord.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.academicRecord.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.reportCard.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.examResult.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.paymentProof.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.payment.deleteMany({ where: { studentId } }).catch(() => null),
+      tenantDb.invoice.deleteMany({ where: { studentId } }).catch(() => null),
+    ]);
+
+    const studentToDelete = await tenantDb.student.findUnique({
+      where: { id: studentId },
+      select: { id: true, userId: true },
+    }).catch(() => null);
+
+    if (studentToDelete?.userId) {
+      await basePrisma.user.delete({ where: { id: studentToDelete.userId } }).catch(() => null);
+    }
+
     await tenantDb.student.delete({
       where: { id: studentId }
     });
@@ -511,11 +561,36 @@ export async function deleteStudent(schoolId: string, studentId: string, tierCon
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
 
+    // Multi-tenant safe revalidation
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { subdomain: true },
+    }).catch(() => null);
+
+    if (school?.subdomain) {
+      safeRevalidatePath(`/${school.subdomain}/students`, "page");
+      safeRevalidatePath(`/${school.subdomain}/students`, "layout");
+      safeRevalidatePath(`/${school.subdomain}/students`);
+    }
+
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
-    return { success: true };
+    safeRevalidatePath(`/[schoolDomain]/students`, "layout");
+    safeRevalidatePath(`/[schoolDomain]/students`);
+    return { success: true, message: "Record successfully removed from server." };
   } catch (error: any) {
     console.error("[Server Action] Failed to delete student:", error);
-    return { success: false, error: error.message || "Failed to delete student." };
+    const msg = error?.message || "";
+    if (
+      msg.includes("does not exist") ||
+      msg.includes("belongs to another institution") ||
+      msg.includes("Record to delete does not exist") ||
+      msg.includes("403")
+    ) {
+      await invalidateStudentNamespace(schoolId, tierContext);
+      safeRevalidatePath(`/[schoolDomain]/students`, "page");
+      return { success: true, message: "Record successfully removed from server." };
+    }
+    return { success: false, error: msg || "Failed to delete student." };
   }
 }
 

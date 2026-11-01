@@ -62,10 +62,25 @@ export async function executeCursorPagination<T extends { id: string }>(
 ): Promise<CursorPaginationResult<T>> {
   const { take, cursor, skip, limit } = buildPrismaCursorArgs(params);
 
-  const rawItems = await queryFn({
-    take,
-    ...(cursor ? { cursor, skip } : {}),
-  });
+  try {
+    const rawItems = await queryFn({
+      take,
+      ...(cursor ? { cursor, skip } : {}),
+    });
 
-  return formatCursorPaginationResult(rawItems, limit);
+    return formatCursorPaginationResult(rawItems ?? [], limit);
+  } catch (err: any) {
+    // If the cursor record was hard-deleted (e.g. Prisma P2025: Record to use for cursor does not exist)
+    if (
+      cursor &&
+      (err?.code === "P2025" ||
+        err?.message?.includes("cursor") ||
+        err?.message?.includes("does not exist") ||
+        err?.message?.includes("Record to use for cursor"))
+    ) {
+      const fallbackItems = await queryFn({ take }).catch(() => []);
+      return formatCursorPaginationResult(fallbackItems ?? [], limit);
+    }
+    throw err;
+  }
 }
