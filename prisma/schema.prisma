@@ -100,6 +100,7 @@ model School {
   isActive      Boolean         @default(true)
   deletedAt     DateTime?
   contactPhone  String?
+  tier          SchoolTier      @default(TERTIARY)
 
   // Legacy Subscription Details (Nullable for backward compatibility)
   subscriptionPlan      SubscriptionPlan?   @default(BASIC)

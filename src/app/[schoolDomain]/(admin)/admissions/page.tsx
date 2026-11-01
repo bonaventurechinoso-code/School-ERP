@@ -374,36 +374,18 @@ export default async function AdmissionsPage({
     level: t.level ?? 1,
   }));
 
-  const tier = getTier(school);
+  const tier = school.tier || getTier(school);
   const tierConfig = TIER_CONFIG[tier as keyof typeof TIER_CONFIG] || TIER_CONFIG.PRIMARY;
 
   return (
     <div className="space-y-6 w-full min-h-screen flex flex-col p-2 sm:p-4">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
-            Enterprise Admissions Workspace
-          </h1>
-          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm">
-            Full lifecycle applicant processing: inquiries, document verification, post-UTME screening, batch provisional offers, fee reconciliation, and matriculation.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>{school.name}</span>
-          </span>
-        </div>
-      </header>
-
       {/* Enterprise Admissions Client Workspace */}
       <EnterpriseAdmissionsClient
+        school={school}
+        tier={tier}
         schoolId={school.id}
         schoolDomain={schoolDomain}
         schoolName={school.name}
-        tier={tier}
         tierConfig={tierConfig}
         initialApplications={applications}
         initialTransactions={transactions}

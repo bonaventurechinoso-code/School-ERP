@@ -2565,7 +2565,7 @@ export async function updateApplicationStageAction(payload: {
       targetStatus = ApplicationStatus.OFFER_EXTENDED;
     } else if (stageUpper === "REJECTED") {
       targetStatus = ApplicationStatus.REJECTED;
-    } else if (stageUpper === "CONVERTED" || stageUpper === "ENROLLED") {
+    } else if (stageUpper === "CONVERTED" || stageUpper === "ENROLLED" || stageUpper === "ADMITTED") {
       targetStatus = ApplicationStatus.ENROLLED;
     } else if (Object.values(ApplicationStatus).includes(stageUpper as any)) {
       targetStatus = stageUpper as ApplicationStatus;

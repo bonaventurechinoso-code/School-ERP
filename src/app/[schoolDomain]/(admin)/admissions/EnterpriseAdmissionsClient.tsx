@@ -173,11 +173,35 @@ function calculateAge(dobString?: string | Date | null): string {
   return `${years} yrs`;
 }
 
+export const TIER_COPY = {
+  CRECHE: {
+    title: "Creche Admissions Workspace",
+    desc: "Full lifecycle child enrollment: inquiries, parent screening, assessment, provisional offers and enrollment.",
+    cards: ["INQUIRIES", "PARENT SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
+  },
+  PRIMARY: {
+    title: "Primary Admissions Workspace",
+    desc: "Full lifecycle pupil enrollment: inquiries, document verification, entrance assessment, provisional admission and enrollment.",
+    cards: ["INQUIRIES", "SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
+  },
+  SECONDARY: {
+    title: "Secondary Admissions Workspace",
+    desc: "Full lifecycle student admission: inquiries, BECE/entrance screening, interview, offers and admission.",
+    cards: ["INQUIRIES", "SCREENING & KYC", "ENTRANCE / BECE", "OFFERS", "ADMITTED"],
+  },
+  TERTIARY: {
+    title: "Enterprise Admissions Workspace",
+    desc: "Full lifecycle applicant processing: inquiries, document verification, post-UTME screening, batch provisional offers, fee reconciliation, and matriculation.",
+    cards: ["INQUIRIES", "SCREENING & KYC", "EXAMS & INTERVIEWS", "OFFERS EXTENDED", "MATRICULATED"],
+  },
+};
+
 interface EnterpriseAdmissionsProps {
+  school?: any;
+  tier?: string;
   schoolId: string;
   schoolDomain: string;
   schoolName: string;
-  tier?: "CRECHE" | "PRIMARY" | "SECONDARY" | "TERTIARY";
   tierConfig?: TierConfig;
   initialApplications: SerializedApplication[];
   initialTransactions: SerializedTransaction[];
@@ -192,19 +216,18 @@ interface EnterpriseAdmissionsProps {
 }
 
 const KANBAN_STAGES = [
-  { key: "INQUIRY", label: "Inquiry", bg: "bg-slate-50 dark:bg-zinc-900/60", border: "border-slate-200 dark:border-zinc-800" },
   { key: "DOCS PENDING", label: "Docs Pending", bg: "bg-amber-50/50 dark:bg-amber-950/20", border: "border-amber-200 dark:border-amber-900/40" },
   { key: "VERIFIED", label: "Verified", bg: "bg-blue-50/50 dark:bg-blue-950/20", border: "border-blue-200 dark:border-blue-900/40" },
   { key: "APPROVED", label: "Approved", bg: "bg-purple-50/50 dark:bg-purple-950/20", border: "border-purple-200 dark:border-purple-900/40" },
-  { key: "REJECTED", label: "Rejected", bg: "bg-rose-50/50 dark:bg-rose-950/20", border: "border-rose-200 dark:border-rose-900/40" },
-  { key: "CONVERTED", label: "Converted", bg: "bg-emerald-50/50 dark:bg-emerald-950/20", border: "border-emerald-200 dark:border-emerald-900/40" },
+  { key: "ADMITTED", label: "Admitted / Enrolled", bg: "bg-emerald-50/50 dark:bg-emerald-950/20", border: "border-emerald-200 dark:border-emerald-900/40" },
 ];
 
 export default function EnterpriseAdmissionsClient({
+  school,
+  tier: passedTier,
   schoolId,
   schoolDomain,
   schoolName,
-  tier = "TERTIARY",
   tierConfig: incomingTierConfig,
   initialApplications,
   initialTransactions,
@@ -213,6 +236,20 @@ export default function EnterpriseAdmissionsClient({
   bankDetails,
   canMutate = true,
 }: EnterpriseAdmissionsProps) {
+  // Resolve tier strictly from passed tier, school.tier, or school name
+  const rawTier = (passedTier || school?.tier || "").toUpperCase();
+  let tier: keyof typeof TIER_COPY = "PRIMARY";
+  if (rawTier in TIER_COPY) {
+    tier = rawTier as keyof typeof TIER_COPY;
+  } else {
+    const sName = (school?.name || schoolName || "").toLowerCase();
+    if (sName.includes("creche") || sName.includes("daycare") || sName.includes("crèche")) tier = "CRECHE";
+    else if (sName.includes("primary") || sName.includes("basic") || sName.includes("elementary") || sName.includes("nursery")) tier = "PRIMARY";
+    else if (sName.includes("secondary") || sName.includes("high") || (sName.includes("college") && !sName.includes("education"))) tier = "SECONDARY";
+    else tier = "TERTIARY";
+  }
+
+  const copy = TIER_COPY[tier] || TIER_COPY.PRIMARY;
   const tierConfig = incomingTierConfig || DEFAULT_TIER_CONFIG;
   const [applications, setApplications] = useState<SerializedApplication[]>(initialApplications);
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
@@ -300,11 +337,11 @@ export default function EnterpriseAdmissionsClient({
     return { inquiries, screening, exams, offers, matriculated };
   }, [applications]);
 
-  // Stage mapping helper
+  // Stage mapping helper - INQUIRY is strictly top-level only, no inquiry column at bottom
   const mapAppToKanbanStage = (status: string): string => {
     switch (status) {
       case "DRAFT":
-        return "INQUIRY";
+        return ""; // Inquiry only lives at top funnel bar
       case "PAYMENT_PENDING":
       case "ACTION_REQUIRED":
         return "DOCS PENDING";
@@ -315,12 +352,13 @@ export default function EnterpriseAdmissionsClient({
       case "OFFER_EXTENDED":
       case "OFFER_ACCEPTED":
         return "APPROVED";
-      case "REJECTED":
-        return "REJECTED";
       case "ENROLLED":
-        return "CONVERTED";
+      case "ADMITTED":
+        return "ADMITTED";
+      case "REJECTED":
+        return "";
       default:
-        return "INQUIRY";
+        return "";
     }
   };
 
@@ -676,107 +714,64 @@ export default function EnterpriseAdmissionsClient({
         </div>
       )}
 
+      {/* Dynamic Tier Header */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
+            {copy.title}
+          </h1>
+          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm">
+            {copy.desc}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            <span>{schoolName || school?.name}</span>
+          </span>
+        </div>
+      </header>
+
       {/* 1. TOP METRICS FUNNEL BAR */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-        {/* Card 1 */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              {tierConfig.topCards[0] || "INQUIRIES"}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
-              {funnelMetrics.inquiries}
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-              Portal &amp; Walk-In Leads
-            </p>
-          </div>
-        </div>
+        {copy.cards.map((cardTitle, idx) => {
+          const config = [
+            { count: funnelMetrics.inquiries, subtitle: "Portal & Walk-In Leads", Icon: Users, textCls: "text-amber-600", bgCls: "bg-amber-50 dark:bg-amber-950/50" },
+            { count: funnelMetrics.screening, subtitle: "Credentials & Verification", Icon: ShieldCheck, textCls: "text-blue-600", bgCls: "bg-blue-50 dark:bg-blue-950/50" },
+            { count: funnelMetrics.exams, subtitle: "Assessment Scheduled", Icon: FileCheck, textCls: "text-purple-600", bgCls: "bg-purple-50 dark:bg-purple-950/50" },
+            { count: funnelMetrics.offers, subtitle: "Provisional Admissions", Icon: Award, textCls: "text-indigo-600", bgCls: "bg-indigo-50 dark:bg-indigo-950/50" },
+            { count: funnelMetrics.matriculated, subtitle: "Enrolled in Active SIS", Icon: GraduationCap, textCls: "text-emerald-600", bgCls: "bg-emerald-50 dark:bg-emerald-950/50" },
+          ][idx] || { count: 0, subtitle: "", Icon: Users, textCls: "text-blue-600", bgCls: "bg-blue-50" };
 
-        {/* Card 2 */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              {tierConfig.topCards[1] || "SCREENING"}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
-              {funnelMetrics.screening}
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-              Credentials &amp; Verification
-            </p>
-          </div>
-        </div>
+          const { count, subtitle, Icon, textCls, bgCls } = config;
 
-        {/* Card 3 */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              {tierConfig.topCards[2] || "ASSESSMENT"}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600">
-              <FileCheck className="w-4 h-4" />
+          return (
+            <div
+              key={cardTitle}
+              className={`bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between ${
+                idx === 4 ? "col-span-2 md:col-span-1" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  {cardTitle}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${bgCls} flex items-center justify-center ${textCls}`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
+                  {count}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                  {subtitle}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
-              {funnelMetrics.exams}
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-              Assessment Scheduled
-            </p>
-          </div>
-        </div>
-
-        {/* Card 4 */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              {tierConfig.topCards[3] || "OFFERS"}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600">
-              <Award className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
-              {funnelMetrics.offers}
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-              Provisional Admissions
-            </p>
-          </div>
-        </div>
-
-        {/* Card 5 */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-              {tierConfig.topCards[4] || "ENROLLED"}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
-              <GraduationCap className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50">
-              {funnelMetrics.matriculated}
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-              Enrolled in Active SIS
-            </p>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* 2. MAIN WORKSPACE TABS */}
