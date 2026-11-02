@@ -2,11 +2,11 @@ import React from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/admissions.service";
-import EnterpriseAdmissionsClient, {
+import AdmissionsWorkspaceClient, {
   SerializedApplication,
   SerializedTransaction,
   AdmissionCycleItem,
-} from "./EnterpriseAdmissionsClient";
+} from "./AdmissionsWorkspaceClient";
 
 const TIER_CONFIG = {
   CRECHE: {
@@ -379,8 +379,8 @@ export default async function AdmissionsPage({
 
   return (
     <div className="space-y-6 w-full min-h-screen flex flex-col p-2 sm:p-4">
-      {/* Enterprise Admissions Client Workspace */}
-      <EnterpriseAdmissionsClient
+      {/* Admissions Client Workspace */}
+      <AdmissionsWorkspaceClient
         school={school}
         tier={tier}
         schoolId={school.id}

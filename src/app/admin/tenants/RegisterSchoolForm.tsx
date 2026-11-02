@@ -40,6 +40,7 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
   });
 
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
+  const [tertiaryType, setTertiaryType] = useState<string>("UNIVERSITY");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,6 +54,18 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
   const hasNumber = /[0-9]/.test(password);
   const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password);
   const strengthScore = [hasMinLength, hasUppercase, hasNumber, hasSpecial].filter(Boolean).length;
+
+  const hasTertiaryTier = selectedTiers.some((t) => {
+    const norm = t.toLowerCase();
+    return (
+      norm.includes("university") ||
+      norm.includes("polytechnic") ||
+      norm.includes("college of education") ||
+      norm.includes("monotechnic") ||
+      norm.includes("tertiary") ||
+      norm.includes("institute")
+    );
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -106,6 +119,7 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
           contactPhone: formData.contactPhone.trim(),
           password: formData.password,
           tiers: selectedTiers,
+          tertiaryType: hasTertiaryTier ? tertiaryType : undefined,
         }),
       });
 
@@ -355,6 +369,26 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
           searchPlaceholder="Search academic tiers..."
         />
       </div>
+
+      {hasTertiaryTier && (
+        <div className="animate-in fade-in duration-200">
+          <label className="block text-xs font-semibold text-purple-700 dark:text-purple-400 mb-1.5 uppercase tracking-wider">
+            Tertiary Institution Classification *
+          </label>
+          <select
+            value={tertiaryType}
+            onChange={(e) => setTertiaryType(e.target.value)}
+            className="w-full bg-purple-50/40 dark:bg-zinc-950/50 border border-purple-200 dark:border-purple-900/60 text-slate-900 dark:text-zinc-100 p-2.5 text-xs rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition outline-none cursor-pointer"
+          >
+            <option value="UNIVERSITY">University</option>
+            <option value="POLYTECHNIC">Polytechnic</option>
+            <option value="COLLEGE_OF_EDUCATION">College of Education</option>
+            <option value="SCHOOL_OF_NURSING">School of Nursing / Health Sciences</option>
+            <option value="MONOTECHNIC">Monotechnic</option>
+            <option value="INNOVATION_ENTERPRISE">Innovation Enterprise Institution</option>
+          </select>
+        </div>
+      )}
 
       {/* Clear, Functional Action Submission Button */}
       <button

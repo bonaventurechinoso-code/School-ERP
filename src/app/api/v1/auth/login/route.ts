@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import {
@@ -391,23 +393,47 @@ export async function POST(req: Request) {
 
     // Resolve the tenant strictly using the unified resolveTenant function.
     // If incoming request specifies schoolCode === "demo", bypass live tenant row verification.
-    const tenant: any =
-      targetSchoolCode === "demo"
-        ? {
-            id: "demo",
-            name: "Demo Evaluation Academy",
-            subdomain: "demo",
-            slug: "demo",
-            isActive: true,
-            status: "ACTIVE",
-            academicTiers: [
-              { name: "Primary School" },
-              { name: "Secondary School" },
-              { name: "Higher Institution" },
-              { name: "Creche/Nursery" },
+    let tenant: any = null;
+    try {
+      tenant =
+        targetSchoolCode === "demo"
+          ? {
+              id: "demo",
+              name: "Demo Evaluation Academy",
+              subdomain: "demo",
+              slug: "demo",
+              isActive: true,
+              status: "ACTIVE",
+              academicTiers: [
+                { name: "Primary School" },
+                { name: "Secondary School" },
+                { name: "Higher Institution" },
+                { name: "Creche/Nursery" },
+              ],
+            }
+          : await resolveTenant(targetSchoolCode);
+    } catch (resolveErr: any) {
+      console.error("[AUTH_LOGIN] resolveTenant error:", resolveErr?.message);
+      try {
+        tenant = await basePrisma.school.findFirst({
+          where: {
+            OR: [
+              { subdomain: { equals: targetSchoolCode, mode: "insensitive" } },
+              { slug: { equals: targetSchoolCode, mode: "insensitive" } },
+              { id: targetSchoolCode },
             ],
-          }
-        : await resolveTenant(targetSchoolCode);
+            deletedAt: null,
+          },
+          include: {
+            academicTiers: { orderBy: { level: "asc" } },
+            tierDatabases: true,
+          },
+        });
+      } catch (innerErr: any) {
+        console.error("[AUTH_LOGIN] Tenant fallback failed:", innerErr?.message);
+        tenant = null;
+      }
+    }
 
     if (!tenant) {
       console.warn(`[AUTH_LOGIN_DEBUG] [TENANT_NOT_FOUND] Target school code "${targetSchoolCode}" did not match any tenant.`);

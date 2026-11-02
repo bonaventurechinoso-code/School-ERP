@@ -101,6 +101,7 @@ model School {
   deletedAt     DateTime?
   contactPhone  String?
   tier          SchoolTier      @default(TERTIARY)
+  tertiaryType  TertiaryType?   @default(UNIVERSITY)
 
   // Legacy Subscription Details (Nullable for backward compatibility)
   subscriptionPlan      SubscriptionPlan?   @default(BASIC)
@@ -1444,6 +1445,15 @@ enum SchoolTier {
   PRIMARY
   SECONDARY
   TERTIARY
+}
+
+enum TertiaryType {
+  UNIVERSITY
+  POLYTECHNIC
+  COLLEGE_OF_EDUCATION
+  SCHOOL_OF_NURSING
+  MONOTECHNIC
+  INNOVATION_ENTERPRISE
 }
 
 enum ApplicationDocumentType {

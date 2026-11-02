@@ -1,11 +1,18 @@
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { fixAllTiers } = require('./fix-all-tiers');
 
 async function initSuperAdmin() {
   if (!process.env.DATABASE_URL) {
     console.log('[INIT_SUPERADMIN] No DATABASE_URL detected in environment, skipping initialization.');
     return;
+  }
+
+  try {
+    await fixAllTiers();
+  } catch (err) {
+    console.warn('[INIT_SUPERADMIN] fixAllTiers notice:', err.message);
   }
 
   const prisma = new PrismaClient();

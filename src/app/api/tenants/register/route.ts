@@ -43,7 +43,7 @@ const VALID_TIERS = [
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password, adminPassword } = body;
+    const { schoolName, adminEmail, contactPhone, subdomain, tiers, password, adminPassword, tertiaryType } = body;
 
     // Validate inputs
     if (!schoolName || !adminEmail || !subdomain || !tiers || tiers.length === 0) {
@@ -366,6 +366,7 @@ export async function POST(request: Request) {
       adminPassword: adminPasswordToSave,
       contactPhone: contactPhone || null,
       tiers,
+      tertiaryType: tertiaryType || null,
       isSelfRegistration: true,
       mustChangePassword: false,
       isTemporaryPassword: false,

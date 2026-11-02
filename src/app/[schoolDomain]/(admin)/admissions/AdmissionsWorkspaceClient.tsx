@@ -175,28 +175,24 @@ function calculateAge(dobString?: string | Date | null): string {
 
 export const TIER_COPY = {
   CRECHE: {
-    title: "Creche Admissions Workspace",
-    desc: "Full lifecycle child enrollment: inquiries, parent screening, assessment, provisional offers and enrollment.",
+    subtitle: "Early years enrollment, guardian verification and care placement",
     cards: ["INQUIRIES", "PARENT SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
   },
   PRIMARY: {
-    title: "Primary Admissions Workspace",
-    desc: "Full lifecycle pupil enrollment: inquiries, document verification, entrance assessment, provisional admission and enrollment.",
+    subtitle: "Pupil enrollment, parent guardian screening, fee assurance and class placement",
     cards: ["INQUIRIES", "SCREENING", "ASSESSMENT", "OFFERS", "ENROLLED"],
   },
   SECONDARY: {
-    title: "Secondary Admissions Workspace",
-    desc: "Full lifecycle student admission: inquiries, BECE/entrance screening, interview, offers and admission.",
+    subtitle: "Student enrollment, entrance assessment, fee assurance and class placement",
     cards: ["INQUIRIES", "SCREENING & KYC", "ENTRANCE / BECE", "OFFERS", "ADMITTED"],
   },
   TERTIARY: {
-    title: "Enterprise Admissions Workspace",
-    desc: "Full lifecycle applicant processing: inquiries, document verification, post-UTME screening, batch provisional offers, fee reconciliation, and matriculation.",
+    subtitle: "Student enrollment, screening, offers, fee reconciliation and matriculation",
     cards: ["INQUIRIES", "SCREENING & KYC", "EXAMS & INTERVIEWS", "OFFERS EXTENDED", "MATRICULATED"],
   },
 };
 
-interface EnterpriseAdmissionsProps {
+interface AdmissionsWorkspaceProps {
   school?: any;
   tier?: string;
   schoolId: string;
@@ -222,7 +218,7 @@ const KANBAN_STAGES = [
   { key: "ADMITTED", label: "Admitted / Enrolled", bg: "bg-emerald-50/50 dark:bg-emerald-950/20", border: "border-emerald-200 dark:border-emerald-900/40" },
 ];
 
-export default function EnterpriseAdmissionsClient({
+export default function AdmissionsWorkspaceClient({
   school,
   tier: passedTier,
   schoolId,
@@ -235,7 +231,7 @@ export default function EnterpriseAdmissionsClient({
   academicTiers,
   bankDetails,
   canMutate = true,
-}: EnterpriseAdmissionsProps) {
+}: AdmissionsWorkspaceProps) {
   // Resolve tier strictly from passed tier, school.tier, or school name
   const rawTier = (passedTier || school?.tier || "").toUpperCase();
   let tier: keyof typeof TIER_COPY = "PRIMARY";
@@ -718,10 +714,15 @@ export default function EnterpriseAdmissionsClient({
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-50">
-            {copy.title}
+            Admissions Workspace
           </h1>
-          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm">
-            {copy.desc}
+          <p className="text-slate-500 dark:text-zinc-400 mt-1 text-xs sm:text-sm flex items-center gap-2">
+            <span>{copy.subtitle}</span>
+            {tier === "TERTIARY" && school?.tertiaryType && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                Tertiary • {school.tertiaryType.replace(/_/g, " ")}
+              </span>
+            )}
           </p>
         </div>
 
@@ -779,7 +780,7 @@ export default function EnterpriseAdmissionsClient({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-zinc-800 pb-3">
           <TabsList className="bg-slate-100 dark:bg-zinc-800/80 p-1 rounded-xl">
             <TabsTrigger value="kanban" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
-              Admissions Pipeline Kanban
+              Admissions Pipeline
             </TabsTrigger>
             <TabsTrigger value="register" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
               Admissions Register Table

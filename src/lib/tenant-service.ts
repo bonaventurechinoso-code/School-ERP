@@ -12,6 +12,7 @@ export interface CreateTenantWithAdminParams {
   adminPassword: string;
   contactPhone?: string | null;
   tiers?: string[];
+  tertiaryType?: string | null;
   isSelfRegistration?: boolean;
   mustChangePassword?: boolean;
   isTemporaryPassword?: boolean;
@@ -69,20 +70,42 @@ export async function resolveTenant(schoolCode: string) {
   const normalizedCode = normalizeSchoolCode(schoolCode);
   if (!normalizedCode) return null;
 
-  return basePrisma.school.findFirst({
-    where: {
-      OR: [
-        { subdomain: { equals: normalizedCode, mode: "insensitive" } },
-        { slug: { equals: normalizedCode, mode: "insensitive" } },
-        { id: normalizedCode },
-      ],
-      deletedAt: null,
-    },
-    include: {
-      academicTiers: { orderBy: { level: "asc" } },
-      tierDatabases: true,
-    },
-  });
+  try {
+    return await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: normalizedCode, mode: "insensitive" } },
+          { slug: { equals: normalizedCode, mode: "insensitive" } },
+          { id: normalizedCode },
+        ],
+        deletedAt: null,
+      },
+      include: {
+        academicTiers: { orderBy: { level: "asc" } },
+        tierDatabases: true,
+      },
+    });
+  } catch (err: any) {
+    console.warn("[resolveTenant] Primary lookup notice:", err?.message);
+    try {
+      return await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: normalizedCode, mode: "insensitive" } },
+            { slug: { equals: normalizedCode, mode: "insensitive" } },
+            { id: normalizedCode },
+          ],
+          deletedAt: null,
+        },
+        include: {
+          academicTiers: true,
+        },
+      });
+    } catch (fallbackErr: any) {
+      console.error("[resolveTenant] Critical lookup failure:", fallbackErr?.message);
+      return null;
+    }
+  }
 }
 
 /**
@@ -93,7 +116,7 @@ export async function resolveTenant(schoolCode: string) {
 export async function createTenantWithAdmin(
   params: CreateTenantWithAdminParams
 ): Promise<TenantWithAdminResult> {
-  const { slug, name, adminEmail, adminPassword, contactPhone, tiers = [] } = params;
+  const { slug, name, adminEmail, adminPassword, contactPhone, tiers = [], tertiaryType } = params;
 
   // 1. Validation & normalization
   const canonicalSlug = (slug || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -151,12 +174,25 @@ export async function createTenantWithAdmin(
   // 4. Atomic Transaction: School + Tiers + Subscription + Department + User + Staff
   const transactionResult = await basePrisma.$transaction(async (tx) => {
     // A. School row: status ACTIVE, slug and subdomain strictly canonicalSlug
+    let derivedTier: any = "TERTIARY";
+    const lowerName = trimmedName.toLowerCase();
+    const joinedTiers = effectiveTiers.join(" ").toLowerCase();
+    if (lowerName.includes("creche") || joinedTiers.includes("creche")) {
+      derivedTier = "CRECHE";
+    } else if (lowerName.includes("primary") || joinedTiers.includes("primary") || joinedTiers.includes("nursery")) {
+      derivedTier = "PRIMARY";
+    } else if (lowerName.includes("secondary") || joinedTiers.includes("secondary") || joinedTiers.includes("high")) {
+      derivedTier = "SECONDARY";
+    }
+
     const school = await tx.school.create({
       data: {
         name: trimmedName,
         subdomain: canonicalSlug,
         slug: canonicalSlug,
         status: "ACTIVE",
+        tier: derivedTier,
+        tertiaryType: derivedTier === "TERTIARY" ? (tertiaryType as any) || "UNIVERSITY" : null,
         contactPhone: contactPhone?.trim() || null,
         isActive: true,
         isBanned: false,
