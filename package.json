@@ -11,7 +11,7 @@
     "build": "prisma generate && (prisma migrate deploy || prisma db push --accept-data-loss --skip-generate || true) && next build",
     "build:local": "prisma generate && next build",
     "build:render": "npx prisma generate && node scripts/init-superadmin.js && echo 'Using precompiled local build assets'",
-    "start": "node scripts/init-superadmin.js && next start",
+    "start": "node scripts/fix-all-tiers.js && node scripts/init-superadmin.js && next start",
     "lint": "next lint",
     "db:push": "prisma db push"
   },

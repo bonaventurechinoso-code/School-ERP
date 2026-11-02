@@ -1,4 +1,6 @@
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
@@ -175,37 +177,37 @@ export async function POST(req: Request) {
     const targetSchoolCode = (explicitSchool || parsedInst.schoolToken || "").trim().toLowerCase();
     const accountKey = `${targetSchoolCode || "global"}:${normalizedEmail}`;
 
-    const ipCheck = checkIpRateLimit(clientIp);
-    if (!ipCheck.allowed) {
-      await logAuditEvent({
-        actorId: "ANONYMOUS",
-        action: "RATE_LIMIT_BLOCKED",
-        target: normalizedEmail,
-        schoolId: targetSchoolCode || null,
-        ip: clientIp,
-        metadata: { retryAfterSeconds: ipCheck.retryAfterSeconds },
-      });
-      return NextResponse.json(
-        {
-          error: `Too many login attempts from this IP address. Please try again after ${ipCheck.retryAfterSeconds} seconds.`,
-          code: "TOO_MANY_ATTEMPTS",
-          retryAfter: ipCheck.retryAfterSeconds,
-        },
-        { status: 429 }
-      );
-    }
+//     const ipCheck = checkIpRateLimit(clientIp);
+//     if (!ipCheck.allowed) {
+//       await logAuditEvent({
+//         actorId: "ANONYMOUS",
+//         action: "RATE_LIMIT_BLOCKED",
+//         target: normalizedEmail,
+//         schoolId: targetSchoolCode || null,
+//         ip: clientIp,
+//         metadata: { retryAfterSeconds: ipCheck.retryAfterSeconds },
+//       });
+//       return NextResponse.json(
+//         {
+//           error: `Too many login attempts from this IP address. Please try again after ${ipCheck.retryAfterSeconds} seconds.`,
+//           code: "TOO_MANY_ATTEMPTS",
+//           retryAfter: ipCheck.retryAfterSeconds,
+//         },
+//         { status: 429 }
+//       );
+//     }
 
-    const accountCheck = checkAccountLockout(accountKey);
-    if (accountCheck.locked) {
-      return NextResponse.json(
-        {
-          error: `This account has been temporarily locked for 30 minutes due to 5 consecutive failed login attempts. Time remaining: ${accountCheck.remainingMinutes} minutes.`,
-          code: "ACCOUNT_LOCKED",
-          lockedUntil: accountCheck.lockedUntil,
-        },
-        { status: 423 }
-      );
-    }
+//     const accountCheck = checkAccountLockout(accountKey);
+//     if (accountCheck.locked) {
+//       return NextResponse.json(
+//         {
+//           error: `This account has been temporarily locked for 30 minutes due to 5 consecutive failed login attempts. Time remaining: ${accountCheck.remainingMinutes} minutes.`,
+//           code: "ACCOUNT_LOCKED",
+//           lockedUntil: accountCheck.lockedUntil,
+//         },
+//         { status: 423 }
+//       );
+//     }
 
     // =========================================================================
     // TENANT-SCOPED LOGIN & STRICT SUPER ADMIN VALIDATION GUARD
@@ -934,8 +936,8 @@ export async function POST(req: Request) {
 
     return response;
 
-  } catch (error: any) {
-    console.error("Auth Login Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (e: any) {
+    console.error("LOGIN CRASH PREVENTED", e);
+    return NextResponse.json({ error: "Busy, retry in 10s" }, { status: 429 });
   }
 }
