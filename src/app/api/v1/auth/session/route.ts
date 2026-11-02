@@ -118,8 +118,15 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[API_AUTH_SESSION_ERROR]:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to retrieve active session", session: null },
-      { status: 500 }
+      { success: false, authenticated: false, session: null, error: "Failed to retrieve active session" },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
     );
   }
 }

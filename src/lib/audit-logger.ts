@@ -22,6 +22,15 @@ export async function logAuditEvent(params: LogAuditParams): Promise<void> {
     const actorId = params.actorId || "SYSTEM";
     const ip = params.ip || "unknown";
 
+    let safeMetadata: any = undefined;
+    if (params.metadata) {
+      try {
+        safeMetadata = JSON.parse(JSON.stringify(params.metadata));
+      } catch {
+        safeMetadata = { summary: String(params.metadata) };
+      }
+    }
+
     await basePrisma.auditLog.create({
       data: {
         actorId,
@@ -31,7 +40,7 @@ export async function logAuditEvent(params: LogAuditParams): Promise<void> {
         ip: ip,
         ipAddress: ip,
         tenantId: params.schoolId || null,
-        metadata: params.metadata ? JSON.parse(JSON.stringify(params.metadata)) : undefined,
+        metadata: safeMetadata,
       },
     });
   } catch (err: any) {

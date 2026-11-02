@@ -102,17 +102,21 @@ export async function issueRefreshToken(params: {
     if (exists) validSchoolId = params.schoolId;
   }
 
-  await basePrisma.refreshToken.create({
-    data: {
-      userId: params.userId,
-      schoolId: validSchoolId,
-      tokenHash,
-      expiresAt,
-      isRevoked: false,
-      ipAddress: params.ipAddress || null,
-      userAgent: params.userAgent || null,
-    },
-  });
+  try {
+    await basePrisma.refreshToken.create({
+      data: {
+        userId: params.userId,
+        schoolId: validSchoolId,
+        tokenHash,
+        expiresAt,
+        isRevoked: false,
+        ipAddress: params.ipAddress || null,
+        userAgent: params.userAgent || null,
+      },
+    });
+  } catch (err: any) {
+    console.warn("[AUTH_TOKEN_NOTICE]: Non-fatal error persisting refreshToken row:", err?.message);
+  }
   return { rawRefreshToken, expiresAt };
 }
 

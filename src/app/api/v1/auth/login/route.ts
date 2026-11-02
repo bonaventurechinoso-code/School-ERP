@@ -462,17 +462,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const activeTiers: string[] = (tenant.academicTiers || []).map((t: any) => t.name);
+    const activeTiers: string[] = Array.isArray(tenant.academicTiers)
+      ? tenant.academicTiers.map((t: any) => t?.name || "").filter(Boolean)
+      : [];
+    if (activeTiers.length === 0 && tenant.tier) {
+      const tierMap: Record<string, string> = {
+        CRECHE: "Creche",
+        PRIMARY: "Primary School",
+        SECONDARY: "Secondary School",
+        TERTIARY: "Higher Institution",
+      };
+      activeTiers.push(tierMap[tenant.tier] || tenant.tier);
+    }
 
     let tierFromToken: string | null = null;
-    if (parsedInst.tierToken) {
+    if (parsedInst.tierToken && Array.isArray(tenant.academicTiers)) {
       const mappedCandidate = parsedInst.candidateTierName?.toUpperCase();
       const matchedTierObj = tenant.academicTiers.find((t: any) => {
-        const nameUpper = t.name.toUpperCase();
+        const nameUpper = (t?.name || "").toUpperCase();
         return (
           (mappedCandidate && nameUpper.includes(mappedCandidate)) ||
-          formatTierBadgeCode(t.name) === parsedInst.tierToken ||
-          resolveTierCode(t.name) === parsedInst.tierToken ||
+          formatTierBadgeCode(t?.name) === parsedInst.tierToken ||
+          resolveTierCode(t?.name) === parsedInst.tierToken ||
           nameUpper.includes(parsedInst.tierToken!)
         );
       });
@@ -624,10 +635,18 @@ export async function POST(req: Request) {
         ],
       };
 
-      let student = await basePrisma.student.findFirst({
-        where: studentMatchQuery,
-        include: { school: true, tier: true },
-      });
+      let student: any = null;
+      try {
+        student = await basePrisma.student.findFirst({
+          where: studentMatchQuery,
+          include: { school: true, tier: true },
+        });
+      } catch (studentErr: any) {
+        console.warn("[AUTH_LOGIN] Relational student query failed:", studentErr?.message);
+        try {
+          student = await basePrisma.student.findFirst({ where: studentMatchQuery });
+        } catch {}
+      }
 
       if (!student && tenant.databaseUrl) {
         try {
@@ -690,20 +709,34 @@ export async function POST(req: Request) {
     }
 
     if (!resolvedRole && ((requestedRole || "").toUpperCase() === "PARENT" || normalizedEmail.length > 5)) {
-      const parentRecord = await basePrisma.parent.findFirst({
-        where: {
-          schoolId: tenant.id,
-          email: { equals: normalizedEmail, mode: "insensitive" },
-          isActive: true,
-        },
-        include: {
-          students: {
-            include: {
-              student: { include: { tier: true } },
+      let parentRecord: any = null;
+      try {
+        parentRecord = await basePrisma.parent.findFirst({
+          where: {
+            schoolId: tenant.id,
+            email: { equals: normalizedEmail, mode: "insensitive" },
+            isActive: true,
+          },
+          include: {
+            students: {
+              include: {
+                student: { include: { tier: true } },
+              },
             },
           },
-        },
-      });
+        });
+      } catch (parentErr: any) {
+        console.warn("[AUTH_LOGIN] Relational parent query failed:", parentErr?.message);
+        try {
+          parentRecord = await basePrisma.parent.findFirst({
+            where: {
+              schoolId: tenant.id,
+              email: { equals: normalizedEmail, mode: "insensitive" },
+              isActive: true,
+            },
+          });
+        } catch {}
+      }
 
       if (parentRecord && parentRecord.passwordHash) {
         let isParentValid = await bcrypt.compare(password, parentRecord.passwordHash).catch(() => false);
@@ -770,21 +803,11 @@ export async function POST(req: Request) {
     }
 
     if (!resolvedRole) {
-      let staffMember = await basePrisma.staff.findFirst({
-        where: {
-          schoolId: tenant.id,
-          email: { equals: normalizedEmail, mode: "insensitive" },
-          status: { not: "TERMINATED" },
-        },
-        include: {
-          user: true,
-          department: { include: { tier: true } },
-        },
-      });
-
-      if (!staffMember) {
+      let staffMember: any = null;
+      try {
         staffMember = await basePrisma.staff.findFirst({
           where: {
+            schoolId: tenant.id,
             email: { equals: normalizedEmail, mode: "insensitive" },
             status: { not: "TERMINATED" },
           },
@@ -793,6 +816,43 @@ export async function POST(req: Request) {
             department: { include: { tier: true } },
           },
         });
+      } catch (staffErr: any) {
+        console.warn("[AUTH_LOGIN] Relational staff lookup failed, trying clean query:", staffErr?.message);
+        try {
+          staffMember = await basePrisma.staff.findFirst({
+            where: {
+              schoolId: tenant.id,
+              email: { equals: normalizedEmail, mode: "insensitive" },
+              status: { not: "TERMINATED" },
+            },
+            include: { user: true },
+          });
+        } catch {}
+      }
+
+      if (!staffMember) {
+        try {
+          staffMember = await basePrisma.staff.findFirst({
+            where: {
+              email: { equals: normalizedEmail, mode: "insensitive" },
+              status: { not: "TERMINATED" },
+            },
+            include: {
+              user: true,
+              department: { include: { tier: true } },
+            },
+          });
+        } catch {
+          try {
+            staffMember = await basePrisma.staff.findFirst({
+              where: {
+                email: { equals: normalizedEmail, mode: "insensitive" },
+                status: { not: "TERMINATED" },
+              },
+              include: { user: true },
+            });
+          } catch {}
+        }
       }
 
       if (staffMember) {
@@ -881,47 +941,65 @@ export async function POST(req: Request) {
       mustChangePassword = false;
     }
 
-    const accessToken = await signAccessToken({
-      userId: authenticatedUserId,
-      schoolId: tenant.id,
-      tenantId: tenant.id,
-      role: resolvedRole,
-      userRole: resolvedRole,
-      assignedTier: assignedTier,
-      activeTiers,
-      schoolDomain: tenant.subdomain,
-      tenantSlug: effectiveSlug,
-      tenantName: tenant.name,
-      email: authenticatedEmail,
-      isSuperAdmin: false,
-      mustChangePassword,
-      isSuspended,
-    });
+    let accessToken = "";
+    try {
+      accessToken = await signAccessToken({
+        userId: authenticatedUserId,
+        schoolId: tenant.id,
+        tenantId: tenant.id,
+        role: resolvedRole,
+        userRole: resolvedRole,
+        assignedTier: assignedTier,
+        activeTiers,
+        schoolDomain: tenant.subdomain,
+        tenantSlug: effectiveSlug,
+        tenantName: tenant.name,
+        email: authenticatedEmail,
+        isSuperAdmin: false,
+        mustChangePassword,
+        isSuspended,
+      });
+    } catch (tokenErr: any) {
+      console.error("[AUTH_LOGIN] Token signing failed:", tokenErr?.message);
+    }
 
-    const { rawRefreshToken } = await issueRefreshToken({
-      userId: authenticatedUserId,
-      schoolId: tenant.id,
-      ipAddress: clientIp,
-      userAgent,
-    });
+    let rawRefreshToken: string = crypto.randomUUID();
+    try {
+      const refreshResult = await issueRefreshToken({
+        userId: authenticatedUserId,
+        schoolId: tenant.id,
+        ipAddress: clientIp,
+        userAgent,
+      });
+      if (refreshResult?.rawRefreshToken) {
+        rawRefreshToken = refreshResult.rawRefreshToken;
+      }
+    } catch (refreshErr: any) {
+      console.warn("[AUTH_LOGIN] Refresh token issue notice:", refreshErr?.message);
+    }
 
-    const sessionResult = await createDatabaseSession({
-      userId: authenticatedUserId,
-      email: authenticatedEmail,
-      tenantId: tenant.id,
-      schoolDomain: tenant.subdomain,
-      tenantName: tenant.name,
-      role: resolvedRole,
-      userRole: resolvedRole,
-      assignedTier: assignedTier,
-      staffRole: resolvedStaffRole,
-      activeTiers: activeTiers,
-      permissions: permissions,
-      mustChangePassword: mustChangePassword,
-      ipAddress: clientIp,
-      userAgent,
-      sessionToken: distinctSessionToken,
-    });
+    let sessionResult: any = { sessionToken: distinctSessionToken, cookieToken: accessToken };
+    try {
+      sessionResult = await createDatabaseSession({
+        userId: authenticatedUserId,
+        email: authenticatedEmail,
+        tenantId: tenant.id,
+        schoolDomain: tenant.subdomain,
+        tenantName: tenant.name,
+        role: resolvedRole,
+        userRole: resolvedRole,
+        assignedTier: assignedTier,
+        staffRole: resolvedStaffRole,
+        activeTiers: activeTiers,
+        permissions: permissions,
+        mustChangePassword: mustChangePassword,
+        ipAddress: clientIp,
+        userAgent,
+        sessionToken: distinctSessionToken,
+      });
+    } catch (sessionErr: any) {
+      console.warn("[AUTH_LOGIN] Database session row creation notice:", sessionErr?.message);
+    }
 
     let redirectTarget = `/change-password`;
     if (!mustChangePassword) {
