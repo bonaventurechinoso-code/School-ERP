@@ -451,7 +451,7 @@ export async function ensureTenantAdmissionTracks(tenantId: string) {
   if (school?.academicTiers && school.academicTiers.length > 0) {
     for (const t of school.academicTiers) {
       const lower = t.name.toLowerCase();
-      if (lower.includes("nursery") || lower.includes("creche") || lower.includes("creche") || lower.includes("early")) {
+      if (lower.includes("nursery") || lower.includes("creche") || lower.includes("daycare") || lower.includes("early")) {
         operatingTiers.add(AdmissionTierType.NURSERY);
       }
       if (lower.includes("primary") || lower.includes("basic") || lower.includes("elementary")) {
@@ -463,6 +463,19 @@ export async function ensureTenantAdmissionTracks(tenantId: string) {
       if (lower.includes("university") || lower.includes("polytechnic") || lower.includes("tertiary") || lower.includes("undergraduate") || lower.includes("education")) {
         operatingTiers.add(AdmissionTierType.TERTIARY);
       }
+    }
+  }
+
+  if (school?.tier) {
+    const st = String(school.tier).toUpperCase();
+    if (st === "CRECHE" || st.includes("CRECHE") || st.includes("NURSERY") || st.includes("DAYCARE")) {
+      operatingTiers.add(AdmissionTierType.NURSERY);
+    } else if (st === "PRIMARY" || st.includes("PRIMARY")) {
+      operatingTiers.add(AdmissionTierType.PRIMARY);
+    } else if (st === "SECONDARY" || st.includes("SECONDARY")) {
+      operatingTiers.add(AdmissionTierType.SECONDARY);
+    } else if (st === "TERTIARY" || st.includes("TERTIARY")) {
+      operatingTiers.add(AdmissionTierType.TERTIARY);
     }
   }
 

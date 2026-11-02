@@ -127,6 +127,15 @@ export const COMBINED_ALLOWED_CLASSES = [
   "SSS 3",
 ];
 
+export const TERTIARY_ALLOWED_CLASSES = [
+  "100 Level",
+  "200 Level",
+  "300 Level",
+  "400 Level",
+  "500 Level",
+  "Postgraduate",
+];
+
 /**
  * Returns the authoritative class levels allowed for a school tier.
  * Primary tier school = Nursery 1, Nursery 2, Primary 1-6 (8 items max).
@@ -163,6 +172,17 @@ export function getAllowedLevelsByTier(tier?: string | null): string[] {
     (normalized.includes("PRIMARY") && normalized.includes("SECONDARY"))
   ) {
     return COMBINED_ALLOWED_CLASSES;
+  }
+
+  if (
+    normalized === "TERTIARY" ||
+    normalized.includes("TERTIARY") ||
+    normalized.includes("UNIVERSITY") ||
+    normalized.includes("POLYTECHNIC") ||
+    normalized.includes("COLLEGE") ||
+    normalized.includes("HIGHER")
+  ) {
+    return TERTIARY_ALLOWED_CLASSES;
   }
 
   // Default: PRIMARY tier school = allowed class levels = NURSERY + PRIMARY (8 items max)

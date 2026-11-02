@@ -77,6 +77,8 @@ export async function resolveTenant(schoolCode: string) {
           { subdomain: { equals: normalizedCode, mode: "insensitive" } },
           { slug: { equals: normalizedCode, mode: "insensitive" } },
           { id: normalizedCode },
+          ...(normalizedCode === "sandbox" ? [{ subdomain: { equals: "trial-sandbox", mode: "insensitive" as const } }, { slug: { equals: "trial-sandbox", mode: "insensitive" as const } }] : []),
+          ...(normalizedCode === "trial-sandbox" ? [{ subdomain: { equals: "sandbox", mode: "insensitive" as const } }, { slug: { equals: "sandbox", mode: "insensitive" as const } }] : []),
         ],
         deletedAt: null,
       },

@@ -62,21 +62,56 @@ async function initSuperAdmin() {
 
     // Ensure Egede Admin is seeded/healed with Password123#
     try {
-      const egedeSchool = await prisma.school.findFirst({
-        where: { OR: [{ subdomain: 'egede' }, { slug: 'egede' }] },
+      let egedeSchool = await prisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: 'egede', mode: 'insensitive' } },
+            { slug: { equals: 'egede', mode: 'insensitive' } },
+            { name: { contains: 'egede', mode: 'insensitive' } },
+          ],
+        },
       });
-      if (egedeSchool) {
-        const egedeHash = await bcrypt.hash('Password123#', 10);
-        await prisma.user.upsert({
-          where: { email: 'chinonsomabia8@gmail.com' },
-          update: {
+
+      if (!egedeSchool) {
+        egedeSchool = await prisma.school.create({
+          data: {
+            name: 'Egede Primary School',
+            subdomain: 'egede',
+            slug: 'egede',
+            tier: 'PRIMARY',
+            status: 'ACTIVE',
+            isActive: true,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Created Egede Primary School:', egedeSchool.id);
+      } else {
+        await prisma.school.update({
+          where: { id: egedeSchool.id },
+          data: { tier: 'PRIMARY', status: 'ACTIVE', isActive: true, deletedAt: null },
+        });
+      }
+
+      const egedeHash = await bcrypt.hash('Password123#', 10);
+      const existingEgedeUser = await prisma.user.findFirst({
+        where: { email: { equals: 'chinonsomabia8@gmail.com', mode: 'insensitive' } },
+      });
+
+      if (existingEgedeUser) {
+        await prisma.user.update({
+          where: { id: existingEgedeUser.id },
+          data: {
+            email: 'chinonsomabia8@gmail.com',
             schoolId: egedeSchool.id,
             passwordHash: egedeHash,
             status: 'ACTIVE',
             role: 'SCHOOL_ADMIN',
             mustChangePassword: false,
           },
-          create: {
+        });
+        console.log('[INIT_SUPERADMIN] Egede Admin (chinonsomabia8@gmail.com) verified and synchronized.');
+      } else {
+        await prisma.user.create({
+          data: {
             email: 'chinonsomabia8@gmail.com',
             firstName: 'Egede',
             lastName: 'Admin',
@@ -87,20 +122,155 @@ async function initSuperAdmin() {
             mustChangePassword: false,
           },
         });
-        console.log('[INIT_SUPERADMIN] Egede Admin (chinonsomabia8@gmail.com) verified and synchronized.');
+        console.log('[INIT_SUPERADMIN] Egede Admin (chinonsomabia8@gmail.com) created and initialized.');
       }
     } catch (egedeErr) {
       console.warn('[INIT_SUPERADMIN] Egede sync notice:', egedeErr.message);
     }
 
-    // Auto-heal any user records that have blank or missing passwordHash
+    // Ensure Demo School and Headmaster are seeded/healed with Password123
+    try {
+      let demoSchool = await prisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: 'demo', mode: 'insensitive' } },
+            { slug: { equals: 'demo', mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (!demoSchool) {
+        demoSchool = await prisma.school.create({
+          data: {
+            name: 'Demo School',
+            subdomain: 'demo',
+            slug: 'demo',
+            tier: 'TERTIARY',
+            status: 'ACTIVE',
+            isActive: true,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Created Demo School:', demoSchool.id);
+      } else {
+        await prisma.school.update({
+          where: { id: demoSchool.id },
+          data: { status: 'ACTIVE', isActive: true, deletedAt: null },
+        });
+      }
+
+      const demoHash = await bcrypt.hash('Password123', 10);
+      const existingDemoUser = await prisma.user.findFirst({
+        where: {
+          email: { equals: 'headmaster@demo.edu.ng', mode: 'insensitive' },
+        },
+      });
+
+      if (existingDemoUser) {
+        await prisma.user.update({
+          where: { id: existingDemoUser.id },
+          data: {
+            schoolId: demoSchool.id,
+            passwordHash: demoHash,
+            status: 'ACTIVE',
+            role: 'PRINCIPAL',
+            mustChangePassword: false,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) synchronized.');
+      } else {
+        await prisma.user.create({
+          data: {
+            email: 'headmaster@demo.edu.ng',
+            firstName: 'Demo',
+            lastName: 'Headmaster',
+            passwordHash: demoHash,
+            role: 'PRINCIPAL',
+            schoolId: demoSchool.id,
+            status: 'ACTIVE',
+            mustChangePassword: false,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) created.');
+      }
+    } catch (demoErr) {
+      console.warn('[INIT_SUPERADMIN] Demo sync notice:', demoErr.message);
+    }
+
+    // Ensure Sandbox / Trial-Sandbox School and Principal are seeded/healed with Password123
+    try {
+      let sandboxSchool = await prisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: 'sandbox', mode: 'insensitive' } },
+            { slug: { equals: 'sandbox', mode: 'insensitive' } },
+            { subdomain: { equals: 'trial-sandbox', mode: 'insensitive' } },
+            { slug: { equals: 'trial-sandbox', mode: 'insensitive' } },
+            { name: { contains: 'sandbox', mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (!sandboxSchool) {
+        sandboxSchool = await prisma.school.create({
+          data: {
+            name: 'Trial Sandbox Academy',
+            subdomain: 'sandbox',
+            slug: 'sandbox',
+            tier: 'TERTIARY',
+            status: 'ACTIVE',
+            isActive: true,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Created Sandbox School:', sandboxSchool.id);
+      } else {
+        await prisma.school.update({
+          where: { id: sandboxSchool.id },
+          data: { status: 'ACTIVE', isActive: true, deletedAt: null },
+        });
+      }
+
+      const sandboxHash = await bcrypt.hash('Password123', 10);
+      const existingSandboxUser = await prisma.user.findFirst({
+        where: { email: { equals: 'principal@sandbox.edu.ng', mode: 'insensitive' } },
+      });
+
+      if (existingSandboxUser) {
+        await prisma.user.update({
+          where: { id: existingSandboxUser.id },
+          data: {
+            email: 'principal@sandbox.edu.ng',
+            schoolId: sandboxSchool.id,
+            passwordHash: sandboxHash,
+            status: 'ACTIVE',
+            role: 'PRINCIPAL',
+            mustChangePassword: false,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Sandbox Principal (principal@sandbox.edu.ng) synchronized.');
+      } else {
+        await prisma.user.create({
+          data: {
+            email: 'principal@sandbox.edu.ng',
+            firstName: 'Sandbox',
+            lastName: 'Principal',
+            passwordHash: sandboxHash,
+            role: 'PRINCIPAL',
+            schoolId: sandboxSchool.id,
+            status: 'ACTIVE',
+            mustChangePassword: false,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Sandbox Principal (principal@sandbox.edu.ng) created.');
+      }
+    } catch (sandboxErr) {
+      console.warn('[INIT_SUPERADMIN] Sandbox sync notice:', sandboxErr.message);
+    }
+
+    // Auto-heal any user records that have blank passwordHash
     try {
       const brokenUsers = await prisma.user.findMany({
         where: {
-          OR: [
-            { passwordHash: '' },
-            { passwordHash: null },
-          ],
+          passwordHash: '',
         },
       });
       if (brokenUsers.length > 0) {

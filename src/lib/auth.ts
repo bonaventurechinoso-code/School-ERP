@@ -176,8 +176,16 @@ export function validateTenantSessionMatch(
   const sessionDomain = (session.schoolDomain || "").trim().toLowerCase();
   const sessionTenantId = (session.tenantId || "").trim();
 
-  // Standard user must match target tenant domain or tenant ID exactly
-  if (sessionDomain === target || sessionTenantId === targetDomainOrSlug.trim()) {
+  const sessionSlug = (((session as any).tenantSlug || "") as string).trim().toLowerCase();
+  const isMatch =
+    sessionDomain === target ||
+    sessionTenantId === targetDomainOrSlug.trim() ||
+    sessionTenantId.toLowerCase() === target ||
+    (sessionSlug && sessionSlug === target) ||
+    (target === "sandbox" && (sessionDomain === "trial-sandbox" || sessionSlug === "trial-sandbox")) ||
+    (target === "trial-sandbox" && (sessionDomain === "sandbox" || sessionSlug === "sandbox"));
+
+  if (isMatch) {
     return { allowed: true, isSuperAdmin: false };
   }
 

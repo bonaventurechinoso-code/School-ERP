@@ -16,6 +16,7 @@ export function sanitizeTierSlug(tierName: string): string {
   if (upper.includes("UNIVERSITY")) return "university";
   if (upper.includes("POLYTECHNIC")) return "polytechnic";
   if (upper.includes("COLLEGE")) return "college_education";
+  if (upper.includes("TERTIARY")) return "tertiary";
   
   // Fallback: clean alphanumeric
   return tierName.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_").slice(0, 20);
@@ -58,6 +59,9 @@ export function formatTierBadgeCode(tierName?: string): string {
   }
   if (upper.includes("COLLEGE")) {
     return "COLLEGE";
+  }
+  if (upper.includes("TERTIARY")) {
+    return "TERTIARY";
   }
   
   return tierName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12) || "PRIMARY";
@@ -262,6 +266,9 @@ export function mapTierTokenToTierName(tierToken?: string | null): string | null
   }
   if (t === "COL" || t === "NCE" || t === "COLLEGE") {
     return "College";
+  }
+  if (t === "TER" || t === "TERTIARY") {
+    return "Higher Institution";
   }
   return null;
 }
