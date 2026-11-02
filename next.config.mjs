@@ -2,6 +2,7 @@
 const nextConfig = {
   serverExternalPackages: ['pdfkit'],
   experimental: {
+    isrMemoryCacheSize: 0,
     serverActions: {
       bodySizeLimit: '10mb',
     },

@@ -100,8 +100,8 @@ async function verifyMustChangePassword() {
 
   // Test 4: Login Endpoint returning mustChangePassword = true and redirectUrl = /change-password
   console.log("\n4. Testing POST /api/auth/login with newly created user:");
-  const { POST: loginPOST } = await import("../src/app/api/auth/login/route");
-  const loginReq = new Request("http://localhost:3000/api/auth/login", {
+  const { POST: loginPOST } = await import("../src/app/api/v1/auth/login/route");
+  const loginReq = new Request("http://localhost:3000/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
