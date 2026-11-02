@@ -249,18 +249,31 @@ export async function validateDatabaseSession(
       (dbSession.schoolDomain || (payload as any).schoolDomain || "").toLowerCase() === "demo";
     let mustChangePassword = !isDemoTenantSession && Boolean(payload.mustChangePassword);
     if (!isDemoTenantSession) {
-      const userRow = await basePrisma.user.findFirst({
-        where: {
-          OR: [
-            { id: dbSession.userId },
-            { staff: { id: dbSession.userId } },
-            { student: { id: dbSession.userId } },
-          ],
-        },
-        select: { mustChangePassword: true },
-      });
-      if (userRow) {
-        mustChangePassword = Boolean(userRow.mustChangePassword);
+      try {
+        const userRow = await basePrisma.user.findFirst({
+          where: {
+            OR: [
+              { id: dbSession.userId },
+              { staff: { id: dbSession.userId } },
+              { student: { id: dbSession.userId } },
+            ],
+          },
+          select: { mustChangePassword: true },
+        });
+        if (userRow) {
+          mustChangePassword = Boolean(userRow.mustChangePassword);
+        }
+      } catch (userRowErr) {
+        // Fallback to base user query without relations if nested query fails due to hard deletes
+        try {
+          const fallbackUser = await basePrisma.user.findUnique({
+            where: { id: dbSession.userId },
+            select: { mustChangePassword: true },
+          });
+          if (fallbackUser) {
+            mustChangePassword = Boolean(fallbackUser.mustChangePassword);
+          }
+        } catch {}
       }
     }
 

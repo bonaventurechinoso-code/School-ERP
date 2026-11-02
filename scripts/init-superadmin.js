@@ -60,6 +60,63 @@ async function initSuperAdmin() {
       console.log('[INIT_SUPERADMIN] Super Admin account verified and up-to-date.');
     }
 
+    // Ensure Egede Admin is seeded/healed with Password123#
+    try {
+      const egedeSchool = await prisma.school.findFirst({
+        where: { OR: [{ subdomain: 'egede' }, { slug: 'egede' }] },
+      });
+      if (egedeSchool) {
+        const egedeHash = await bcrypt.hash('Password123#', 10);
+        await prisma.user.upsert({
+          where: { email: 'chinonsomabia8@gmail.com' },
+          update: {
+            schoolId: egedeSchool.id,
+            passwordHash: egedeHash,
+            status: 'ACTIVE',
+            role: 'SCHOOL_ADMIN',
+            mustChangePassword: false,
+          },
+          create: {
+            email: 'chinonsomabia8@gmail.com',
+            firstName: 'Egede',
+            lastName: 'Admin',
+            passwordHash: egedeHash,
+            role: 'SCHOOL_ADMIN',
+            schoolId: egedeSchool.id,
+            status: 'ACTIVE',
+            mustChangePassword: false,
+          },
+        });
+        console.log('[INIT_SUPERADMIN] Egede Admin (chinonsomabia8@gmail.com) verified and synchronized.');
+      }
+    } catch (egedeErr) {
+      console.warn('[INIT_SUPERADMIN] Egede sync notice:', egedeErr.message);
+    }
+
+    // Auto-heal any user records that have blank or missing passwordHash
+    try {
+      const brokenUsers = await prisma.user.findMany({
+        where: {
+          OR: [
+            { passwordHash: '' },
+            { passwordHash: null },
+          ],
+        },
+      });
+      if (brokenUsers.length > 0) {
+        const defaultHash = await bcrypt.hash('Password123#', 10);
+        for (const u of brokenUsers) {
+          await prisma.user.update({
+            where: { id: u.id },
+            data: { passwordHash: defaultHash, status: 'ACTIVE' },
+          });
+          console.log(`[INIT_SUPERADMIN] Auto-healed blank passwordHash for user: ${u.email}`);
+        }
+      }
+    } catch (healErr) {
+      console.warn('[INIT_SUPERADMIN] Auto-heal notice:', healErr.message);
+    }
+
     console.log('[INIT_SUPERADMIN] Ensuring payment_receipts table exists...');
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "payment_receipts" (
