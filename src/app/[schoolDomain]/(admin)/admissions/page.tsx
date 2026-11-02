@@ -115,6 +115,99 @@ export default async function AdmissionsPage({
   }
 
   // 3. Query Admissions Applications scoped to tenant
+  // Auto-reconcile / backfill any pending AdmissionLead or AdmissionRegister records into AdmissionsApplication
+  try {
+    const existingApps = await basePrisma.admissionsApplication.findMany({
+      where: { schoolId: school.id },
+      select: { applicationNumber: true, id: true },
+    });
+    const knownAppNos = new Set(existingApps.map((a) => a.applicationNumber));
+
+    const pendingRegisters = await basePrisma.admissionRegister.findMany({
+      where: { tenantId: school.id },
+      take: 50,
+    });
+
+    for (const reg of pendingRegisters) {
+      if (!knownAppNos.has(reg.applicationNo)) {
+        const currentYear = new Date().getFullYear();
+        await basePrisma.admissionsApplication.create({
+          data: {
+            tenantId: school.id,
+            schoolId: school.id,
+            academicSessionId: currentYear + "/" + (currentYear + 1),
+            programId: reg.classApplied || "Class 1",
+            applicationNumber: reg.applicationNo,
+            intakeChannel: "ONLINE_PORTAL",
+            firstName: reg.firstName,
+            lastName: reg.lastName,
+            email: reg.email || (reg.applicationNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+            phoneNumber: reg.parentPhone || "N/A",
+            whatsappNumber: reg.parentPhone || null,
+            dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
+            gender: "Unspecified",
+            status: "PAYMENT_PENDING",
+            tierSpecificData: {
+              targetGrade: reg.classApplied,
+              targetClass: reg.classApplied,
+              parentPhone: reg.parentPhone,
+              registerId: reg.id,
+            },
+          },
+        }).catch(() => null);
+        knownAppNos.add(reg.applicationNo);
+      }
+    }
+
+    const pendingLeads = await basePrisma.admissionLead.findMany({
+      where: { schoolId: school.id },
+      take: 50,
+    });
+
+    for (const lead of pendingLeads) {
+      const generatedAppNo = (lead as any).applicationNo || ("APP-" + lead.id.slice(0, 6).toUpperCase());
+      if (!knownAppNos.has(generatedAppNo)) {
+        const nameParts = (lead.applicantName || "Student").trim().split(" ");
+        const firstName = nameParts[0] || "Student";
+        const lastName = nameParts.slice(1).join(" ") || "Applicant";
+        const currentYear = new Date().getFullYear();
+
+        await basePrisma.admissionsApplication.create({
+          data: {
+            tenantId: school.id,
+            schoolId: school.id,
+            academicSessionId: currentYear + "/" + (currentYear + 1),
+            programId: lead.targetGrade || "Class 1",
+            applicationNumber: generatedAppNo,
+            intakeChannel: "ONLINE_PORTAL",
+            firstName,
+            lastName,
+            email: lead.studentEmail || lead.parentEmail || (generatedAppNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+            phoneNumber: lead.parentPhone || lead.parentContact || "N/A",
+            whatsappNumber: lead.parentPhone || lead.parentContact || null,
+            dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
+            gender: "Unspecified",
+            status: "PAYMENT_PENDING",
+            tierSpecificData: {
+              targetGrade: lead.targetGrade,
+              targetClass: lead.targetGrade,
+              parentName: lead.parentName,
+              parentPhone: lead.parentPhone || lead.parentContact,
+              leadId: lead.id,
+            },
+            metadata: {
+              leadId: lead.id,
+              uploadToken: (lead as any).uploadToken,
+            },
+          },
+        }).catch(() => null);
+        knownAppNos.add(generatedAppNo);
+      }
+    }
+  } catch (reconcileErr) {
+    console.warn("[ADMISSIONS] Notice during auto-reconciliation:", reconcileErr);
+  }
+
   // Wrap auditTrails include in try/catch - if table missing, fallback to empty array
   let rawApplications: any[] = [];
   try {

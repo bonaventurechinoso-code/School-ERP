@@ -27,6 +27,7 @@ const PUBLIC_ROOT_PATHS = new Set([
 const PUBLIC_TENANT_ACTIONS = new Set([
   "login",
   "apply",
+  "track",
   "forgot-password",
   "reset-password",
 ]);
@@ -126,7 +127,32 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
   // 4. Public API routes
   if (firstSegment === "api") {
     const apiPath = "/" + segments.join("/");
-    // Allow applicant /auth/session or /admissions/* when request includes an applicant/upload token
+    // Allow public admissions and upload endpoints
+    if (
+      apiPath.startsWith("/api/v1/admissions/upload") ||
+      apiPath.startsWith("/api/admissions/upload") ||
+      apiPath.startsWith("/api/v1/admissions/public-submit") ||
+      apiPath.startsWith("/api/admissions/public-submit") ||
+      apiPath.startsWith("/api/v1/payments/receipt/upload") ||
+      apiPath.startsWith("/api/v1/payments/settings") ||
+      apiPath.startsWith("/api/v1/payments/access-check") ||
+      apiPath.startsWith("/api/uploads") ||
+      apiPath.startsWith("/api/auth") ||
+      apiPath.startsWith("/api/v1/auth/login") ||
+      apiPath.startsWith("/api/v1/auth/forgot-password") ||
+      apiPath.startsWith("/api/v1/auth/reset-password") ||
+      apiPath.startsWith("/api/v1/auth/verify-reset-token") ||
+      apiPath.startsWith("/api/schools") ||
+      apiPath.startsWith("/api/tenants/register") ||
+      apiPath.startsWith("/api/ssl") ||
+      apiPath.startsWith("/api/wallet/webhook") ||
+      apiPath.startsWith("/api/trial") ||
+      apiPath.startsWith("/api/trials") ||
+      apiPath.startsWith("/api/v1/health")
+    ) {
+      return true;
+    }
+    // Allow applicant /auth/session or /admissions/* when request includes an applicant/upload token or guest session
     if (
       req &&
       (apiPath === "/api/v1/auth/session" ||
@@ -136,29 +162,9 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
       Boolean(
         req.nextUrl.searchParams.get("token") ||
         req.headers.get("x-applicant-token") ||
-        req.headers.get("x-upload-token")
+        req.headers.get("x-upload-token") ||
+        req.cookies.get("guest_session")
       )
-    ) {
-      return true;
-    }
-    if (
-      apiPath.startsWith("/api/uploads") ||
-      apiPath.startsWith("/api/auth") ||
-      apiPath.startsWith("/api/v1/auth/login") ||
-      apiPath.startsWith("/api/v1/auth/forgot-password") ||
-      apiPath.startsWith("/api/v1/auth/reset-password") ||
-      apiPath.startsWith("/api/v1/auth/verify-reset-token") ||
-      apiPath.startsWith("/api/v1/admissions/public-submit") ||
-      apiPath.startsWith("/api/v1/payments/receipt/upload") ||
-      apiPath.startsWith("/api/v1/payments/settings") ||
-      apiPath.startsWith("/api/v1/payments/access-check") ||
-      apiPath.startsWith("/api/schools") ||
-      apiPath.startsWith("/api/tenants/register") ||
-      apiPath.startsWith("/api/ssl") ||
-      apiPath.startsWith("/api/wallet/webhook") ||
-      apiPath.startsWith("/api/trial") ||
-      apiPath.startsWith("/api/trials") ||
-      apiPath.startsWith("/api/v1/health")
     ) {
       return true;
     }
@@ -177,9 +183,19 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
     if (PUBLIC_TENANT_ACTIONS.has(secondSegment)) {
       return true;
     }
-    // Public applicant upload: /{schoolDomain}/admissions/upload/...
-    if (secondSegment === "admissions" && segments.length >= 3 && segments[2].toLowerCase() === "upload") {
-      return true;
+    // Public applicant admission portal sub-paths: /{schoolDomain}/admissions/{upload|track|apply|offer|admit-slip}/...
+    if (secondSegment === "admissions" && segments.length >= 3) {
+      const thirdSegment = segments[2].toLowerCase();
+      if (["upload", "track", "apply", "offer", "admit-slip", "status"].includes(thirdSegment)) {
+        return true;
+      }
+    }
+    // Public applications tracking: /{schoolDomain}/applications/{track|apply|upload}/...
+    if (secondSegment === "applications" && segments.length >= 3) {
+      const thirdSegment = segments[2].toLowerCase();
+      if (["track", "apply", "upload"].includes(thirdSegment)) {
+        return true;
+      }
     }
     // All other tenant sub-paths (dashboard, students, staff, finance, etc.) are protected!
     return false;

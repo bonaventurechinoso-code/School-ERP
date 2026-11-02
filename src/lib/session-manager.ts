@@ -185,10 +185,37 @@ export async function validateDatabaseSession(
       (payload.sessionId as string) ||
       (payload.jti as string) ||
       (payload.token as string) ||
-      (payload.id as string);
+      (payload.id as string) ||
+      (payload.userId as string) ||
+      token;
 
     if (!sessionTokenId) {
       return null;
+    }
+
+    // Fast-path for guest applicant tokens (signed JWTs without a staff database session row)
+    const guestPayload = payload as any;
+    if (guestPayload.isGuestApplicant || guestPayload.role === "GUEST_APPLICANT" || guestPayload.role === "GUEST") {
+      return {
+        userId: (guestPayload.userId as string) || (guestPayload.id as string) || sessionTokenId,
+        email: guestPayload.email as string,
+        tenantId: (guestPayload.tenantId as string) || (guestPayload.schoolId as string) || null,
+        schoolDomain: (guestPayload.schoolDomain as string) || "default",
+        tenantName: guestPayload.tenantName as string,
+        role: "GUEST_APPLICANT" as any,
+        userRole: "GUEST_APPLICANT",
+        assignedTier: (guestPayload.assignedTier as string) || (guestPayload.activeTiers?.[0] as string) || null,
+        staffRole: "GUEST_APPLICANT",
+        activeTiers: (guestPayload.activeTiers as string[]) || [],
+        permissions: (guestPayload.permissions as string[]) || ["admissions:upload"],
+        sessionToken: sessionTokenId,
+        sessionId: sessionTokenId,
+        token: token,
+        dbSessionId: sessionTokenId,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        mustChangePassword: false,
+        forceChangePassword: false,
+      };
     }
 
     // 2. Query the active database session record by sessionToken or id
@@ -210,26 +237,26 @@ export async function validateDatabaseSession(
       // Cryptographic signature has already been verified above with SECRET_KEY.
       // Fallback to verified JWT claims so missing session rows or DB hiccups don't cause 401s.
       const anyPayload = payload as any;
-      const effectiveRole = (anyPayload.userRole as string) || (anyPayload.role as string) || "STAFF";
+      const effectiveRole = (guestPayload.userRole as string) || (guestPayload.role as string) || "STAFF";
       return {
-        userId: (anyPayload.userId as string) || (anyPayload.id as string),
-        email: anyPayload.email as string,
-        tenantId: (anyPayload.tenantId as string) || (anyPayload.schoolId as string) || null,
-        schoolDomain: (anyPayload.schoolDomain as string) || "admin",
-        tenantName: anyPayload.tenantName as string,
-        role: (anyPayload.role as UserRole) || effectiveRole,
+        userId: (guestPayload.userId as string) || (guestPayload.id as string),
+        email: guestPayload.email as string,
+        tenantId: (guestPayload.tenantId as string) || (guestPayload.schoolId as string) || null,
+        schoolDomain: (guestPayload.schoolDomain as string) || "admin",
+        tenantName: guestPayload.tenantName as string,
+        role: (guestPayload.role as UserRole) || effectiveRole,
         userRole: effectiveRole,
-        assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
-        staffRole: anyPayload.staffRole as string,
-        activeTiers: (anyPayload.activeTiers as string[]) || [],
-        permissions: (anyPayload.permissions as string[]) || [],
+        assignedTier: (guestPayload.assignedTier as string) || (guestPayload.activeTiers?.[0] as string) || null,
+        staffRole: guestPayload.staffRole as string,
+        activeTiers: (guestPayload.activeTiers as string[]) || [],
+        permissions: (guestPayload.permissions as string[]) || [],
         sessionToken: sessionTokenId,
         sessionId: sessionTokenId,
         token: token,
         dbSessionId: sessionTokenId,
         expiresAt: new Date(Date.now() + SESSION_MAX_AGE_MS),
-        mustChangePassword: Boolean(anyPayload.mustChangePassword),
-        forceChangePassword: Boolean(anyPayload.mustChangePassword),
+        mustChangePassword: Boolean(guestPayload.mustChangePassword),
+        forceChangePassword: Boolean(guestPayload.mustChangePassword),
       };
     }
 
@@ -325,16 +352,16 @@ export async function validateDatabaseSession(
     const anyPayload = payload as any;
     return {
       userId: dbSession.userId,
-      email: dbSession.email || (anyPayload.email as string),
-      tenantId: dbSession.tenantId || (anyPayload.tenantId as string) || null,
-      schoolDomain: dbSession.schoolDomain || (anyPayload.schoolDomain as string) || "admin",
-      tenantName: (anyPayload.tenantName as string) || undefined,
+      email: dbSession.email || (guestPayload.email as string),
+      tenantId: dbSession.tenantId || (guestPayload.tenantId as string) || null,
+      schoolDomain: dbSession.schoolDomain || (guestPayload.schoolDomain as string) || "admin",
+      tenantName: (guestPayload.tenantName as string) || undefined,
       role: dbSession.role as UserRole | string,
-      userRole: (anyPayload.userRole as string) || (dbSession.role as string),
-      assignedTier: (anyPayload.assignedTier as string) || (anyPayload.activeTiers?.[0] as string) || null,
-      staffRole: dbSession.staffRole || (anyPayload.staffRole as string) || undefined,
-      activeTiers: (anyPayload.activeTiers as string[]) || [],
-      permissions: (anyPayload.permissions as string[]) || [],
+      userRole: (guestPayload.userRole as string) || (dbSession.role as string),
+      assignedTier: (guestPayload.assignedTier as string) || (guestPayload.activeTiers?.[0] as string) || null,
+      staffRole: dbSession.staffRole || (guestPayload.staffRole as string) || undefined,
+      activeTiers: (guestPayload.activeTiers as string[]) || [],
+      permissions: (guestPayload.permissions as string[]) || [],
       sessionToken: dbSession.sessionToken,
       sessionId: dbSession.sessionToken,
       token: token,

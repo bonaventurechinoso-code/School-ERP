@@ -249,9 +249,68 @@ export async function POST(request: NextRequest) {
     });
 
     const appNo = transitionResult.registerRecord.applicationNo;
+    const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();
+
+    // 2b. Synchronize with AdmissionsApplication pipeline for Admin Workspace visibility
+    let admissionsApp: any = null;
+    try {
+      const defaultDob = data.dateOfBirth
+        ? new Date(data.dateOfBirth)
+        : new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000);
+      const currentYear = new Date().getFullYear();
+      const currentAcademicSession = currentYear + "/" + (currentYear + 1);
+
+      admissionsApp = await basePrisma.admissionsApplication.upsert({
+        where: { applicationNumber: appNo },
+        create: {
+          tenantId: school.id,
+          schoolId: school.id,
+          academicSessionId: currentAcademicSession,
+          programId: effectiveTargetGrade || "Class 1",
+          applicationNumber: appNo,
+          intakeChannel: "ONLINE_PORTAL",
+          firstName,
+          lastName,
+          email: accountEmail || (appNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+          phoneNumber: parentContact || studentPhone || "N/A",
+          whatsappNumber: parentContact || studentPhone || null,
+          dateOfBirth: defaultDob,
+          gender: data.gender || "Unspecified",
+          status: "PAYMENT_PENDING",
+          tierSpecificData: {
+            targetGrade: effectiveTargetGrade,
+            targetClass: effectiveTargetGrade,
+            academicTier: finalTierName,
+            parentName: parentName || "Parent / Guardian",
+            parentPhone: parentContact || studentPhone || "N/A",
+            leadId: newLead.id,
+          },
+          metadata: {
+            leadId: newLead.id,
+            registerId: transitionResult.registerRecord?.id,
+            uploadToken,
+          },
+        },
+        update: {
+          programId: effectiveTargetGrade || "Class 1",
+          email: accountEmail || undefined,
+          phoneNumber: parentContact || studentPhone || undefined,
+          tierSpecificData: {
+            targetGrade: effectiveTargetGrade,
+            targetClass: effectiveTargetGrade,
+            academicTier: finalTierName,
+            parentName: parentName || "Parent / Guardian",
+            parentPhone: parentContact || studentPhone || "N/A",
+            leadId: newLead.id,
+          },
+        },
+      });
+      console.log("[PUBLIC_SUBMIT] Synchronized AdmissionsApplication record:", admissionsApp.id, admissionsApp.applicationNumber);
+    } catch (appErr: any) {
+      console.error("[PUBLIC_SUBMIT] Error creating AdmissionsApplication:", appErr);
+    }
 
     // Provision or sync Student portal user record
-    const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();
     if (accountEmail) {
       try {
         let existingStudent = await tenantDb.student.findFirst({
@@ -361,12 +420,20 @@ export async function POST(request: NextRequest) {
     const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
     const secret = new TextEncoder().encode(jwtSecret);
     const guestExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const sessionTokenId = "guest_" + newLead.id + "_" + Date.now();
     const guestSessionToken = await new jose.SignJWT({
       userId: newLead.id,
+      id: newLead.id,
+      sessionToken: sessionTokenId,
+      sessionId: sessionTokenId,
+      jti: sessionTokenId,
+      applicationId: admissionsApp?.id || newLead.id,
+      applicationNumber: appNo,
       email: accountEmail || undefined,
       tenantId: school.id,
+      schoolId: school.id,
       schoolDomain: sub,
-      role: "GUEST",
+      role: "GUEST_APPLICANT",
       staffRole: "GUEST_APPLICANT",
       isGuestApplicant: true,
       mustChangePassword: false,

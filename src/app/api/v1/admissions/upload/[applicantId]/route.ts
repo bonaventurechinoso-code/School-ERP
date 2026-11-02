@@ -892,7 +892,7 @@ export async function POST(
             payerName: lead.applicantName,
             referenceNo: appNo,
             amount: 5000,
-            paymentMethod: "BANK_TRANSFER",
+            paymentMethod: "MANUAL_BANK_TRANSFER",
             fileUrl: currentDocs.applicationFeeReceiptUrl,
             fileName: currentDocs.applicationFeeReceipt?.fileName || "application_fee_receipt.jpg",
             status: "PENDING",
@@ -905,6 +905,152 @@ export async function POST(
       } catch (syncReceiptErr) {
         console.warn("[UPLOAD_ROUTE] Warning: Could not mirror receipt to PaymentReceipt:", syncReceiptErr);
       }
+    }
+
+    // 5d. Synchronize with AdmissionsApplication, AdmissionsDocument & AdmissionsFeeTransaction
+    let targetApp: any = null;
+    try {
+      const appNo = registerRecord?.applicationNo || (lead as any).applicationNo || ("APP-" + lead.id.slice(0, 6).toUpperCase());
+      const nameParts = (lead.applicantName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
+
+      targetApp = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          schoolId,
+          OR: [
+            { applicationNumber: appNo },
+            { id: applicantId },
+            ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+            ...(lead.parentPhone ? [{ phoneNumber: lead.parentPhone }] : []),
+          ],
+        },
+      });
+
+      if (!targetApp) {
+        const currentYear = new Date().getFullYear();
+        targetApp = await basePrisma.admissionsApplication.create({
+          data: {
+            tenantId: schoolId,
+            schoolId,
+            academicSessionId: currentYear + "/" + (currentYear + 1),
+            programId: lead.targetGrade || "Class 1",
+            applicationNumber: appNo,
+            intakeChannel: "ONLINE_PORTAL",
+            firstName,
+            lastName,
+            email: lead.studentEmail || lead.parentEmail || (appNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+            phoneNumber: lead.parentPhone || lead.parentContact || "N/A",
+            whatsappNumber: lead.parentPhone || lead.parentContact || null,
+            dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
+            gender: "Unspecified",
+            status: "PAYMENT_PENDING",
+            tierSpecificData: {
+              targetGrade: lead.targetGrade,
+              parentName: lead.parentName || "Parent / Guardian",
+              parentPhone: lead.parentPhone || lead.parentContact,
+              leadId: lead.id,
+            },
+            metadata: {
+              leadId: lead.id,
+              uploadToken: (lead as any).uploadToken,
+            },
+          },
+        });
+        console.log("[UPLOAD_ROUTE] Created AdmissionsApplication record:", targetApp.id, targetApp.applicationNumber);
+      }
+
+      if (targetApp) {
+        // Record fee transaction if receipt was uploaded
+        if (currentDocs.applicationFeeReceiptUrl) {
+          const existingTx = await basePrisma.admissionsFeeTransaction.findFirst({
+            where: { applicationId: targetApp.id },
+          });
+          if (existingTx) {
+            await basePrisma.admissionsFeeTransaction.update({
+              where: { id: existingTx.id },
+              data: {
+                proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
+                paymentStatus: "PENDING",
+                reconciliationNotes: "Proof re-uploaded by applicant. Depositor: " + (currentDocs.depositorName || targetApp.firstName),
+              },
+            });
+          } else {
+            await basePrisma.admissionsFeeTransaction.create({
+              data: {
+                tenantId: schoolId,
+                applicationId: targetApp.id,
+                paymentMethod: "MANUAL_BANK_TRANSFER",
+                amount: 5000,
+                currency: "NGN",
+                paymentReference: "FEE-" + targetApp.applicationNumber + "-" + Date.now().toString().slice(-4),
+                proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
+                paymentStatus: "PENDING",
+                reconciliationNotes: "Uploaded by applicant via portal. Depositor: " + (currentDocs.depositorName || targetApp.firstName),
+              },
+            });
+          }
+        }
+
+        // Record documents in AdmissionsDocument
+        const docMappings: Record<string, string> = {
+          passportPhoto: "PASSPORT_PHOTOGRAPH",
+          academicResults: "ACADEMIC_TRANSCRIPT",
+          birthCertificate: "BIRTH_CERTIFICATE",
+          medicalRecords: "MEDICAL_REPORT",
+        };
+
+        for (const [fieldKey, docTypeConst] of Object.entries(docMappings)) {
+          const docItem = currentDocs[fieldKey];
+          if (docItem && docItem.url) {
+            const existingDoc = await basePrisma.admissionsDocument.findFirst({
+              where: { applicationId: targetApp.id, documentType: docTypeConst },
+            });
+            if (existingDoc) {
+              await basePrisma.admissionsDocument.update({
+                where: { id: existingDoc.id },
+                data: {
+                  storageKey: docItem.url,
+                  verificationStatus: "PENDING",
+                },
+              });
+            } else {
+              await basePrisma.admissionsDocument.create({
+                data: {
+                  tenantId: schoolId,
+                  applicationId: targetApp.id,
+                  documentType: docTypeConst,
+                  storageKey: docItem.url,
+                  fileMimeType: docItem.mimeType || (docItem.url?.endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+                  fileSizeBytes: docItem.size || 1024,
+                  verificationStatus: "PENDING",
+                },
+              });
+            }
+          }
+        }
+
+        // Advance application stage if documents and/or fee receipt are present
+        const hasFee = Boolean(currentDocs.applicationFeeReceiptUrl);
+        const hasOtherDocs = Boolean(currentDocs.passportPhoto || currentDocs.academicResults || currentDocs.birthCertificate || currentDocs.medicalRecords);
+        let nextStatus = targetApp.status;
+        if (hasFee && hasOtherDocs) {
+          nextStatus = "UNDER_REVIEW";
+        } else if (hasOtherDocs) {
+          nextStatus = "SUBMITTED";
+        } else if (hasFee) {
+          nextStatus = "PAYMENT_PENDING";
+        }
+
+        if (nextStatus !== targetApp.status) {
+          await basePrisma.admissionsApplication.update({
+            where: { id: targetApp.id },
+            data: { status: nextStatus as any },
+          });
+        }
+      }
+    } catch (syncAppErr) {
+      console.warn("[UPLOAD_ROUTE] Warning: Could not mirror to admissionsApplication:", syncAppErr);
     }
 
     // 6. Cache Invalidation & Multi-Tier Path Revalidation
@@ -936,7 +1082,7 @@ export async function POST(
       currentDocs.applicationFeeReceipt?.url ||
       null;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: "Credentials uploaded successfully",
       receiptUrl: finalFeeReceiptUrl,
@@ -944,7 +1090,58 @@ export async function POST(
       documents: currentDocs,
       uploadedCount: uploadedFileList.length,
       lead: updatedLead,
+      applicationId: targetApp?.id || lead.id,
     }, { headers: corsHeaders });
+
+    // Refresh and persist guest applicant session cookie so uploading subsequent documents never logs out
+    try {
+      const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+      const secret = new TextEncoder().encode(jwtSecret);
+      const guestExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const sessionTokenId = "guest_" + lead.id + "_" + Date.now();
+      const appNo = registerRecord?.applicationNo || (lead as any).applicationNo || ("APP-" + lead.id.slice(0, 6).toUpperCase());
+      const guestSessionToken = await new jose.SignJWT({
+        userId: lead.id,
+        id: lead.id,
+        sessionToken: sessionTokenId,
+        sessionId: sessionTokenId,
+        jti: sessionTokenId,
+        applicationId: targetApp?.id || lead.id,
+        applicationNumber: appNo,
+        email: lead.studentEmail || undefined,
+        tenantId: schoolId,
+        schoolId,
+        schoolDomain: subdomain,
+        role: "GUEST_APPLICANT",
+        staffRole: "GUEST_APPLICANT",
+        isGuestApplicant: true,
+        mustChangePassword: false,
+        leadId: lead.id,
+        uploadToken: (lead as any).uploadToken || token,
+        applicationNo: appNo,
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(guestExpiresAt.getTime() / 1000))
+        .sign(secret);
+
+      const isSecure = process.env.NODE_ENV === "production";
+      const cookieOptions = {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: "lax" as const,
+        path: "/",
+        maxAge: 24 * 60 * 60,
+      };
+
+      response.cookies.set("session", guestSessionToken, cookieOptions);
+      response.cookies.set("accessToken", guestSessionToken, cookieOptions);
+      response.cookies.set("guest_session", "true", { ...cookieOptions, httpOnly: false });
+    } catch (cookieErr) {
+      console.warn("[UPLOAD_ROUTE] Could not refresh guest session cookie:", cookieErr);
+    }
+
+    return response;
   } catch (error: any) {
     console.error("[UPLOAD_API_POST] Error uploading documents:", error);
     return NextResponse.json(

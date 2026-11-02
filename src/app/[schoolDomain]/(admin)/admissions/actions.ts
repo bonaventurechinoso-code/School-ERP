@@ -2752,33 +2752,70 @@ export async function enrollAdmissionsApplicationAction(payload: {
         },
       });
 
-      // Step B: Create Student in target database
-      const student = await tx.student.create({
-        data: {
+      // Step B: Create or Update Student in target database
+      const existingStudent = await tx.student.findFirst({
+        where: {
           schoolId: targetSchoolId,
-          userId: user.id,
-          tierId: targetTierId,
-          firstName: application.firstName,
-          lastName: application.lastName,
-          email: userEmail,
-          admissionNumber: matriculationNumber,
-          currentClass: payload.classArm || application.programId || "Year 1",
-          dateOfBirth: application.dateOfBirth,
-          status: "ENROLLED",
-          parentName,
-          parentEmail,
-          parentPhone,
-          parentWhatsApp: application.whatsappNumber || parentPhone,
-          feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
-          enrolledAt: new Date(),
-          dynamicFields: {
-            applicationId: application.id,
-            intakeChannel: application.intakeChannel,
-            tierSpecificData: application.tierSpecificData,
-            verifiedDocumentsCount: application.documents.length,
-          },
+          email: { equals: userEmail, mode: "insensitive" },
         },
       });
+
+      let student: any;
+      if (existingStudent) {
+        student = await tx.student.update({
+          where: { id: existingStudent.id },
+          data: {
+            userId: user.id,
+            tierId: targetTierId,
+            firstName: application.firstName,
+            lastName: application.lastName,
+            admissionNumber: matriculationNumber,
+            currentClass: payload.classArm || application.programId || "Year 1",
+            dateOfBirth: application.dateOfBirth,
+            status: "ENROLLED",
+            parentName,
+            parentEmail,
+            parentPhone,
+            parentWhatsApp: application.whatsappNumber || parentPhone,
+            feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
+            enrolledAt: new Date(),
+            dynamicFields: {
+              ...((existingStudent.dynamicFields as any) || {}),
+              applicationId: application.id,
+              intakeChannel: application.intakeChannel,
+              tierSpecificData: application.tierSpecificData,
+              verifiedDocumentsCount: application.documents.length,
+            },
+          },
+        });
+      } else {
+        student = await tx.student.create({
+          data: {
+            schoolId: targetSchoolId,
+            userId: user.id,
+            tierId: targetTierId,
+            firstName: application.firstName,
+            lastName: application.lastName,
+            email: userEmail,
+            admissionNumber: matriculationNumber,
+            currentClass: payload.classArm || application.programId || "Year 1",
+            dateOfBirth: application.dateOfBirth,
+            status: "ENROLLED",
+            parentName,
+            parentEmail,
+            parentPhone,
+            parentWhatsApp: application.whatsappNumber || parentPhone,
+            feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
+            enrolledAt: new Date(),
+            dynamicFields: {
+              applicationId: application.id,
+              intakeChannel: application.intakeChannel,
+              tierSpecificData: application.tierSpecificData,
+              verifiedDocumentsCount: application.documents.length,
+            },
+          },
+        });
+      }
 
       // Step C: Link Parent
       if (parentEmail && parentEmail.includes("@")) {
