@@ -573,6 +573,7 @@ export default function VerificationDeskClient({
                   }}
                   className="max-w-full max-h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={currentDoc.presignedUrl}
                     alt="Applicant Document"

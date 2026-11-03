@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useTransition } from "react";
+import React, { useState, useEffect, useMemo, useTransition, useCallback } from "react";
 import {
   Search,
   RefreshCw,
@@ -115,7 +115,7 @@ export default function AdmissionRegisterTable({
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const fetchRecords = async () => {
+  const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/admissions?tenantId=${encodeURIComponent(schoolId)}`, {
@@ -133,11 +133,11 @@ export default function AdmissionRegisterTable({
     } finally {
       setLoading(false);
     }
-  };
+  }, [schoolId]);
 
   useEffect(() => {
     fetchRecords();
-  }, [schoolId]);
+  }, [fetchRecords]);
 
   // UNIFIED DATASET: Merge active track Kanban leads with legacy/direct register records
   const unifiedRows: UnifiedApplicantRow[] = useMemo(() => {
