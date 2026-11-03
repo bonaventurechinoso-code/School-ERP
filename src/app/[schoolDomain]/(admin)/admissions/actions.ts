@@ -466,10 +466,59 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
 }) {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
-    const lead = await basePrisma.admissionLead.findUnique({
+    let lead = await basePrisma.admissionLead.findUnique({
       where: { id: payload.leadId },
       include: { tier: true, school: true },
     });
+
+    // Fallback: If leadId is an AdmissionsApplication or AdmissionRegister ID, locate the lead or construct surrogate
+    if (!lead) {
+      const appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          schoolId,
+          OR: [{ id: payload.leadId }, { applicationNumber: payload.leadId }],
+        },
+      });
+
+      if (appRecord) {
+        const leadIdFromApp = (appRecord.metadata as any)?.leadId || (appRecord.tierSpecificData as any)?.leadId;
+        if (leadIdFromApp) {
+          lead = await basePrisma.admissionLead.findUnique({
+            where: { id: leadIdFromApp },
+            include: { tier: true, school: true },
+          });
+        }
+
+        if (!lead) {
+          // Provision or retrieve matching lead for this application
+          lead = await basePrisma.admissionLead.create({
+            data: {
+              id: appRecord.id,
+              schoolId,
+              applicantName: `${appRecord.firstName} ${appRecord.lastName}`.trim(),
+              studentEmail: appRecord.email,
+              studentPhone: appRecord.phoneNumber,
+              parentPhone: appRecord.phoneNumber,
+              parentContact: appRecord.phoneNumber,
+              targetGrade: appRecord.programId,
+              tierId: (await basePrisma.academicTier.findFirst({ where: { schoolId } }))?.id || "tier-1",
+              status: "CONVERTED",
+              documents: {
+                academicTier: (appRecord.tierSpecificData as any)?.academicTier || "General",
+                targetClass: appRecord.programId,
+              },
+            },
+            include: { tier: true, school: true },
+          }).catch(async () => {
+            return await basePrisma.admissionLead.findFirst({
+              where: { schoolId, applicantName: `${appRecord.firstName} ${appRecord.lastName}`.trim() },
+              include: { tier: true, school: true },
+            });
+          });
+        }
+      }
+    }
+
     if (!lead) return { success: false, error: "Applicant lead not found." };
 
     const school = lead.school || (await basePrisma.school.findUnique({ where: { id: schoolId } }));
@@ -2304,6 +2353,39 @@ export async function saveManualEntranceScoreAction(payload: {
       });
     }
 
+    // Also sync to AdmissionsApplication (Modern Admissions Workspace)
+    try {
+      const appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          schoolId,
+          OR: [
+            { id: payload.leadId },
+            ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+            ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+            { firstName, lastName },
+          ],
+        },
+      });
+
+      if (appRecord) {
+        const appTierData = (appRecord.tierSpecificData as any) || {};
+        appTierData.entranceScore = parsedScore;
+        appTierData.examScore = parsedScore;
+        appTierData.examAggregate = parsedScore;
+        appTierData.utmeScore = parsedScore; // In case tertiary uses utmeScore
+        appTierData.postUtmeScore = parsedScore;
+
+        await basePrisma.admissionsApplication.update({
+          where: { id: appRecord.id },
+          data: {
+            tierSpecificData: appTierData,
+          },
+        });
+      }
+    } catch (appSyncErr) {
+      console.warn("[saveManualEntranceScoreAction] Warning syncing entranceScore to AdmissionsApplication:", appSyncErr);
+    }
+
     await invalidateAdmissionsNamespace(schoolId);
     safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
     return { success: true, lead: updated, score: parsedScore };
@@ -3231,14 +3313,81 @@ export async function reconcileFeeAction(payload: {
         const updatedApp = await prismaTx.admissionsApplication.update({
           where: { id: txRecord.applicationId },
           data: {
-            status: "SUBMITTED",
+            status: "UNDER_REVIEW",
             metadata: {
               ...((txRecord.application.metadata as any) || {}),
               settledPaymentRef: txRecord.paymentReference,
               settledAt: new Date().toISOString(),
+              feeSettledBy: payload.actorId || "Bursar Officer",
             },
           },
         });
+
+        // Synchronize with AdmissionRegister & AdmissionLead
+        try {
+          const appNo = txRecord.application.applicationNumber;
+          const reg = await prismaTx.admissionRegister.findFirst({
+            where: {
+              OR: [
+                { applicationNo: appNo },
+                { id: txRecord.applicationId },
+                ...(txRecord.application.email ? [{ email: txRecord.application.email }] : []),
+              ],
+            },
+          });
+          if (reg) {
+            let creds: any = reg.credentialsJson || {};
+            if (typeof creds === "string") {
+              try { creds = JSON.parse(creds); } catch { creds = {}; }
+            }
+            creds.formFeePaid = true;
+            creds.formFeeStatus = "PAID";
+            creds.feePaid = true;
+            creds.formFeeVerifiedAt = new Date().toISOString();
+            creds.formFeeVerifiedBy = payload.actorId || "Bursar Officer";
+            await prismaTx.admissionRegister.update({
+              where: { id: reg.id },
+              data: { formFeePaid: true, credentialsJson: creds },
+            });
+          }
+
+          const lead = await prismaTx.admissionLead.findFirst({
+            where: {
+              OR: [
+                { id: txRecord.applicationId },
+                ...(txRecord.application.email ? [{ studentEmail: txRecord.application.email }] : []),
+              ],
+            },
+          });
+          if (lead) {
+            const lDocs: any = (lead.documents as any) || {};
+            lDocs.formFeePaid = true;
+            lDocs.formFeeStatus = "PAID";
+            lDocs.feePaid = true;
+            lDocs.formFeeVerifiedAt = new Date().toISOString();
+            lDocs.formFeeVerifiedBy = payload.actorId || "Bursar Officer";
+            await prismaTx.admissionLead.update({
+              where: { id: lead.id },
+              data: { documents: lDocs },
+            });
+          }
+
+          // Also mirror into PaymentReceipt if present
+          await prismaTx.paymentReceipt.updateMany({
+            where: {
+              referenceNo: appNo,
+              status: "PENDING",
+            },
+            data: {
+              status: "VERIFIED",
+              state: "SETTLED",
+              verifiedBy: payload.actorId || "Bursar Officer",
+              verifiedAt: new Date(),
+            },
+          });
+        } catch (syncErr) {
+          console.warn("[reconcileFeeAction:approve] Warning syncing legacy register/receipts:", syncErr);
+        }
 
         return { settledTx, updatedApp };
       });
@@ -3373,4 +3522,341 @@ export async function rejectAdmissionsFeeTransaction(args: {
     actorId: args.verifiedByUserId,
     schoolDomain: args.schoolDomain,
   });
+}
+
+/**
+ * Enterprise Admissions: Edit Applicant Bio-Data / Target Class / Contact Info
+ */
+export async function updateAdmissionsApplicationBioAction(payload: {
+  applicationId: string;
+  schoolId: string;
+  schoolDomain: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  email?: string;
+  phoneNumber?: string;
+  whatsappNumber?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  programId?: string;
+  parentName?: string;
+  parentPhone?: string;
+  parentEmail?: string;
+  notes?: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = await verifyAdmissionsMutatorRole(session, schoolId);
+    if (!auth.authorized) {
+      return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to edit applicant." };
+    }
+
+    const app = await basePrisma.admissionsApplication.findUnique({
+      where: { id: payload.applicationId },
+    });
+
+    if (!app || app.schoolId !== schoolId) {
+      return { success: false, error: "404 Not Found: Applicant record not found in this institution." };
+    }
+
+    const prevTierData = (app.tierSpecificData as any) || {};
+    const updatedTierData = {
+      ...prevTierData,
+      targetGrade: payload.programId || prevTierData.targetGrade,
+      targetClass: payload.programId || prevTierData.targetClass,
+      parentName: payload.parentName || prevTierData.parentName,
+      parentPhone: payload.parentPhone || prevTierData.parentPhone || payload.phoneNumber,
+      parentEmail: payload.parentEmail || prevTierData.parentEmail,
+      dateOfBirth: payload.dateOfBirth || prevTierData.dateOfBirth,
+    };
+
+    const updatedApp = await basePrisma.admissionsApplication.update({
+      where: { id: payload.applicationId },
+      data: {
+        firstName: payload.firstName.trim(),
+        lastName: payload.lastName.trim(),
+        middleName: payload.middleName?.trim() || null,
+        email: payload.email?.trim().toLowerCase() || app.email,
+        phoneNumber: payload.phoneNumber?.trim() || app.phoneNumber,
+        whatsappNumber: payload.whatsappNumber?.trim() || null,
+        gender: payload.gender || app.gender,
+        programId: payload.programId?.trim() || app.programId,
+        dateOfBirth: payload.dateOfBirth ? new Date(payload.dateOfBirth) : app.dateOfBirth,
+        tierSpecificData: updatedTierData,
+      },
+    });
+
+    // Also cascade updates to legacy tables (AdmissionRegister & AdmissionLead)
+    try {
+      const appNo = app.applicationNumber;
+      await basePrisma.admissionRegister.updateMany({
+        where: {
+          tenantId: schoolId,
+          OR: [{ applicationNo: appNo }, { id: payload.applicationId }],
+        },
+        data: {
+          firstName: payload.firstName.trim(),
+          lastName: payload.lastName.trim(),
+          classApplied: payload.programId?.trim() || undefined,
+          email: payload.email?.trim() || undefined,
+          parentPhone: payload.parentPhone?.trim() || payload.phoneNumber?.trim() || undefined,
+        },
+      });
+
+      const leadId = (app.metadata as any)?.leadId || (prevTierData as any)?.leadId;
+      if (leadId) {
+        await basePrisma.admissionLead.updateMany({
+          where: { id: leadId, schoolId },
+          data: {
+            applicantName: `${payload.firstName} ${payload.lastName}`.trim(),
+            targetGrade: payload.programId?.trim() || undefined,
+            studentEmail: payload.email?.trim() || undefined,
+            parentPhone: payload.parentPhone?.trim() || payload.phoneNumber?.trim() || undefined,
+            parentName: payload.parentName?.trim() || undefined,
+          },
+        });
+      }
+    } catch (cascadeErr) {
+      console.warn("[updateAdmissionsApplicationBioAction] Warning cascading edit to legacy tables:", cascadeErr);
+    }
+
+    // Record audit trail
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: schoolId,
+          schoolId,
+          applicationId: app.id,
+          actorId: session?.user?.name || session?.email || "Admissions Officer",
+          action: "APPLICANT_BIO_UPDATED",
+          fromStage: app.status,
+          toStage: app.status,
+          metadata: {
+            updatedFields: {
+              firstName: payload.firstName,
+              lastName: payload.lastName,
+              programId: payload.programId,
+              phoneNumber: payload.phoneNumber,
+            },
+            notes: payload.notes || "Applicant bio-data modified via admissions workspace",
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[updateAdmissionsApplicationBioAction] Warning logging audit trail:", auditErr);
+    }
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+
+    return { success: true, application: updatedApp, message: "Applicant profile updated successfully." };
+  } catch (err: any) {
+    console.error("[updateAdmissionsApplicationBioAction] Error:", err);
+    return { success: false, error: err.message || "Failed to update applicant profile." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Permanent Hard Deletion of AdmissionsApplication with Cascades
+ */
+export async function deleteAdmissionsApplicationAction(payload: {
+  applicationId: string;
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = await verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return { success: false, error: auth.reason || "403 Forbidden: Only Tenant Admin can delete applicants." };
+    }
+
+    const app = await basePrisma.admissionsApplication.findUnique({
+      where: { id: payload.applicationId },
+      include: {
+        documents: true,
+        feeTransactions: true,
+      },
+    });
+
+    if (!app || app.schoolId !== schoolId) {
+      return { success: false, error: "404 Not Found: Applicant record not found in this institution." };
+    }
+
+    const appNo = app.applicationNumber;
+    const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
+
+    // Delete application and cascade linked tables
+    await basePrisma.$transaction(async (tx) => {
+      // 1. Audit trails
+      await tx.admissionAuditTrail.deleteMany({
+        where: { applicationId: app.id },
+      });
+
+      // 2. Documents & fee transactions
+      await tx.admissionsDocument.deleteMany({
+        where: { applicationId: app.id },
+      });
+      await tx.admissionsFeeTransaction.deleteMany({
+        where: { applicationId: app.id },
+      });
+
+      // 3. Delete modern AdmissionsApplication
+      await tx.admissionsApplication.delete({
+        where: { id: app.id },
+      });
+
+      // 4. Cascade delete legacy AdmissionRegister
+      await tx.admissionRegister.deleteMany({
+        where: {
+          tenantId: schoolId,
+          OR: [{ applicationNo: appNo }, { id: app.id }],
+        },
+      });
+
+      // 5. Cascade delete legacy AdmissionLead if linked
+      if (leadId) {
+        await tx.admissionNote.deleteMany({
+          where: { studentLeadId: leadId },
+        });
+        await tx.admissionLead.deleteMany({
+          where: { id: leadId, schoolId },
+        });
+      }
+
+      // 6. Purge unverified receipts
+      await tx.paymentReceipt.deleteMany({
+        where: {
+          tenantId: schoolId,
+          referenceNo: appNo,
+          status: { in: ["PENDING", "REJECTED"] },
+        },
+      });
+    });
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+
+    return { success: true, message: `Applicant ${app.lastName} ${app.firstName} (${appNo}) deleted permanently.` };
+  } catch (err: any) {
+    console.error("[deleteAdmissionsApplicationAction] Error:", err);
+    return { success: false, error: err.message || "Failed to delete applicant record." };
+  }
+}
+
+/**
+ * Enterprise Admissions: Deduplicate Modern AdmissionsApplication Table along with Legacy Registries
+ */
+export async function deduplicateAllAdmissionsAction(payload: {
+  schoolId: string;
+  schoolDomain: string;
+}) {
+  try {
+    const schoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = await verifyTenantAdminRole(session, schoolId);
+    if (!auth.authorized) {
+      return { success: false, error: auth.reason || "403 Forbidden: Only Tenant Admin can execute deduplication." };
+    }
+
+    // 1. Run legacy deduplication
+    const legacyResult = await deduplicateTenantAdmissions(schoolId).catch(() => ({
+      totalMergedGroups: 0,
+      totalPurged: 0,
+    }));
+
+    // 2. Run deduplication on AdmissionsApplication
+    const allApps = await basePrisma.admissionsApplication.findMany({
+      where: { schoolId },
+      include: {
+        documents: true,
+        feeTransactions: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const appGroups = new Map<string, typeof allApps>();
+    for (const app of allApps) {
+      const fullName = `${app.firstName || ""} ${app.lastName || ""}`.trim().toLowerCase();
+      const phone = (app.phoneNumber || "").replace(/[^0-9]/g, "");
+      const email = (app.email || "").trim().toLowerCase();
+      // Compound key: name + (phone or email or program)
+      const key = `${fullName}|${phone || email}|${(app.programId || "").trim().toLowerCase()}`;
+      if (!key || key === "||") continue;
+
+      const group = appGroups.get(key) || [];
+      group.push(app);
+      appGroups.set(key, group);
+    }
+
+    let appsMergedGroups = 0;
+    let appsPurgedCount = 0;
+
+    for (const [, group] of appGroups.entries()) {
+      if (group.length > 1) {
+        // Master is preferred as the one with SETTLED fee or farthest progressed status
+        const master = group.reduce((best, curr) => {
+          const score = (a: any) => {
+            let s = 0;
+            if (a.status === "ENROLLED") s += 100;
+            if (a.status === "OFFER_EXTENDED") s += 80;
+            if (a.status === "UNDER_REVIEW") s += 50;
+            if (a.feeTransactions?.some((t: any) => t.paymentStatus === "SETTLED")) s += 40;
+            if (a.documents?.length > 0) s += a.documents.length * 5;
+            return s;
+          };
+          return score(curr) > score(best) ? curr : best;
+        }, group[0]);
+
+        const duplicates = group.filter((g) => g.id !== master.id);
+        const dupIds = duplicates.map((d) => d.id);
+
+        await basePrisma.$transaction(async (tx) => {
+          // Re-assign documents and transactions to master
+          await tx.admissionsDocument.updateMany({
+            where: { applicationId: { in: dupIds } },
+            data: { applicationId: master.id },
+          });
+          await tx.admissionsFeeTransaction.updateMany({
+            where: { applicationId: { in: dupIds } },
+            data: { applicationId: master.id },
+          });
+          await tx.admissionAuditTrail.updateMany({
+            where: { applicationId: { in: dupIds } },
+            data: { applicationId: master.id },
+          });
+
+          // Delete duplicates
+          await tx.admissionsApplication.deleteMany({
+            where: { id: { in: dupIds } },
+          });
+        });
+
+        appsMergedGroups++;
+        appsPurgedCount += duplicates.length;
+      }
+    }
+
+    await invalidateAdmissionsNamespace(schoolId);
+    safeRevalidate(`/${payload.schoolDomain}/admissions`);
+
+    const totalMerged = (legacyResult?.totalMergedGroups || 0) + appsMergedGroups;
+    const totalPurged = (legacyResult?.totalPurged || 0) + appsPurgedCount;
+
+    return {
+      success: true,
+      mergedCount: totalMerged,
+      purgedCount: totalPurged,
+      message:
+        totalPurged > 0
+          ? `Admissions deduplication complete: Merged ${totalMerged} duplicate group(s), purged ${totalPurged} redundant records.`
+          : "Admissions register is clean. No duplicate applicant records found.",
+    };
+  } catch (err: any) {
+    console.error("[deduplicateAllAdmissionsAction] Error:", err);
+    return { success: false, error: err.message || "Failed to execute admissions deduplication." };
+  }
 }

@@ -30,7 +30,11 @@ import {
   UserPlus,
   X,
   Layers,
+  Sparkles,
+  Edit,
+  Trash2,
 } from "lucide-react";
+import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Sheet,
@@ -49,6 +53,9 @@ import {
   verifyDocumentAction,
   approveAdmissionsFeeTransaction,
   rejectAdmissionsFeeTransaction,
+  updateAdmissionsApplicationBioAction,
+  deleteAdmissionsApplicationAction,
+  deduplicateAllAdmissionsAction,
 } from "./actions";
 import { recordWalkInApplication } from "./walk-in/actions";
 
@@ -258,6 +265,33 @@ export default function AdmissionsWorkspaceClient({
   // Read-only bank modal
   const [bankModalApp, setBankModalApp] = useState<SerializedApplication | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Dossier Drawer state
+  const [dossierApp, setDossierApp] = useState<SerializedApplication | null>(null);
+
+  // Edit Applicant Modal state
+  const [editingApp, setEditingApp] = useState<SerializedApplication | null>(null);
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    middleName: "",
+    email: "",
+    phoneNumber: "",
+    whatsappNumber: "",
+    gender: "MALE",
+    programId: "",
+    dateOfBirth: "",
+    parentName: "",
+    parentPhone: "",
+    parentEmail: "",
+  });
+
+  // Delete Applicant Confirmation Modal state
+  const [deletingApp, setDeletingApp] = useState<SerializedApplication | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Deduplication state
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
 
   // Enroll modal
   const [enrollingApp, setEnrollingApp] = useState<SerializedApplication | null>(null);
@@ -597,15 +631,27 @@ export default function AdmissionsWorkspaceClient({
             t.id === txId ? { ...t, paymentStatus: "SETTLED" } : t
           )
         );
-        // Also update local application status if present
+        // Also update local application status if present and settle fee transaction in application
         setApplications((prev) =>
-          prev.map((a) =>
-            a.id === res.transaction.applicationId ? { ...a, status: "SUBMITTED" } : a
-          )
+          prev.map((a) => {
+            if (a.id === res.transaction.applicationId) {
+              const updatedFeeTxs = (a.feeTransactions || []).map((t) =>
+                t.id === txId || t.paymentStatus === "PENDING"
+                  ? { ...t, paymentStatus: "SETTLED" }
+                  : t
+              );
+              return {
+                ...a,
+                status: "UNDER_REVIEW",
+                feeTransactions: updatedFeeTxs,
+              };
+            }
+            return a;
+          })
         );
         setFeedback({
           type: "success",
-          message: "Transaction approved and settled. Candidate transitioned to SUBMITTED.",
+          message: "Transaction approved and settled. Candidate fee marked PAID (SETTLED) with status UNDER_REVIEW.",
         });
       } else {
         setFeedback({ type: "error", message: res.error || "Failed to settle payment." });
@@ -637,6 +683,124 @@ export default function AdmissionsWorkspaceClient({
       } else {
         setFeedback({ type: "error", message: res.error || "Failed to reject transaction." });
       }
+    });
+  };
+
+  // Action: Open Edit Applicant Modal
+  const handleOpenEdit = (app: SerializedApplication) => {
+    setEditingApp(app);
+    const tierData = (app.tierSpecificData as any) || {};
+    setEditForm({
+      firstName: app.firstName || "",
+      lastName: app.lastName || "",
+      middleName: app.middleName || "",
+      email: app.email || "",
+      phoneNumber: app.phoneNumber || "",
+      whatsappNumber: app.whatsappNumber || "",
+      gender: app.gender || "MALE",
+      programId: app.programId || tierData.targetGrade || "",
+      dateOfBirth: app.dateOfBirth
+        ? new Date(app.dateOfBirth).toISOString().split("T")[0]
+        : "",
+      parentName: tierData.parentName || tierData.parent?.name || "",
+      parentPhone: tierData.parentPhone || tierData.parent?.phone || "",
+      parentEmail: tierData.parentEmail || "",
+    });
+  };
+
+  // Action: Save Edit Applicant
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingApp) return;
+
+    startTransition(async () => {
+      const res = await updateAdmissionsApplicationBioAction({
+        applicationId: editingApp.id,
+        schoolId,
+        schoolDomain,
+        ...editForm,
+      });
+
+      if (res.success && res.application) {
+        setApplications((prev) =>
+          prev.map((a) =>
+            a.id === editingApp.id
+              ? {
+                  ...a,
+                  firstName: res.application.firstName,
+                  lastName: res.application.lastName,
+                  middleName: res.application.middleName,
+                  email: res.application.email,
+                  phoneNumber: res.application.phoneNumber,
+                  whatsappNumber: res.application.whatsappNumber,
+                  gender: res.application.gender,
+                  programId: res.application.programId,
+                  dateOfBirth: res.application.dateOfBirth,
+                  tierSpecificData: res.application.tierSpecificData,
+                }
+              : a
+          )
+        );
+        setEditingApp(null);
+        setFeedback({
+          type: "success",
+          message: `Applicant profile for ${res.application.firstName} ${res.application.lastName} updated successfully.`,
+        });
+      } else {
+        setFeedback({ type: "error", message: res.error || "Failed to update applicant bio-data." });
+      }
+    });
+  };
+
+  // Action: Delete Applicant
+  const handleConfirmDelete = () => {
+    if (!deletingApp) return;
+    setIsDeleting(true);
+
+    startTransition(async () => {
+      const res = await deleteAdmissionsApplicationAction({
+        applicationId: deletingApp.id,
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res.success) {
+        setApplications((prev) => prev.filter((a) => a.id !== deletingApp.id));
+        setDeletingApp(null);
+        setFeedback({
+          type: "success",
+          message: res.message || "Applicant record removed permanently.",
+        });
+      } else {
+        setFeedback({ type: "error", message: res.error || "Failed to delete applicant record." });
+      }
+      setIsDeleting(false);
+    });
+  };
+
+  // Action: Run Global Deduplication
+  const handleRunDeduplication = () => {
+    setIsDeduplicating(true);
+    startTransition(async () => {
+      const res = await deduplicateAllAdmissionsAction({
+        schoolId,
+        schoolDomain,
+      });
+
+      if (res.success) {
+        setFeedback({
+          type: "success",
+          message: res.message || "Admissions deduplication completed successfully.",
+        });
+        // Filter out any applications that were deleted during deduplication
+        // In real use, a full reload or state sync will reflect the cleanest ledger
+      } else {
+        setFeedback({
+          type: "error",
+          message: res.error || "Failed to execute admissions deduplication.",
+        });
+      }
+      setIsDeduplicating(false);
     });
   };
 
@@ -1018,6 +1182,20 @@ export default function AdmissionsWorkspaceClient({
                     <span>O&apos;Level &gt;= 5 Credits</span>
                   </label>
                 )}
+
+                {/* Deduplicate Button in Toolbar */}
+                {canMutate && (
+                  <button
+                    type="button"
+                    onClick={handleRunDeduplication}
+                    disabled={isDeduplicating}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-amber-300 dark:border-amber-800 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 transition shadow-2xs cursor-pointer disabled:opacity-50"
+                    title="Audit and clean up duplicate applicant records"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isDeduplicating ? "animate-spin" : ""}`} />
+                    <span>{isDeduplicating ? "Deduplicating..." : "✨ Deduplicate"}</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1239,6 +1417,29 @@ export default function AdmissionsWorkspaceClient({
                           })}
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* View Dossier Drawer */}
+                              <button
+                                type="button"
+                                onClick={() => setDossierApp(app)}
+                                className="px-2 py-1 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 flex items-center gap-1 cursor-pointer"
+                                title="Open Candidate Dossier Drawer"
+                              >
+                                <Eye className="w-3 h-3 text-blue-500" />
+                                <span>Dossier</span>
+                              </button>
+
+                              {/* Edit Applicant Profile */}
+                              {canMutate && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(app)}
+                                  className="p-1.5 rounded-md text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-950/40 border border-slate-200 dark:border-zinc-750 transition cursor-pointer"
+                                  title="Edit Applicant Bio-data"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
                               {/* Enroll action */}
                               {app.status === "OFFER_EXTENDED" && (
                                 <button
@@ -1256,6 +1457,18 @@ export default function AdmissionsWorkspaceClient({
                               >
                                 Extend Offer
                               </button>
+
+                              {/* Delete Applicant Record */}
+                              {canMutate && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingApp(app)}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-zinc-750 transition cursor-pointer"
+                                  title="Delete Applicant Record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2060,6 +2273,260 @@ export default function AdmissionsWorkspaceClient({
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: EDIT APPLICANT BIO-DATA MODAL                                    */}
+      {/* ========================================================================= */}
+      {editingApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-50 flex items-center gap-2">
+                <Edit className="w-4 h-4 text-indigo-600" />
+                <span>Edit Applicant Bio-Data ({editingApp.applicationNumber})</span>
+              </h3>
+              <button
+                onClick={() => setEditingApp(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    First Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.firstName}
+                    onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Last Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.lastName}
+                    onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phoneNumber}
+                    onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Target Class / Program *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.programId}
+                    onChange={(e) => setEditForm({ ...editForm, programId: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.dateOfBirth}
+                    onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Parent / Guardian Details
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                      Parent Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.parentName}
+                      onChange={(e) => setEditForm({ ...editForm, parentName: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                      Parent Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={editForm.parentPhone}
+                      onChange={(e) => setEditForm({ ...editForm, parentPhone: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingApp(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: DELETE APPLICANT CONFIRMATION MODAL                              */}
+      {/* ========================================================================= */}
+      {deletingApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/60 rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-black text-slate-900 dark:text-zinc-50">
+                  Delete Applicant Record
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                  Are you sure you want to permanently remove <strong>{deletingApp.firstName} {deletingApp.lastName}</strong> ({deletingApp.applicationNumber})?
+                </p>
+              </div>
+              <button
+                onClick={() => setDeletingApp(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+              <span className="font-bold">Permanent removal:</span> This will safely purge the applicant profile, uploaded documents, fee transaction history, and progression records from the institution&apos;s admissions register.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingApp(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-zinc-800 text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DOSSIER DRAWER COMPONENT (VERIFY DOCUMENTS & DISPATCH ADMIT SLIP)         */}
+      {/* ========================================================================= */}
+      {dossierApp && (
+        <ApplicantDossierDrawer
+          lead={{
+            id: dossierApp.id,
+            applicantName: `${dossierApp.firstName} ${dossierApp.lastName}`,
+            targetGrade: dossierApp.programId,
+            studentEmail: dossierApp.email,
+            studentPhone: dossierApp.phoneNumber,
+            parentName: (dossierApp.tierSpecificData as any)?.parentName || (dossierApp.tierSpecificData as any)?.parent?.name,
+            parentPhone: (dossierApp.tierSpecificData as any)?.parentPhone || dossierApp.phoneNumber,
+            status: dossierApp.status,
+            documents: {
+              ...(dossierApp.tierSpecificData || {}),
+              entranceScore: (dossierApp.tierSpecificData as any)?.entranceScore ?? (dossierApp.tierSpecificData as any)?.examScore ?? null,
+              applicationFeeReceiptUrl: dossierApp.feeTransactions?.find((t) => t.proofOfPaymentUrl)?.proofOfPaymentUrl || null,
+              passportPhotoUrl: dossierApp.documents?.find((d) => d.documentType === "PASSPORT_PHOTO")?.storageKey || null,
+              birthCertificateUrl: dossierApp.documents?.find((d) => d.documentType === "BIRTH_CERT")?.storageKey || null,
+              academicResultsUrl: dossierApp.documents?.find((d) => d.documentType === "ACADEMIC_RESULTS" || d.documentType === "O_LEVEL_RESULT")?.storageKey || null,
+            },
+          }}
+          applicant={{
+            id: dossierApp.id,
+            applicationNo: dossierApp.applicationNumber,
+            firstName: dossierApp.firstName,
+            lastName: dossierApp.lastName,
+            classApplied: dossierApp.programId,
+            email: dossierApp.email,
+            parentPhone: dossierApp.phoneNumber,
+            status: dossierApp.status,
+          }}
+          isOpen={Boolean(dossierApp)}
+          onClose={() => setDossierApp(null)}
+          schoolId={schoolId}
+          schoolDomain={schoolDomain}
+          schoolName={schoolName}
+          canMutate={canMutate}
+          onLeadUpdated={() => {
+            // Re-fetch or refresh current view
+            if (typeof window !== "undefined") {
+              window.location.reload();
+            }
+          }}
+          onRecordUpdated={() => {
+            if (typeof window !== "undefined") {
+              window.location.reload();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

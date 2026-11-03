@@ -98,6 +98,7 @@ export default function PublicApplyForm({
     parentEmail: "",
     targetGrade: "",
     targetClass: "",
+    dateOfBirth: "",
     academicTier: matchedTierRecord?.name || schoolTier || "Secondary School",
     facultyOrSchool: "",
     intendedCourseOrProgramme: "",
@@ -631,6 +632,18 @@ export default function PublicApplyForm({
                               }
                             />
                           </div>
+                          <div>
+                            <label className={labelStyles}>Date of Birth (Age Verification)</label>
+                            <input
+                              type="date"
+                              className={inputStyles}
+                              style={{ "--tw-ring-color": brandColor } as React.CSSProperties}
+                              value={formData.dateOfBirth}
+                              onChange={(e) =>
+                                setFormData({ ...formData, dateOfBirth: e.target.value })
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -743,6 +756,19 @@ export default function PublicApplyForm({
                           value={formData.studentEmail}
                           onChange={(e) =>
                             setFormData({ ...formData, studentEmail: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Date of Birth (Child Age)
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full h-10 px-3 text-[13px] rounded-lg border border-slate-300 bg-white text-slate-900 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
+                          value={formData.dateOfBirth}
+                          onChange={(e) =>
+                            setFormData({ ...formData, dateOfBirth: e.target.value })
                           }
                         />
                       </div>

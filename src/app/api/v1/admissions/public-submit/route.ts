@@ -284,6 +284,7 @@ export async function POST(request: NextRequest) {
             parentName: parentName || "Parent / Guardian",
             parentPhone: parentContact || studentPhone || "N/A",
             leadId: newLead.id,
+            dateOfBirth: data.dateOfBirth || null,
           },
           metadata: {
             leadId: newLead.id,
@@ -295,6 +296,7 @@ export async function POST(request: NextRequest) {
           programId: effectiveTargetGrade || "Class 1",
           email: accountEmail || undefined,
           phoneNumber: parentContact || studentPhone || undefined,
+          dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
           tierSpecificData: {
             targetGrade: effectiveTargetGrade,
             targetClass: effectiveTargetGrade,
@@ -302,6 +304,7 @@ export async function POST(request: NextRequest) {
             parentName: parentName || "Parent / Guardian",
             parentPhone: parentContact || studentPhone || "N/A",
             leadId: newLead.id,
+            dateOfBirth: data.dateOfBirth || null,
           },
         },
       });

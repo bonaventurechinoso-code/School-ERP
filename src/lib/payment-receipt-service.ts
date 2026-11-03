@@ -479,9 +479,16 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
   // -------------------------------------------------------------
 
   if (params.action === "VERIFY") {
-    // 1. Admission Form Fee: Mark Form Fee Paid
+    // 1. Admission Form Fee: Mark Form Fee Paid across AdmissionRegister, AdmissionLead, AND AdmissionsApplication / AdmissionsFeeTransaction
     if (receipt.moduleType === "ADMISSION_FORM_FEE") {
-      await markAdmissionFormFeePaid(receipt.referenceNo, receipt.verifiedBy || params.verifiedBy);
+      await markAdmissionFormFeePaid(
+        receipt.referenceNo,
+        receipt.verifiedBy || params.verifiedBy,
+        receipt.tenantId || receipt.schoolId,
+        receipt.amount,
+        receipt.transferReference || receipt.txnRef || receipt.referenceNo,
+        receipt.fileUrl || receipt.proofOfPaymentUrl
+      );
     }
 
     // 2. Platform Subscription: Mark Subscription Active
@@ -577,9 +584,16 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
 
 
 /**
- * Automates Admission Form Fee marking in AdmissionRegister and AdmissionLead
+ * Automates Admission Form Fee marking across AdmissionRegister, AdmissionLead, AND AdmissionsApplication / AdmissionsFeeTransaction
  */
-async function markAdmissionFormFeePaid(applicationNo: string, verifiedBy: string) {
+async function markAdmissionFormFeePaid(
+  applicationNo: string,
+  verifiedBy: string,
+  tenantId?: string | null,
+  amount: number = 5000,
+  reference: string = "",
+  proofUrl?: string | null
+) {
   try {
     // 1. Update AdmissionRegister if exists
     const register = await basePrisma.admissionRegister.findFirst({
@@ -597,6 +611,8 @@ async function markAdmissionFormFeePaid(applicationNo: string, verifiedBy: strin
       }
 
       creds.formFeePaid = true;
+      creds.formFeeStatus = "PAID";
+      creds.feePaid = true;
       creds.formFeeVerifiedAt = new Date().toISOString();
       creds.formFeeVerifiedBy = verifiedBy;
 
@@ -614,20 +630,110 @@ async function markAdmissionFormFeePaid(applicationNo: string, verifiedBy: strin
         where: { id: register.id },
         data: {
           credentialsJson: creds,
+          formFeePaid: true,
           updatedAt: new Date(),
         },
       });
     }
 
-    // 2. Also touch linked lead if found by email
-    if (register?.email) {
-      const lead = await basePrisma.admissionLead.findFirst({
-        where: { studentEmail: register.email },
+    // 2. Also touch linked lead if found by email or id
+    let lead = register?.email
+      ? await basePrisma.admissionLead.findFirst({
+          where: { studentEmail: register.email },
+        })
+      : null;
+
+    if (!lead && applicationNo) {
+      const cleanRef = applicationNo.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
+      lead = await basePrisma.admissionLead.findFirst({
+        where: {
+          OR: [
+            { id: applicationNo },
+            { id: { contains: cleanRef, mode: "insensitive" } },
+          ],
+        },
       });
-      if (lead) {
-        await basePrisma.admissionLead.update({
-          where: { id: lead.id },
-          data: { updatedAt: new Date() },
+    }
+
+    if (lead) {
+      const leadDocs: any = (lead.documents as any) || {};
+      leadDocs.formFeePaid = true;
+      leadDocs.formFeeStatus = "PAID";
+      leadDocs.feePaid = true;
+      leadDocs.formFeeVerifiedAt = new Date().toISOString();
+      leadDocs.formFeeVerifiedBy = verifiedBy;
+
+      await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          documents: leadDocs,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // 3. Atomically synchronize with AdmissionsApplication and AdmissionsFeeTransaction (Modern Admissions Workspace)
+    const schoolTargetId = tenantId || register?.tenantId || lead?.schoolId;
+    let targetApp = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        OR: [
+          { applicationNumber: applicationNo },
+          ...(lead ? [{ id: lead.id }, { email: lead.studentEmail || "" }] : []),
+          ...(register?.email ? [{ email: register.email }] : []),
+        ],
+      },
+      include: {
+        feeTransactions: true,
+      },
+    });
+
+    if (targetApp) {
+      // Find or create the AdmissionsFeeTransaction and mark SETTLED
+      const existingFeeTx = targetApp.feeTransactions.find(
+        (t) => t.paymentStatus === "PENDING" || t.paymentReference === reference
+      ) || targetApp.feeTransactions[0];
+
+      if (existingFeeTx) {
+        await basePrisma.admissionsFeeTransaction.update({
+          where: { id: existingFeeTx.id },
+          data: {
+            paymentStatus: "SETTLED",
+            reconciliationNotes: `Verified and settled by Bursar (${verifiedBy})`,
+            verifiedByUserId: verifiedBy,
+            verifiedAt: new Date(),
+          },
+        });
+      } else {
+        const paymentRef = reference || `BURS-VERIF-${Date.now().toString().slice(-6)}`;
+        await basePrisma.admissionsFeeTransaction.create({
+          data: {
+            tenantId: targetApp.tenantId || targetApp.schoolId,
+            applicationId: targetApp.id,
+            paymentMethod: "MANUAL_BANK_TRANSFER",
+            amount: amount,
+            currency: "NGN",
+            paymentReference: paymentRef,
+            proofOfPaymentUrl: proofUrl || null,
+            paymentStatus: "SETTLED",
+            reconciliationNotes: `Directly verified and settled by Bursar (${verifiedBy})`,
+            verifiedByUserId: verifiedBy,
+            verifiedAt: new Date(),
+          },
+        });
+      }
+
+      // If application was still PAYMENT_PENDING, advance it to UNDER_REVIEW
+      if (targetApp.status === "PAYMENT_PENDING" || targetApp.status === "DRAFT") {
+        await basePrisma.admissionsApplication.update({
+          where: { id: targetApp.id },
+          data: {
+            status: "UNDER_REVIEW",
+            metadata: {
+              ...((targetApp.metadata as any) || {}),
+              feeSettledAt: new Date().toISOString(),
+              feeSettledBy: verifiedBy,
+            },
+          },
         });
       }
     }
