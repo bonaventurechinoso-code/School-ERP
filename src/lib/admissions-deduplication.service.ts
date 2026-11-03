@@ -39,6 +39,162 @@ export function buildDeduplicationCompoundKey(
   return `${normName}|${normGrade}|${normPhone}`;
 }
 
+export function normalizeDobOrAge(
+  dob?: Date | string | null,
+  age?: number | string | null
+): {
+  birthYear: string;
+  approxAge: number | null;
+} {
+  const currentYear = new Date().getFullYear();
+  if (dob) {
+    const d = new Date(dob);
+    if (!isNaN(d.getTime())) {
+      const bYear = d.getFullYear();
+      const approx = Math.max(0, currentYear - bYear);
+      return { birthYear: String(bYear), approxAge: approx };
+    }
+  }
+  if (age !== undefined && age !== null && age !== "") {
+    const numericAge = parseInt(String(age).replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(numericAge) && numericAge > 0 && numericAge < 100) {
+      return { birthYear: String(currentYear - numericAge), approxAge: numericAge };
+    }
+  }
+  return { birthYear: "", approxAge: null };
+}
+
+export function normalizeAcademicSession(session?: string | null): string {
+  if (!session) {
+    const currentYear = new Date().getFullYear();
+    return `${currentYear}/${currentYear + 1}`;
+  }
+  const digits = session.replace(/[^0-9]/g, "");
+  if (digits.length >= 8) {
+    return `${digits.slice(0, 4)}/${digits.slice(4, 8)}`;
+  }
+  if (digits.length >= 4) {
+    const startYear = parseInt(digits.slice(0, 4), 10);
+    return `${startYear}/${startYear + 1}`;
+  }
+  return session.trim();
+}
+
+export function isInstitutionalApplicationNo(appNo?: string | null): boolean {
+  if (!appNo) return false;
+  // Localized / institutional formats contain slashes (e.g. EGEDE/2026/0001, SCH/2026/0002)
+  // or multi-part structured prefixes like APP-EGED-2026-W1234 or ADM-2026-1234
+  if (appNo.includes("/")) return true;
+  if (/^APP-[A-Z0-9]{4,10}-\d{4}-[A-Z0-9]+$/i.test(appNo)) return true;
+  // Temporary portal format is typically APP- followed by short hex (e.g. APP-7F6950)
+  if (/^APP-[0-9A-Fa-f]{6}$/.test(appNo)) return false;
+  return false;
+}
+
+/**
+ * Deterministic Matching Key:
+ * [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
+ */
+export function buildDeterministicAdmissionKey(params: {
+  fullName?: string | null;
+  className?: string | null;
+  dateOfBirth?: Date | string | null;
+  age?: number | string | null;
+  session?: string | null;
+}): string {
+  const normName = normalizeCandidateName(params.fullName);
+  const normClass = normalizeCandidateGrade(params.className);
+  const { birthYear, approxAge } = normalizeDobOrAge(params.dateOfBirth, params.age);
+  const normSession = normalizeAcademicSession(params.session);
+  const dobKey = birthYear ? `yr:${birthYear}` : approxAge ? `age:${approxAge}` : "unknown";
+  return `${normName}|${normClass}|${dobKey}|${normSession}`;
+}
+
+/**
+ * Finds an existing AdmissionsApplication record matching the deterministic composite key:
+ * [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION] (with phone/email fallback)
+ */
+export async function findExistingAdmissionsApplication(params: {
+  schoolId: string;
+  fullName: string;
+  className?: string | null;
+  dateOfBirth?: Date | string | null;
+  age?: number | string | null;
+  session?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}) {
+  const normTargetName = normalizeCandidateName(params.fullName);
+  if (!normTargetName) return null;
+
+  const normTargetClass = normalizeCandidateGrade(params.className);
+  const { birthYear: targetBirthYear } = normalizeDobOrAge(params.dateOfBirth, params.age);
+  const normTargetSession = normalizeAcademicSession(params.session);
+  const normPhone = normalizeParentPhone(params.phoneNumber);
+  const normEmail = params.email ? params.email.trim().toLowerCase() : "";
+
+  // Query existing applications for this school
+  const candidates = await basePrisma.admissionsApplication.findMany({
+    where: {
+      schoolId: params.schoolId,
+    },
+    include: {
+      feeTransactions: true,
+      documents: true,
+      auditTrails: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return candidates.find((app) => {
+    const appFullName = normalizeCandidateName(`${app.firstName} ${app.middleName || ""} ${app.lastName}`);
+    const appSimpleName = normalizeCandidateName(`${app.firstName} ${app.lastName}`);
+    const appReversedName = normalizeCandidateName(`${app.lastName} ${app.firstName}`);
+
+    const nameMatch =
+      appFullName === normTargetName ||
+      appSimpleName === normTargetName ||
+      appReversedName === normTargetName ||
+      (normTargetName.length > 5 && (appFullName.includes(normTargetName) || normTargetName.includes(appFullName)));
+
+    if (!nameMatch) return false;
+
+    // Check class / program
+    const appClass = normalizeCandidateGrade(
+      app.programId || (app.tierSpecificData as any)?.targetGrade || (app.tierSpecificData as any)?.targetClass
+    );
+    const classMatch = !normTargetClass || !appClass || appClass === normTargetClass;
+
+    // Check DOB / Birth Year
+    const { birthYear: appBirthYear } = normalizeDobOrAge(app.dateOfBirth);
+    const dobMatch =
+      !targetBirthYear ||
+      !appBirthYear ||
+      targetBirthYear === appBirthYear ||
+      Math.abs(parseInt(targetBirthYear, 10) - parseInt(appBirthYear, 10)) <= 1;
+
+    // Check Session
+    const appSession = normalizeAcademicSession(app.academicSessionId);
+    const sessionMatch = !normTargetSession || !appSession || appSession === normTargetSession;
+
+    // If deterministic key matches: name + class + session + dob
+    if (classMatch && sessionMatch && dobMatch) {
+      return true;
+    }
+
+    // Secondary match: name + verified phone or email
+    const appPhone = normalizeParentPhone(
+      app.phoneNumber || (app.tierSpecificData as any)?.parentPhone || (app.tierSpecificData as any)?.parent?.phone
+    );
+    const appEmail = (app.email || "").toLowerCase().trim();
+
+    if (normPhone && appPhone && normPhone === appPhone) return true;
+    if (normEmail && appEmail && !appEmail.includes("@applicant.schoolerp") && normEmail === appEmail) return true;
+
+    return false;
+  }) || null;
+}
+
 const STAGE_RANK: Record<string, number> = {
   ENROLLED: 5,
   ADMITTED: 5,
@@ -237,7 +393,98 @@ export function mergeDuplicateRegisters(registers: any[]): { master: any; duplic
 }
 
 /**
- * Executes full deduplication across AdmissionLead and AdmissionRegister for a specific tenant.
+ * Consolidates duplicate AdmissionsApplication records into the master record.
+ * Prioritizes finalized/institutional application number format (e.g. EGEDE/2026/0001) over temporary portal ID (APP-XXXXXX),
+ * preserves documents, fee transactions, uploadToken, and audit trails.
+ */
+export function mergeDuplicateAdmissionsApplications(applications: any[]): { master: any; duplicates: any[] } {
+  if (applications.length <= 1) {
+    return { master: applications[0], duplicates: [] };
+  }
+
+  const sorted = [...applications].sort((a, b) => {
+    // 1. Prefer institutional localized application numbers (e.g. EGEDE/2026/0001) over temporary portal IDs (e.g. APP-7F6950)
+    const isInstA = isInstitutionalApplicationNo(a.applicationNumber) ? 1 : 0;
+    const isInstB = isInstitutionalApplicationNo(b.applicationNumber) ? 1 : 0;
+    if (isInstB !== isInstA) return isInstB - isInstA;
+
+    // 2. Higher status rank
+    const rankA = getStatusRank(a.status);
+    const rankB = getStatusRank(b.status);
+    if (rankB !== rankA) return rankB - rankA;
+
+    // 3. Settled fee transactions or more documents
+    const feesA = Array.isArray(a.feeTransactions) ? a.feeTransactions.filter((f: any) => f.paymentStatus === "SETTLED").length : 0;
+    const feesB = Array.isArray(b.feeTransactions) ? b.feeTransactions.filter((f: any) => f.paymentStatus === "SETTLED").length : 0;
+    if (feesB !== feesA) return feesB - feesA;
+
+    const docsA = Array.isArray(a.documents) ? a.documents.length : 0;
+    const docsB = Array.isArray(b.documents) ? b.documents.length : 0;
+    if (docsB !== docsA) return docsB - docsA;
+
+    // 4. Earliest created
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
+  const master = { ...sorted[0] };
+  const duplicates = sorted.slice(1);
+
+  const masterTierData =
+    typeof master.tierSpecificData === "object" && master.tierSpecificData !== null
+      ? { ...master.tierSpecificData }
+      : {};
+
+  const masterMetadata =
+    typeof master.metadata === "object" && master.metadata !== null
+      ? { ...master.metadata }
+      : {};
+
+  for (const dup of duplicates) {
+    const dupTierData =
+      typeof dup.tierSpecificData === "object" && dup.tierSpecificData !== null
+        ? dup.tierSpecificData
+        : {};
+    for (const [k, v] of Object.entries(dupTierData)) {
+      if (masterTierData[k] === undefined || masterTierData[k] === null || masterTierData[k] === "") {
+        masterTierData[k] = v;
+      }
+    }
+
+    const dupMetadata =
+      typeof dup.metadata === "object" && dup.metadata !== null
+        ? dup.metadata
+        : {};
+    for (const [k, v] of Object.entries(dupMetadata)) {
+      if (masterMetadata[k] === undefined || masterMetadata[k] === null || masterMetadata[k] === "") {
+        masterMetadata[k] = v;
+      }
+    }
+
+    // Ensure uploadToken from duplicate portal session is preserved
+    if (!masterMetadata.uploadToken && dupMetadata.uploadToken) {
+      masterMetadata.uploadToken = dupMetadata.uploadToken;
+    }
+
+    if (!master.middleName && dup.middleName) master.middleName = dup.middleName;
+    if ((!master.email || master.email.includes("@applicant.schoolerp")) && dup.email && !dup.email.includes("@applicant.schoolerp")) {
+      master.email = dup.email;
+    }
+    if ((!master.phoneNumber || master.phoneNumber === "N/A") && dup.phoneNumber && dup.phoneNumber !== "N/A") {
+      master.phoneNumber = dup.phoneNumber;
+    }
+    if (!master.whatsappNumber && dup.whatsappNumber) {
+      master.whatsappNumber = dup.whatsappNumber;
+    }
+  }
+
+  master.tierSpecificData = masterTierData;
+  master.metadata = masterMetadata;
+
+  return { master, duplicates };
+}
+
+/**
+ * Executes full deduplication across AdmissionLead, AdmissionRegister, and AdmissionsApplication for a specific tenant.
  * Consolidates duplicate profiles into single master records and safely deletes redundant rows in a transaction.
  */
 export async function deduplicateTenantAdmissions(schoolId: string) {
@@ -245,6 +492,8 @@ export async function deduplicateTenantAdmissions(schoolId: string) {
   let leadsPurgedCount = 0;
   let registersMergedGroups = 0;
   let registersPurgedCount = 0;
+  let applicationsMergedGroups = 0;
+  let applicationsPurgedCount = 0;
 
   // =========================================================================
   // 1. DEDUPLICATE ADMISSION LEADS
@@ -373,13 +622,100 @@ export async function deduplicateTenantAdmissions(schoolId: string) {
     }
   }
 
+  // =========================================================================
+  // 3. DEDUPLICATE ADMISSIONS APPLICATION PIPELINE (PORTAL VS ADMIN ROWS)
+  // =========================================================================
+  const allApplications = await basePrisma.admissionsApplication.findMany({
+    where: { schoolId },
+    include: {
+      feeTransactions: true,
+      documents: true,
+      auditTrails: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const appGroups = new Map<string, any[]>();
+  for (const app of allApplications) {
+    const fullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
+    const key = buildDeterministicAdmissionKey({
+      fullName,
+      className: app.programId,
+      dateOfBirth: app.dateOfBirth,
+      session: app.academicSessionId,
+    });
+    if (!key || key === "|||") continue;
+
+    const existing = appGroups.get(key) || [];
+    existing.push(app);
+    appGroups.set(key, existing);
+  }
+
+  for (const [, group] of appGroups.entries()) {
+    if (group.length > 1) {
+      const { master, duplicates } = mergeDuplicateAdmissionsApplications(group);
+      const duplicateIds = duplicates.map((d) => d.id);
+
+      await basePrisma.$transaction(async (tx) => {
+        // Update master application
+        await tx.admissionsApplication.update({
+          where: { id: master.id },
+          data: {
+            applicationNumber: master.applicationNumber,
+            middleName: master.middleName,
+            email: master.email,
+            phoneNumber: master.phoneNumber,
+            whatsappNumber: master.whatsappNumber,
+            tierSpecificData: master.tierSpecificData,
+            metadata: master.metadata,
+            status: master.status,
+          },
+        });
+
+        // Re-link fee transactions to master
+        await tx.admissionsFeeTransaction.updateMany({
+          where: { applicationId: { in: duplicateIds } },
+          data: { applicationId: master.id },
+        });
+
+        // Re-link documents to master
+        await tx.admissionsDocument.updateMany({
+          where: { applicationId: { in: duplicateIds } },
+          data: { applicationId: master.id },
+        });
+
+        // Re-link audit trails to master
+        await tx.admissionAuditTrail.updateMany({
+          where: { applicationId: { in: duplicateIds } },
+          data: { applicationId: master.id },
+        });
+
+        // Re-link any admission registers referencing duplicate IDs
+        await tx.admissionRegister.updateMany({
+          where: { applicationNo: { in: duplicates.map((d) => d.applicationNumber) } },
+          data: { applicationNo: master.applicationNumber },
+        });
+
+        // Delete redundant duplicate applications
+        await tx.admissionsApplication.deleteMany({
+          where: { id: { in: duplicateIds } },
+        });
+      });
+
+      applicationsMergedGroups++;
+      applicationsPurgedCount += duplicates.length;
+    }
+  }
+
   return {
-    totalMergedGroups: leadsMergedGroups + registersMergedGroups,
-    totalPurged: leadsPurgedCount + registersPurgedCount,
+    totalMergedGroups: leadsMergedGroups + registersMergedGroups + applicationsMergedGroups,
+    totalPurged: leadsPurgedCount + registersPurgedCount + applicationsPurgedCount,
     leadsMergedGroups,
     leadsPurgedCount,
     registersMergedGroups,
     registersPurgedCount,
+    applicationsMergedGroups,
+    applicationsPurgedCount,
   };
 }
 

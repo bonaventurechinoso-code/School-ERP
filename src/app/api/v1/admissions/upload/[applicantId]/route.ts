@@ -915,17 +915,38 @@ export async function POST(
       const firstName = nameParts[0] || "Student";
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Applicant";
 
-      targetApp = await basePrisma.admissionsApplication.findFirst({
-        where: {
-          schoolId,
-          OR: [
-            { applicationNumber: appNo },
-            { id: applicantId },
-            ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
-            ...(lead.parentPhone ? [{ phoneNumber: lead.parentPhone }] : []),
-          ],
-        },
+      const { findExistingAdmissionsApplication, isInstitutionalApplicationNo } = await import(
+        "@/lib/admissions-deduplication.service"
+      );
+
+      targetApp = await findExistingAdmissionsApplication({
+        schoolId,
+        fullName: lead.applicantName || `${firstName} ${lastName}`,
+        className: lead.targetGrade,
+        phoneNumber: lead.parentPhone || lead.parentContact,
+        email: lead.studentEmail || lead.parentEmail,
       });
+
+      if (!targetApp) {
+        targetApp = await basePrisma.admissionsApplication.findFirst({
+          where: {
+            schoolId,
+            OR: [
+              { applicationNumber: appNo },
+              { id: applicantId },
+              ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+              ...(lead.parentPhone ? [{ phoneNumber: lead.parentPhone }] : []),
+            ],
+          },
+        });
+      }
+
+      if (targetApp && !isInstitutionalApplicationNo(targetApp.applicationNumber) && isInstitutionalApplicationNo(appNo)) {
+        targetApp = await basePrisma.admissionsApplication.update({
+          where: { id: targetApp.id },
+          data: { applicationNumber: appNo },
+        });
+      }
 
       if (!targetApp) {
         const currentYear = new Date().getFullYear();

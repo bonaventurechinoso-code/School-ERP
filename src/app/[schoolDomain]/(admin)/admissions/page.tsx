@@ -2,6 +2,13 @@ import React from "react";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/admissions.service";
+import {
+  normalizeCandidateName,
+  normalizeCandidateGrade,
+  isInstitutionalApplicationNo,
+  buildDeterministicAdmissionKey,
+  mergeDuplicateAdmissionsApplications,
+} from "@/lib/admissions-deduplication.service";
 import AdmissionsWorkspaceClient, {
   SerializedApplication,
   SerializedTransaction,
@@ -119,7 +126,18 @@ export default async function AdmissionsPage({
   try {
     const existingApps = await basePrisma.admissionsApplication.findMany({
       where: { schoolId: school.id },
-      select: { applicationNumber: true, id: true },
+      select: {
+        id: true,
+        applicationNumber: true,
+        firstName: true,
+        lastName: true,
+        middleName: true,
+        programId: true,
+        academicSessionId: true,
+        dateOfBirth: true,
+        tierSpecificData: true,
+        metadata: true,
+      },
     });
     const knownAppNos = new Set(existingApps.map((a) => a.applicationNumber));
 
@@ -129,34 +147,69 @@ export default async function AdmissionsPage({
     });
 
     for (const reg of pendingRegisters) {
-      if (!knownAppNos.has(reg.applicationNo)) {
-        const currentYear = new Date().getFullYear();
-        await basePrisma.admissionsApplication.create({
-          data: {
-            tenantId: school.id,
-            schoolId: school.id,
-            academicSessionId: currentYear + "/" + (currentYear + 1),
-            programId: reg.classApplied || "Class 1",
-            applicationNumber: reg.applicationNo,
-            intakeChannel: "ONLINE_PORTAL",
-            firstName: reg.firstName,
-            lastName: reg.lastName,
-            email: reg.email || (reg.applicationNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
-            phoneNumber: reg.parentPhone || "N/A",
-            whatsappNumber: reg.parentPhone || null,
-            dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
-            gender: "Unspecified",
-            status: "PAYMENT_PENDING",
-            tierSpecificData: {
-              targetGrade: reg.classApplied,
-              targetClass: reg.classApplied,
-              parentPhone: reg.parentPhone,
-              registerId: reg.id,
+      if (knownAppNos.has(reg.applicationNo)) continue;
+
+      const regFullName = `${reg.firstName || ""} ${reg.lastName || ""}`.trim();
+      const normRegName = normalizeCandidateName(regFullName);
+      const normRegClass = normalizeCandidateGrade(reg.classApplied);
+
+      // Deterministic check: do NOT create duplicate if pupil already has an application
+      const matchApp = existingApps.find((app) => {
+        const appFullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
+        const normApp = normalizeCandidateName(appFullName);
+        const nameMatch = normApp === normRegName || (normRegName.length > 5 && (normApp.includes(normRegName) || normRegName.includes(normApp)));
+        if (!nameMatch) return false;
+
+        const normAppClass = normalizeCandidateGrade(app.programId);
+        return !normRegClass || !normAppClass || normAppClass === normRegClass;
+      });
+
+      if (matchApp) {
+        // If matching application has temporary ID (APP-XXXXXX), upgrade to finalized institutional format!
+        if (!isInstitutionalApplicationNo(matchApp.applicationNumber) && isInstitutionalApplicationNo(reg.applicationNo)) {
+          await basePrisma.admissionsApplication.update({
+            where: { id: matchApp.id },
+            data: {
+              applicationNumber: reg.applicationNo,
+              metadata: {
+                ...((matchApp.metadata as any) || {}),
+                registerId: reg.id,
+              },
             },
-          },
-        }).catch(() => null);
+          }).catch(() => null);
+          knownAppNos.delete(matchApp.applicationNumber);
+          matchApp.applicationNumber = reg.applicationNo;
+        }
         knownAppNos.add(reg.applicationNo);
+        continue;
       }
+
+      const currentYear = new Date().getFullYear();
+      await basePrisma.admissionsApplication.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          academicSessionId: currentYear + "/" + (currentYear + 1),
+          programId: reg.classApplied || "Class 1",
+          applicationNumber: reg.applicationNo,
+          intakeChannel: "ONLINE_PORTAL",
+          firstName: reg.firstName,
+          lastName: reg.lastName,
+          email: reg.email || (reg.applicationNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+          phoneNumber: reg.parentPhone || "N/A",
+          whatsappNumber: reg.parentPhone || null,
+          dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
+          gender: "Unspecified",
+          status: "PAYMENT_PENDING",
+          tierSpecificData: {
+            targetGrade: reg.classApplied,
+            targetClass: reg.classApplied,
+            parentPhone: reg.parentPhone,
+            registerId: reg.id,
+          },
+        },
+      }).catch(() => null);
+      knownAppNos.add(reg.applicationNo);
     }
 
     const pendingLeads = await basePrisma.admissionLead.findMany({
@@ -165,44 +218,66 @@ export default async function AdmissionsPage({
     });
 
     for (const lead of pendingLeads) {
-      const generatedAppNo = (lead as any).applicationNo || ("APP-" + lead.id.slice(0, 6).toUpperCase());
-      if (!knownAppNos.has(generatedAppNo)) {
-        const nameParts = (lead.applicantName || "Student").trim().split(" ");
-        const firstName = nameParts[0] || "Student";
-        const lastName = nameParts.slice(1).join(" ") || "Applicant";
-        const currentYear = new Date().getFullYear();
+      // If lead is already CONVERTED, it has already transitioned to register/application! Do NOT spawn APP-XXXXXX!
+      if (lead.status === "CONVERTED") continue;
 
-        await basePrisma.admissionsApplication.create({
-          data: {
-            tenantId: school.id,
-            schoolId: school.id,
-            academicSessionId: currentYear + "/" + (currentYear + 1),
-            programId: lead.targetGrade || "Class 1",
-            applicationNumber: generatedAppNo,
-            intakeChannel: "ONLINE_PORTAL",
-            firstName,
-            lastName,
-            email: lead.studentEmail || lead.parentEmail || (generatedAppNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
-            phoneNumber: lead.parentPhone || lead.parentContact || "N/A",
-            whatsappNumber: lead.parentPhone || lead.parentContact || null,
-            dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
-            gender: "Unspecified",
-            status: "PAYMENT_PENDING",
-            tierSpecificData: {
-              targetGrade: lead.targetGrade,
-              targetClass: lead.targetGrade,
-              parentName: lead.parentName,
-              parentPhone: lead.parentPhone || lead.parentContact,
-              leadId: lead.id,
-            },
-            metadata: {
-              leadId: lead.id,
-              uploadToken: (lead as any).uploadToken,
-            },
-          },
-        }).catch(() => null);
-        knownAppNos.add(generatedAppNo);
+      const leadFullName = (lead.applicantName || "").trim();
+      const normLeadName = normalizeCandidateName(leadFullName);
+      const normLeadClass = normalizeCandidateGrade(lead.targetGrade);
+
+      // Deterministic check: do NOT create duplicate if pupil already has an application
+      const matchApp = existingApps.find((app) => {
+        const appFullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
+        const normApp = normalizeCandidateName(appFullName);
+        const nameMatch = normApp === normLeadName || (normLeadName.length > 5 && (normApp.includes(normLeadName) || normLeadName.includes(normApp)));
+        if (!nameMatch) return false;
+
+        const normAppClass = normalizeCandidateGrade(app.programId);
+        return !normLeadClass || !normAppClass || normAppClass === normLeadClass;
+      });
+
+      if (matchApp) {
+        continue;
       }
+
+      const generatedAppNo = (lead as any).applicationNo || ("APP-" + lead.id.slice(0, 6).toUpperCase());
+      if (knownAppNos.has(generatedAppNo)) continue;
+
+      const nameParts = leadFullName.split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.slice(1).join(" ") || "Applicant";
+      const currentYear = new Date().getFullYear();
+
+      await basePrisma.admissionsApplication.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          academicSessionId: currentYear + "/" + (currentYear + 1),
+          programId: lead.targetGrade || "Class 1",
+          applicationNumber: generatedAppNo,
+          intakeChannel: "ONLINE_PORTAL",
+          firstName,
+          lastName,
+          email: lead.studentEmail || lead.parentEmail || (generatedAppNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+          phoneNumber: lead.parentPhone || lead.parentContact || "N/A",
+          whatsappNumber: lead.parentPhone || lead.parentContact || null,
+          dateOfBirth: new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000),
+          gender: "Unspecified",
+          status: "PAYMENT_PENDING",
+          tierSpecificData: {
+            targetGrade: lead.targetGrade,
+            targetClass: lead.targetGrade,
+            parentName: lead.parentName,
+            parentPhone: lead.parentPhone || lead.parentContact,
+            leadId: lead.id,
+          },
+          metadata: {
+            leadId: lead.id,
+            uploadToken: (lead as any).uploadToken,
+          },
+        },
+      }).catch(() => null);
+      knownAppNos.add(generatedAppNo);
     }
   } catch (reconcileErr) {
     console.warn("[ADMISSIONS] Notice during auto-reconciliation:", reconcileErr);
@@ -294,6 +369,41 @@ export default async function AdmissionsPage({
       rawApplications = [];
     }
   }
+
+  // Self-healing deduplication pass for rawApplications:
+  // If identical pupil applications exist with distinct application number formats (e.g. portal APP-7F6950 vs localized EGEDE/2026/0001),
+  // merge them into the finalized institutional record so the Admissions Register Table renders cleanly without duplicates!
+  const deduplicatedApps: any[] = [];
+  const compositeKeyMap = new Map<string, any>();
+
+  for (const app of rawApplications) {
+    const fullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
+    const dKey = buildDeterministicAdmissionKey({
+      fullName,
+      className: app.programId,
+      dateOfBirth: app.dateOfBirth,
+      session: app.academicSessionId,
+    });
+
+    if (!compositeKeyMap.has(dKey)) {
+      compositeKeyMap.set(dKey, app);
+      deduplicatedApps.push(app);
+    } else {
+      const existing = compositeKeyMap.get(dKey);
+      // Prefer finalized localized institutional number (e.g. EGEDE/2026/0001) over temporary portal ID (APP-7F6950)
+      if (isInstitutionalApplicationNo(app.applicationNumber) && !isInstitutionalApplicationNo(existing.applicationNumber)) {
+        const idx = deduplicatedApps.indexOf(existing);
+        if (idx !== -1) deduplicatedApps[idx] = app;
+        compositeKeyMap.set(dKey, app);
+        // Purge redundant temporary record from database
+        basePrisma.admissionsApplication.delete({ where: { id: existing.id } }).catch(() => null);
+      } else {
+        // Current app is the duplicate; purge from database
+        basePrisma.admissionsApplication.delete({ where: { id: app.id } }).catch(() => null);
+      }
+    }
+  }
+  rawApplications = deduplicatedApps;
 
   // Serialize applications for client component
   const applications: SerializedApplication[] = (rawApplications || []).map((app: any) => ({

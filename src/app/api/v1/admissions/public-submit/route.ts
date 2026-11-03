@@ -248,69 +248,111 @@ export async function POST(request: NextRequest) {
       status: "docs_pending",
     });
 
-    const appNo = transitionResult.registerRecord.applicationNo;
+    let appNo = transitionResult.registerRecord.applicationNo;
     const accountEmail = (studentEmail || parentEmail || "").trim().toLowerCase();
 
     // 2b. Synchronize with AdmissionsApplication pipeline for Admin Workspace visibility
+    // UPSTREAM VALIDATION & DETERMINISTIC COMPOSITE KEY PRE-CHECK:
+    // [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
     let admissionsApp: any = null;
     try {
+      const { findExistingAdmissionsApplication, isInstitutionalApplicationNo } = await import(
+        "@/lib/admissions-deduplication.service"
+      );
+
       const defaultDob = data.dateOfBirth
         ? new Date(data.dateOfBirth)
         : new Date(Date.now() - 10 * 365.25 * 24 * 60 * 60 * 1000);
       const currentYear = new Date().getFullYear();
       const currentAcademicSession = currentYear + "/" + (currentYear + 1);
 
-      admissionsApp = await basePrisma.admissionsApplication.upsert({
-        where: { applicationNumber: appNo },
-        create: {
-          tenantId: school.id,
-          schoolId: school.id,
-          academicSessionId: currentAcademicSession,
-          programId: effectiveTargetGrade || "Class 1",
-          applicationNumber: appNo,
-          intakeChannel: "ONLINE_PORTAL",
-          firstName,
-          lastName,
-          email: accountEmail || (appNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
-          phoneNumber: parentContact || studentPhone || "N/A",
-          whatsappNumber: parentContact || studentPhone || null,
-          dateOfBirth: defaultDob,
-          gender: data.gender || "Unspecified",
-          status: "PAYMENT_PENDING",
-          tierSpecificData: {
-            targetGrade: effectiveTargetGrade,
-            targetClass: effectiveTargetGrade,
-            academicTier: finalTierName,
-            parentName: parentName || "Parent / Guardian",
-            parentPhone: parentContact || studentPhone || "N/A",
-            leadId: newLead.id,
-            dateOfBirth: data.dateOfBirth || null,
-          },
-          metadata: {
-            leadId: newLead.id,
-            registerId: transitionResult.registerRecord?.id,
-            uploadToken,
-          },
-        },
-        update: {
-          programId: effectiveTargetGrade || "Class 1",
-          email: accountEmail || undefined,
-          phoneNumber: parentContact || studentPhone || undefined,
-          dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
-          tierSpecificData: {
-            targetGrade: effectiveTargetGrade,
-            targetClass: effectiveTargetGrade,
-            academicTier: finalTierName,
-            parentName: parentName || "Parent / Guardian",
-            parentPhone: parentContact || studentPhone || "N/A",
-            leadId: newLead.id,
-            dateOfBirth: data.dateOfBirth || null,
-          },
-        },
+      // Check if an application already exists matching deterministic composite key
+      const existingApp = await findExistingAdmissionsApplication({
+        schoolId: school.id,
+        fullName,
+        className: effectiveTargetGrade,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : defaultDob,
+        session: currentAcademicSession,
+        phoneNumber: parentContact || studentPhone || null,
+        email: accountEmail || null,
       });
-      console.log("[PUBLIC_SUBMIT] Synchronized AdmissionsApplication record:", admissionsApp.id, admissionsApp.applicationNumber);
+
+      if (existingApp) {
+        // Upsert / Merge: Do NOT spawn a duplicate row.
+        // If the existing application has a temporary number (e.g. APP-7F6950) while the register
+        // has an institutional number (e.g. EGEDE/2026/0001), upgrade to the finalized institutional number!
+        let canonicalAppNo = existingApp.applicationNumber;
+        if (!isInstitutionalApplicationNo(existingApp.applicationNumber) && isInstitutionalApplicationNo(appNo)) {
+          canonicalAppNo = appNo;
+        } else if (isInstitutionalApplicationNo(existingApp.applicationNumber)) {
+          canonicalAppNo = existingApp.applicationNumber;
+          appNo = canonicalAppNo;
+        }
+
+        admissionsApp = await basePrisma.admissionsApplication.update({
+          where: { id: existingApp.id },
+          data: {
+            applicationNumber: canonicalAppNo,
+            programId: effectiveTargetGrade || existingApp.programId,
+            email: accountEmail || existingApp.email,
+            phoneNumber: parentContact || studentPhone || existingApp.phoneNumber,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : existingApp.dateOfBirth,
+            tierSpecificData: {
+              ...((existingApp.tierSpecificData as any) || {}),
+              targetGrade: effectiveTargetGrade,
+              targetClass: effectiveTargetGrade,
+              academicTier: finalTierName,
+              parentName: parentName || (existingApp.tierSpecificData as any)?.parentName || "Parent / Guardian",
+              parentPhone: parentContact || studentPhone || (existingApp.tierSpecificData as any)?.parentPhone || "N/A",
+              leadId: newLead.id,
+              dateOfBirth: data.dateOfBirth || (existingApp.tierSpecificData as any)?.dateOfBirth || null,
+            },
+            metadata: {
+              ...((existingApp.metadata as any) || {}),
+              leadId: newLead.id,
+              registerId: transitionResult.registerRecord?.id,
+              uploadToken,
+            },
+          },
+        });
+        console.log("[PUBLIC_SUBMIT] Deduplicated & Merged into existing AdmissionsApplication record:", admissionsApp.id, canonicalAppNo);
+      } else {
+        admissionsApp = await basePrisma.admissionsApplication.create({
+          data: {
+            tenantId: school.id,
+            schoolId: school.id,
+            academicSessionId: currentAcademicSession,
+            programId: effectiveTargetGrade || "Class 1",
+            applicationNumber: appNo,
+            intakeChannel: "ONLINE_PORTAL",
+            firstName,
+            lastName,
+            email: accountEmail || (appNo.toLowerCase().replace(/[^a-z0-9]/g, "") + "@applicant.schoolerp"),
+            phoneNumber: parentContact || studentPhone || "N/A",
+            whatsappNumber: parentContact || studentPhone || null,
+            dateOfBirth: defaultDob,
+            gender: data.gender || "Unspecified",
+            status: "PAYMENT_PENDING",
+            tierSpecificData: {
+              targetGrade: effectiveTargetGrade,
+              targetClass: effectiveTargetGrade,
+              academicTier: finalTierName,
+              parentName: parentName || "Parent / Guardian",
+              parentPhone: parentContact || studentPhone || "N/A",
+              leadId: newLead.id,
+              dateOfBirth: data.dateOfBirth || null,
+            },
+            metadata: {
+              leadId: newLead.id,
+              registerId: transitionResult.registerRecord?.id,
+              uploadToken,
+            },
+          },
+        });
+        console.log("[PUBLIC_SUBMIT] Created new AdmissionsApplication record:", admissionsApp.id, admissionsApp.applicationNumber);
+      }
     } catch (appErr: any) {
-      console.error("[PUBLIC_SUBMIT] Error creating AdmissionsApplication:", appErr);
+      console.error("[PUBLIC_SUBMIT] Error creating/updating AdmissionsApplication:", appErr);
     }
 
     // Provision or sync Student portal user record

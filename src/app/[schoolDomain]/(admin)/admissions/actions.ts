@@ -11,6 +11,9 @@ import {
 import {
   buildDeduplicationCompoundKey,
   deduplicateTenantAdmissions,
+  findExistingAdmissionsApplication,
+  buildDeterministicAdmissionKey,
+  isInstitutionalApplicationNo,
 } from "@/lib/admissions-deduplication.service";
 import { AdmissionTierType, ApplicationStatus } from "@prisma/client";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
@@ -3780,12 +3783,14 @@ export async function deduplicateAllAdmissionsAction(payload: {
 
     const appGroups = new Map<string, typeof allApps>();
     for (const app of allApps) {
-      const fullName = `${app.firstName || ""} ${app.lastName || ""}`.trim().toLowerCase();
-      const phone = (app.phoneNumber || "").replace(/[^0-9]/g, "");
-      const email = (app.email || "").trim().toLowerCase();
-      // Compound key: name + (phone or email or program)
-      const key = `${fullName}|${phone || email}|${(app.programId || "").trim().toLowerCase()}`;
-      if (!key || key === "||") continue;
+      const fullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
+      const key = buildDeterministicAdmissionKey({
+        fullName,
+        className: app.programId,
+        dateOfBirth: app.dateOfBirth,
+        session: app.academicSessionId,
+      });
+      if (!key || key === "|||") continue;
 
       const group = appGroups.get(key) || [];
       group.push(app);
@@ -3797,10 +3802,12 @@ export async function deduplicateAllAdmissionsAction(payload: {
 
     for (const [, group] of appGroups.entries()) {
       if (group.length > 1) {
-        // Master is preferred as the one with SETTLED fee or farthest progressed status
+        // Master is preferred as the one with localized institutional application number (e.g. EGEDE/2026/0001)
+        // over temporary portal ID (APP-7F6950), then SETTLED fee or farthest progressed status
         const master = group.reduce((best, curr) => {
           const score = (a: any) => {
             let s = 0;
+            if (isInstitutionalApplicationNo(a.applicationNumber)) s += 200;
             if (a.status === "ENROLLED") s += 100;
             if (a.status === "OFFER_EXTENDED") s += 80;
             if (a.status === "UNDER_REVIEW") s += 50;

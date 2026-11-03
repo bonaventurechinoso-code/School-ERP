@@ -3,6 +3,10 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
+import {
+  findExistingAdmissionsApplication,
+  isInstitutionalApplicationNo,
+} from "@/lib/admissions-deduplication.service";
 
 export async function recordWalkInApplication(payload: {
   schoolId: string;
@@ -65,43 +69,106 @@ export async function recordWalkInApplication(payload: {
     const year = new Date().getFullYear();
     const branchPrefix = school.subdomain ? school.subdomain.toUpperCase().slice(0, 4) : "SCH";
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const applicationNumber = `APP-${branchPrefix}-${year}-W${randomSuffix}`;
+    const newApplicationNumber = `APP-${branchPrefix}-${year}-W${randomSuffix}`;
     const paymentReference = payment.posTerminalReference || `POS-${branchPrefix}-${Date.now().toString().slice(-6)}`;
+    const effectiveSession = academicSessionId || `${year}/${year + 1}`;
+    const targetFullName = `${firstName} ${middleName ? middleName + " " : ""}${lastName}`.trim();
 
-    // Atomic creation of Walk-In Application, Sighted Documents, and Settled Fee Transaction
+    // 1. UPSTREAM VALIDATION RULE & DETERMINISTIC MATCHING KEY PRE-SUBMISSION CHECK:
+    // [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
+    const existingApp = await findExistingAdmissionsApplication({
+      schoolId: school.id,
+      fullName: targetFullName,
+      className: programId,
+      dateOfBirth: new Date(dateOfBirth),
+      session: effectiveSession,
+      phoneNumber: phoneNumber || parentPhone,
+      email,
+    });
+
+    const isUpsert = Boolean(existingApp);
+    // If existing record has temporary portal ID (e.g. APP-7F6950), finalize to localized format.
+    // If existing record already has finalized institutional format (e.g. EGEDE/2026/0001), preserve it.
+    let finalizedAppNo = newApplicationNumber;
+    if (existingApp) {
+      if (isInstitutionalApplicationNo(existingApp.applicationNumber)) {
+        finalizedAppNo = existingApp.applicationNumber;
+      } else {
+        finalizedAppNo = newApplicationNumber;
+      }
+    }
+
+    // Atomic execution of Walk-In Application (Upsert/Create), Sighted Documents, and Settled Fee Transaction
     const result = await basePrisma.$transaction(async (tx) => {
-      // 1. Create AdmissionsApplication
-      const application = await tx.admissionsApplication.create({
-        data: {
-          tenantId: school.id,
-          schoolId: school.id,
-          programId,
-          academicSessionId: academicSessionId || `${year}/${year + 1}`,
-          applicationNumber,
-          intakeChannel: "WALK_IN",
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          middleName: middleName?.trim() || null,
-          email: email.toLowerCase().trim(),
-          phoneNumber: phoneNumber.trim(),
-          whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim(),
-          dateOfBirth: new Date(dateOfBirth),
-          gender,
-          status: "SUBMITTED", // Immediately submitted as payment is settled at the desk
-          tierSpecificData: {
-            parent: {
-              name: parentName || `${lastName} Family`,
-              phone: parentPhone || phoneNumber,
+      let application: any = null;
+
+      if (existingApp) {
+        // Upsert / Merge into existing record to prevent duplicate portal vs admin rows
+        application = await tx.admissionsApplication.update({
+          where: { id: existingApp.id },
+          data: {
+            applicationNumber: finalizedAppNo,
+            intakeChannel: "WALK_IN",
+            status: "SUBMITTED",
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            middleName: middleName?.trim() || existingApp.middleName,
+            email: email.toLowerCase().trim() || existingApp.email,
+            phoneNumber: phoneNumber.trim() || existingApp.phoneNumber,
+            whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim() || existingApp.whatsappNumber,
+            dateOfBirth: new Date(dateOfBirth),
+            gender: gender || existingApp.gender,
+            tierSpecificData: {
+              ...((existingApp.tierSpecificData as any) || {}),
+              parent: {
+                name: parentName || (existingApp.tierSpecificData as any)?.parent?.name || `${lastName} Family`,
+                phone: parentPhone || phoneNumber || (existingApp.tierSpecificData as any)?.parent?.phone,
+              },
+              deskOfficer: registrarName,
+              physicalInspectionCompleted: true,
             },
-            deskOfficer: registrarName,
-            physicalInspectionCompleted: true,
+            metadata: {
+              ...((existingApp.metadata as any) || {}),
+              intakeDesk: "Admissions Front Desk",
+              registrarName,
+              walkInMergedAt: new Date().toISOString(),
+            },
           },
-          metadata: {
-            intakeDesk: "Admissions Front Desk",
-            registrarName,
+        });
+      } else {
+        // Create brand-new AdmissionsApplication
+        application = await tx.admissionsApplication.create({
+          data: {
+            tenantId: school.id,
+            schoolId: school.id,
+            programId,
+            academicSessionId: effectiveSession,
+            applicationNumber: finalizedAppNo,
+            intakeChannel: "WALK_IN",
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            middleName: middleName?.trim() || null,
+            email: email.toLowerCase().trim(),
+            phoneNumber: phoneNumber.trim(),
+            whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim(),
+            dateOfBirth: new Date(dateOfBirth),
+            gender,
+            status: "SUBMITTED", // Immediately submitted as payment is settled at the desk
+            tierSpecificData: {
+              parent: {
+                name: parentName || `${lastName} Family`,
+                phone: parentPhone || phoneNumber,
+              },
+              deskOfficer: registrarName,
+              physicalInspectionCompleted: true,
+            },
+            metadata: {
+              intakeDesk: "Admissions Front Desk",
+              registrarName,
+            },
           },
-        },
-      });
+        });
+      }
 
       // 2. Register sighted physical credentials
       const docEntries: any[] = [];
@@ -111,20 +178,35 @@ export async function recordWalkInApplication(payload: {
       if (physicalDocsSighted.lgaIndigeneCert) docEntries.push("LGA_INDIGENE_LETTER");
 
       for (const docType of docEntries) {
-        await tx.admissionsDocument.create({
-          data: {
-            tenantId: school.id,
-            applicationId: application.id,
-            documentType: docType,
-            storageKey: `desk_sighted/${school.id}/${application.id}/${docType}`,
-            fileMimeType: "application/physical-copy",
-            fileSizeBytes: 0,
-            verificationStatus: "MANUALLY_VERIFIED",
-            rejectionReason: null,
-            verifiedByUserId: registrarName,
-            verifiedAt: new Date(),
-          },
+        const existingDoc = await tx.admissionsDocument.findFirst({
+          where: { applicationId: application.id, documentType: docType },
         });
+
+        if (existingDoc) {
+          await tx.admissionsDocument.update({
+            where: { id: existingDoc.id },
+            data: {
+              verificationStatus: "MANUALLY_VERIFIED",
+              verifiedByUserId: registrarName,
+              verifiedAt: new Date(),
+            },
+          });
+        } else {
+          await tx.admissionsDocument.create({
+            data: {
+              tenantId: school.id,
+              applicationId: application.id,
+              documentType: docType,
+              storageKey: `desk_sighted/${school.id}/${application.id}/${docType}`,
+              fileMimeType: "application/physical-copy",
+              fileSizeBytes: 0,
+              verificationStatus: "MANUALLY_VERIFIED",
+              rejectionReason: null,
+              verifiedByUserId: registrarName,
+              verifiedAt: new Date(),
+            },
+          });
+        }
       }
 
       // 3. Record settled POS/Cash transaction
@@ -143,7 +225,23 @@ export async function recordWalkInApplication(payload: {
         },
       });
 
-      return { application, feeTx, docEntriesCount: docEntries.length };
+      // 4. Sync corresponding AdmissionRegister if one exists
+      await tx.admissionRegister.updateMany({
+        where: {
+          tenantId: school.id,
+          OR: [
+            { applicationNo: finalizedAppNo },
+            ...(existingApp ? [{ applicationNo: existingApp.applicationNumber }] : []),
+          ],
+        },
+        data: {
+          applicationNo: finalizedAppNo,
+          formFeePaid: true,
+          status: "DOCS_PENDING",
+        },
+      });
+
+      return { application, feeTx, docEntriesCount: docEntries.length, isUpsert };
     });
 
     // 4. Record Audit Trail safely after transaction commits
@@ -155,8 +253,8 @@ export async function recordWalkInApplication(payload: {
           applicationId: result.application.id,
           registerId: result.application.id,
           actorId: registrarName,
-          action: "WALK_IN_CREATED",
-          fromStage: "DRAFT",
+          action: result.isUpsert ? "WALK_IN_MERGED" : "WALK_IN_CREATED",
+          fromStage: result.isUpsert ? "PORTAL_INQUIRY" : "DRAFT",
           toStage: "SUBMITTED",
           metadata: {
             intakeChannel: "WALK_IN",
@@ -193,7 +291,11 @@ export async function recordWalkInApplication(payload: {
       console.warn("[WALK_IN_NOTIFICATION_WARN]:", notifErr);
     });
 
-    revalidatePath("/[schoolDomain]/admissions", "page");
+    try {
+      revalidatePath("/[schoolDomain]/admissions", "page");
+    } catch {
+      // Safe no-op in non-HTTP/test contexts
+    }
 
     return {
       success: true,

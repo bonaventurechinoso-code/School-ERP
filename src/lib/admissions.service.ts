@@ -412,10 +412,31 @@ export async function convertLeadToRegister(
         },
       });
     } else {
-      // Create new register record
-      const year = new Date().getFullYear();
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      const applicationNo = `ADM-${year}-${rand}`;
+      // UPSTREAM VALIDATION & DETERMINISTIC COMPOSITE KEY PRE-CHECK:
+      // [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
+      const { findExistingAdmissionsApplication, isInstitutionalApplicationNo } = await import(
+        "@/lib/admissions-deduplication.service"
+      );
+      const { generateApplicationNo } = await import("@/modules/enrollment/enrollment.controller");
+
+      const existingApp = await findExistingAdmissionsApplication({
+        schoolId: effectiveSchoolId,
+        fullName: `${fName} ${lName}`,
+        className: targetClass,
+        phoneNumber: pPhone,
+        email: pEmail,
+      });
+
+      let applicationNo = "";
+      if (existingApp && isInstitutionalApplicationNo(existingApp.applicationNumber)) {
+        applicationNo = existingApp.applicationNumber;
+      } else {
+        applicationNo = await generateApplicationNo(effectiveSchoolId).catch(() => {
+          const year = new Date().getFullYear();
+          const rand = Math.floor(1000 + Math.random() * 9000);
+          return `ADM-${year}-${rand}`;
+        });
+      }
 
       registerRecord = await tx.admissionRegister.create({
         data: {
@@ -437,6 +458,21 @@ export async function convertLeadToRegister(
           } as any,
         },
       });
+
+      // Synchronize AdmissionsApplication with the finalized institutional application number
+      if (existingApp) {
+        await tx.admissionsApplication.update({
+          where: { id: existingApp.id },
+          data: {
+            applicationNumber: applicationNo,
+            metadata: {
+              ...((existingApp.metadata as any) || {}),
+              registerId: registerRecord.id,
+              leadId,
+            },
+          },
+        });
+      }
     }
 
     // b) Update AdmissionLeads { status: CONVERTED } - do NOT delete

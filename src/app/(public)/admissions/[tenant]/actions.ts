@@ -4,6 +4,10 @@ import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { savePrivateAdmissionsFile } from "@/lib/storage/admissionsStorage";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
 import { getTenantPaymentSettings } from "@/lib/payment-receipt-service";
+import {
+  findExistingAdmissionsApplication,
+  isInstitutionalApplicationNo,
+} from "@/lib/admissions-deduplication.service";
 
 export async function lookupTenantAdmissionsProfile(tenantSlug: string) {
   try {
@@ -111,32 +115,74 @@ export async function submitPublicApplication(payload: {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const applicationNumber = `APP-${branchPrefix}-${year}-${randomSuffix}`;
     const paymentReference = `PAY-${branchPrefix}-${year}-${randomSuffix}`;
+    const effectiveSession = academicSessionId || `${year}/${year + 1}`;
+    const targetFullName = `${firstName} ${middleName ? middleName + " " : ""}${lastName}`.trim();
 
-    // 1. Create the AdmissionsApplication record
-    const application = await basePrisma.admissionsApplication.create({
-      data: {
-        tenantId: effectiveSchoolId,
-        schoolId: effectiveSchoolId,
-        programId,
-        academicSessionId: academicSessionId || `${year}/${year + 1}`,
-        applicationNumber,
-        intakeChannel: "ONLINE_PORTAL",
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        middleName: middleName?.trim() || null,
-        email: email.toLowerCase().trim(),
-        phoneNumber: phoneNumber.trim(),
-        whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim(),
-        dateOfBirth: new Date(dateOfBirth),
-        gender,
-        status: feePayment?.receiptBase64 ? "PAYMENT_PENDING" : "DRAFT",
-        tierSpecificData: tierSpecificData || {},
-        metadata: {
-          submittedFromIp: "client-portal",
-          userDevice: "browser",
-        },
-      },
+    // 1. UPSTREAM VALIDATION RULE & DETERMINISTIC MATCHING KEY PRE-SUBMISSION CHECK:
+    // [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
+    const existingApp = await findExistingAdmissionsApplication({
+      schoolId: effectiveSchoolId,
+      fullName: targetFullName,
+      className: programId,
+      dateOfBirth: new Date(dateOfBirth),
+      session: effectiveSession,
+      phoneNumber,
+      email,
     });
+
+    let application: any = null;
+    let finalAppNo = applicationNumber;
+
+    if (existingApp) {
+      if (isInstitutionalApplicationNo(existingApp.applicationNumber)) {
+        finalAppNo = existingApp.applicationNumber;
+      }
+      application = await basePrisma.admissionsApplication.update({
+        where: { id: existingApp.id },
+        data: {
+          applicationNumber: finalAppNo,
+          middleName: middleName?.trim() || existingApp.middleName,
+          phoneNumber: phoneNumber.trim() || existingApp.phoneNumber,
+          whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim() || existingApp.whatsappNumber,
+          dateOfBirth: new Date(dateOfBirth),
+          gender: gender || existingApp.gender,
+          status: feePayment?.receiptBase64 ? "PAYMENT_PENDING" : existingApp.status,
+          tierSpecificData: {
+            ...((existingApp.tierSpecificData as any) || {}),
+            ...(tierSpecificData || {}),
+          },
+          metadata: {
+            ...((existingApp.metadata as any) || {}),
+            lastPortalSubmitAt: new Date().toISOString(),
+          },
+        },
+      });
+    } else {
+      application = await basePrisma.admissionsApplication.create({
+        data: {
+          tenantId: effectiveSchoolId,
+          schoolId: effectiveSchoolId,
+          programId,
+          academicSessionId: effectiveSession,
+          applicationNumber: finalAppNo,
+          intakeChannel: "ONLINE_PORTAL",
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          middleName: middleName?.trim() || null,
+          email: email.toLowerCase().trim(),
+          phoneNumber: phoneNumber.trim(),
+          whatsappNumber: whatsappNumber?.trim() || phoneNumber.trim(),
+          dateOfBirth: new Date(dateOfBirth),
+          gender,
+          status: feePayment?.receiptBase64 ? "PAYMENT_PENDING" : "DRAFT",
+          tierSpecificData: tierSpecificData || {},
+          metadata: {
+            submittedFromIp: "client-portal",
+            userDevice: "browser",
+          },
+        },
+      });
+    }
 
     // 2. Process and Store Uploaded Credentials in Private Storage
     for (const doc of documents) {
