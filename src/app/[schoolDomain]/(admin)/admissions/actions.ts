@@ -25,6 +25,7 @@ import {
   sendStudentEnrollmentConfirmationEmail,
   sendDocsRequestEmail,
   sendExamAdmitSlipEmail,
+  sendDirectCommunicationEmail,
 } from "@/lib/mail";
 import { sendPaymentInstructionEmail } from "@/lib/email";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
@@ -3872,5 +3873,278 @@ export async function deduplicateAllAdmissionsAction(payload: {
   } catch (err: any) {
     console.error("[deduplicateAllAdmissionsAction] Error:", err);
     return { success: false, error: err.message || "Failed to execute admissions deduplication." };
+  }
+}
+
+/**
+ * Scans checklist state for missing/pending documents and triggers an instant
+ * email and notification reminder directly to the applicant's guardian.
+ */
+export async function sendMissingDocsReminderAction(payload: {
+  schoolId: string;
+  schoolDomain?: string;
+  applicantId?: string;
+  applicationNo?: string;
+  applicantName?: string;
+  recipientEmail?: string;
+  recipientPhone?: string;
+  missingDocuments: string[];
+  customMessage?: string;
+}) {
+  try {
+    const {
+      schoolId: rawSchoolId,
+      schoolDomain,
+      applicantId,
+      applicationNo,
+      applicantName: rawApplicantName,
+      recipientEmail,
+      recipientPhone,
+      missingDocuments,
+      customMessage,
+    } = payload;
+    const schoolId = await resolveSchoolId(rawSchoolId || schoolDomain || "");
+
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [{ id: schoolId }, { subdomain: schoolId }, ...(schoolDomain ? [{ subdomain: schoolDomain }, { slug: schoolDomain }] : [])],
+      },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
+    });
+
+    if (!school) {
+      return { success: false, error: "School tenant not found." };
+    }
+
+    if (!missingDocuments || missingDocuments.length === 0) {
+      return { success: false, error: "No missing documents identified. All checklist items are already uploaded." };
+    }
+
+    // Locate linked application or lead
+    const lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          ...(applicantId ? [{ id: applicantId }] : []),
+          ...(applicationNo ? [{ id: { contains: applicationNo.replace(/[^a-zA-Z0-9]/g, "") } }] : []),
+        ],
+      },
+    });
+
+    const app = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          ...(applicantId ? [{ id: applicantId }] : []),
+          ...(applicationNo ? [{ applicationNumber: applicationNo }] : []),
+        ],
+      },
+    });
+
+    const targetEmail = (
+      recipientEmail ||
+      app?.email ||
+      lead?.parentEmail ||
+      lead?.studentEmail ||
+      (app?.tierSpecificData as any)?.parentEmail ||
+      ""
+    ).trim();
+
+    if (!targetEmail || !targetEmail.includes("@") || targetEmail.includes("@applicant.schoolerp")) {
+      return {
+        success: false,
+        error: "No valid parent/guardian email address found on file. Please enter or update the guardian's email address.",
+      };
+    }
+
+    // Ensure valid upload token
+    let uploadToken = (app?.metadata as any)?.uploadToken || (lead as any)?.uploadToken;
+    if (!uploadToken) {
+      uploadToken = crypto.randomUUID();
+      if (lead) {
+        await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: { uploadToken, uploadExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+        }).catch(() => null);
+      }
+      if (app) {
+        await basePrisma.admissionsApplication.update({
+          where: { id: app.id },
+          data: {
+            metadata: {
+              ...((app.metadata as any) || {}),
+              uploadToken,
+            },
+          },
+        }).catch(() => null);
+      }
+    }
+
+    const sub = school.subdomain || schoolDomain || "portal";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const effectiveTargetId = applicantId || app?.id || lead?.id || "portal";
+    const uploadUrl = `${baseUrl}/${sub}/admissions/upload/${effectiveTargetId}?token=${uploadToken}`;
+    const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo || app?.applicationNumber || "status")}`;
+
+    const applicantName = rawApplicantName || (app ? `${app.firstName} ${app.lastName}` : lead?.applicantName || "Applicant");
+    const parentName = (app?.tierSpecificData as any)?.parentName || (app?.tierSpecificData as any)?.parent?.name || lead?.parentName || "Parent / Guardian";
+
+    // 1. Dispatch Email with exact missing items
+    const mailRes = await sendDocsRequestEmail({
+      schoolId: school.id,
+      applicantName,
+      parentName,
+      applicationNo: applicationNo || app?.applicationNumber || "APP-PENDING",
+      targetGrade: app?.programId || lead?.targetGrade || "Selected Grade",
+      recipientEmail: targetEmail,
+      uploadUrl,
+      trackUrl,
+      schoolName: school.name,
+      subdomain: sub,
+      customMessage: customMessage || `Friendly reminder: The following ${missingDocuments.length} verification document(s) are still pending on file: ${missingDocuments.join(", ")}. Please use the secure link below to complete your submission.`,
+      missingDocuments,
+    });
+
+    if (!mailRes.success) {
+      return { success: false, error: mailRes.error || "Failed to dispatch reminder email." };
+    }
+
+    // 2. Dispatch SMS / WhatsApp notification if phone number is available
+    const targetPhone = recipientPhone || app?.phoneNumber || lead?.parentPhone || lead?.parentContact;
+    if (targetPhone && targetPhone !== "Not provided" && targetPhone !== "N/A") {
+      await dispatchAdmissionsNotification({
+        tenantId: school.id,
+        schoolName: school.name,
+        schoolSubdomain: sub,
+        applicantNumber: applicationNo || app?.applicationNumber || "APP-PENDING",
+        recipient: {
+          name: parentName,
+          email: targetEmail,
+          phone: targetPhone,
+          whatsappNumber: targetPhone,
+        },
+        event: "APPLICATION_INITIATED",
+        magicTrackingLink: uploadUrl,
+      }).catch((err) => console.warn("[REMINDER_NOTIFICATION_WARN]:", err));
+    }
+
+    // 3. Log Audit Trail
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          applicationId: app?.id || lead?.id || null,
+          registerId: app?.id || lead?.id || null,
+          actorId: "Admissions Office",
+          action: "MISSING_DOCS_REMINDER_SENT",
+          fromStage: app?.status || "DOCS_PENDING",
+          toStage: app?.status || "DOCS_PENDING",
+          metadata: {
+            recipientEmail: targetEmail,
+            recipientPhone: targetPhone || null,
+            missingDocumentsCount: missingDocuments.length,
+            missingDocuments,
+            uploadUrl,
+            sentAt: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[sendMissingDocsReminderAction] Warning logging audit trail:", auditErr);
+    }
+
+    return {
+      success: true,
+      message: `Verification reminder successfully dispatched to ${targetEmail} for ${missingDocuments.length} missing document(s).`,
+      missingDocuments,
+      uploadUrl,
+    };
+  } catch (error: any) {
+    console.error("[sendMissingDocsReminderAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to send reminder notification." };
+  }
+}
+
+/**
+ * Dispatches a direct branded email from the school admissions office to the applicant's parent/guardian.
+ */
+export async function sendGuardianDirectEmailAction(payload: {
+  schoolId: string;
+  schoolDomain?: string;
+  applicantId?: string;
+  applicationNo?: string;
+  recipientEmail: string;
+  recipientName?: string;
+  subject: string;
+  message: string;
+}) {
+  try {
+    const { schoolId: rawSchoolId, schoolDomain, applicantId, applicationNo, recipientEmail, recipientName, subject, message } = payload;
+    const schoolId = await resolveSchoolId(rawSchoolId || schoolDomain || "");
+
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [{ id: schoolId }, { subdomain: schoolId }, ...(schoolDomain ? [{ subdomain: schoolDomain }, { slug: schoolDomain }] : [])],
+      },
+      select: { id: true, name: true, subdomain: true, contactPhone: true },
+    });
+
+    if (!school) {
+      return { success: false, error: "School tenant not found." };
+    }
+
+    if (!recipientEmail || !recipientEmail.includes("@")) {
+      return { success: false, error: "A valid guardian email address is required." };
+    }
+
+    if (!subject?.trim() || !message?.trim()) {
+      return { success: false, error: "Subject and message body cannot be empty." };
+    }
+
+    const mailRes = await sendDirectCommunicationEmail({
+      schoolId: school.id,
+      recipientEmail: recipientEmail.trim(),
+      recipientType: "GUARDIAN",
+      subject: subject.trim(),
+      body: message.trim(),
+    });
+
+    if (!mailRes.success) {
+      return { success: false, error: mailRes.error || "Failed to deliver email to guardian." };
+    }
+
+    // Log audit trail
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          applicationId: applicantId || null,
+          registerId: applicantId || null,
+          actorId: "Admissions Officer",
+          action: "GUARDIAN_DIRECT_EMAIL_SENT",
+          fromStage: "ADMISSIONS",
+          toStage: "ADMISSIONS",
+          metadata: {
+            recipientEmail: recipientEmail.trim(),
+            recipientName: recipientName || "Parent / Guardian",
+            subject: subject.trim(),
+            applicationNo: applicationNo || null,
+            sentAt: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[sendGuardianDirectEmailAction] Audit log warning:", auditErr);
+    }
+
+    return {
+      success: true,
+      message: `Direct email sent successfully to ${recipientEmail.trim()}.`,
+    };
+  } catch (error: any) {
+    console.error("[sendGuardianDirectEmailAction] Error:", error);
+    return { success: false, error: error?.message || "Failed to dispatch email to guardian." };
   }
 }

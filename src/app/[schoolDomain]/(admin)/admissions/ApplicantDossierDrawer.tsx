@@ -35,6 +35,7 @@ import {
   Check,
   AlertTriangle,
   CreditCard,
+  Bell,
 } from "lucide-react";
 import {
   updateLeadStatusAction,
@@ -46,6 +47,8 @@ import {
   sendBankDetailsEmailAction,
   markFormFeePaidAction,
   saveManualEntranceScoreAction,
+  sendMissingDocsReminderAction,
+  sendGuardianDirectEmailAction,
 } from "./actions";
 import { getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 
@@ -154,6 +157,18 @@ export default function ApplicantDossierDrawer({
   const [isSendingBankEmail, setIsSendingBankEmail] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 
+  // Missing Documents Reminder State
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+
+  // Email Guardian Composer Modal State
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailForm, setEmailForm] = useState({
+    recipientEmail: "",
+    subject: "",
+    message: "",
+  });
+  const [isSendingDirectEmail, setIsSendingDirectEmail] = useState(false);
+
   // Screening state
   const [examScore, setExamScore] = useState<string>("");
   const [subjectScores, setSubjectScores] = useState<Record<string, string>>({});
@@ -222,9 +237,18 @@ export default function ApplicantDossierDrawer({
     `ADM-${(activeCandidate.id || "").substring(0, 6).toUpperCase()}`;
 
   const parentPhone =
-    activeCandidate.parentPhone || activeCandidate.parentContact || "Not provided";
+    activeCandidate.parentPhone ||
+    activeCandidate.parentContact ||
+    (activeCandidate.tierSpecificData as any)?.parentPhone ||
+    (activeCandidate.tierSpecificData as any)?.parent?.phone ||
+    "Not provided";
   const parentEmail =
-    activeCandidate.parentEmail || activeCandidate.email || activeCandidate.studentEmail || "";
+    activeCandidate.parentEmail ||
+    (activeCandidate.tierSpecificData as any)?.parentEmail ||
+    (activeCandidate.metadata as any)?.parentEmail ||
+    activeCandidate.email ||
+    activeCandidate.studentEmail ||
+    "";
   const cleanPhone = parentPhone.replace(/\D/g, "");
 
   const receiptUrl =
@@ -257,6 +281,162 @@ export default function ApplicantDossierDrawer({
   );
 
   const feeState: "UNPAID" | "PENDING" | "PAID" = isFeePaid ? "PAID" : isFeePending ? "PENDING" : "UNPAID";
+
+  // The Canonical Statutory & Admissions Documents Checklist
+  const kycChecklist = [
+    {
+      key: "applicationFeeReceipt",
+      label: "Application Fee Receipt",
+      mandatory: true,
+      url:
+        receiptUrl ||
+        localCandidate?.applicationFeeReceiptUrl ||
+        activeCandidate?.applicationFeeReceiptUrl ||
+        docs?.applicationFeeReceiptUrl ||
+        docs?.formFeeReceiptUrl ||
+        (docs?.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object"
+          ? docs.applicationFeeReceipt.url || docs.applicationFeeReceipt.fileUrl
+          : null) ||
+        (typeof docs?.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null),
+    },
+    {
+      key: "passportPhoto",
+      label: "Passport Photograph",
+      mandatory: true,
+      url: localCandidate?.passportPhotoUrl || docs?.passportPhoto?.url || docs?.passportPhoto?.fileUrl || docs?.passport,
+    },
+    {
+      key: "birthCertificate",
+      label: "NPC National Birth Certificate / Age Declaration",
+      mandatory: true,
+      url: localCandidate?.birthCertificateUrl || docs?.birthCertificate?.url || docs?.birthCertificate?.fileUrl || docs?.birthCert,
+    },
+    {
+      key: "academicResults",
+      label: "Academic Transcripts / Previous Term Results",
+      mandatory: true,
+      url: localCandidate?.academicResultsUrl || docs?.academicResults?.url || docs?.academicResults?.fileUrl || docs?.previousResults,
+    },
+    {
+      key: "medicalRecords",
+      label: "Medical Certificate of Fitness",
+      mandatory: true,
+      url: localCandidate?.medicalRecordsUrl || docs?.medicalRecords?.url || docs?.medicalRecords?.fileUrl || docs?.medical,
+    },
+    {
+      key: "ninSlip",
+      label: "NIMC NIN Identification Slip",
+      mandatory: false,
+      url: docs?.ninSlip?.url || docs?.ninSlip?.fileUrl || docs?.ninSlip || docs?.nin,
+    },
+  ];
+
+  // Missing Documents Reminder Handler
+  const handleSendMissingDocsReminder = async () => {
+    setIsSendingReminder(true);
+    setAlertMsg(null);
+    try {
+      const missingItems = kycChecklist
+        .filter((item) => !item.url)
+        .map((item) => item.label);
+
+      if (missingItems.length === 0) {
+        setAlertMsg({
+          type: "success",
+          text: "All required statutory credentials have already been uploaded by this applicant!",
+        });
+        setIsSendingReminder(false);
+        return;
+      }
+
+      const targetId = activeCandidate.leadId || activeCandidate.id;
+      const res = await sendMissingDocsReminderAction({
+        schoolId,
+        schoolDomain,
+        applicantId: targetId,
+        applicationNo: appNo,
+        applicantName: activeCandidate.applicantName,
+        recipientEmail: parentEmail,
+        recipientPhone: parentPhone !== "Not provided" ? parentPhone : undefined,
+        missingDocuments: missingItems,
+      });
+
+      if (res && res.success) {
+        setAlertMsg({
+          type: "success",
+          text: `Reminder dispatched to ${parentEmail || "guardian"} for ${missingItems.length} missing document(s)!`,
+        });
+        if (onLeadUpdated) onLeadUpdated();
+        if (onRecordUpdated) onRecordUpdated();
+      } else {
+        setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch reminder." });
+      }
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch reminder." });
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
+
+  // Open Guardian Email Modal
+  const handleOpenEmailModal = () => {
+    const candidateName =
+      activeCandidate.applicantName ||
+      `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() ||
+      "Applicant";
+    const defaultSubject = `[${schoolName || "Admissions Office"}] Admissions Application Status - ${candidateName} (${appNo})`;
+    const defaultMessage = `Dear Parent / Guardian,\n\nWe are writing from the Admissions Office at ${schoolName || "the School"} regarding the admission application for ${candidateName} (Application No: ${appNo}).\n\nPlease find important updates regarding your application status.\n\nKind regards,\nAdmissions Committee\n${schoolName || ""}`;
+
+    setEmailForm({
+      recipientEmail: parentEmail && !parentEmail.includes("@applicant.schoolerp") ? parentEmail : "",
+      subject: defaultSubject,
+      message: defaultMessage,
+    });
+    setIsEmailModalOpen(true);
+  };
+
+  // Send Direct Email to Guardian
+  const handleSendDirectEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailForm.recipientEmail?.trim() || !emailForm.recipientEmail.includes("@")) {
+      setAlertMsg({ type: "error", text: "Please enter a valid recipient email address." });
+      return;
+    }
+    if (!emailForm.subject?.trim() || !emailForm.message?.trim()) {
+      setAlertMsg({ type: "error", text: "Email subject and message body cannot be blank." });
+      return;
+    }
+
+    setIsSendingDirectEmail(true);
+    setAlertMsg(null);
+    try {
+      const targetId = activeCandidate.leadId || activeCandidate.id;
+      const res = await sendGuardianDirectEmailAction({
+        schoolId,
+        schoolDomain,
+        applicantId: targetId,
+        applicationNo: appNo,
+        recipientEmail: emailForm.recipientEmail.trim(),
+        recipientName: activeCandidate.parentName || "Parent / Guardian",
+        subject: emailForm.subject.trim(),
+        message: emailForm.message.trim(),
+      });
+
+      if (res && res.success) {
+        setIsEmailModalOpen(false);
+        setAlertMsg({
+          type: "success",
+          text: `Direct email sent successfully to ${emailForm.recipientEmail.trim()}!`,
+        });
+      } else {
+        setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch email." });
+      }
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch email." });
+    } finally {
+      setIsSendingDirectEmail(false);
+    }
+  };
 
   const bankDetails = {
     bankName: "Zenith Bank",
@@ -589,54 +769,7 @@ export default function ApplicantDossierDrawer({
     }
   };
 
-  // The Canonical Statutory & Admissions Documents Checklist
-  const kycChecklist = [
-    {
-      key: "applicationFeeReceipt",
-      label: "Application Fee Receipt",
-      mandatory: true,
-      url:
-        receiptUrl ||
-        localCandidate?.applicationFeeReceiptUrl ||
-        activeCandidate?.applicationFeeReceiptUrl ||
-        docs?.applicationFeeReceiptUrl ||
-        docs?.formFeeReceiptUrl ||
-        (docs?.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object"
-          ? docs.applicationFeeReceipt.url || docs.applicationFeeReceipt.fileUrl
-          : null) ||
-        (typeof docs?.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null),
-    },
-    {
-      key: "passportPhoto",
-      label: "Passport Photograph",
-      mandatory: true,
-      url: localCandidate?.passportPhotoUrl || docs?.passportPhoto?.url || docs?.passportPhoto?.fileUrl || docs?.passport,
-    },
-    {
-      key: "birthCertificate",
-      label: "NPC National Birth Certificate / Age Declaration",
-      mandatory: true,
-      url: localCandidate?.birthCertificateUrl || docs?.birthCertificate?.url || docs?.birthCertificate?.fileUrl || docs?.birthCert,
-    },
-    {
-      key: "academicResults",
-      label: "Academic Transcripts / Previous Term Results",
-      mandatory: true,
-      url: localCandidate?.academicResultsUrl || docs?.academicResults?.url || docs?.academicResults?.fileUrl || docs?.previousResults,
-    },
-    {
-      key: "medicalRecords",
-      label: "Medical Certificate of Fitness",
-      mandatory: true,
-      url: localCandidate?.medicalRecordsUrl || docs?.medicalRecords?.url || docs?.medicalRecords?.fileUrl || docs?.medical,
-    },
-    {
-      key: "ninSlip",
-      label: "NIMC NIN Identification Slip",
-      mandatory: false,
-      url: docs?.ninSlip?.url || docs?.ninSlip?.fileUrl || docs?.ninSlip || docs?.nin,
-    },
-  ];
+
 
   return (
     <div
@@ -860,13 +993,14 @@ export default function ApplicantDossierDrawer({
                   <span>WhatsApp</span>
                 </a>
 
-                <a
-                  href={parentEmail ? `mailto:${parentEmail}` : undefined}
-                  className="p-3 rounded-xl border bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 flex items-center justify-center gap-2 font-bold text-xs transition"
+                <button
+                  type="button"
+                  onClick={handleOpenEmailModal}
+                  className="p-3 rounded-xl border bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/40 flex items-center justify-center gap-2 font-bold text-xs transition cursor-pointer"
                 >
                   <Mail className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span>Email Guardian</span>
-                </a>
+                </button>
               </div>
 
               {/* CORE APPLICANT BIO-DATA */}
@@ -1061,24 +1195,45 @@ export default function ApplicantDossierDrawer({
                   onClick={() => {
                     const token = activeCandidate.uploadToken || activeCandidate.documents?.uploadToken || activeCandidate.id;
                     const link = `${window.location.origin}/${schoolDomain}/admissions/upload/${activeCandidate.id}?token=${token}`;
-                    handleCopy(link, "link");
+                    const candidateName =
+                      activeCandidate.applicantName ||
+                      `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() ||
+                      "Applicant";
+                    const descriptiveMessage = `Dear Parent/Guardian, please use this secure link to upload the remaining pending credentials for ${candidateName}: ${link}`;
+                    handleCopy(descriptiveMessage, "link");
                   }}
                   className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>{copiedLink ? "Link Copied!" : "Copy Portal Link"}</span>
+                  <span>{copiedLink ? "Message Copied!" : "Copy Portal Link"}</span>
                 </button>
               </div>
 
               {/* THE COMPLETE CANONICAL 6-DOCUMENT CHECKLIST */}
               <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
-                    Statutory &amp; Admissions Verification Checklist ({kycChecklist.length})
-                  </h4>
-                  <span className="text-xs text-slate-500 dark:text-zinc-400">
-                    5 Mandatory • 1 Statutory NIN
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 gap-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                      Statutory &amp; Admissions Verification Checklist ({kycChecklist.length})
+                    </h4>
+                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      5 Mandatory • 1 Statutory NIN
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSendMissingDocsReminder}
+                    disabled={isSendingReminder}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isSendingReminder ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Bell className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isSendingReminder ? "Sending Reminder..." : "Send Reminder"}</span>
+                  </button>
                 </div>
 
                 <div className="divide-y divide-slate-100 dark:divide-zinc-800 space-y-2">
@@ -1369,6 +1524,132 @@ export default function ApplicantDossierDrawer({
           )}
         </div>
       </div>
+
+      {/* ===================== EMAIL GUARDIAN COMPOSER MODAL OVERLAY ===================== */}
+      {isEmailModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 sm:p-6"
+          onClick={() => setIsEmailModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-zinc-100">
+                    Email Applicant Guardian
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    {activeCandidate.applicantName} • {appNo}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEmailModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleSendDirectEmail} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-1.5">
+                  Guardian Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={emailForm.recipientEmail}
+                  onChange={(e) => setEmailForm((prev) => ({ ...prev, recipientEmail: e.target.value }))}
+                  placeholder="guardian@example.com"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                {!emailForm.recipientEmail && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                    No guardian email was linked yet. Please enter the parent&apos;s email above.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-1.5">
+                  Subject Line <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={emailForm.subject}
+                  onChange={(e) => setEmailForm((prev) => ({ ...prev, subject: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-1.5">
+                  Message Body <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  value={emailForm.message}
+                  onChange={(e) => setEmailForm((prev) => ({ ...prev, message: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-sans"
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                {emailForm.recipientEmail ? (
+                  <a
+                    href={`mailto:${emailForm.recipientEmail}?subject=${encodeURIComponent(
+                      emailForm.subject
+                    )}&body=${encodeURIComponent(emailForm.message)}`}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 self-start sm:self-auto py-1.5"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open in Native Mail Client</span>
+                  </a>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2 justify-end ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailModalOpen(false)}
+                    className="px-3.5 py-2 text-xs font-bold text-slate-600 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingDirectEmail}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isSendingDirectEmail ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isSendingDirectEmail ? "Sending..." : "Send Email"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

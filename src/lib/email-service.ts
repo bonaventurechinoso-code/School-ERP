@@ -667,6 +667,7 @@ export interface DocsRequestEmailPayload {
   schoolName?: string;
   subdomain?: string;
   customMessage?: string;
+  missingDocuments?: string[];
 }
 
 /**
@@ -687,6 +688,7 @@ export async function sendDocsRequestEmail(payload: DocsRequestEmailPayload) {
       schoolName,
       subdomain,
       customMessage,
+      missingDocuments,
     } = payload;
 
     const school = await basePrisma.school.findFirst({
@@ -755,11 +757,17 @@ export async function sendDocsRequestEmail(payload: DocsRequestEmailPayload) {
         </div>
       </div>
 
-      <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 20px 0 10px 0;">Required Documents:</h3>
+      <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 20px 0 10px 0;">
+        ${missingDocuments && missingDocuments.length > 0 ? "Pending Documents Required:" : "Required Documents:"}
+      </h3>
+      ${missingDocuments && missingDocuments.length > 0
+        ? missingDocuments.map((doc, idx) => `<div class="doc-item" style="border-left: 4px solid #f59e0b; background-color: #fffbeb; color: #92400e; padding: 10px 14px; margin-bottom: 8px; border-radius: 8px;"><strong>${idx + 1}. ${doc}</strong> &ndash; Not yet uploaded. Please upload as soon as possible.</div>`).join("")
+        : `
       <div class="doc-item"><strong>1. Recent Passport Photograph</strong> &ndash; Clear color photo with white background.</div>
       <div class="doc-item"><strong>2. Previous Academic Results</strong> &ndash; Recent termly report cards or transcripts.</div>
       <div class="doc-item"><strong>3. Birth Certificate or Valid ID</strong> &ndash; NPC birth certificate or valid ID card.</div>
       <div class="doc-item"><strong>4. NIN / Medical Fitness</strong> &ndash; National Identity slip or medical report.</div>
+      `}
 
       <div style="text-align: center; margin: 30px 0 20px 0;">
         <a href="${uploadUrl}" class="btn" style="color: #ffffff !important;">Upload Pending Documents Now &rarr;</a>

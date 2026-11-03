@@ -2486,8 +2486,18 @@ export default function AdmissionsWorkspaceClient({
             targetGrade: dossierApp.programId,
             studentEmail: dossierApp.email,
             studentPhone: dossierApp.phoneNumber,
-            parentName: (dossierApp.tierSpecificData as any)?.parentName || (dossierApp.tierSpecificData as any)?.parent?.name,
-            parentPhone: (dossierApp.tierSpecificData as any)?.parentPhone || dossierApp.phoneNumber,
+            parentEmail:
+              (dossierApp.tierSpecificData as any)?.parentEmail ||
+              (dossierApp.tierSpecificData as any)?.parent?.email ||
+              (dossierApp.metadata as any)?.parentEmail ||
+              dossierApp.email,
+            parentName:
+              (dossierApp.tierSpecificData as any)?.parentName ||
+              (dossierApp.tierSpecificData as any)?.parent?.name,
+            parentPhone:
+              (dossierApp.tierSpecificData as any)?.parentPhone ||
+              (dossierApp.tierSpecificData as any)?.parent?.phone ||
+              dossierApp.phoneNumber,
             status: dossierApp.status,
             documents: {
               ...(dossierApp.tierSpecificData || {}),
@@ -2505,6 +2515,11 @@ export default function AdmissionsWorkspaceClient({
             lastName: dossierApp.lastName,
             classApplied: dossierApp.programId,
             email: dossierApp.email,
+            parentEmail:
+              (dossierApp.tierSpecificData as any)?.parentEmail ||
+              (dossierApp.tierSpecificData as any)?.parent?.email ||
+              (dossierApp.metadata as any)?.parentEmail ||
+              dossierApp.email,
             parentPhone: dossierApp.phoneNumber,
             status: dossierApp.status,
           }}
