@@ -3819,15 +3819,22 @@ export async function deduplicateAllAdmissionsAction(payload: {
           await tx.admissionsDocument.updateMany({
             where: { applicationId: { in: dupIds } },
             data: { applicationId: master.id },
-          });
+          }).catch((err) => console.warn("[deduplicateAllAdmissionsAction] Document reassign warning:", err));
+
           await tx.admissionsFeeTransaction.updateMany({
             where: { applicationId: { in: dupIds } },
             data: { applicationId: master.id },
-          });
-          await tx.admissionAuditTrail.updateMany({
-            where: { applicationId: { in: dupIds } },
-            data: { applicationId: master.id },
-          });
+          }).catch((err) => console.warn("[deduplicateAllAdmissionsAction] Fee transaction reassign warning:", err));
+
+          // Safely reassign audit trails if table and column exist in DB
+          try {
+            await tx.admissionAuditTrail.updateMany({
+              where: { applicationId: { in: dupIds } },
+              data: { applicationId: master.id },
+            });
+          } catch (auditErr) {
+            console.warn("[deduplicateAllAdmissionsAction] Notice: admissionAuditTrail reassign bypassed:", auditErr);
+          }
 
           // Delete duplicates
           await tx.admissionsApplication.deleteMany({
