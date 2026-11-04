@@ -7,6 +7,7 @@ import path from "path";
 import * as jose from "jose";
 import crypto from "crypto";
 import { cleanSchoolDomain } from "@/lib/school-domain";
+import { getStorage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -985,7 +986,8 @@ export async function POST(
     const updateData: any = {};
     const uploadedFileList: string[] = [];
 
-    const { uploadToUploadthing } = await import("@/lib/uploadthing");
+    const storage = getStorage();
+    console.log("[STORAGE] provider", storage.providerName);
 
     for (const item of fileFields) {
       let fileObj: File | null = null;
@@ -1014,7 +1016,7 @@ export async function POST(
         // Size check (Max 5MB)
         if (fileObj.size > MAX_FILE_SIZE_BYTES) {
           return NextResponse.json(
-            { error: `File "${fileObj.name}" exceeds the 5MB size limit.` },
+            { success: false, error: `File "${fileObj.name}" exceeds the 5MB size limit.` },
             { status: 400, headers: corsHeaders }
           );
         }
@@ -1032,6 +1034,7 @@ export async function POST(
         if (!isAllowedType) {
           return NextResponse.json(
             {
+              success: false,
               error: `Invalid file type for ${item.field}. Allowed types: ${
                 item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
               }`,
@@ -1040,40 +1043,25 @@ export async function POST(
           );
         }
 
-        // 1. Direct cloud upload to Uploadthing if UPLOADTHING_TOKEN is configured
+        const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
+        const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+        const customName = `${item.prefix}-${lead.id.slice(0, 8)}-${Date.now()}${safeExt}`;
         let publicUrl: string | null = null;
         let savedName = fileObj.name;
 
         try {
-          const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
-          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
-          const customName = `${item.prefix}-${lead.id.slice(0, 8)}-${Date.now()}${safeExt}`;
-
-          // Race with 12s timeout so slow cloud calls do not break or hang the client socket
-          const utPromise = uploadToUploadthing(fileObj, customName);
-          const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), 12000));
-          const utResult = await Promise.race([utPromise, timeoutPromise]);
-
-          if (utResult && utResult.url) {
-            publicUrl = utResult.url;
-            savedName = utResult.name || customName;
-            console.log(`[UPLOAD_API_POST] Uploaded ${item.field} directly to Uploadthing:`, publicUrl);
-          }
-        } catch (utErr) {
-          console.warn(`[UPLOAD_API_POST] Uploadthing upload failed for ${item.field}:`, utErr);
-        }
-
-        // 2. Fallback to local disk storage if Uploadthing token is not set or failed (e.g., local dev)
-        if (!publicUrl) {
-          const originalExt = path.extname(fileObj.name) || (fileObj.type === "application/pdf" ? ".pdf" : ".jpg");
-          const safeExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
+          const arrayBuffer = await fileObj.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const uploadRes = await storage.upload(buffer, customName, fileObj.type || "application/octet-stream");
+          publicUrl = uploadRes.url;
+          savedName = customName;
+          console.log(`[STORAGE] Uploaded ${item.field} via ${storage.providerName}:`, publicUrl?.slice(0, 60));
+        } catch (storageErr) {
+          console.warn(`[STORAGE_WARN] Storage adapter failed for ${item.field}, falling back to disk:`, storageErr);
           const fileName = `${item.prefix}-${Date.now()}${safeExt}`;
           const filePath = path.join(targetDir, fileName);
-
-          // Write file buffer to disk
           const arrayBuffer = await fileObj.arrayBuffer();
           fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
-
           publicUrl = `/api/uploads/admissions/${schoolId}/${lead.id}/${fileName}`;
           savedName = fileName;
         }
@@ -1678,7 +1666,7 @@ export async function POST(
   } catch (error: any) {
     console.error("[UPLOAD_API_POST] Error uploading documents:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to process file upload" },
+      { success: false, error: error?.message || "Failed to process file upload" },
       { status: 500, headers: corsHeaders }
     );
   }

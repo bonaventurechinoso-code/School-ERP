@@ -692,6 +692,9 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
         if (transferReference) formData.append("transferReference", transferReference);
       }
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const res = await fetch(
         `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token)}`,
         {
@@ -702,10 +705,18 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
             Authorization: `Bearer ${token}`,
           },
           body: formData,
+          signal: controller.signal,
         }
       );
+      clearTimeout(timeoutId);
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Upload server returned HTTP ${res.status}: ${res.statusText || "Communication error"}`);
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || `Failed to upload ${key}`);
       }
@@ -859,6 +870,9 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       if (depositorName) formData.append("depositorName", depositorName);
       if (transferReference) formData.append("transferReference", transferReference);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const res = await fetch(
         `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token)}`,
         {
@@ -869,12 +883,20 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
             Authorization: `Bearer ${token}`,
           },
           body: formData,
+          signal: controller.signal,
         }
       );
 
+      clearTimeout(timeoutId);
       clearInterval(progressTimer);
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Upload server returned HTTP ${res.status}: ${res.statusText || "Communication error"}`);
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to upload credential files");
       }

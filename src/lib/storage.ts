@@ -10,6 +10,7 @@ export interface UploadResult {
 }
 
 export interface StorageAdapter {
+  readonly providerName: string;
   upload(buffer: Buffer, fileName: string, mimeType: string): Promise<UploadResult>;
 }
 
@@ -60,6 +61,8 @@ export function validateMagicBytes(buffer: Buffer, mimeType: string): boolean {
  * Guaranteed to never 404 after unlimited Render deploys.
  */
 export class Base64DBStorage implements StorageAdapter {
+  readonly providerName = "Base64DB";
+
   async upload(buffer: Buffer, fileName: string, mimeType: string): Promise<UploadResult> {
     const base64 = buffer.toString("base64");
     const dataUri = `data:${mimeType};base64,${base64}`;
@@ -81,6 +84,7 @@ export class Base64DBStorage implements StorageAdapter {
  * Falls back to Base64DBStorage if the external API is unreachable.
  */
 export class CloudinaryStorage implements StorageAdapter {
+  readonly providerName = "Cloudinary";
   private cloudName: string;
   private apiKey: string;
   private apiSecret: string;
@@ -140,15 +144,59 @@ export class CloudinaryStorage implements StorageAdapter {
 }
 
 /**
- * Factory returning the optimal Storage implementation
+ * 3. UploadThing Persistent Storage Adapter
+ * Used whenever UPLOADTHING_TOKEN is present in Render environment variables.
+ * Falls back to Base64DBStorage if upload fails or times out.
+ */
+export class UploadthingStorage implements StorageAdapter {
+  readonly providerName = "UploadThing";
+  private fallback: Base64DBStorage;
+
+  constructor() {
+    this.fallback = new Base64DBStorage();
+  }
+
+  async upload(buffer: Buffer, fileName: string, mimeType: string): Promise<UploadResult> {
+    const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+    try {
+      const { uploadToUploadthing } = await import("@/lib/uploadthing");
+      const file = new File([new Uint8Array(buffer)], fileName, { type: mimeType });
+      const utResult = await uploadToUploadthing(file, fileName);
+      if (utResult && utResult.url) {
+        return {
+          url: utResult.url,
+          publicId: utResult.key,
+          data: buffer.toString("base64"),
+          mimeType,
+          size: buffer.length,
+          checksum,
+        };
+      }
+    } catch (err) {
+      console.warn("[STORAGE_WARN] Uploadthing exception, falling back to Base64:", err);
+    }
+    return this.fallback.upload(buffer, fileName, mimeType);
+  }
+}
+
+/**
+ * Factory returning the optimal Storage implementation:
+ * 1. Cloudinary if CLOUDINARY_CLOUD_NAME + API_KEY + API_SECRET are configured
+ * 2. UploadThing if UPLOADTHING_TOKEN is configured
+ * 3. Base64 database fallback (0 external dependencies, 100% resilient)
  */
 export function getStorage(): StorageAdapter {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
   const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const utToken = process.env.UPLOADTHING_TOKEN?.trim();
 
   if (cloudName && apiKey && apiSecret) {
     return new CloudinaryStorage(cloudName, apiKey, apiSecret);
+  }
+
+  if (utToken) {
+    return new UploadthingStorage();
   }
 
   return new Base64DBStorage();
