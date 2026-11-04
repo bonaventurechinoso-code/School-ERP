@@ -1085,6 +1085,25 @@ export async function POST(
         // Resilient MIME & extension type check (Max 5MB - Accepts all documents & images)
         const fileExt = path.extname(fileObj.name).toLowerCase();
         const clientMime = (fileObj.type || "").toLowerCase().trim();
+
+        // 1. Strict Restriction: Disallow audio and video files across all slots
+        const isAudioOrVideo =
+          clientMime.startsWith("audio/") ||
+          clientMime.startsWith("video/") ||
+          [
+            ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".wma", ".flac", ".opus", ".mid", ".midi",
+            ".mp4", ".mov", ".avi", ".mkv", ".webm", ".3gp", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"
+          ].includes(fileExt);
+
+        if (isAudioOrVideo) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Audio and video files are restricted. Please upload a valid document or image for ${item.field}.`,
+            },
+            { status: 400, headers: corsHeaders }
+          );
+        }
         const isPdfExt = fileExt === ".pdf";
         const isImgExt = [
           ".jpg",
@@ -1759,12 +1778,9 @@ export async function POST(
       // Always grant guest_session cookie so public upload portal recognizes current upload
       response.cookies.set("guest_session", "true", { ...cookieOptions, httpOnly: false });
 
-      // CRITICAL: NEVER overwrite existing session or accessToken cookies!
-      // Overwriting them logs out Administrators, Staff, Parents, or existing users!
-      if (!existingSession && !existingAccessToken) {
-        response.cookies.set("session", guestSessionToken, cookieOptions);
-        response.cookies.set("accessToken", guestSessionToken, cookieOptions);
-      }
+      // Note: Do NOT set or overwrite "session" or "accessToken" cookies here.
+      // Setting synthetic tokens on the public upload route corrupts active user sessions
+      // and triggers session mismatch redirects / logouts across the application.
     } catch (cookieErr) {
       console.warn("[UPLOAD_ROUTE] Could not refresh guest session cookie:", cookieErr);
     }

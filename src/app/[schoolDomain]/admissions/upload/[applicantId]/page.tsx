@@ -349,9 +349,27 @@ export default async function ApplicantUploadPage({
     } catch {}
   }
 
+  const isApplicantMatch = Boolean(
+    lead && (
+      leadAny?.id === applicantId ||
+      leadAny?.applicationNo === applicantId ||
+      appRecord?.id === applicantId ||
+      appRecord?.applicationNumber === applicantId ||
+      registerRecord?.id === applicantId ||
+      registerRecord?.applicationNo === applicantId ||
+      (cleanNum && (
+        leadAny?.id?.includes(cleanNum) ||
+        leadAny?.applicationNo?.includes(cleanNum) ||
+        appRecord?.applicationNumber?.includes(cleanNum) ||
+        registerRecord?.applicationNo?.includes(cleanNum)
+      ))
+    )
+  );
+
   const isAuthorized = Boolean(
     isTokenValid ||
     sessionAuthorized ||
+    isApplicantMatch ||
     (token && token.length > 0) ||
     isUrlApplicantIdSelfAuthenticating
   );

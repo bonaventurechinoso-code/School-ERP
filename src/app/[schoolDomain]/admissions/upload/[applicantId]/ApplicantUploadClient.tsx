@@ -99,9 +99,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Application Fee Receipt",
     subLabel: "Direct Bank Transfer Verification",
     mandatory: true,
-    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls",
-    badge: "Any Format (5MB)",
-    description: "Official bank deposit teller, electronic transfer receipt, downloaded bank receipt, or proof of payment (PDF, Image, Word, or Document • Max 5MB).",
+    acceptedTypes: "image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    badge: "PDF / Image / Doc (5MB)",
+    description: "Official bank deposit teller, electronic transfer receipt, downloaded bank receipt, or proof of payment (PDF, Image, Word, or Document • Max 5MB • No Audio/Video).",
   },
   {
     id: "template-passportPhoto",
@@ -112,7 +112,7 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     mandatory: true,
     acceptedTypes: "image/*,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.tiff,.tif",
     badge: "Image Only (5MB)",
-    description: "Clear photo of applicant with plain background (JPG, PNG, WebP, JFIF, HEIC • Max 5MB).",
+    description: "Clear photo of applicant with plain background (JPG, PNG, WebP, JFIF, HEIC • Max 5MB • No Audio/Video).",
   },
   {
     id: "template-birthCertificate",
@@ -121,9 +121,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NPC National Birth Certificate / Age Declaration",
     subLabel: "Statutory Age Verification",
     mandatory: true,
-    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
-    badge: "Any Format (5MB)",
-    description: "NPC National Birth Certificate, statutory age declaration, or downloaded birth certificate (PDF, Image, or Document • Max 5MB).",
+    acceptedTypes: "image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    badge: "PDF / Image / Doc (5MB)",
+    description: "NPC National Birth Certificate, statutory age declaration, or downloaded birth certificate (PDF, Image, or Document • Max 5MB • No Audio/Video).",
   },
   {
     id: "template-academicResults",
@@ -132,9 +132,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Academic Transcripts / Previous Term Results",
     subLabel: "Prior Academic Records",
     mandatory: true,
-    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls",
-    badge: "Any Format (5MB)",
-    description: "Certified termly report cards, result slips, or official transcripts (PDF, Image, or Document • Max 5MB).",
+    acceptedTypes: "image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    badge: "PDF / Image / Doc (5MB)",
+    description: "Certified termly report cards, result slips, or official transcripts (PDF, Image, or Document • Max 5MB • No Audio/Video).",
   },
   {
     id: "template-ninSlip",
@@ -143,9 +143,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NIMC NIN Identification Slip",
     subLabel: "National Identity Verification",
     mandatory: false,
-    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
+    acceptedTypes: "image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     badge: "Statutory NIN (5MB)",
-    description: "National Identification Number (NIN) registration slip, card, screenshot, or NIMC verification document (PDF, Image, or Document • Max 5MB).",
+    description: "National Identification Number (NIN) registration slip, card, screenshot, or NIMC verification document (PDF, Image, or Document • Max 5MB • No Audio/Video).",
   },
   {
     id: "template-medicalRecords",
@@ -154,9 +154,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Medical Certificate of Fitness",
     subLabel: "Health & Immunization Record",
     mandatory: true,
-    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
-    badge: "Any Format (5MB)",
-    description: "Medical clearance, clinical fitness certificate, or immunization records (PDF, Image, or Document • Max 5MB).",
+    acceptedTypes: "image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    badge: "PDF / Image / Doc (5MB)",
+    description: "Medical clearance, clinical fitness certificate, or immunization records (PDF, Image, or Document • Max 5MB • No Audio/Video).",
   },
 ];
 
@@ -821,13 +821,42 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     const fileNameLower = file.name.toLowerCase();
     const fileTypeLower = (file.type || "").toLowerCase();
 
+    // 1. Explicit Restriction: Strictly forbid audio and video files
+    const isAudioOrVideo =
+      fileTypeLower.startsWith("audio/") ||
+      fileTypeLower.startsWith("video/") ||
+      /\.(mp3|wav|m4a|aac|ogg|wma|flac|opus|mid|midi|mp4|mov|avi|mkv|webm|3gp|flv|wmv|m4v|mpg|mpeg)$/i.test(fileNameLower);
+
+    if (isAudioOrVideo) {
+      setErrorMsg(
+        `Audio and video files are restricted. Please select a valid document or image (PDF, JPG, PNG, WebP, Word, etc.).`
+      );
+      return;
+    }
+
     const isImageFile =
       fileTypeLower.startsWith("image/") ||
       /\.(jpe?g|png|webp|jfif|heic|heif|bmp|gif|tiff?)$/i.test(fileNameLower);
 
+    const isDocFile =
+      fileTypeLower.includes("pdf") ||
+      fileTypeLower.includes("word") ||
+      fileTypeLower.includes("document") ||
+      fileTypeLower.includes("text") ||
+      fileTypeLower.includes("sheet") ||
+      fileTypeLower.includes("excel") ||
+      fileTypeLower === "application/octet-stream" ||
+      fileTypeLower === "" ||
+      /\.(pdf|docx?|txt|rtf|odt|xlsx?|csv)$/i.test(fileNameLower);
+
     if (key === "passportPhoto") {
       if (!isImageFile && fileTypeLower !== "application/octet-stream" && fileTypeLower !== "") {
         setErrorMsg("Passport photograph must be an image file (JPG, PNG, WebP, JFIF, or similar photo).");
+        return;
+      }
+    } else {
+      if (!isImageFile && !isDocFile) {
+        setErrorMsg("Unsupported file format. Please upload a valid document or image (PDF, JPG, PNG, Word doc, etc.).");
         return;
       }
     }
