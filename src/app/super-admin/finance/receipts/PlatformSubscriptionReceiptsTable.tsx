@@ -189,7 +189,13 @@ export default function PlatformSubscriptionReceiptsTable({
   const isOldEphemeral = (r: PlatformSubscriptionReceipt) => {
     if (r.receiptData) return false;
     if (r.receiptUrl?.startsWith("data:")) return false;
-    if (r.receiptUrl?.startsWith("https://res.cloudinary.com") || r.receiptUrl?.includes("cloudinary")) return false;
+    if (
+      r.receiptUrl?.startsWith("https://res.cloudinary.com") ||
+      r.receiptUrl?.includes("cloudinary") ||
+      r.receiptUrl?.includes("uploadthing") ||
+      r.receiptUrl?.includes("ufs.sh")
+    )
+      return false;
     if (r.receiptUrl?.includes("/uploads/")) return true;
     if (!r.receiptUrl) return true;
     return false;

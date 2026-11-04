@@ -351,16 +351,44 @@ export default function ApplicantDossierDrawer({
       }
 
       const targetId = activeCandidate.leadId || activeCandidate.id;
-      const res = await sendMissingDocsReminderAction({
-        schoolId,
-        schoolDomain,
-        applicantId: targetId,
-        applicationNo: appNo,
-        applicantName: activeCandidate.applicantName,
-        recipientEmail: parentEmail,
-        recipientPhone: parentPhone !== "Not provided" ? parentPhone : undefined,
-        missingDocuments: missingItems,
-      });
+      let res: any = null;
+
+      // 1. First attempt: call REST API endpoint
+      try {
+        const apiResponse = await fetch("/api/v1/admissions/send-reminder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolId,
+            schoolDomain,
+            applicantId: targetId,
+            applicationNo: appNo,
+            applicantName: activeCandidate.applicantName,
+            recipientEmail: parentEmail,
+            recipientPhone: parentPhone !== "Not provided" ? parentPhone : undefined,
+            missingDocuments: missingItems,
+          }),
+        });
+        if (apiResponse.ok) {
+          res = await apiResponse.json().catch(() => null);
+        }
+      } catch (fetchErr) {
+        console.warn("[SEND_REMINDER_API_NOTICE] API route fetch failed, falling back to server action:", fetchErr);
+      }
+
+      // 2. Resilient fallback: call direct server action if REST route returned non-200 or null
+      if (!res || !res.success) {
+        res = await sendMissingDocsReminderAction({
+          schoolId,
+          schoolDomain,
+          applicantId: targetId,
+          applicationNo: appNo,
+          applicantName: activeCandidate.applicantName,
+          recipientEmail: parentEmail,
+          recipientPhone: parentPhone !== "Not provided" ? parentPhone : undefined,
+          missingDocuments: missingItems,
+        });
+      }
 
       if (res && res.success) {
         setAlertMsg({
@@ -373,6 +401,7 @@ export default function ApplicantDossierDrawer({
         setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch reminder." });
       }
     } catch (err: any) {
+      console.error("[SEND_REMINDER_EXCEPTION]:", err);
       setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch reminder." });
     } finally {
       setIsSendingReminder(false);

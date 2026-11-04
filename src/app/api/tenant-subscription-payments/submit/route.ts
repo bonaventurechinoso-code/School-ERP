@@ -123,7 +123,7 @@ export async function POST(req: NextRequest | Request) {
       );
     }
 
-    // 7. Upload file to persistent storage (Base64 in DB + Cloudinary if configured)
+    // 7. Upload file to persistent storage (Base64 in DB + UploadThing configured on Render)
     const cleanFileName = `proof_${Date.now()}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}.${file.name.split(".").pop() || "jpg"}`;
     const storageResult = await getStorage().upload(buffer, cleanFileName, file.type);
 

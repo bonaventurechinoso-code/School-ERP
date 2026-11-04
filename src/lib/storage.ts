@@ -181,22 +181,21 @@ export class UploadthingStorage implements StorageAdapter {
 
 /**
  * Factory returning the optimal Storage implementation:
- * 1. Cloudinary if CLOUDINARY_CLOUD_NAME + API_KEY + API_SECRET are configured
- * 2. UploadThing if UPLOADTHING_TOKEN is configured
- * 3. Base64 database fallback (0 external dependencies, 100% resilient)
+ * 1. UploadThing if UPLOADTHING_TOKEN is configured (Render primary persistent cloud storage)
+ * 2. Base64 database fallback (0 external dependencies, 100% resilient, persists across deploys)
+ * 3. Cloudinary fallback only if explicitly configured
  */
 export function getStorage(): StorageAdapter {
+  const utToken = process.env.UPLOADTHING_TOKEN?.trim();
+  if (utToken) {
+    return new UploadthingStorage();
+  }
+
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
   const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-  const utToken = process.env.UPLOADTHING_TOKEN?.trim();
-
   if (cloudName && apiKey && apiSecret) {
     return new CloudinaryStorage(cloudName, apiKey, apiSecret);
-  }
-
-  if (utToken) {
-    return new UploadthingStorage();
   }
 
   return new Base64DBStorage();

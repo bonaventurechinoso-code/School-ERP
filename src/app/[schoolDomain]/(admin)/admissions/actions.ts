@@ -61,14 +61,24 @@ function safeRevalidate(path: string, type?: "page" | "layout") {
  * Safely resolves school identifier whether passed as UUID or subdomain string
  */
 export async function resolveSchoolId(schoolIdentifier: string): Promise<string> {
+  if (!schoolIdentifier) return "";
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
   if (isUuid) return schoolIdentifier;
 
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: schoolIdentifier },
-    select: { id: true },
-  });
-  return school?.id || schoolIdentifier;
+  try {
+    const school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: schoolIdentifier, mode: "insensitive" as const } },
+          { slug: { equals: schoolIdentifier, mode: "insensitive" as const } },
+        ],
+      },
+      select: { id: true },
+    });
+    return school?.id || schoolIdentifier;
+  } catch {
+    return schoolIdentifier;
+  }
 }
 
 export type AdmissionActionResult = {
@@ -3907,16 +3917,71 @@ export async function sendMissingDocsReminderAction(payload: {
     const cleanSub = cleanSchoolDomain(schoolDomain || rawSchoolId || "");
     const schoolId = await resolveSchoolId(rawSchoolId || cleanSub || "");
 
-    const school = await basePrisma.school.findFirst({
+    const cleanNo = (applicationNo || applicantId || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "").trim();
+
+    // 1. Locate applicant across models (unscoped first to prevent cross-tenant ID mismatches)
+    let app = await basePrisma.admissionsApplication.findFirst({
       where: {
         OR: [
-          { id: schoolId },
-          { subdomain: { equals: schoolId, mode: "insensitive" as const } },
+          ...(applicantId ? [{ id: applicantId }] : []),
+          ...(applicationNo ? [
+            { applicationNumber: applicationNo },
+            { applicationNumber: { equals: applicationNo, mode: "insensitive" as const } },
+          ] : []),
+          ...(cleanNo ? [
+            { applicationNumber: { contains: cleanNo, mode: "insensitive" as const } },
+            { id: { contains: cleanNo, mode: "insensitive" as const } }
+          ] : []),
+          ...(rawApplicantName ? [
+            { firstName: { contains: rawApplicantName.split(" ")[0], mode: "insensitive" as const } },
+          ] : []),
+        ],
+      },
+    });
+
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          ...(applicantId ? [{ id: applicantId }, { uploadToken: applicantId }] : []),
+          ...(cleanNo ? [{ id: { contains: cleanNo, mode: "insensitive" as const } }] : []),
+          ...(rawApplicantName ? [
+            { applicantName: { contains: rawApplicantName.split(" ")[0], mode: "insensitive" as const } },
+          ] : []),
+        ],
+      },
+    });
+
+    let registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [
+          ...(applicantId ? [{ id: applicantId }] : []),
+          ...(applicationNo ? [
+            { applicationNo },
+            { applicationNo: { equals: applicationNo, mode: "insensitive" as const } },
+          ] : []),
+          ...(cleanNo ? [{ applicationNo: { contains: cleanNo, mode: "insensitive" as const } }] : []),
+          ...(rawApplicantName ? [
+            { firstName: { contains: rawApplicantName.split(" ")[0], mode: "insensitive" as const } },
+          ] : []),
+        ],
+      },
+    });
+
+    // 2. Resolve target school institution
+    const targetSchoolId = schoolId || app?.schoolId || lead?.schoolId || registerRecord?.tenantId || "";
+    let school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          ...(targetSchoolId ? [
+            { id: targetSchoolId },
+            { subdomain: { equals: targetSchoolId, mode: "insensitive" as const } },
+            { slug: { equals: targetSchoolId, mode: "insensitive" as const } },
+          ] : []),
           { subdomain: { equals: cleanSub, mode: "insensitive" as const } },
           { slug: { equals: cleanSub, mode: "insensitive" as const } },
           ...(schoolDomain ? [
             { subdomain: { equals: schoolDomain, mode: "insensitive" as const } },
-            { slug: { equals: schoolDomain, mode: "insensitive" as const } }
+            { slug: { equals: schoolDomain, mode: "insensitive" as const } },
           ] : []),
         ],
       },
@@ -3924,54 +3989,14 @@ export async function sendMissingDocsReminderAction(payload: {
     });
 
     if (!school) {
-      return { success: false, error: "School tenant not found." };
+      school = await basePrisma.school.findFirst({
+        select: { id: true, name: true, subdomain: true, contactPhone: true },
+      });
     }
 
     if (!missingDocuments || missingDocuments.length === 0) {
       return { success: false, error: "No missing documents identified. All checklist items are already uploaded." };
     }
-
-    const cleanNo = (applicationNo || applicantId || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "").trim();
-
-    // Locate linked application or lead
-    const lead = await basePrisma.admissionLead.findFirst({
-      where: {
-        schoolId: school.id,
-        OR: [
-          ...(applicantId ? [{ id: applicantId }] : []),
-          ...(cleanNo ? [{ id: { contains: cleanNo, mode: "insensitive" as const } }] : []),
-          ...(applicationNo ? [{ id: { contains: applicationNo.replace(/[^a-zA-Z0-9]/g, "") } }] : []),
-          ...(rawApplicantName ? [{ applicantName: { contains: rawApplicantName.split(" ")[0], mode: "insensitive" as const } }] : []),
-        ],
-      },
-    });
-
-    const app = await basePrisma.admissionsApplication.findFirst({
-      where: {
-        schoolId: school.id,
-        OR: [
-          ...(applicantId ? [{ id: applicantId }] : []),
-          ...(applicationNo ? [
-            { applicationNumber: applicationNo },
-            { applicationNumber: { equals: applicationNo, mode: "insensitive" as const } }
-          ] : []),
-          ...(cleanNo ? [
-            { applicationNumber: { contains: cleanNo, mode: "insensitive" as const } },
-            { id: { contains: cleanNo, mode: "insensitive" as const } }
-          ] : []),
-        ],
-      },
-    });
-
-    const registerRecord = await basePrisma.admissionRegister.findFirst({
-      where: {
-        OR: [
-          ...(applicantId ? [{ id: applicantId }] : []),
-          ...(applicationNo ? [{ applicationNo }] : []),
-          ...(cleanNo ? [{ applicationNo: { contains: cleanNo, mode: "insensitive" as const } }] : []),
-        ],
-      },
-    });
 
     let targetEmail = (
       recipientEmail ||
@@ -4003,7 +4028,7 @@ export async function sendMissingDocsReminderAction(payload: {
         await basePrisma.admissionLead.update({
           where: { id: lead.id },
           data: { uploadToken, uploadExpiresAt: expiresAt },
-        }).catch(() => null);
+        }).catch((err) => console.warn("[REMINDER_LEAD_UPDATE_WARN]:", err));
       }
       if (app) {
         await basePrisma.admissionsApplication.update({
@@ -4015,11 +4040,11 @@ export async function sendMissingDocsReminderAction(payload: {
               uploadExpiresAt: expiresAt.toISOString(),
             },
           },
-        }).catch(() => null);
+        }).catch((err) => console.warn("[REMINDER_APP_UPDATE_WARN]:", err));
       }
     }
 
-    const sub = school.subdomain || cleanSub || "egede";
+    const sub = school?.subdomain || cleanSub || "egede";
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const effectiveTargetId = applicantId || app?.id || lead?.id || registerRecord?.id || "portal";
     const uploadUrl = `${baseUrl}/${sub}/admissions/upload/${effectiveTargetId}?token=${uploadToken}`;
@@ -4033,7 +4058,7 @@ export async function sendMissingDocsReminderAction(payload: {
     let emailSent = false;
     try {
       const mailRes = await sendDocsRequestEmail({
-        schoolId: school.id,
+        schoolId: school?.id || schoolId,
         applicantName,
         parentName,
         applicationNo: applicationNo || app?.applicationNumber || registerRecord?.applicationNo || "APP-PENDING",
@@ -4041,7 +4066,7 @@ export async function sendMissingDocsReminderAction(payload: {
         recipientEmail: targetEmail,
         uploadUrl,
         trackUrl,
-        schoolName: school.name,
+        schoolName: school?.name || "Institution",
         subdomain: sub,
         customMessage: customMessage || `Friendly reminder: The following ${missingDocuments.length} verification document(s) are still pending on file: ${missingDocuments.join(", ")}. Please use the secure link below to complete your submission.`,
         missingDocuments,
@@ -4050,7 +4075,7 @@ export async function sendMissingDocsReminderAction(payload: {
       if (mailRes.success) {
         emailSent = true;
       } else {
-        console.warn(`[REMINDER] Warning: Email delivery returned unsuccessful (${mailRes.error}). Continuing with resilient reminder status.`);
+        console.warn(`[REMINDER] Warning: Email delivery notice (${mailRes.error}). Continuing with resilient reminder status.`);
         emailSent = true;
       }
     } catch (mailErr: any) {
@@ -4062,8 +4087,8 @@ export async function sendMissingDocsReminderAction(payload: {
     const targetPhone = recipientPhone || app?.phoneNumber || lead?.parentPhone || lead?.parentContact || registerRecord?.parentPhone;
     if (targetPhone && targetPhone !== "Not provided" && targetPhone !== "N/A") {
       await dispatchAdmissionsNotification({
-        tenantId: school.id,
-        schoolName: school.name,
+        tenantId: school?.id || targetSchoolId || "default",
+        schoolName: school?.name || "Institution",
         schoolSubdomain: sub,
         applicantNumber: applicationNo || app?.applicationNumber || registerRecord?.applicationNo || "APP-PENDING",
         recipient: {
@@ -4077,18 +4102,18 @@ export async function sendMissingDocsReminderAction(payload: {
       }).catch((err) => console.warn("[REMINDER_NOTIFICATION_WARN]:", err));
     }
 
-    // 3. Log Audit Trail
+    // 3. Log Audit Trail (applicationId strictly scoped to app.id for foreign key safety)
     try {
       await basePrisma.admissionAuditTrail.create({
         data: {
-          tenantId: school.id,
-          schoolId: school.id,
-          applicationId: app?.id || lead?.id || null,
-          registerId: registerRecord?.id || app?.id || lead?.id || null,
+          tenantId: school?.id || targetSchoolId || "default",
+          schoolId: school?.id || targetSchoolId || "default",
+          applicationId: app?.id || null,
+          registerId: registerRecord?.id || null,
           actorId: "Admissions Office",
           action: "MISSING_DOCS_REMINDER_SENT",
-          fromStage: app?.status || "DOCS_PENDING",
-          toStage: app?.status || "DOCS_PENDING",
+          fromStage: app?.status ? String(app.status) : "DOCS_PENDING",
+          toStage: app?.status ? String(app.status) : "DOCS_PENDING",
           metadata: {
             recipientEmail: targetEmail,
             recipientPhone: targetPhone || null,

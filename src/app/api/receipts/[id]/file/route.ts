@@ -59,7 +59,7 @@ export async function GET(
       });
     }
 
-    // 2. Direct external HTTPS URL (e.g. Cloudinary) - only if not ephemeral /uploads/
+    // 2. Direct external HTTPS URL (e.g. UploadThing) - only if not ephemeral /uploads/
     if (payment.receiptUrl?.startsWith("https://") && !payment.receiptUrl.includes("/uploads/")) {
       return NextResponse.redirect(payment.receiptUrl);
     }
