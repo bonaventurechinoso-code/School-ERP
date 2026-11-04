@@ -158,7 +158,12 @@ export class UploadthingStorage implements StorageAdapter {
 
   async upload(buffer: Buffer, fileName: string, mimeType: string): Promise<UploadResult> {
     const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+    console.log(`[STORAGE] UPLOADTHING_TOKEN present? ${!!process.env.UPLOADTHING_TOKEN}`);
     try {
+      if (!process.env.UPLOADTHING_TOKEN) {
+        console.warn("[STORAGE_WARN] UPLOADTHING_TOKEN missing, falling back to Base64.");
+        return this.fallback.upload(buffer, fileName, mimeType);
+      }
       const { uploadToUploadthing } = await import("@/lib/uploadthing");
       const file = new File([new Uint8Array(buffer)], fileName, { type: mimeType });
       const utResult = await uploadToUploadthing(file, fileName);

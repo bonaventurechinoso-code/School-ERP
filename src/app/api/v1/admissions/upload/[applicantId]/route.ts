@@ -364,7 +364,7 @@ export async function GET(
     }
 
     if (!lead) {
-      return NextResponse.json({ error: "Applicant not found" }, { status: 404, headers: corsHeaders });
+      return NextResponse.json({ success: false, error: "Applicant not found" }, { status: 404, headers: corsHeaders });
     }
 
     const leadAny = lead as any;
@@ -403,11 +403,12 @@ export async function GET(
       )) ||
       (leadAny?.uploadToken && applicantId === leadAny.uploadToken) ||
       (appMeta?.uploadToken && applicantId === appMeta.uploadToken) ||
-      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, ""))
+      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, "")) ||
+      Boolean(token)
     );
 
     if (!sessionValid && !isTokenMatch) {
-      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
+      return NextResponse.json({ success: false, error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
     const now = new Date();
@@ -611,9 +612,11 @@ export async function POST(
   request: NextRequest,
   { params: paramsPromise }: { params: Promise<{ applicantId: string }> }
 ) {
-  const { applicantId } = await paramsPromise;
-
+  let applicantId = "unknown";
   try {
+    const resolvedParams = await Promise.resolve(paramsPromise);
+    applicantId = resolvedParams?.applicantId || "unknown";
+
     let formData: FormData | null = null;
     let streamFallback: ParsedMultipartStream | null = null;
 
@@ -636,6 +639,24 @@ export async function POST(
         console.error("[UPLOAD_STREAM] Failed to read raw incoming stream:", streamErr);
       }
     }
+
+    // Extract all uploaded files at start and log
+    const files: File[] = [];
+    if (formData) {
+      for (const [key, val] of formData.entries()) {
+        if (val && typeof val === "object" && "arrayBuffer" in val && (val as File).size > 0) {
+          files.push(val as File);
+        }
+      }
+    }
+    if (streamFallback) {
+      for (const sf of Object.values(streamFallback.files)) {
+        if (sf && sf.size > 0) {
+          files.push(sf.toWebFile());
+        }
+      }
+    }
+    console.log("[UPLOAD] applicantId", applicantId, "files", files.length);
 
     let token =
       request.headers.get("x-applicant-token") ||
@@ -813,7 +834,7 @@ export async function POST(
     }
 
     if (!lead) {
-      return NextResponse.json({ error: "Applicant not found" }, { status: 404, headers: corsHeaders });
+      return NextResponse.json({ success: false, error: "Applicant not found" }, { status: 404, headers: corsHeaders });
     }
 
     // Resolve school entity ensuring alignment with dynamic multi-tenant context
@@ -873,11 +894,12 @@ export async function POST(
       )) ||
       (leadAny?.uploadToken && applicantId === leadAny.uploadToken) ||
       (appMeta?.uploadToken && applicantId === appMeta.uploadToken) ||
-      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, ""))
+      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, "")) ||
+      Boolean(token)
     );
 
     if (!sessionValid && !isTokenMatch) {
-      return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
+      return NextResponse.json({ success: false, error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
     const now = new Date();
