@@ -46,6 +46,7 @@ interface UploadClientProps {
   existingAcademicResultsUrl?: string | null;
   existingBirthCertificateUrl?: string | null;
   existingMedicalRecordsUrl?: string | null;
+  existingNinSlipUrl?: string | null;
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -76,6 +77,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     existingAcademicResultsUrl,
     existingBirthCertificateUrl,
     existingMedicalRecordsUrl,
+    existingNinSlipUrl,
   } = props;
 
   // Selected files state
@@ -85,12 +87,14 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     academicResults: File | null;
     birthCertificate: File | null;
     medicalRecords: File | null;
+    ninSlip: File | null;
   }>({
     applicationFeeReceipt: null,
     passportPhoto: null,
     academicResults: null,
     birthCertificate: null,
     medicalRecords: null,
+    ninSlip: null,
   });
 
   const [previews, setPreviews] = useState<{
@@ -119,6 +123,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   const passportInputRef = useRef<HTMLInputElement>(null);
   const resultsInputRef = useRef<HTMLInputElement>(null);
   const birthInputRef = useRef<HTMLInputElement>(null);
+  const ninInputRef = useRef<HTMLInputElement>(null);
   const medicalInputRef = useRef<HTMLInputElement>(null);
 
   const formatFileSize = (bytes: number) => {
@@ -182,7 +187,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   };
 
   const validateAndSetFile = (
-    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords",
+    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords" | "ninSlip",
     file: File | null
   ) => {
     setErrorMsg(null);
@@ -232,7 +237,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
 
   const handleDrop = (
     e: React.DragEvent,
-    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords"
+    field: "applicationFeeReceipt" | "passportPhoto" | "academicResults" | "birthCertificate" | "medicalRecords" | "ninSlip"
   ) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -244,25 +249,20 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     e.preventDefault();
     setErrorMsg(null);
 
-    const hasPendingFiles =
-      files.passportPhoto ||
-      files.academicResults ||
-      files.birthCertificate ||
-      files.medicalRecords;
-
-    if (!hasPendingFiles && (feeReceiptUrl || feeState === "PENDING")) {
-      setIsSuccess(true);
-      return;
-    }
-
     const hasNewFiles =
       files.applicationFeeReceipt ||
       files.passportPhoto ||
       files.academicResults ||
       files.birthCertificate ||
-      files.medicalRecords;
+      files.medicalRecords ||
+      files.ninSlip;
+
     if (!hasNewFiles) {
-      setErrorMsg("Please select at least one document or application fee receipt to upload.");
+      if (feeReceiptUrl || feeState === "PENDING" || Object.keys(uploadedDocs).length > 0) {
+        setIsSuccess(true);
+        return;
+      }
+      setErrorMsg("Please select at least one document or credential to upload.");
       return;
     }
 
@@ -294,6 +294,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       if (files.academicResults) formData.append("academicResults", files.academicResults);
       if (files.birthCertificate) formData.append("birthCertificate", files.birthCertificate);
       if (files.medicalRecords) formData.append("medicalRecords", files.medicalRecords);
+      if (files.ninSlip) formData.append("ninSlip", files.ninSlip);
 
       const res = await fetch(`/api/v1/admissions/upload/${applicantId}?token=${token}`, {
         method: "POST",
@@ -909,7 +910,113 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                   )}
                 </div>
 
-                {/* 4. Medical / Behavioral Records */}
+                {/* 5. NIMC NIN Identification Slip */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, "ninSlip")}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, a, input")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    ninInputRef.current?.click();
+                  }}
+                  className={`relative p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[220px] bg-white dark:bg-zinc-900 ${
+                    files.ninSlip || existingNinSlipUrl
+                      ? "border-emerald-500/80 bg-emerald-50/20 dark:bg-emerald-950/10"
+                      : "border-slate-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-zinc-800/40"
+                  }`}
+                >
+                  <input
+                    id="nin-upload"
+                    name="ninSlip"
+                    ref={ninInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      validateAndSetFile("ninSlip", e.target.files?.[0] || null);
+                    }}
+                  />
+
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                          5
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm">NIMC NIN Identification Slip</h3>
+                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">National Identity Verification</p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800">
+                        PDF or Image
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-4">
+                      National Identification Number (NIN) slip, card, or NIMC verification document (Max 5MB).
+                    </p>
+                  </div>
+
+                  {files.ninSlip || existingNinSlipUrl ? (
+                    <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
+                      <FileCheck className="w-8 h-8 text-emerald-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
+                          {files.ninSlip?.name || "NIMC NIN Slip Uploaded"}
+                        </p>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                          {files.ninSlip ? formatFileSize(files.ninSlip.size) : "Ready on server"}
+                        </p>
+                      </div>
+                      {existingNinSlipUrl && !files.ninSlip && (
+                        <a
+                          href={existingNinSlipUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1 shrink-0"
+                        >
+                          View
+                        </a>
+                      )}
+                      {files.ninSlip && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            validateAndSetFile("ninSlip", null);
+                          }}
+                          className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
+                      <UploadCloud className="w-8 h-8 mb-2 text-indigo-500/70" />
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                        Drop NIMC NIN slip here or tap below
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          ninInputRef.current?.click();
+                        }}
+                        className="mt-2.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Select NIN Slip</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. Medical / Behavioral Records */}
                 <div
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, "medicalRecords")}
@@ -942,7 +1049,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                          4
+                          6
                         </div>
                         <h3 className="font-bold text-slate-900 dark:text-white text-sm">Medical / Behavioral Records</h3>
                       </div>
@@ -1035,7 +1142,8 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                       !files.passportPhoto &&
                       !files.academicResults &&
                       !files.birthCertificate &&
-                      !files.medicalRecords)
+                      !files.medicalRecords &&
+                      !files.ninSlip)
                   }
                   className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >

@@ -197,7 +197,7 @@ export async function GET(
         OR: [
           { id: applicantId },
           { uploadToken: applicantId },
-          ...(token ? [{ uploadToken: token }] : []),
+          ...(token ? [{ uploadToken: token }, { id: token }] : []),
         ],
       },
       include: {
@@ -205,6 +205,91 @@ export async function GET(
         tier: { select: { id: true, name: true } },
       },
     });
+
+    let appRecord: any = null;
+    if (!lead) {
+      appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [
+            { id: applicantId },
+            { applicationNumber: applicantId },
+            ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+          ],
+        },
+        include: {
+          documents: true,
+          feeTransactions: true,
+        },
+      });
+
+      if (appRecord) {
+        const appMeta = (appRecord.metadata as any) || {};
+        const tierData = (appRecord.tierSpecificData as any) || {};
+        const docsMap: Record<string, any> = { ...(appMeta.documents || {}) };
+
+        if (Array.isArray(appRecord.documents)) {
+          for (const d of appRecord.documents) {
+            const key = d.documentType === "PASSPORT_PHOTOGRAPH"
+              ? "passportPhoto"
+              : d.documentType === "ACADEMIC_TRANSCRIPT"
+              ? "academicResults"
+              : d.documentType === "BIRTH_CERTIFICATE"
+              ? "birthCertificate"
+              : d.documentType === "MEDICAL_REPORT"
+              ? "medicalRecords"
+              : d.documentType === "NIN_SLIP"
+              ? "ninSlip"
+              : d.documentType.toLowerCase();
+
+            docsMap[key] = {
+              url: d.storageKey,
+              fileUrl: d.storageKey,
+              name: d.documentType,
+              status: d.verificationStatus,
+            };
+          }
+        }
+
+        const feeTx = appRecord.feeTransactions?.[0];
+        if (feeTx?.proofOfPaymentUrl) {
+          docsMap.applicationFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeStatus = feeTx.paymentStatus;
+          docsMap.formFeePaid = feeTx.paymentStatus === "VERIFIED" || feeTx.paymentStatus === "PAID";
+        }
+
+        const school = appRecord.school || (await basePrisma.school.findFirst({
+          where: { id: appRecord.schoolId },
+          select: { id: true, name: true, subdomain: true, contactPhone: true },
+        }));
+
+        lead = {
+          id: appRecord.id,
+          schoolId: appRecord.schoolId,
+          school,
+          tier: null,
+          applicantName: `${appRecord.firstName || ""} ${appRecord.lastName || ""}`.trim() || "Applicant",
+          targetGrade: appRecord.programId || tierData.targetGrade || "Selected Grade",
+          parentPhone: appRecord.phoneNumber,
+          parentContact: appRecord.phoneNumber,
+          studentEmail: appRecord.email,
+          parentEmail: appRecord.email,
+          parentName: tierData.parentName || tierData.parent?.name || "Parent / Guardian",
+          status: appRecord.status || "APPLIED",
+          logs: Array.isArray(appMeta.logs) ? appMeta.logs : [],
+          documents: docsMap,
+          uploadToken: appMeta.uploadToken || appRecord.id,
+          uploadExpiresAt: null,
+          passportPhotoUrl: docsMap.passportPhoto?.url || null,
+          academicResultsUrl: docsMap.academicResults?.url || null,
+          birthCertificateUrl: docsMap.birthCertificate?.url || null,
+          medicalRecordsUrl: docsMap.medicalRecords?.url || null,
+          ninSlipUrl: docsMap.ninSlip?.url || null,
+          formFeePaid: feeTx?.paymentStatus === "VERIFIED" || feeTx?.paymentStatus === "PAID",
+          applicationNo: appRecord.applicationNumber,
+        } as any;
+      }
+    }
 
     let registerRecord: any = null;
     if (!lead) {
@@ -256,6 +341,7 @@ export async function GET(
 
     const leadAny = lead as any;
     const regCreds = registerRecord?.credentialsJson as any;
+    const appMeta = (appRecord?.metadata as any) || (leadAny?.metadata as any) || {};
     const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
     let sessionValid = false;
     if (cookieToken) {
@@ -266,7 +352,8 @@ export async function GET(
         if (
           payload.leadId === applicantId ||
           payload.userId === applicantId ||
-          (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+          payload.applicationId === applicantId ||
+          (payload.uploadToken && (payload.uploadToken === leadAny?.uploadToken || payload.uploadToken === appMeta?.uploadToken)) ||
           payload.isGuestApplicant
         ) {
           sessionValid = true;
@@ -276,9 +363,19 @@ export async function GET(
 
     const isTokenMatch = Boolean(
       (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+      (token && appMeta?.uploadToken && appMeta.uploadToken === token) ||
       (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
-      (token && (token === applicantId || token === registerRecord?.applicationNo || token === registerRecord?.id || token === "admin")) ||
-      (leadAny?.uploadToken && applicantId === leadAny.uploadToken)
+      (token && (
+        token === applicantId ||
+        token === registerRecord?.applicationNo ||
+        token === registerRecord?.id ||
+        token === appRecord?.applicationNumber ||
+        token === appRecord?.id ||
+        token === "admin"
+      )) ||
+      (leadAny?.uploadToken && applicantId === leadAny.uploadToken) ||
+      (appMeta?.uploadToken && applicantId === appMeta.uploadToken) ||
+      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, ""))
     );
 
     if (!sessionValid && !isTokenMatch) {
@@ -305,6 +402,7 @@ export async function GET(
         academicResultsUrl: leadAny.academicResultsUrl || null,
         birthCertificateUrl: leadAny.birthCertificateUrl || null,
         medicalRecordsUrl: leadAny.medicalRecordsUrl || null,
+        ninSlipUrl: leadAny.ninSlipUrl || leadAny.documents?.ninSlip?.url || null,
         applicationFeeReceiptUrl: leadAny.applicationFeeReceiptUrl || leadAny.documents?.applicationFeeReceiptUrl || null,
         formFeeReceiptUrl: leadAny.formFeeReceiptUrl || leadAny.documents?.formFeeReceiptUrl || null,
         formFeePaid: Boolean(leadAny.formFeePaid || leadAny.documents?.formFeePaid),
@@ -360,13 +458,101 @@ export async function POST(
     const tenantCtx = resolveRequestTenantContext(request, formData, streamFallback?.fields);
 
     // 1. Verify Lead and Token
-    let lead = await basePrisma.admissionLead.findUnique({
-      where: { id: applicantId },
+    let lead = await basePrisma.admissionLead.findFirst({
+      where: {
+        OR: [
+          { id: applicantId },
+          { uploadToken: applicantId },
+          ...(token ? [{ uploadToken: token }, { id: token }] : []),
+        ],
+      },
       include: {
         school: true,
         tier: true,
       },
     });
+
+    let isAppOnly = false;
+    let appRecord: any = null;
+    if (!lead) {
+      appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [
+            { id: applicantId },
+            { applicationNumber: applicantId },
+            ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+          ],
+        },
+        include: {
+          documents: true,
+          feeTransactions: true,
+        },
+      });
+
+      if (appRecord) {
+        isAppOnly = true;
+        const appMeta = (appRecord.metadata as any) || {};
+        const tierData = (appRecord.tierSpecificData as any) || {};
+        const docsMap: Record<string, any> = { ...(appMeta.documents || {}) };
+
+        if (Array.isArray(appRecord.documents)) {
+          for (const d of appRecord.documents) {
+            const key = d.documentType === "PASSPORT_PHOTOGRAPH"
+              ? "passportPhoto"
+              : d.documentType === "ACADEMIC_TRANSCRIPT"
+              ? "academicResults"
+              : d.documentType === "BIRTH_CERTIFICATE"
+              ? "birthCertificate"
+              : d.documentType === "MEDICAL_REPORT"
+              ? "medicalRecords"
+              : d.documentType === "NIN_SLIP"
+              ? "ninSlip"
+              : d.documentType.toLowerCase();
+
+            docsMap[key] = {
+              url: d.storageKey,
+              fileUrl: d.storageKey,
+              name: d.documentType,
+              status: d.verificationStatus,
+            };
+          }
+        }
+
+        const feeTx = appRecord.feeTransactions?.[0];
+        if (feeTx?.proofOfPaymentUrl) {
+          docsMap.applicationFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeStatus = feeTx.paymentStatus;
+          docsMap.formFeePaid = feeTx.paymentStatus === "VERIFIED" || feeTx.paymentStatus === "PAID";
+        }
+
+        lead = {
+          id: appRecord.id,
+          schoolId: appRecord.schoolId,
+          school: appRecord.school,
+          tier: null,
+          applicantName: `${appRecord.firstName || ""} ${appRecord.lastName || ""}`.trim() || "Applicant",
+          targetGrade: appRecord.programId || tierData.targetGrade || "Selected Grade",
+          parentPhone: appRecord.phoneNumber,
+          parentContact: appRecord.phoneNumber,
+          studentEmail: appRecord.email,
+          parentEmail: appRecord.email,
+          parentName: tierData.parentName || tierData.parent?.name || "Parent / Guardian",
+          status: appRecord.status || "APPLIED",
+          logs: Array.isArray(appMeta.logs) ? appMeta.logs : [],
+          documents: docsMap,
+          uploadToken: appMeta.uploadToken || appRecord.id,
+          uploadExpiresAt: null,
+          passportPhotoUrl: docsMap.passportPhoto?.url || null,
+          academicResultsUrl: docsMap.academicResults?.url || null,
+          birthCertificateUrl: docsMap.birthCertificate?.url || null,
+          medicalRecordsUrl: docsMap.medicalRecords?.url || null,
+          ninSlipUrl: docsMap.ninSlip?.url || null,
+          formFeePaid: feeTx?.paymentStatus === "VERIFIED" || feeTx?.paymentStatus === "PAID",
+          applicationNo: appRecord.applicationNumber,
+        } as any;
+      }
+    }
 
     let isRegisterOnly = false;
     let registerRecord: any = null;
@@ -432,6 +618,7 @@ export async function POST(
 
     const leadAny = lead as any;
     const regCreds = registerRecord?.credentialsJson as any;
+    const appMeta = (appRecord?.metadata as any) || (leadAny?.metadata as any) || {};
     const cookieToken = request.cookies.get("session")?.value || request.cookies.get("accessToken")?.value;
     let sessionValid = false;
     if (cookieToken) {
@@ -442,7 +629,8 @@ export async function POST(
         if (
           payload.leadId === applicantId ||
           payload.userId === applicantId ||
-          (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+          payload.applicationId === applicantId ||
+          (payload.uploadToken && (payload.uploadToken === leadAny?.uploadToken || payload.uploadToken === appMeta?.uploadToken)) ||
           payload.isGuestApplicant
         ) {
           sessionValid = true;
@@ -452,9 +640,19 @@ export async function POST(
 
     const isTokenMatch = Boolean(
       (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+      (token && appMeta?.uploadToken && appMeta.uploadToken === token) ||
       (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
-      (token && (token === applicantId || token === registerRecord?.applicationNo || token === registerRecord?.id || token === "admin")) ||
-      (leadAny?.uploadToken && applicantId === leadAny.uploadToken)
+      (token && (
+        token === applicantId ||
+        token === registerRecord?.applicationNo ||
+        token === registerRecord?.id ||
+        token === appRecord?.applicationNumber ||
+        token === appRecord?.id ||
+        token === "admin"
+      )) ||
+      (leadAny?.uploadToken && applicantId === leadAny.uploadToken) ||
+      (appMeta?.uploadToken && applicantId === appMeta.uploadToken) ||
+      (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, ""))
     );
 
     if (!sessionValid && !isTokenMatch) {
@@ -505,6 +703,13 @@ export async function POST(
         field: "medicalRecords",
         aliases: ["medical_records", "medical"],
         prefix: "medical-records",
+        type: "DOC",
+        allowedMimes: ALLOWED_DOC_MIMES,
+      },
+      {
+        field: "ninSlip",
+        aliases: ["nin_slip", "nin", "ninSlipUrl", "national_id", "nationalId"],
+        prefix: "nin-slip",
         type: "DOC",
         allowedMimes: ALLOWED_DOC_MIMES,
       },
@@ -603,6 +808,7 @@ export async function POST(
         if (item.field === "academicResults") updateData.academicResultsUrl = publicUrl;
         if (item.field === "birthCertificate") updateData.birthCertificateUrl = publicUrl;
         if (item.field === "medicalRecords") updateData.medicalRecordsUrl = publicUrl;
+        if (item.field === "ninSlip") updateData.ninSlipUrl = publicUrl;
 
         // Dedicated Application Fee Receipt Mapping (STATE 2: PENDING)
         if (item.field === "applicationFeeReceipt") {
@@ -673,7 +879,7 @@ export async function POST(
     // 4. Update Database
     let updatedLead: any = null;
     try {
-      if (!isRegisterOnly) {
+      if (!isRegisterOnly && !isAppOnly) {
         updatedLead = await basePrisma.admissionLead.update({
           where: { id: lead.id },
           data: updateData,
@@ -742,6 +948,18 @@ export async function POST(
               verified: false,
             });
           }
+          if (updateData.ninSlipUrl) {
+            credsList.push({
+              type: "nin_slip",
+              docType: "ninSlip",
+              key: "ninSlip",
+              name: "NIMC NIN Identification Slip",
+              path: updateData.ninSlipUrl,
+              url: updateData.ninSlipUrl,
+              fileUrl: updateData.ninSlipUrl,
+              verified: false,
+            });
+          }
           if (updateData.applicationFeeReceiptUrl) {
             credsList.push({
               type: "fee_receipt",
@@ -781,6 +999,18 @@ export async function POST(
         } catch (regErr) {
           console.warn("[UPLOAD_ROUTE] Warning: Could not mirror credentials to admission_registers:", regErr);
         }
+      } else if (isAppOnly && appRecord) {
+        const appMeta = (appRecord.metadata as any) || {};
+        updatedLead = await basePrisma.admissionsApplication.update({
+          where: { id: appRecord.id },
+          data: {
+            metadata: {
+              ...appMeta,
+              documents: currentDocs,
+              logs: existingLogs,
+            },
+          },
+        });
       } else {
         // Update AdmissionRegister record directly
         const currentReg = await basePrisma.admissionRegister.findUnique({ where: { id: applicantId } });
@@ -1019,6 +1249,7 @@ export async function POST(
           academicResults: "ACADEMIC_TRANSCRIPT",
           birthCertificate: "BIRTH_CERTIFICATE",
           medicalRecords: "MEDICAL_REPORT",
+          ninSlip: "NIN_SLIP",
         };
 
         for (const [fieldKey, docTypeConst] of Object.entries(docMappings)) {
@@ -1053,7 +1284,13 @@ export async function POST(
 
         // Advance application stage if documents and/or fee receipt are present
         const hasFee = Boolean(currentDocs.applicationFeeReceiptUrl);
-        const hasOtherDocs = Boolean(currentDocs.passportPhoto || currentDocs.academicResults || currentDocs.birthCertificate || currentDocs.medicalRecords);
+        const hasOtherDocs = Boolean(
+          currentDocs.passportPhoto ||
+          currentDocs.academicResults ||
+          currentDocs.birthCertificate ||
+          currentDocs.medicalRecords ||
+          currentDocs.ninSlip
+        );
         let nextStatus = targetApp.status;
         if (hasFee && hasOtherDocs) {
           nextStatus = "UNDER_REVIEW";

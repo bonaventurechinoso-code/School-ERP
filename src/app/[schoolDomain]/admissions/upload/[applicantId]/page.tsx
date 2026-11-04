@@ -33,18 +33,116 @@ export default async function ApplicantUploadPage({
     );
   }
 
-  // 2. Resolve applicant: Check admissionLead first, then admissionRegister fallback
+  // 2. Resolve applicant: Check admissionLead first, then modern admissionsApplication, then admissionRegister fallback
   let lead = await basePrisma.admissionLead.findFirst({
     where: {
       schoolId: school.id,
       OR: [
         { id: applicantId },
         { uploadToken: applicantId },
-        ...(token ? [{ uploadToken: token }] : []),
+        ...(token ? [{ uploadToken: token }, { id: token }] : []),
       ],
     },
     include: { tier: true },
   });
+
+  let appRecord: any = null;
+  if (!lead) {
+    appRecord = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          { id: applicantId },
+          { applicationNumber: applicantId },
+          ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+        ],
+      },
+      include: {
+        documents: true,
+        feeTransactions: true,
+      },
+    });
+
+    if (appRecord) {
+      // Check if linked lead exists
+      lead = await basePrisma.admissionLead.findFirst({
+        where: {
+          schoolId: school.id,
+          OR: [
+            { id: appRecord.id },
+            ...(appRecord.email ? [{ studentEmail: appRecord.email }, { parentEmail: appRecord.email }] : []),
+            ...(appRecord.phoneNumber ? [{ parentPhone: appRecord.phoneNumber }, { parentContact: appRecord.phoneNumber }] : []),
+          ],
+        },
+        include: { tier: true },
+      });
+
+      // If still no lead record, synthesize client profile from admissionsApplication
+      if (!lead) {
+        const appMeta = (appRecord.metadata as any) || {};
+        const tierData = (appRecord.tierSpecificData as any) || {};
+        const docsMap: Record<string, any> = { ...(appMeta.documents || {}) };
+
+        // Populate from appRecord.documents relations
+        if (Array.isArray(appRecord.documents)) {
+          for (const d of appRecord.documents) {
+            const key = d.documentType === "PASSPORT_PHOTOGRAPH"
+              ? "passportPhoto"
+              : d.documentType === "ACADEMIC_TRANSCRIPT"
+              ? "academicResults"
+              : d.documentType === "BIRTH_CERTIFICATE"
+              ? "birthCertificate"
+              : d.documentType === "MEDICAL_REPORT"
+              ? "medicalRecords"
+              : d.documentType === "NIN_SLIP"
+              ? "ninSlip"
+              : d.documentType.toLowerCase();
+
+            docsMap[key] = {
+              url: d.storageKey,
+              fileUrl: d.storageKey,
+              name: d.documentType,
+              status: d.verificationStatus,
+            };
+          }
+        }
+
+        const feeTx = appRecord.feeTransactions?.[0];
+        if (feeTx?.proofOfPaymentUrl) {
+          docsMap.applicationFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeReceiptUrl = feeTx.proofOfPaymentUrl;
+          docsMap.formFeeStatus = feeTx.paymentStatus;
+          docsMap.formFeePaid = feeTx.paymentStatus === "VERIFIED" || feeTx.paymentStatus === "PAID";
+        }
+
+        lead = {
+          id: appRecord.id,
+          schoolId: school.id,
+          tierId: null,
+          tier: null,
+          applicantName: `${appRecord.firstName || ""} ${appRecord.lastName || ""}`.trim() || "Applicant",
+          parentName: tierData.parentName || tierData.parent?.name || "Parent / Guardian",
+          parentPhone: appRecord.phoneNumber,
+          parentContact: appRecord.phoneNumber,
+          studentEmail: appRecord.email,
+          parentEmail: appRecord.email,
+          targetGrade: appRecord.programId || tierData.targetGrade || "Selected Grade",
+          status: appRecord.status || "APPLIED",
+          documents: docsMap,
+          logs: Array.isArray(appMeta.logs) ? appMeta.logs : [],
+          uploadToken: appMeta.uploadToken || appRecord.id,
+          uploadExpiresAt: null,
+          passportPhotoUrl: docsMap.passportPhoto?.url || null,
+          academicResultsUrl: docsMap.academicResults?.url || null,
+          birthCertificateUrl: docsMap.birthCertificate?.url || null,
+          medicalRecordsUrl: docsMap.medicalRecords?.url || null,
+          ninSlipUrl: docsMap.ninSlip?.url || null,
+          formFeePaid: feeTx?.paymentStatus === "VERIFIED" || feeTx?.paymentStatus === "PAID",
+          applicationNo: appRecord.applicationNumber,
+        } as any;
+      }
+    }
+  }
 
   let registerRecord: any = null;
   if (!lead) {
@@ -54,6 +152,7 @@ export default async function ApplicantUploadPage({
         OR: [
           { id: applicantId },
           { applicationNo: applicantId },
+          ...(token ? [{ id: token }, { applicationNo: token }] : []),
         ],
       },
     });
@@ -96,6 +195,7 @@ export default async function ApplicantUploadPage({
           academicResultsUrl: null,
           birthCertificateUrl: null,
           medicalRecordsUrl: null,
+          ninSlipUrl: null,
         } as any;
       }
     }
@@ -103,22 +203,41 @@ export default async function ApplicantUploadPage({
 
   const leadAny = lead as any;
   const regCreds = registerRecord?.credentialsJson as any;
+  const appMeta = (appRecord?.metadata as any) || (leadAny?.metadata as any) || {};
 
   // Flexible token authentication:
-  // - Direct uploadToken match
-  // - URL applicantId matches lead.uploadToken
-  // - Token matches applicationNo / record ID
+  // - Direct uploadToken match (from lead, admissionsApplication metadata, or admissionRegister)
+  // - URL applicantId matches uploadToken
+  // - Token matches applicationNo / record ID / applicantId
+  // - Token matches applicant UUID (tokenized direct upload link)
   // - Admin token ("admin")
   const isDirectTokenMatch = Boolean(
     (token && leadAny?.uploadToken && leadAny.uploadToken === token) ||
+    (token && appMeta?.uploadToken && appMeta.uploadToken === token) ||
     (token && regCreds?.uploadToken && regCreds.uploadToken === token) ||
-    (token && (leadAny?.id === token || registerRecord?.id === token || registerRecord?.applicationNo === token)) ||
-    (token && token === "admin")
+    (token && (
+      leadAny?.id === token ||
+      registerRecord?.id === token ||
+      registerRecord?.applicationNo === token ||
+      appRecord?.id === token ||
+      appRecord?.applicationNumber === token ||
+      applicantId === token
+    )) ||
+    (token && token === "admin") ||
+    (applicantId && token && applicantId.replace(/-/g, "") === token.replace(/-/g, ""))
   );
   const isUrlApplicantIdSelfAuthenticating = Boolean(
-    leadAny?.uploadToken && applicantId === leadAny.uploadToken
+    (leadAny?.uploadToken && applicantId === leadAny.uploadToken) ||
+    (appMeta?.uploadToken && applicantId === appMeta.uploadToken) ||
+    (regCreds?.uploadToken && applicantId === regCreds.uploadToken)
   );
-  const isTokenValid = Boolean(lead && (isDirectTokenMatch || isUrlApplicantIdSelfAuthenticating));
+  const isTokenValid = Boolean(
+    lead && (
+      isDirectTokenMatch ||
+      isUrlApplicantIdSelfAuthenticating ||
+      (token && (token === applicantId || token === leadAny?.id || token === appRecord?.id))
+    )
+  );
   const isTokenExpired = Boolean(leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date());
 
   // Allow authorization via active guest applicant or tenant session cookie as fallback
@@ -134,7 +253,8 @@ export default async function ApplicantUploadPage({
         payload.leadId === applicantId ||
         payload.userId === applicantId ||
         payload.tenantId === school.id ||
-        (payload.uploadToken && payload.uploadToken === leadAny?.uploadToken) ||
+        payload.applicationId === applicantId ||
+        (payload.uploadToken && (payload.uploadToken === leadAny?.uploadToken || payload.uploadToken === appMeta?.uploadToken)) ||
         payload.isGuestApplicant
       ) {
         sessionAuthorized = true;
@@ -143,7 +263,7 @@ export default async function ApplicantUploadPage({
   }
 
   const isAuthorized = (isTokenValid || sessionAuthorized) && !isTokenExpired;
-  const effectiveToken = token || leadAny?.uploadToken || applicantId;
+  const effectiveToken = token || leadAny?.uploadToken || appMeta?.uploadToken || applicantId;
 
   // 3. Security Guard: Token / Session validation
   if (!lead || !isAuthorized) {
@@ -230,6 +350,7 @@ export default async function ApplicantUploadPage({
       existingAcademicResultsUrl={leadAny.academicResultsUrl}
       existingBirthCertificateUrl={leadAny.birthCertificateUrl}
       existingMedicalRecordsUrl={leadAny.medicalRecordsUrl}
+      existingNinSlipUrl={leadAny.ninSlipUrl || (leadAny.documents?.ninSlip?.url || leadAny.documents?.ninSlip?.fileUrl || null)}
     />
   );
 }
