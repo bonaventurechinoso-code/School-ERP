@@ -15,13 +15,46 @@ export const maxDuration = 120; // Allow sufficient time for multi-file streamin
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 
-const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+const ALLOWED_IMAGE_MIMES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/jpg",
+  "image/jfif",
+  "image/pjpeg",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/bmp",
+  "image/tiff",
+  "image/gif",
+  "image/x-png",
+  "application/octet-stream",
+];
+
 const ALLOWED_DOC_MIMES = [
   "application/pdf",
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/jpg",
+  "image/jfif",
+  "image/pjpeg",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/bmp",
+  "image/tiff",
+  "image/gif",
+  "image/x-png",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+  "application/octet-stream",
+  "application/download",
 ];
 
 const corsHeaders = {
@@ -419,12 +452,12 @@ export async function GET(
 
     const now = new Date();
     if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now) {
-      const freshToken = crypto.randomUUID();
-      const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+      const freshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30-day extended rolling window
+      const currentToken = leadAny.uploadToken || token || crypto.randomUUID();
       if (lead?.id) {
         await basePrisma.admissionLead.update({
           where: { id: lead.id },
-          data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+          data: { uploadToken: currentToken, uploadExpiresAt: freshExpiresAt },
         }).catch(() => null);
       }
       if (appRecord?.id) {
@@ -433,13 +466,13 @@ export async function GET(
           data: {
             metadata: {
               ...((appRecord.metadata as any) || {}),
-              uploadToken: freshToken,
+              uploadToken: currentToken,
               uploadExpiresAt: freshExpiresAt.toISOString(),
             },
           },
         }).catch(() => null);
       }
-      leadAny.uploadToken = freshToken;
+      leadAny.uploadToken = currentToken;
       leadAny.uploadExpiresAt = freshExpiresAt;
     }
 
@@ -910,12 +943,12 @@ export async function POST(
 
     const now = new Date();
     if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now) {
-      const freshToken = crypto.randomUUID();
-      const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+      const freshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30-day extended rolling window
+      const currentToken = leadAny.uploadToken || token || crypto.randomUUID();
       if (lead?.id) {
         await basePrisma.admissionLead.update({
           where: { id: lead.id },
-          data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+          data: { uploadToken: currentToken, uploadExpiresAt: freshExpiresAt },
         }).catch(() => null);
       }
       if (appRecord?.id) {
@@ -924,13 +957,13 @@ export async function POST(
           data: {
             metadata: {
               ...((appRecord.metadata as any) || {}),
-              uploadToken: freshToken,
+              uploadToken: currentToken,
               uploadExpiresAt: freshExpiresAt.toISOString(),
             },
           },
         }).catch(() => null);
       }
-      leadAny.uploadToken = freshToken;
+      leadAny.uploadToken = currentToken;
       leadAny.uploadExpiresAt = freshExpiresAt;
     }
 
@@ -1049,22 +1082,52 @@ export async function POST(
           );
         }
 
-        // Resilient MIME & extension type check (Max 5MB)
+        // Resilient MIME & extension type check (Max 5MB - Accepts all documents & images)
         const fileExt = path.extname(fileObj.name).toLowerCase();
         const clientMime = (fileObj.type || "").toLowerCase().trim();
         const isPdfExt = fileExt === ".pdf";
-        const isImgExt = [".jpg", ".jpeg", ".png", ".webp"].includes(fileExt);
+        const isImgExt = [
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".webp",
+          ".jfif",
+          ".pjpeg",
+          ".heic",
+          ".heif",
+          ".bmp",
+          ".tiff",
+          ".tif",
+          ".gif",
+        ].includes(fileExt);
+        const isDocExt = [
+          ".pdf",
+          ".doc",
+          ".docx",
+          ".txt",
+          ".rtf",
+          ".odt",
+          ".xls",
+          ".xlsx",
+          ".csv",
+        ].includes(fileExt);
 
         const isAllowedType =
           item.allowedMimes.includes(clientMime) ||
-          (item.type === "IMAGE" ? isImgExt : (isPdfExt || isImgExt));
+          clientMime.startsWith("image/") ||
+          (item.type === "IMAGE" ? isImgExt : (isPdfExt || isImgExt || isDocExt)) ||
+          clientMime === "application/octet-stream" ||
+          clientMime === "" ||
+          clientMime === "application/download";
 
         if (!isAllowedType) {
           return NextResponse.json(
             {
               success: false,
               error: `Invalid file type for ${item.field}. Allowed types: ${
-                item.type === "IMAGE" ? "JPG, PNG, WebP" : "PDF, JPG, PNG, WebP"
+                item.type === "IMAGE"
+                  ? "JPG, PNG, WebP, JFIF, HEIC, BMP"
+                  : "PDF, Word Docs, JPG, PNG, WebP, JFIF, HEIC, Text"
               }`,
             },
             { status: 400, headers: corsHeaders }
@@ -1094,18 +1157,8 @@ export async function POST(
           savedName = fileName;
         }
 
-        // Map to update columns & finite state machine flags
-        if (item.field === "passportPhoto") updateData.passportPhotoUrl = publicUrl;
-        if (item.field === "academicResults") updateData.academicResultsUrl = publicUrl;
-        if (item.field === "birthCertificate") updateData.birthCertificateUrl = publicUrl;
-        if (item.field === "medicalRecords") updateData.medicalRecordsUrl = publicUrl;
-        if (item.field === "ninSlip") updateData.ninSlipUrl = publicUrl;
-
         // Dedicated Application Fee Receipt Mapping (STATE 2: PENDING)
         if (item.field === "applicationFeeReceipt") {
-          updateData.applicationFeeReceiptUrl = publicUrl;
-          updateData.formFeeReceiptUrl = publicUrl;
-          updateData.formFeePaid = false;
 
           currentDocs.applicationFeeReceipt = {
             url: publicUrl,
@@ -1155,7 +1208,12 @@ export async function POST(
       return NextResponse.json({ error: "No files were selected for upload" }, { status: 400, headers: corsHeaders });
     }
 
-    updateData.documents = currentDocs;
+    // Merge new uploads cleanly into existing documents JSON
+    const existingLeadDocs = (lead.documents as any) || {};
+    const mergedDocuments = {
+      ...existingLeadDocs,
+      ...currentDocs,
+    };
 
     // Update activity logs
     const existingLogs = Array.isArray(lead.logs) ? [...lead.logs] : [];
@@ -1165,15 +1223,26 @@ export async function POST(
       files: uploadedFileList,
       ip: request.headers.get("x-forwarded-for") || "client",
     });
-    updateData.logs = existingLogs;
 
-    // 4. Update Database
+    // 4. Update Database (JSON documents + logs only, no invalid URL columns)
     let updatedLead: any = null;
     try {
       if (!isRegisterOnly && !isAppOnly) {
+        const leadUpdateData: any = {
+          documents: mergedDocuments,
+          logs: existingLogs,
+          updatedAt: new Date(),
+        };
+
+        if (mergedDocuments.applicationFeeReceiptUrl) {
+          leadUpdateData.applicationFeeReceiptUrl = mergedDocuments.applicationFeeReceiptUrl;
+          leadUpdateData.formFeeReceiptUrl = mergedDocuments.formFeeReceiptUrl || mergedDocuments.applicationFeeReceiptUrl;
+          leadUpdateData.formFeePaid = false;
+        }
+
         updatedLead = await basePrisma.admissionLead.update({
           where: { id: lead.id },
-          data: updateData,
+          data: leadUpdateData,
         });
 
         // 5. Dynamic Tier Database Synchronization
@@ -1182,7 +1251,7 @@ export async function POST(
           const tierDb = await getPrismaClientForTier(schoolId, targetTier);
           await tierDb.admissionLead.update({
             where: { id: lead.id },
-            data: updateData,
+            data: leadUpdateData,
           }).catch(() => null);
         } catch (tierSyncErr) {
           console.warn("[UPLOAD_ROUTE] Warning: Could not mirror document update to tier DB:", tierSyncErr);
@@ -1191,75 +1260,76 @@ export async function POST(
         // 5b. Update Global Admission Register audit record & document vault
         try {
           const credsList: any[] = [];
-          if (updateData.passportPhotoUrl) {
+          if (mergedDocuments.passportPhoto?.url) {
             credsList.push({
               type: "passport",
               docType: "passportPhoto",
               key: "passportPhoto",
               name: "Applicant Passport Photograph",
-              path: updateData.passportPhotoUrl,
-              url: updateData.passportPhotoUrl,
-              fileUrl: updateData.passportPhotoUrl,
+              path: mergedDocuments.passportPhoto.url,
+              url: mergedDocuments.passportPhoto.url,
+              fileUrl: mergedDocuments.passportPhoto.url,
               verified: false,
             });
           }
-          if (updateData.academicResultsUrl) {
+          if (mergedDocuments.academicResults?.url) {
             credsList.push({
               type: "result",
               docType: "academicResults",
               key: "academicResults",
               name: "Previous Academic Results",
-              path: updateData.academicResultsUrl,
-              url: updateData.academicResultsUrl,
-              fileUrl: updateData.academicResultsUrl,
+              path: mergedDocuments.academicResults.url,
+              url: mergedDocuments.academicResults.url,
+              fileUrl: mergedDocuments.academicResults.url,
               verified: false,
             });
           }
-          if (updateData.birthCertificateUrl) {
+          if (mergedDocuments.birthCertificate?.url) {
             credsList.push({
               type: "birth_cert",
               docType: "birthCertificate",
               key: "birthCertificate",
               name: "Birth Certificate / Age Declaration",
-              path: updateData.birthCertificateUrl,
-              url: updateData.birthCertificateUrl,
-              fileUrl: updateData.birthCertificateUrl,
+              path: mergedDocuments.birthCertificate.url,
+              url: mergedDocuments.birthCertificate.url,
+              fileUrl: mergedDocuments.birthCertificate.url,
               verified: false,
             });
           }
-          if (updateData.medicalRecordsUrl) {
+          if (mergedDocuments.medicalRecords?.url) {
             credsList.push({
               type: "medical",
               docType: "medicalRecords",
               key: "medicalRecords",
               name: "Medical Certificate of Fitness",
-              path: updateData.medicalRecordsUrl,
-              url: updateData.medicalRecordsUrl,
-              fileUrl: updateData.medicalRecordsUrl,
+              path: mergedDocuments.medicalRecords.url,
+              url: mergedDocuments.medicalRecords.url,
+              fileUrl: mergedDocuments.medicalRecords.url,
               verified: false,
             });
           }
-          if (updateData.ninSlipUrl) {
+          if (mergedDocuments.ninSlip?.url) {
             credsList.push({
               type: "nin_slip",
               docType: "ninSlip",
               key: "ninSlip",
               name: "NIMC NIN Identification Slip",
-              path: updateData.ninSlipUrl,
-              url: updateData.ninSlipUrl,
-              fileUrl: updateData.ninSlipUrl,
+              path: mergedDocuments.ninSlip.url,
+              url: mergedDocuments.ninSlip.url,
+              fileUrl: mergedDocuments.ninSlip.url,
               verified: false,
             });
           }
-          if (updateData.applicationFeeReceiptUrl) {
+          if (mergedDocuments.applicationFeeReceiptUrl || mergedDocuments.applicationFeeReceipt?.url) {
+            const feeUrl = mergedDocuments.applicationFeeReceiptUrl || mergedDocuments.applicationFeeReceipt?.url;
             credsList.push({
               type: "fee_receipt",
               docType: "applicationFeeReceipt",
               key: "applicationFeeReceipt",
               name: "Application Fee Receipt",
-              path: updateData.applicationFeeReceiptUrl,
-              url: updateData.applicationFeeReceiptUrl,
-              fileUrl: updateData.applicationFeeReceiptUrl,
+              path: feeUrl,
+              url: feeUrl,
+              fileUrl: feeUrl,
               verified: false,
               status: "PENDING",
             });
@@ -1340,9 +1410,9 @@ export async function POST(
         });
       }
     } catch (dbUpdateError: any) {
-      console.error("DB Upload Error:", dbUpdateError);
+      console.error("[UPLOAD_DB_ERROR]:", dbUpdateError);
       return NextResponse.json(
-        { error: dbUpdateError?.message || "Database write error during file upload" },
+        { success: false, error: "Failed to save documents, please try again" },
         { status: 500, headers: corsHeaders }
       );
     }
@@ -1674,6 +1744,9 @@ export async function POST(
         .setExpirationTime(Math.floor(guestExpiresAt.getTime() / 1000))
         .sign(secret);
 
+      const existingSession = request.cookies.get("session")?.value;
+      const existingAccessToken = request.cookies.get("accessToken")?.value;
+
       const isSecure = process.env.NODE_ENV === "production";
       const cookieOptions = {
         httpOnly: true,
@@ -1683,9 +1756,15 @@ export async function POST(
         maxAge: 24 * 60 * 60,
       };
 
-      response.cookies.set("session", guestSessionToken, cookieOptions);
-      response.cookies.set("accessToken", guestSessionToken, cookieOptions);
+      // Always grant guest_session cookie so public upload portal recognizes current upload
       response.cookies.set("guest_session", "true", { ...cookieOptions, httpOnly: false });
+
+      // CRITICAL: NEVER overwrite existing session or accessToken cookies!
+      // Overwriting them logs out Administrators, Staff, Parents, or existing users!
+      if (!existingSession && !existingAccessToken) {
+        response.cookies.set("session", guestSessionToken, cookieOptions);
+        response.cookies.set("accessToken", guestSessionToken, cookieOptions);
+      }
     } catch (cookieErr) {
       console.warn("[UPLOAD_ROUTE] Could not refresh guest session cookie:", cookieErr);
     }
@@ -1694,7 +1773,7 @@ export async function POST(
   } catch (error: any) {
     console.error("[UPLOAD_API_POST] Error uploading documents:", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to process file upload" },
+      { success: false, error: "Failed to process file upload, please try again" },
       { status: 500, headers: corsHeaders }
     );
   }

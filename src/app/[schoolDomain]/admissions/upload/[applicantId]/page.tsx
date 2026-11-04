@@ -288,14 +288,14 @@ export default async function ApplicantUploadPage({
   const now = new Date();
   const isTokenExpired = Boolean(leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now);
 
-  // Auto-regenerate token and redirect if expired (7-day window)
+  // Auto-extend token expiry (30-day rolling window) without breaking existing links or forcing redirects
   if (isTokenExpired && lead) {
-    const freshToken = crypto.randomUUID();
-    const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+    const existingToken = leadAny.uploadToken || token || crypto.randomUUID();
+    const freshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30-day expiry
     if (lead?.id) {
       await basePrisma.admissionLead.update({
         where: { id: lead.id },
-        data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+        data: { uploadToken: existingToken, uploadExpiresAt: freshExpiresAt },
       }).catch(() => null);
     }
     if (appRecord?.id) {
@@ -304,7 +304,7 @@ export default async function ApplicantUploadPage({
         data: {
           metadata: {
             ...((appRecord.metadata as any) || {}),
-            uploadToken: freshToken,
+            uploadToken: existingToken,
             uploadExpiresAt: freshExpiresAt.toISOString(),
           },
         },
@@ -317,15 +317,14 @@ export default async function ApplicantUploadPage({
         data: {
           credentialsJson: {
             ...currentCreds,
-            uploadToken: freshToken,
+            uploadToken: existingToken,
             uploadExpiresAt: freshExpiresAt.toISOString(),
           },
         },
       }).catch(() => null);
     }
-
-    const targetSub = school.subdomain || cleanedDomain || "egede";
-    redirect(`/${targetSub}/admissions/upload/${applicantId}?token=${freshToken}`);
+    leadAny.uploadToken = existingToken;
+    leadAny.uploadExpiresAt = freshExpiresAt;
   }
 
   // Allow authorization via active guest applicant or tenant session cookie as fallback

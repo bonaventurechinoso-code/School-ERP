@@ -99,9 +99,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Application Fee Receipt",
     subLabel: "Direct Bank Transfer Verification",
     mandatory: true,
-    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
-    badge: "PDF / Image (5MB)",
-    description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form (PDF or Image • Max 5MB).",
+    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls",
+    badge: "Any Format (5MB)",
+    description: "Official bank deposit teller, electronic transfer receipt, downloaded bank receipt, or proof of payment (PDF, Image, Word, or Document • Max 5MB).",
   },
   {
     id: "template-passportPhoto",
@@ -110,9 +110,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Recent Passport Photograph",
     subLabel: "Official Identification Photo",
     mandatory: true,
-    acceptedTypes: "image/jpeg,image/png,image/webp,image/*,.jpg,.jpeg,.png,.webp",
+    acceptedTypes: "image/*,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.tiff,.tif",
     badge: "Image Only (5MB)",
-    description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
+    description: "Clear photo of applicant with plain background (JPG, PNG, WebP, JFIF, HEIC • Max 5MB).",
   },
   {
     id: "template-birthCertificate",
@@ -121,9 +121,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NPC National Birth Certificate / Age Declaration",
     subLabel: "Statutory Age Verification",
     mandatory: true,
-    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
-    badge: "PDF / Image (5MB)",
-    description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court (PDF or Image • Max 5MB).",
+    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
+    badge: "Any Format (5MB)",
+    description: "NPC National Birth Certificate, statutory age declaration, or downloaded birth certificate (PDF, Image, or Document • Max 5MB).",
   },
   {
     id: "template-academicResults",
@@ -132,9 +132,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Academic Transcripts / Previous Term Results",
     subLabel: "Prior Academic Records",
     mandatory: true,
-    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
-    badge: "PDF / Image (5MB)",
-    description: "Certified termly report cards or official transcripts from the most recent school attended (PDF or Image • Max 5MB).",
+    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt,.xlsx,.xls",
+    badge: "Any Format (5MB)",
+    description: "Certified termly report cards, result slips, or official transcripts (PDF, Image, or Document • Max 5MB).",
   },
   {
     id: "template-ninSlip",
@@ -143,9 +143,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NIMC NIN Identification Slip",
     subLabel: "National Identity Verification",
     mandatory: false,
-    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
     badge: "Statutory NIN (5MB)",
-    description: "National Identification Number (NIN) registration slip, card, or NIMC verification document (PDF or Image • Max 5MB).",
+    description: "National Identification Number (NIN) registration slip, card, screenshot, or NIMC verification document (PDF, Image, or Document • Max 5MB).",
   },
   {
     id: "template-medicalRecords",
@@ -154,9 +154,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Medical Certificate of Fitness",
     subLabel: "Health & Immunization Record",
     mandatory: true,
-    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
-    badge: "PDF / Image (5MB)",
-    description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility (PDF or Image • Max 5MB).",
+    acceptedTypes: "*/*,image/*,.pdf,application/pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.jfif,.heic,.heif,.bmp,.txt",
+    badge: "Any Format (5MB)",
+    description: "Medical clearance, clinical fitness certificate, or immunization records (PDF, Image, or Document • Max 5MB).",
   },
 ];
 
@@ -214,18 +214,30 @@ export function UploadCard({
   const isUnderReview = existingSubmission?.status === "PENDING" || (hasExistingUrl && !isVerified);
   const isRejected = existingSubmission?.status === "REJECTED";
 
-  // PDF Detection: Skip <img> rendering on PDFs to prevent layout crashes
-  const isPdf =
-    Boolean(
-      selectedFile &&
-        (selectedFile.type === "application/pdf" ||
-          selectedFile.name.toLowerCase().endsWith(".pdf"))
-    ) ||
-    Boolean(
-      !selectedFile &&
-        (existingSubmission?.fileName?.toLowerCase().endsWith(".pdf") ||
-          existingSubmission?.url?.toLowerCase().includes(".pdf"))
+  // Non-previewable document detection (PDF, Word, Text, Excel, etc.)
+  const isDocFile = (name?: string | null, type?: string | null) => {
+    if (!name && !type) return false;
+    const lowerName = (name || "").toLowerCase();
+    const lowerType = (type || "").toLowerCase();
+    return (
+      lowerType.includes("pdf") ||
+      lowerName.endsWith(".pdf") ||
+      lowerType.includes("word") ||
+      lowerType.includes("document") ||
+      lowerType.includes("text") ||
+      lowerName.endsWith(".doc") ||
+      lowerName.endsWith(".docx") ||
+      lowerName.endsWith(".txt") ||
+      lowerName.endsWith(".rtf") ||
+      lowerName.endsWith(".xls") ||
+      lowerName.endsWith(".xlsx") ||
+      lowerName.endsWith(".csv")
     );
+  };
+
+  const isPdf =
+    Boolean(selectedFile && isDocFile(selectedFile.name, selectedFile.type)) ||
+    Boolean(!selectedFile && isDocFile(existingSubmission?.fileName, existingSubmission?.url));
 
   return (
     <div
@@ -253,11 +265,14 @@ export function UploadCard({
         id={`slot-file-${template.id}`}
         name={template.key}
         type="file"
-        accept={template.acceptedTypes}
+        accept={template.acceptedTypes || "*/*"}
         className="hidden"
         onChange={(e) => {
           e.stopPropagation();
-          onFileSelect(e.target.files?.[0] || null);
+          const selected = e.target.files?.[0] || null;
+          onFileSelect(selected);
+          // Always reset so re-selecting the same or fresh file fires reliably
+          e.target.value = "";
         }}
       />
 
@@ -508,7 +523,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   } = props;
 
   // 1. Definition template slots: Always maintains all 6 canonical statutory items with 5MB limit
-  const checklistTemplates: ChecklistTemplateSlot[] =
+  const baseTemplates: ChecklistTemplateSlot[] =
     incomingChecklistTemplates && incomingChecklistTemplates.length > 0
       ? incomingChecklistTemplates
       : incomingChecklist && incomingChecklist.length > 0
@@ -520,10 +535,19 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
           subLabel: c.subLabel,
           mandatory: c.mandatory,
           acceptedTypes: c.acceptedTypes,
-          badge: c.badge || "5MB Limit",
+          badge: c.badge || "Any Format (5MB)",
           description: c.description,
         }))
       : CANONICAL_CHECKLIST_TEMPLATES;
+
+  const checklistTemplates: ChecklistTemplateSlot[] = baseTemplates.map((t) => {
+    const canonical = CANONICAL_CHECKLIST_TEMPLATES.find((c) => c.key === t.key);
+    return {
+      ...t,
+      acceptedTypes: canonical?.acceptedTypes || t.acceptedTypes || "*/*",
+      badge: canonical?.badge || t.badge || "Any Format (5MB)",
+    };
+  });
 
   // 2. Existing submissions state: Maps matching student attachments
   const defaultSubmissions: DocumentSubmission[] = [
@@ -794,38 +818,46 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       return;
     }
 
-    const isPdfFile =
-      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const fileNameLower = file.name.toLowerCase();
+    const fileTypeLower = (file.type || "").toLowerCase();
+
+    const isImageFile =
+      fileTypeLower.startsWith("image/") ||
+      /\.(jpe?g|png|webp|jfif|heic|heif|bmp|gif|tiff?)$/i.test(fileNameLower);
 
     if (key === "passportPhoto") {
-      if (!file.type.startsWith("image/")) {
-        setErrorMsg("Passport photograph must be an image file (JPG, PNG, or WebP).");
+      if (!isImageFile && fileTypeLower !== "application/octet-stream" && fileTypeLower !== "") {
+        setErrorMsg("Passport photograph must be an image file (JPG, PNG, WebP, JFIF, or similar photo).");
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreviews((prev) => ({ ...prev, [key]: e.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
-    } else if (isPdfFile) {
-      // PDF documents: skip image preview / objectURL to prevent layout crashes
-      setPreviews((prev) => ({ ...prev, [key]: null }));
-    } else if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreviews((prev) => ({ ...prev, [key]: e.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
+    }
+
+    // Preview generation only for directly browser-previewable image types (exclude PDF, HEIC, TIFF to avoid render crashes)
+    const isDirectlyPreviewable =
+      (fileTypeLower.startsWith("image/") &&
+        !fileTypeLower.includes("heic") &&
+        !fileTypeLower.includes("tiff")) ||
+      /\.(jpe?g|png|webp|gif|bmp|jfif)$/i.test(fileNameLower);
+
+    if (isDirectlyPreviewable) {
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreviews((prev) => ({ ...prev, [key]: e.target?.result as string }));
+        };
+        reader.onerror = () => {
+          setPreviews((prev) => ({ ...prev, [key]: null }));
+        };
+        reader.readAsDataURL(file);
+      } catch {
+        setPreviews((prev) => ({ ...prev, [key]: null }));
+      }
     } else {
       setPreviews((prev) => ({ ...prev, [key]: null }));
     }
 
+    // Accept file into card holder state as Ready to Submit
     setFiles((prev) => ({ ...prev, [key]: file }));
-
-    // For instant bank payment proof upload
-    if (key === "applicationFeeReceipt") {
-      uploadSingleSlotFile(key, file);
-    }
   };
 
   // Submit all newly selected pending files concurrently
