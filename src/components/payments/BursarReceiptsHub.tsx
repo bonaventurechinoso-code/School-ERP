@@ -20,6 +20,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  AlertTriangle,
+  Copy,
+  CheckCircle,
+  ShieldCheck,
 } from "lucide-react";
 import PaymentReceiptVerify from "./PaymentReceiptVerify";
 
@@ -39,6 +43,7 @@ export default function BursarReceiptsHub({
     pendingCount: 0,
     verifiedToday: 0,
     amountVerified: 0,
+    duplicateCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -54,6 +59,16 @@ export default function BursarReceiptsHub({
 
   // Selected receipt for detailed verification modal
   const [activeReceipt, setActiveReceipt] = useState<any | null>(null);
+
+  // Deduplication Modal State
+  const [dedupModalData, setDedupModalData] = useState<{
+    receipt: any;
+    competingReceipts: any[];
+  } | null>(null);
+  const [selectedMasterId, setSelectedMasterId] = useState<string>("");
+  const [dedupNotes, setDedupNotes] = useState<string>("");
+  const [isDeduplicating, setIsDeduplicating] = useState<boolean>(false);
+  const [dedupError, setDedupError] = useState<string | null>(null);
 
   // Enabled modules for this tenant
   const [enabledModules, setEnabledModules] = useState<{ moduleType: string; title: string }[]>([]);
@@ -125,6 +140,55 @@ export default function BursarReceiptsHub({
     fetchReceipts();
   }, [fetchReceipts]);
 
+  const handleOpenDeduplicate = (receipt: any) => {
+    const competing =
+      receipt.competingReceipts && receipt.competingReceipts.length > 0
+        ? receipt.competingReceipts
+        : [receipt];
+    setDedupModalData({ receipt, competingReceipts: competing });
+    // Default master selection: if one is already VERIFIED, keep it as master, otherwise default to current row
+    const verifiedOne = competing.find((c: any) => c.status === "VERIFIED");
+    setSelectedMasterId(verifiedOne ? verifiedOne.id : receipt.id);
+    setDedupNotes("");
+    setDedupError(null);
+  };
+
+  const handleExecuteDeduplicate = async () => {
+    if (!dedupModalData || !selectedMasterId) return;
+    const clones = dedupModalData.competingReceipts.filter((c: any) => c.id !== selectedMasterId);
+    if (clones.length === 0) {
+      setDedupError("You must have at least one redundant submission to merge as duplicate.");
+      return;
+    }
+
+    try {
+      setIsDeduplicating(true);
+      setDedupError(null);
+
+      const res = await fetch("/api/v1/payments/receipt/deduplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          masterReceiptId: selectedMasterId,
+          duplicateReceiptIds: clones.map((c: any) => c.id),
+          reconciliationNotes: dedupNotes.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to deduplicate transactions");
+      }
+
+      setDedupModalData(null);
+      fetchReceipts();
+    } catch (err: any) {
+      setDedupError(err.message || "Failed to execute deduplication");
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
   const handleExportCSV = () => {
     if (receipts.length === 0) return;
     const headers = [
@@ -175,6 +239,12 @@ export default function BursarReceiptsHub({
         return (
           <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             VERIFIED
+          </span>
+        );
+      case "DUPLICATE":
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+            <Copy className="w-3 h-3" /> DUPLICATE
           </span>
         );
       case "REJECTED":
@@ -359,6 +429,7 @@ export default function BursarReceiptsHub({
               <option value="ALL">All Statuses</option>
               <option value="PENDING">Pending Verification</option>
               <option value="VERIFIED">Verified</option>
+              <option value="DUPLICATE">Duplicate (Merged)</option>
               <option value="REJECTED">Rejected</option>
               <option value="FLAGGED">Flagged</option>
             </select>
@@ -432,6 +503,24 @@ export default function BursarReceiptsHub({
                           {r.payerType}
                         </span>
                       </div>
+                      {r.isPotentialDuplicate && (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-black border border-amber-300 dark:border-amber-800"
+                          title="Multiple receipts share the exact same ID, Module, and Amount"
+                        >
+                          <AlertTriangle className="w-3 h-3 shrink-0 text-amber-600" />
+                          <span>POTENTIAL DUPLICATE ({r.competingCount + 1})</span>
+                        </div>
+                      )}
+                      {r.status === "DUPLICATE" && r.masterReceiptId && (
+                        <div
+                          className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 text-[10px] font-bold border border-purple-200 dark:border-purple-800"
+                          title={`Merged under Master transaction #${r.masterReceiptId}`}
+                        >
+                          <Copy className="w-3 h-3 shrink-0" />
+                          <span>Merged: #{r.masterReceiptId.slice(0, 8)}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3.5">
                       <span className="font-bold text-slate-700 dark:text-zinc-300">
@@ -481,13 +570,35 @@ export default function BursarReceiptsHub({
                             <Eye className="w-3.5 h-3.5" />
                           </a>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setActiveReceipt(r)}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition cursor-pointer"
-                        >
-                          Verify Hub
-                        </button>
+                        {r.isPotentialDuplicate ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDeduplicate(r)}
+                            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-black text-[11px] shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer ring-2 ring-amber-400/30"
+                            title="Multiple identical receipts detected. Click to merge and verify master record."
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Deduplicate</span>
+                          </button>
+                        ) : r.status === "DUPLICATE" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDeduplicate(r)}
+                            className="px-2.5 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
+                            title="Inspect merged duplicate cluster"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Merged Clone</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActiveReceipt(r)}
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition cursor-pointer"
+                          >
+                            Verify Hub
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -531,12 +642,12 @@ export default function BursarReceiptsHub({
               <div className="flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-sm text-slate-800 dark:text-zinc-100">
-                  Review & Verify Payment Receipt
+                  Review &amp; Verify Payment Receipt
                 </h3>
               </div>
               <button
                 onClick={() => setActiveReceipt(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
               >
                 ✕
               </button>
@@ -559,6 +670,239 @@ export default function BursarReceiptsHub({
                   fetchReceipts();
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deduplication Modal */}
+      {dedupModalData && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full border border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 dark:text-zinc-100">
+                    Receipt Deduplication &amp; Clearance Desk
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Resolve competing transactions sharing identical Application/Student ID, Module, and Amount
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDedupModalData(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Context Summary Bar */}
+            <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-slate-400 font-medium">Candidate / Payer: </span>
+                <strong className="text-slate-900 dark:text-zinc-100">
+                  {dedupModalData.receipt.payerName}
+                </strong>
+                <span className="ml-2 font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
+                  {dedupModalData.receipt.referenceNo}
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <span className="text-slate-400 font-medium">Module: </span>
+                  <span className="font-bold text-slate-700 dark:text-zinc-300">
+                    {dedupModalData.receipt.moduleType?.replace(/_/g, " ")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium">Fee: </span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-black">
+                    ₦{Number(dedupModalData.receipt.amount).toLocaleString()}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              {dedupError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{dedupError}</span>
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-2">
+                  Select Master Transaction Record ({dedupModalData.competingReceipts.length} Competing Submissions)
+                </h4>
+                <p className="text-xs text-slate-500 mb-3">
+                  Choose the verified primary transaction record. The unselected competing submission(s) will be automatically merged and tagged natively as <strong>DUPLICATE</strong> under this master record without causing skewed rejection reports or sending false re-upload emails.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {dedupModalData.competingReceipts.map((item: any, idx: number) => {
+                    const isSelectedMaster = selectedMasterId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => setSelectedMasterId(item.id)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between ${
+                          isSelectedMaster
+                            ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-2 ring-emerald-500/30 shadow-xs"
+                            : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/40 hover:border-slate-300 dark:hover:border-zinc-700"
+                        }`}
+                      >
+                        <div>
+                          {/* Card Status & Selection Header */}
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800 mb-3">
+                            <span className="text-[11px] font-mono font-bold text-slate-500">
+                              Entry #{idx + 1} • {item.id.slice(0, 8)}
+                            </span>
+                            {isSelectedMaster ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-2xs">
+                                <CheckCircle2 className="w-3 h-3" />
+                                MASTER RECORD
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                <Copy className="w-3 h-3" />
+                                WILL BE FLAGGED DUPLICATE
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Proof Image Preview */}
+                          {item.fileUrl && (
+                            <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 relative group aspect-video flex items-center justify-center">
+                              {item.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? (
+                                <img
+                                  src={item.fileUrl}
+                                  alt="Payment Proof"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="text-slate-400 text-xs flex flex-col items-center gap-1">
+                                  <FileCheck className="w-6 h-6 text-slate-400" />
+                                  <span>Document Receipt</span>
+                                </div>
+                              )}
+                              <a
+                                href={item.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                <span>Inspect Full Slip</span>
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Metadata Fields */}
+                          <div className="space-y-1.5 text-xs text-slate-600 dark:text-zinc-300 font-medium">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Current Status:</span>
+                              <span>{statusBadge(item.status)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Upload Date:</span>
+                              <span className="text-slate-800 dark:text-zinc-200 font-semibold">
+                                {new Date(item.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            {item.depositorName && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Depositor:</span>
+                                <span className="font-semibold">{item.depositorName}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Bank / Channel:</span>
+                              <span>{item.bankName || item.paymentMethod}</span>
+                            </div>
+                            {(item.transferReference || item.txnRef) && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Ref / Session ID:</span>
+                                <span className="font-mono text-[11px] truncate max-w-[150px]">
+                                  {item.transferReference || item.txnRef}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Radio Selector Footer */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="masterSelection"
+                            checked={isSelectedMaster}
+                            onChange={() => setSelectedMasterId(item.id)}
+                            className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+                            {isSelectedMaster ? "Primary Active Record" : "Set as Master Record"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Deduplication Notes */}
+              <div className="pt-2">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-1.5">
+                  Reconciliation &amp; Deduplication Notes (Audit Trail)
+                </label>
+                <textarea
+                  rows={2}
+                  value={dedupNotes}
+                  onChange={(e) => setDedupNotes(e.target.value)}
+                  placeholder="e.g. Duplicate slip submitted via both applicant portal and walk-in desk; primary transaction verified under master record."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-500">
+                1 record marked <strong>VERIFIED</strong> • {dedupModalData.competingReceipts.length - 1} record(s) flagged <strong>DUPLICATE</strong>
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDedupModalData(null)}
+                  disabled={isDeduplicating}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeduplicate}
+                  disabled={isDeduplicating}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black text-xs shadow-md transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeduplicating ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  <span>{isDeduplicating ? "Merging..." : "Merge & Finalize Deduplication"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

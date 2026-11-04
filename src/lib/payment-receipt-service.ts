@@ -582,6 +582,184 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
   };
 }
 
+/**
+ * Deduplicates and merges redundant payment receipts under a single master transaction record.
+ * Marks master as VERIFIED, flags clones natively as DUPLICATE with systemic reference to master.
+ * Updates reporting metrics accurately without double-counting or altering audit trails.
+ */
+export async function deduplicatePaymentReceipts(params: {
+  masterReceiptId: string;
+  duplicateReceiptIds: string[];
+  verifiedBy?: string;
+  verifiedByUserId?: string;
+  reconciliationNotes?: string;
+  ip?: string;
+}) {
+  const {
+    masterReceiptId,
+    duplicateReceiptIds,
+    verifiedBy = "Bursar Desk",
+    verifiedByUserId,
+    reconciliationNotes,
+    ip,
+  } = params;
+
+  if (!masterReceiptId) {
+    throw new Error("masterReceiptId is required for deduplication");
+  }
+
+  const allIds = Array.from(new Set([masterReceiptId, ...(duplicateReceiptIds || [])]));
+  const receipts = await basePrisma.paymentReceipt.findMany({
+    where: { id: { in: allIds } },
+  });
+
+  const masterReceipt = receipts.find((r) => r.id === masterReceiptId);
+  if (!masterReceipt) {
+    throw new Error(`Master transaction record #${masterReceiptId} not found`);
+  }
+
+  const clones = receipts.filter((r) => r.id !== masterReceiptId);
+  if (clones.length === 0) {
+    throw new Error("At least one competing duplicate transaction must be selected to merge");
+  }
+
+  // 1. Generate fiscal receipt code for Master if not already present
+  const fiscalReceiptCode =
+    masterReceipt.referenceNo && masterReceipt.referenceNo.startsWith("RCP-")
+      ? masterReceipt.referenceNo
+      : `RCP-${new Date().getFullYear()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+
+  // 2. Update Master Record to VERIFIED & SETTLED
+  const updatedMaster = await basePrisma.paymentReceipt.update({
+    where: { id: masterReceipt.id },
+    data: {
+      status: "VERIFIED",
+      state: "SETTLED",
+      verifiedBy,
+      verifiedByUserId: verifiedByUserId || verifiedBy,
+      verifiedAt: new Date(),
+      rejectionReason: null,
+      duplicateNotes: `Master transaction confirmed. Merged ${clones.length} duplicate submission(s): [${clones.map((c) => c.id).join(", ")}]. ${reconciliationNotes || ""}`.trim(),
+      updatedAt: new Date(),
+    },
+  });
+
+  // 3. Update all Clones to DUPLICATE with systemic reference to Master
+  const updatedClones = await Promise.all(
+    clones.map(async (clone) => {
+      return basePrisma.paymentReceipt.update({
+        where: { id: clone.id },
+        data: {
+          status: "DUPLICATE",
+          state: "DUPLICATE",
+          masterReceiptId: masterReceipt.id,
+          duplicateNotes: `Merged as duplicate under master transaction #${masterReceipt.id}. Verified by ${verifiedBy}. ${reconciliationNotes || ""}`.trim(),
+          rejectionReason: null, // Clear any previous false rejection
+          verifiedBy,
+          verifiedByUserId: verifiedByUserId || verifiedBy,
+          verifiedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    })
+  );
+
+  // 4. Log Immutable Audit Event
+  await logAuditEvent({
+    actorId: verifiedByUserId || verifiedBy || "BURSAR_DESK",
+    action: "PAYMENT_TRANSACTION_DEDUPLICATED",
+    target: `payment_receipt:${masterReceipt.id}`,
+    schoolId: masterReceipt.schoolId || masterReceipt.tenantId,
+    ip: ip || "bursar-desk",
+    metadata: {
+      masterReceiptId: masterReceipt.id,
+      duplicateReceiptIds: clones.map((c) => c.id),
+      moduleType: masterReceipt.moduleType,
+      amount: masterReceipt.amount,
+      referenceNo: masterReceipt.referenceNo,
+      payerName: masterReceipt.payerName,
+      fiscalReceiptCode,
+      notes: reconciliationNotes || "Deduplicated via Universal Payment Receipt Verification Hub",
+      verifiedBy,
+    },
+  });
+
+  // 5. Trigger domain automation for the master verified transaction
+  if (masterReceipt.moduleType === "ADMISSION_FORM_FEE") {
+    await markAdmissionFormFeePaid(
+      masterReceipt.referenceNo,
+      verifiedBy,
+      masterReceipt.tenantId || masterReceipt.schoolId,
+      masterReceipt.amount,
+      masterReceipt.transferReference || masterReceipt.txnRef || masterReceipt.referenceNo,
+      masterReceipt.fileUrl || masterReceipt.proofOfPaymentUrl
+    );
+
+    // Also record in AdmissionAuditTrail if applicable
+    await basePrisma.admissionAuditTrail.create({
+      data: {
+        tenantId: masterReceipt.tenantId,
+        schoolId: masterReceipt.schoolId || masterReceipt.tenantId,
+        applicationId: masterReceipt.referenceNo,
+        registerId: masterReceipt.referenceNo,
+        actorId: verifiedBy || "Bursar Officer",
+        action: "PAYMENT_RECEIPTS_DEDUPLICATED",
+        fromStage: "PAYMENT_VERIFICATION",
+        toStage: "PAYMENT_VERIFIED",
+        metadata: {
+          masterReceiptId: masterReceipt.id,
+          mergedDuplicateIds: clones.map((c) => c.id),
+          amount: masterReceipt.amount,
+          referenceNo: masterReceipt.referenceNo,
+          notes: reconciliationNotes || "Merged duplicate payment receipts under master record",
+          mergedAt: new Date().toISOString(),
+        },
+      },
+    }).catch(() => null);
+  } else if (masterReceipt.moduleType === "PLATFORM_SUBSCRIPTION") {
+    await activatePlatformSubscription(masterReceipt.tenantId, masterReceipt.schoolId);
+  } else if (masterReceipt.linkedInvoiceId) {
+    await settleLinkedInvoice(masterReceipt.linkedInvoiceId, masterReceipt.amount, {
+      paymentMode: (masterReceipt as any).paymentMode || "MANUAL_TRANSFER",
+      proofOfPaymentUrl: (masterReceipt as any).proofOfPaymentUrl || masterReceipt.fileUrl,
+      depositorName: (masterReceipt as any).depositorName || masterReceipt.payerName,
+      transferReference: (masterReceipt as any).transferReference || masterReceipt.txnRef || masterReceipt.referenceNo,
+      verifiedByUserId: verifiedByUserId || verifiedBy,
+      fiscalReceiptCode,
+    });
+  }
+
+  // 6. Dispatch receipt verified notification to payer (only once for the master, avoiding redundant emails)
+  const moduleSetting = await getModulePaymentSetting(
+    masterReceipt.tenantId,
+    masterReceipt.moduleType as ModuleType,
+    null,
+    masterReceipt.term
+  ).catch(() => null);
+
+  resolvePayerEmail(masterReceipt).then((email) => {
+    if (email) {
+      sendReceiptVerifiedEmail({
+        to: email,
+        payerName: masterReceipt.payerName,
+        moduleType: masterReceipt.moduleType,
+        referenceNo: masterReceipt.referenceNo,
+        amount: masterReceipt.amount,
+        schoolId: masterReceipt.schoolId || undefined,
+        customWriteup: moduleSetting?.customWriteup,
+      }).catch(() => {});
+    }
+  });
+
+  return {
+    success: true,
+    message: `Successfully verified master transaction #${masterReceipt.id} and merged ${clones.length} duplicate submission(s).`,
+    masterReceipt: { ...updatedMaster, fiscalReceiptCode },
+    clones: updatedClones,
+    mergedCount: clones.length,
+  };
+}
+
 
 /**
  * Automates Admission Form Fee marking across AdmissionRegister, AdmissionLead, AND AdmissionsApplication / AdmissionsFeeTransaction
@@ -995,15 +1173,94 @@ export async function getPaymentReceipts(params: {
     }
   }
 
+  // 2. Automated Deduplication Pipeline:
+  // Detects multiple transactions sharing same Application/Student ID (referenceNo), Module (moduleType), and Amount
+  const candidateCompositePairs = Array.from(
+    new Set(
+      receipts.map((r: any) =>
+        JSON.stringify({
+          moduleType: r.moduleType,
+          amount: r.amount,
+          referenceNo: (r.referenceNo || "").trim().toUpperCase(),
+        })
+      )
+    )
+  ).map((s) => JSON.parse(s));
+
+  const compositeDuplicateMap = new Map<string, any[]>();
+
+  if (candidateCompositePairs.length > 0) {
+    const compWhere: any = {
+      OR: candidateCompositePairs.map((p) => ({
+        moduleType: p.moduleType,
+        amount: p.amount,
+        referenceNo: { equals: p.referenceNo, mode: "insensitive" },
+      })),
+    };
+    if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
+      compWhere.tenantId = params.tenantId;
+    }
+
+    const matchingCompositeReceipts = await basePrisma.paymentReceipt.findMany({
+      where: compWhere,
+      select: {
+        id: true,
+        referenceNo: true,
+        payerName: true,
+        payerType: true,
+        moduleType: true,
+        amount: true,
+        paymentDate: true,
+        paymentMethod: true,
+        bankName: true,
+        txnRef: true,
+        transferReference: true,
+        depositorName: true,
+        fileUrl: true,
+        status: true,
+        state: true,
+        masterReceiptId: true,
+        duplicateNotes: true,
+        verifiedBy: true,
+        verifiedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    for (const item of matchingCompositeReceipts) {
+      const key = `${item.moduleType}::${item.amount}::${(item.referenceNo || "").trim().toUpperCase()}`;
+      const list = compositeDuplicateMap.get(key) || [];
+      list.push(item);
+      compositeDuplicateMap.set(key, list);
+    }
+  }
+
   const enrichedReceipts = receipts.map((r: any) => {
     const refKey = (r.transferReference || r.txnRef || "").trim().toUpperCase();
     const matches = refKey ? duplicateMap.get(refKey) || [] : [];
     const others = matches.filter((m) => m.id !== r.id);
+
+    const compKey = `${r.moduleType}::${r.amount}::${(r.referenceNo || "").trim().toUpperCase()}`;
+    const allInGroup = compositeDuplicateMap.get(compKey) || [];
+    const competingReceipts = allInGroup.filter((m) => m.id !== r.id);
+
+    // Flag as potential duplicate if multiple entries exist in the group and needs resolution
+    const isPotentialDuplicate =
+      competingReceipts.length > 0 &&
+      allInGroup.some((c) => c.status === "PENDING" || c.status === "VERIFIED") &&
+      r.status !== "DUPLICATE" &&
+      r.status !== "REJECTED";
+
     return {
       ...r,
       isDuplicateReference: others.length > 0,
       duplicateCount: others.length,
       duplicateWith: others.map((o) => `${o.payerName} (${o.referenceNo})`),
+      // Automated Deduplication Pipeline attributes
+      isPotentialDuplicate,
+      competingReceipts: allInGroup,
+      competingCount: competingReceipts.length,
     };
   });
 
@@ -1016,7 +1273,7 @@ export async function getPaymentReceipts(params: {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [pendingCount, verifiedTodayAgg, amountVerifiedAgg] = await Promise.all([
+  const [pendingCount, verifiedTodayAgg, amountVerifiedAgg, duplicateCount] = await Promise.all([
     basePrisma.paymentReceipt.count({
       where: { ...statsWhere, status: "PENDING" },
     }),
@@ -1031,6 +1288,9 @@ export async function getPaymentReceipts(params: {
       where: { ...statsWhere, status: "VERIFIED" },
       _sum: { amount: true },
     }),
+    basePrisma.paymentReceipt.count({
+      where: { ...statsWhere, status: "DUPLICATE" },
+    }),
   ]);
 
   return {
@@ -1043,6 +1303,7 @@ export async function getPaymentReceipts(params: {
       pendingCount,
       verifiedToday: verifiedTodayAgg,
       amountVerified: amountVerifiedAgg._sum.amount || 0,
+      duplicateCount,
     },
   };
 }

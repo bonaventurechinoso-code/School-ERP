@@ -82,6 +82,8 @@ export default function PaymentReceiptVerify({
   const statusColor =
     localReceipt.status === "VERIFIED"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+      : localReceipt.status === "DUPLICATE"
+      ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800"
       : localReceipt.status === "REJECTED"
       ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800"
       : localReceipt.status === "FLAGGED"
@@ -269,6 +271,19 @@ export default function PaymentReceiptVerify({
       {localReceipt.rejectionReason && (
         <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300">
           <strong>Rejection Reason:</strong> {localReceipt.rejectionReason}
+        </div>
+      )}
+
+      {/* Duplicate / Merged Alert */}
+      {localReceipt.duplicateNotes && (
+        <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-xs text-purple-700 dark:text-purple-300">
+          <strong className="block font-black">Deduplication Audit Trail:</strong>
+          <span>{localReceipt.duplicateNotes}</span>
+          {localReceipt.masterReceiptId && (
+            <div className="mt-1 font-mono text-[11px]">
+              Master Transaction ID: #{localReceipt.masterReceiptId}
+            </div>
+          )}
         </div>
       )}
 

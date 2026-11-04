@@ -1369,6 +1369,10 @@ model PaymentReceipt {
   transferReference String? @map("transfer_reference")
   verifiedByUserId  String? @map("verified_by_user_id")
 
+  // Deduplication & Master Record Linkage
+  masterReceiptId   String?   @map("master_receipt_id")
+  duplicateNotes    String?   @map("duplicate_notes")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1377,6 +1381,7 @@ model PaymentReceipt {
   @@index([tenantId, transferReference])
   @@index([moduleType, status])
   @@index([referenceNo])
+  @@index([masterReceiptId])
   @@map("payment_receipts")
 }
 
