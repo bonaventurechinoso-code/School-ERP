@@ -106,6 +106,95 @@ function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
   return fallbackTier || "Primary School";
 }
 
+export function resolveDocUrl(candidate: any, key: string): string | null {
+  if (!candidate) return null;
+
+  const docs = candidate.documents || {};
+  const metaDocs = candidate.metadata?.documents || {};
+  const tierDocs = candidate.tierSpecificData?.documents || {};
+
+  // 1. Direct candidate URL property (e.g. candidate.passportPhotoUrl)
+  const directProp = `${key}Url`;
+  if (typeof candidate[directProp] === "string" && candidate[directProp]) {
+    return candidate[directProp];
+  }
+
+  // 2. Direct lookup in docs, metaDocs, tierDocs object maps
+  for (const map of [docs, metaDocs, tierDocs]) {
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      if (typeof map[directProp] === "string" && map[directProp]) return map[directProp];
+      const item = map[key];
+      if (item) {
+        if (typeof item === "string" && item.trim()) return item.trim();
+        if (typeof item === "object") {
+          const u = item.url || item.fileUrl || item.storageKey || item.path;
+          if (typeof u === "string" && u.trim()) return u.trim();
+        }
+      }
+    }
+  }
+
+  // Common aliases across diverse data sources
+  const aliasKeys: Record<string, string[]> = {
+    passportPhoto: [
+      "PASSPORT_PHOTOGRAPH", "PASSPORT_PHOTO", "PASSPORT", "passportPhoto", "passport_photo", "passport", "photo"
+    ],
+    birthCertificate: [
+      "BIRTH_CERTIFICATE", "BIRTH_CERT", "birthCertificate", "birth_certificate", "birthCert", "ageDeclaration"
+    ],
+    academicResults: [
+      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult"
+    ],
+    medicalRecords: [
+      "MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "fitness"
+    ],
+    ninSlip: [
+      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nationalId", "nimc"
+    ],
+    applicationFeeReceipt: [
+      "APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "PAYMENT_RECEIPT", "RECEIPT", "applicationFeeReceipt", "formFeeReceipt", "receipt", "feeReceipt", "paymentReceipt"
+    ],
+  };
+
+  const aliases = aliasKeys[key] || [key];
+
+  // 3. Array of documents (e.g. from AdmissionsDocument[] or credentialsJson[] or docs.documents[])
+  const docArrays: any[] = [];
+  if (Array.isArray(candidate.documents)) docArrays.push(candidate.documents);
+  if (Array.isArray(candidate.rawDocuments)) docArrays.push(candidate.rawDocuments);
+  if (Array.isArray(docs.documents)) docArrays.push(docs.documents);
+  if (Array.isArray(candidate.credentialsJson)) docArrays.push(candidate.credentialsJson);
+
+  for (const arr of docArrays) {
+    for (const d of arr) {
+      if (!d) continue;
+      const dType = (d.documentType || d.type || d.key || d.docType || "").toUpperCase().replace(/[\s-_]/g, "");
+      const matches = aliases.some((a) => {
+        const aNorm = a.toUpperCase().replace(/[\s-_]/g, "");
+        return dType === aNorm || dType.includes(aNorm) || aNorm.includes(dType);
+      });
+      if (matches) {
+        const u = d.storageKey || d.url || d.fileUrl || d.path;
+        if (typeof u === "string" && u.trim()) return u.trim();
+      }
+    }
+  }
+
+  // 4. Special cases
+  if (key === "applicationFeeReceipt") {
+    if (typeof candidate.applicationFeeReceiptUrl === "string" && candidate.applicationFeeReceiptUrl) return candidate.applicationFeeReceiptUrl;
+    if (typeof candidate.formFeeReceiptUrl === "string" && candidate.formFeeReceiptUrl) return candidate.formFeeReceiptUrl;
+    if (typeof docs.applicationFeeReceiptUrl === "string" && docs.applicationFeeReceiptUrl) return docs.applicationFeeReceiptUrl;
+    if (typeof docs.formFeeReceiptUrl === "string" && docs.formFeeReceiptUrl) return docs.formFeeReceiptUrl;
+    if (candidate.feeTransactions && Array.isArray(candidate.feeTransactions)) {
+      const tx = candidate.feeTransactions.find((t: any) => t?.proofOfPaymentUrl);
+      if (tx?.proofOfPaymentUrl) return tx.proofOfPaymentUrl;
+    }
+  }
+
+  return null;
+}
+
 export default function ApplicantDossierDrawer({
   lead,
   applicant,
@@ -122,6 +211,38 @@ export default function ApplicantDossierDrawer({
 }: ApplicantDossierDrawerProps) {
   // Normalize lead or applicant data into unified structure
   const activeCandidate = useMemo(() => {
+    if (lead && applicant) {
+      const creds =
+        typeof applicant.credentialsJson === "object" && applicant.credentialsJson !== null
+          ? applicant.credentialsJson
+          : {};
+      return {
+        ...applicant,
+        ...lead,
+        applicantName:
+          lead.applicantName ||
+          applicant.fullName ||
+          `${applicant.firstName || ""} ${applicant.lastName || ""}`.trim() ||
+          "Candidate",
+        targetGrade: lead.targetGrade || applicant.assignedClass || applicant.classApplied || "Primary 1",
+        targetClass: lead.targetClass || applicant.assignedClass || applicant.classApplied || "Primary 1",
+        documents: {
+          ...(typeof creds === "object" && !Array.isArray(creds) ? creds : {}),
+          ...(typeof lead.documents === "object" && !Array.isArray(lead.documents) ? lead.documents : {}),
+          ...(typeof (lead.metadata as any)?.documents === "object" ? (lead.metadata as any).documents : {}),
+          ...(typeof (applicant.metadata as any)?.documents === "object" ? (applicant.metadata as any).documents : {}),
+        },
+        rawDocuments: [
+          ...(Array.isArray(lead.documents) ? lead.documents : []),
+          ...(Array.isArray(lead.rawDocuments) ? lead.rawDocuments : []),
+          ...(Array.isArray(applicant.documents) ? applicant.documents : []),
+          ...(Array.isArray(applicant.rawDocuments) ? applicant.rawDocuments : []),
+          ...(Array.isArray(creds.documents) ? creds.documents : []),
+          ...(Array.isArray(creds) ? creds : []),
+        ],
+        logs: lead.logs || creds.statusLogs || [],
+      };
+    }
     if (lead) return lead;
     if (!applicant) return null;
 
@@ -290,45 +411,67 @@ export default function ApplicantDossierDrawer({
       label: "Application Fee Receipt",
       mandatory: true,
       url:
+        resolveDocUrl(localCandidate || activeCandidate, "applicationFeeReceipt") ||
         receiptUrl ||
         localCandidate?.applicationFeeReceiptUrl ||
         activeCandidate?.applicationFeeReceiptUrl ||
         docs?.applicationFeeReceiptUrl ||
-        docs?.formFeeReceiptUrl ||
-        (docs?.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object"
-          ? docs.applicationFeeReceipt.url || docs.applicationFeeReceipt.fileUrl
-          : null) ||
-        (typeof docs?.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null),
+        docs?.formFeeReceiptUrl,
     },
     {
       key: "passportPhoto",
       label: "Passport Photograph",
       mandatory: true,
-      url: localCandidate?.passportPhotoUrl || docs?.passportPhoto?.url || docs?.passportPhoto?.fileUrl || docs?.passport,
+      url:
+        resolveDocUrl(localCandidate || activeCandidate, "passportPhoto") ||
+        localCandidate?.passportPhotoUrl ||
+        docs?.passportPhoto?.url ||
+        docs?.passportPhoto?.fileUrl ||
+        docs?.passport,
     },
     {
       key: "birthCertificate",
       label: "NPC National Birth Certificate / Age Declaration",
       mandatory: true,
-      url: localCandidate?.birthCertificateUrl || docs?.birthCertificate?.url || docs?.birthCertificate?.fileUrl || docs?.birthCert,
+      url:
+        resolveDocUrl(localCandidate || activeCandidate, "birthCertificate") ||
+        localCandidate?.birthCertificateUrl ||
+        docs?.birthCertificate?.url ||
+        docs?.birthCertificate?.fileUrl ||
+        docs?.birthCert,
     },
     {
       key: "academicResults",
       label: "Academic Transcripts / Previous Term Results",
       mandatory: true,
-      url: localCandidate?.academicResultsUrl || docs?.academicResults?.url || docs?.academicResults?.fileUrl || docs?.previousResults,
+      url:
+        resolveDocUrl(localCandidate || activeCandidate, "academicResults") ||
+        localCandidate?.academicResultsUrl ||
+        docs?.academicResults?.url ||
+        docs?.academicResults?.fileUrl ||
+        docs?.previousResults,
     },
     {
       key: "medicalRecords",
       label: "Medical Certificate of Fitness",
       mandatory: true,
-      url: localCandidate?.medicalRecordsUrl || docs?.medicalRecords?.url || docs?.medicalRecords?.fileUrl || docs?.medical,
+      url:
+        resolveDocUrl(localCandidate || activeCandidate, "medicalRecords") ||
+        localCandidate?.medicalRecordsUrl ||
+        docs?.medicalRecords?.url ||
+        docs?.medicalRecords?.fileUrl ||
+        docs?.medical,
     },
     {
       key: "ninSlip",
       label: "NIMC NIN Identification Slip",
       mandatory: false,
-      url: docs?.ninSlip?.url || docs?.ninSlip?.fileUrl || docs?.ninSlip || docs?.nin,
+      url:
+        resolveDocUrl(localCandidate || activeCandidate, "ninSlip") ||
+        docs?.ninSlip?.url ||
+        docs?.ninSlip?.fileUrl ||
+        docs?.ninSlip ||
+        docs?.nin,
     },
   ];
 

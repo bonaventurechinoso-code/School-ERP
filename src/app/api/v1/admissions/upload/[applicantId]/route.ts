@@ -1543,6 +1543,11 @@ export async function POST(
             schoolId,
             OR: [
               { applicationNumber: appNo },
+              { applicationNumber: applicantId },
+              ...(cleanNo ? [
+                { applicationNumber: { contains: cleanNo, mode: "insensitive" as const } },
+                { id: { contains: cleanNo, mode: "insensitive" as const } }
+              ] : []),
               { id: applicantId },
               ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
               ...(lead.parentPhone ? [{ phoneNumber: lead.parentPhone }] : []),
@@ -1624,25 +1629,37 @@ export async function POST(
         }
 
         // Record documents in AdmissionsDocument
-        const docMappings: Record<string, string> = {
-          passportPhoto: "PASSPORT_PHOTOGRAPH",
-          academicResults: "ACADEMIC_TRANSCRIPT",
-          birthCertificate: "BIRTH_CERTIFICATE",
-          medicalRecords: "MEDICAL_REPORT",
-          ninSlip: "NIN_SLIP",
+        const docMappings: Record<string, { primary: string; aliases: string[] }> = {
+          passportPhoto: { primary: "PASSPORT_PHOTOGRAPH", aliases: ["PASSPORT_PHOTO", "PASSPORT", "passportPhoto"] },
+          academicResults: { primary: "ACADEMIC_TRANSCRIPT", aliases: ["ACADEMIC_RESULTS", "O_LEVEL_RESULT", "academicResults"] },
+          birthCertificate: { primary: "BIRTH_CERTIFICATE", aliases: ["BIRTH_CERT", "birthCertificate"] },
+          medicalRecords: { primary: "MEDICAL_REPORT", aliases: ["MEDICAL_RECORDS", "medicalRecords"] },
+          ninSlip: { primary: "NIN_SLIP", aliases: ["NIN", "ninSlip"] },
+          applicationFeeReceipt: { primary: "APPLICATION_FEE_RECEIPT", aliases: ["FEE_RECEIPT", "RECEIPT", "applicationFeeReceipt"] },
         };
 
-        for (const [fieldKey, docTypeConst] of Object.entries(docMappings)) {
+        for (const [fieldKey, { primary, aliases }] of Object.entries(docMappings)) {
           const docItem = currentDocs[fieldKey];
-          if (docItem && docItem.url) {
+          const docUrl =
+            docItem?.url ||
+            docItem?.fileUrl ||
+            (typeof docItem === "string" ? docItem : null) ||
+            (fieldKey === "applicationFeeReceipt" ? currentDocs.applicationFeeReceiptUrl : null);
+
+          if (docUrl) {
+            const allTypes = [primary, ...aliases];
             const existingDoc = await basePrisma.admissionsDocument.findFirst({
-              where: { applicationId: targetApp.id, documentType: docTypeConst },
+              where: {
+                applicationId: targetApp.id,
+                documentType: { in: allTypes },
+              },
             });
             if (existingDoc) {
               await basePrisma.admissionsDocument.update({
                 where: { id: existingDoc.id },
                 data: {
-                  storageKey: docItem.url,
+                  storageKey: docUrl,
+                  documentType: primary,
                   verificationStatus: "PENDING",
                 },
               });
@@ -1651,10 +1668,10 @@ export async function POST(
                 data: {
                   tenantId: schoolId,
                   applicationId: targetApp.id,
-                  documentType: docTypeConst,
-                  storageKey: docItem.url,
-                  fileMimeType: docItem.mimeType || (docItem.url?.endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
-                  fileSizeBytes: docItem.size || 1024,
+                  documentType: primary,
+                  storageKey: docUrl,
+                  fileMimeType: docItem?.mimeType || (docUrl.endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+                  fileSizeBytes: docItem?.size || 1024,
                   verificationStatus: "PENDING",
                 },
               });
@@ -1680,12 +1697,23 @@ export async function POST(
           nextStatus = "PAYMENT_PENDING";
         }
 
-        if (nextStatus !== targetApp.status) {
-          await basePrisma.admissionsApplication.update({
-            where: { id: targetApp.id },
-            data: { status: nextStatus as any },
-          });
-        }
+        // Persist documents JSON in metadata and tierSpecificData so UI and dossier render instantly
+        await basePrisma.admissionsApplication.update({
+          where: { id: targetApp.id },
+          data: {
+            status: nextStatus as any,
+            metadata: {
+              ...((targetApp.metadata as any) || {}),
+              documents: mergedDocuments,
+              applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || (targetApp.metadata as any)?.applicationFeeReceiptUrl,
+            },
+            tierSpecificData: {
+              ...((targetApp.tierSpecificData as any) || {}),
+              documents: mergedDocuments,
+              applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || (targetApp.tierSpecificData as any)?.applicationFeeReceiptUrl,
+            },
+          },
+        });
       }
     } catch (syncAppErr) {
       console.warn("[UPLOAD_ROUTE] Warning: Could not mirror to admissionsApplication:", syncAppErr);

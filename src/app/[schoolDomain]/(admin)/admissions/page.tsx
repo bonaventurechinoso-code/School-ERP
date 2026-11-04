@@ -395,10 +395,35 @@ export default async function AdmissionsPage({
         const idx = deduplicatedApps.indexOf(existing);
         if (idx !== -1) deduplicatedApps[idx] = app;
         compositeKeyMap.set(dKey, app);
+        // Safely re-point documents & fee transactions before purging duplicate!
+        basePrisma.admissionsDocument.updateMany({
+          where: { applicationId: existing.id },
+          data: { applicationId: app.id },
+        }).catch(() => null);
+        basePrisma.admissionsFeeTransaction.updateMany({
+          where: { applicationId: existing.id },
+          data: { applicationId: app.id },
+        }).catch(() => null);
+        app.documents = [...(app.documents || []), ...(existing.documents || [])];
+        app.feeTransactions = [...(app.feeTransactions || []), ...(existing.feeTransactions || [])];
+        app.metadata = { ...((existing.metadata as any) || {}), ...((app.metadata as any) || {}) };
+        app.tierSpecificData = { ...((existing.tierSpecificData as any) || {}), ...((app.tierSpecificData as any) || {}) };
         // Purge redundant temporary record from database
         basePrisma.admissionsApplication.delete({ where: { id: existing.id } }).catch(() => null);
       } else {
-        // Current app is the duplicate; purge from database
+        // Current app is the duplicate; migrate its documents to existing before purging!
+        basePrisma.admissionsDocument.updateMany({
+          where: { applicationId: app.id },
+          data: { applicationId: existing.id },
+        }).catch(() => null);
+        basePrisma.admissionsFeeTransaction.updateMany({
+          where: { applicationId: app.id },
+          data: { applicationId: existing.id },
+        }).catch(() => null);
+        existing.documents = [...(existing.documents || []), ...(app.documents || [])];
+        existing.feeTransactions = [...(existing.feeTransactions || []), ...(app.feeTransactions || [])];
+        existing.metadata = { ...((app.metadata as any) || {}), ...((existing.metadata as any) || {}) };
+        existing.tierSpecificData = { ...((app.tierSpecificData as any) || {}), ...((existing.tierSpecificData as any) || {}) };
         basePrisma.admissionsApplication.delete({ where: { id: app.id } }).catch(() => null);
       }
     }
@@ -428,13 +453,52 @@ export default async function AdmissionsPage({
     gender: app.gender,
     status: app.status,
     tierSpecificData: (app.tierSpecificData as any) || {},
-    documents: (app.documents || []).map((d: any) => ({
-      id: d.id,
-      documentType: d.documentType,
-      storageKey: d.storageKey,
-      verificationStatus: d.verificationStatus,
-      rejectionReason: d.rejectionReason,
-    })),
+    documents: (() => {
+      const docsList = [...(app.documents || []).map((d: any) => ({
+        id: d.id,
+        documentType: d.documentType,
+        storageKey: d.storageKey,
+        verificationStatus: d.verificationStatus,
+        rejectionReason: d.rejectionReason,
+      }))];
+
+      const metaDocs = (app.metadata as any)?.documents || (app.tierSpecificData as any)?.documents;
+      if (metaDocs && typeof metaDocs === "object" && !Array.isArray(metaDocs)) {
+        const docMappings: Record<string, string> = {
+          passportPhoto: "PASSPORT_PHOTOGRAPH",
+          academicResults: "ACADEMIC_TRANSCRIPT",
+          birthCertificate: "BIRTH_CERTIFICATE",
+          medicalRecords: "MEDICAL_REPORT",
+          ninSlip: "NIN_SLIP",
+          applicationFeeReceipt: "APPLICATION_FEE_RECEIPT",
+        };
+        for (const [key, dType] of Object.entries(docMappings)) {
+          const item = metaDocs[key];
+          const url =
+            item?.url ||
+            item?.fileUrl ||
+            (typeof item === "string" ? item : null) ||
+            (key === "applicationFeeReceipt" ? metaDocs.applicationFeeReceiptUrl || metaDocs.formFeeReceiptUrl : null);
+          if (
+            url &&
+            !docsList.some((d) =>
+              d.documentType.toUpperCase().replace(/[\s-_]/g, "").includes(key.toUpperCase().replace(/[\s-_]/g, "")) ||
+              d.documentType === dType
+            )
+          ) {
+            docsList.push({
+              id: `meta-${key}-${app.id}`,
+              documentType: dType,
+              storageKey: url,
+              verificationStatus: "PENDING",
+              rejectionReason: null,
+            });
+          }
+        }
+      }
+
+      return docsList;
+    })(),
     feeTransactions: (app.feeTransactions || []).map((t: any) => ({
       id: t.id,
       paymentMethod: t.paymentMethod,

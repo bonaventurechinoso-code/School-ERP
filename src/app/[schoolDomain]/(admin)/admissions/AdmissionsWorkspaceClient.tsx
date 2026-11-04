@@ -414,6 +414,40 @@ export default function AdmissionsWorkspaceClient({
     return "PENDING";
   };
 
+  // Helper to accurately count distinct uploaded credentials
+  const countUploadedDocs = (app: SerializedApplication): number => {
+    const foundKeys = new Set<string>();
+
+    if (Array.isArray(app.documents)) {
+      for (const d of app.documents) {
+        const rawType = (d.documentType || "").toUpperCase().replace(/[\s-_]/g, "");
+        if (rawType.includes("PASSPORT")) foundKeys.add("passportPhoto");
+        else if (rawType.includes("BIRTH") || rawType.includes("AGE")) foundKeys.add("birthCertificate");
+        else if (rawType.includes("ACADEMIC") || rawType.includes("TRANSCRIPT") || rawType.includes("RESULT") || rawType.includes("OLEVEL")) foundKeys.add("academicResults");
+        else if (rawType.includes("MEDICAL") || rawType.includes("FITNESS") || rawType.includes("REPORT")) foundKeys.add("medicalRecords");
+        else if (rawType.includes("NIN") || rawType.includes("NATIONAL")) foundKeys.add("ninSlip");
+        else if (rawType.includes("FEE") || rawType.includes("RECEIPT")) foundKeys.add("applicationFeeReceipt");
+        else if (d.storageKey) foundKeys.add(rawType);
+      }
+    }
+
+    const metaDocs = (app.metadata as any)?.documents || (app.tierSpecificData as any)?.documents;
+    if (metaDocs && typeof metaDocs === "object" && !Array.isArray(metaDocs)) {
+      if (metaDocs.passportPhoto?.url || metaDocs.passportPhoto || metaDocs.passportPhotoUrl) foundKeys.add("passportPhoto");
+      if (metaDocs.birthCertificate?.url || metaDocs.birthCertificate || metaDocs.birthCertificateUrl) foundKeys.add("birthCertificate");
+      if (metaDocs.academicResults?.url || metaDocs.academicResults || metaDocs.academicResultsUrl) foundKeys.add("academicResults");
+      if (metaDocs.medicalRecords?.url || metaDocs.medicalRecords || metaDocs.medicalRecordsUrl) foundKeys.add("medicalRecords");
+      if (metaDocs.ninSlip?.url || metaDocs.ninSlip || metaDocs.ninSlipUrl) foundKeys.add("ninSlip");
+      if (metaDocs.applicationFeeReceipt?.url || metaDocs.applicationFeeReceiptUrl || metaDocs.formFeeReceiptUrl) foundKeys.add("applicationFeeReceipt");
+    }
+
+    if (app.feeTransactions?.some((t) => t.proofOfPaymentUrl)) {
+      foundKeys.add("applicationFeeReceipt");
+    }
+
+    return foundKeys.size;
+  };
+
   // Action: update stage
   const handleStageChange = (appId: string, targetStage: string) => {
     startTransition(async () => {
@@ -1003,6 +1037,7 @@ export default function AdmissionsWorkspaceClient({
                       columnApps.map((app) => {
                         const feeStatus = getFeeStatus(app);
                         const docStatus = getDocStatus(app);
+                        const uploadedDocsCount = countUploadedDocs(app);
 
                         return (
                           <div
@@ -1022,7 +1057,7 @@ export default function AdmissionsWorkspaceClient({
                               </div>
                             </div>
 
-                            {/* Badges: Fee Pill + Document Badge */}
+                            {/* Badges: Fee Pill + Document Badge + Dossier Button */}
                             <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
                               {/* Fee Pill - Clicking opens read-only bank details modal */}
                               <button
@@ -1048,12 +1083,33 @@ export default function AdmissionsWorkspaceClient({
                                     ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
                                     : docStatus === "REJECTED"
                                     ? "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                                    : uploadedDocsCount > 0
+                                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                                     : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
                                 }`}
                               >
                                 <FileCheck className="w-3 h-3" />
-                                <span>{docStatus}</span>
+                                <span>
+                                  {docStatus === "MANUALLY_VERIFIED"
+                                    ? "VERIFIED"
+                                    : docStatus === "REJECTED"
+                                    ? "REJECTED"
+                                    : uploadedDocsCount > 0
+                                    ? `${uploadedDocsCount}/6 DOCS`
+                                    : "NO DOCS"}
+                                </span>
                               </span>
+
+                              {/* Direct Dossier Button */}
+                              <button
+                                type="button"
+                                onClick={() => setDossierApp(app)}
+                                title="Open Candidate Dossier Drawer"
+                                className="px-2 py-1 rounded-full text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 flex items-center gap-1 cursor-pointer transition"
+                              >
+                                <Eye className="w-3 h-3 text-blue-500" />
+                                <span>Dossier</span>
+                              </button>
                             </div>
 
                             {/* Stage Selector / Action Controls */}
@@ -1386,11 +1442,24 @@ export default function AdmissionsWorkspaceClient({
                               );
                             }
                             if (colName === "STATUS") {
+                              const uploadedDocsCount = countUploadedDocs(app);
                               return (
                                 <td key={colName} className="p-3">
-                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
-                                    {app.status}
-                                  </span>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
+                                      {app.status}
+                                    </span>
+                                    {uploadedDocsCount > 0 ? (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                        <FileCheck className="w-2.5 h-2.5" />
+                                        <span>{uploadedDocsCount}/6 Docs</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] font-medium text-slate-400 dark:text-zinc-500">
+                                        No docs
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                               );
                             }
@@ -2499,13 +2568,40 @@ export default function AdmissionsWorkspaceClient({
               (dossierApp.tierSpecificData as any)?.parent?.phone ||
               dossierApp.phoneNumber,
             status: dossierApp.status,
+            rawDocuments: dossierApp.documents,
+            feeTransactions: dossierApp.feeTransactions,
+            metadata: dossierApp.metadata,
+            tierSpecificData: dossierApp.tierSpecificData,
             documents: {
               ...(dossierApp.tierSpecificData || {}),
+              ...((dossierApp.metadata as any)?.documents || {}),
               entranceScore: (dossierApp.tierSpecificData as any)?.entranceScore ?? (dossierApp.tierSpecificData as any)?.examScore ?? null,
-              applicationFeeReceiptUrl: dossierApp.feeTransactions?.find((t) => t.proofOfPaymentUrl)?.proofOfPaymentUrl || null,
-              passportPhotoUrl: dossierApp.documents?.find((d) => d.documentType === "PASSPORT_PHOTO")?.storageKey || null,
-              birthCertificateUrl: dossierApp.documents?.find((d) => d.documentType === "BIRTH_CERT")?.storageKey || null,
-              academicResultsUrl: dossierApp.documents?.find((d) => d.documentType === "ACADEMIC_RESULTS" || d.documentType === "O_LEVEL_RESULT")?.storageKey || null,
+              applicationFeeReceiptUrl:
+                dossierApp.feeTransactions?.find((t) => t.proofOfPaymentUrl)?.proofOfPaymentUrl ||
+                dossierApp.documents?.find((d) => ["APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "RECEIPT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.applicationFeeReceiptUrl ||
+                (dossierApp.metadata as any)?.documents?.applicationFeeReceipt?.url ||
+                null,
+              passportPhotoUrl:
+                dossierApp.documents?.find((d) => ["PASSPORT_PHOTOGRAPH", "PASSPORT_PHOTO", "PASSPORT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.passportPhoto?.url ||
+                null,
+              birthCertificateUrl:
+                dossierApp.documents?.find((d) => ["BIRTH_CERTIFICATE", "BIRTH_CERT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.birthCertificate?.url ||
+                null,
+              academicResultsUrl:
+                dossierApp.documents?.find((d) => ["ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.academicResults?.url ||
+                null,
+              medicalRecordsUrl:
+                dossierApp.documents?.find((d) => ["MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.medicalRecords?.url ||
+                null,
+              ninSlipUrl:
+                dossierApp.documents?.find((d) => ["NIN_SLIP", "NIN"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.ninSlip?.url ||
+                null,
             },
           }}
           applicant={{
