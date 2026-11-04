@@ -135,6 +135,7 @@ export default async function AdmissionsPage({
         programId: true,
         academicSessionId: true,
         dateOfBirth: true,
+        status: true,
         tierSpecificData: true,
         metadata: true,
       },
@@ -166,20 +167,23 @@ export default async function AdmissionsPage({
 
       if (matchApp) {
         // If matching application has temporary ID (APP-XXXXXX), upgrade to finalized institutional format!
+        const updateData: any = {
+          metadata: {
+            ...((matchApp.metadata as any) || {}),
+            registerId: reg.id,
+            documents: reg.credentialsJson || (matchApp.metadata as any)?.documents,
+            applicationFeeReceiptUrl: reg.applicationFeeReceiptUrl || reg.formFeeReceiptUrl || (matchApp.metadata as any)?.applicationFeeReceiptUrl,
+          },
+        };
         if (!isInstitutionalApplicationNo(matchApp.applicationNumber) && isInstitutionalApplicationNo(reg.applicationNo)) {
-          await basePrisma.admissionsApplication.update({
-            where: { id: matchApp.id },
-            data: {
-              applicationNumber: reg.applicationNo,
-              metadata: {
-                ...((matchApp.metadata as any) || {}),
-                registerId: reg.id,
-              },
-            },
-          }).catch(() => null);
+          updateData.applicationNumber = reg.applicationNo;
           knownAppNos.delete(matchApp.applicationNumber);
           matchApp.applicationNumber = reg.applicationNo;
         }
+        await basePrisma.admissionsApplication.update({
+          where: { id: matchApp.id },
+          data: updateData,
+        }).catch(() => null);
         knownAppNos.add(reg.applicationNo);
         continue;
       }
@@ -237,6 +241,34 @@ export default async function AdmissionsPage({
       });
 
       if (matchApp) {
+        const leadDocs = (lead.documents as any) || {};
+        if (Object.keys(leadDocs).length > 0) {
+          const appMeta = (matchApp.metadata as any) || {};
+          const appTierData = (matchApp.tierSpecificData as any) || {};
+          const mergedDocs = { ...(appMeta.documents || {}), ...leadDocs };
+          const hasFee = Boolean(mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl);
+          const hasDocs = Object.keys(mergedDocs).length > 1;
+          const nextStatus = (hasFee && hasDocs) ? "UNDER_REVIEW" : hasDocs ? "SUBMITTED" : matchApp.status;
+
+          await basePrisma.admissionsApplication.update({
+            where: { id: matchApp.id },
+            data: {
+              status: nextStatus as any,
+              metadata: {
+                ...appMeta,
+                leadId: lead.id,
+                documents: mergedDocs,
+                applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appMeta.applicationFeeReceiptUrl,
+              },
+              tierSpecificData: {
+                ...appTierData,
+                leadId: lead.id,
+                documents: mergedDocs,
+                applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appTierData.applicationFeeReceiptUrl,
+              },
+            },
+          }).catch(() => null);
+        }
         continue;
       }
 
@@ -429,6 +461,88 @@ export default async function AdmissionsPage({
     }
   }
   rawApplications = deduplicatedApps;
+
+  // Real-time document hydration pass: Ensure any uploaded credentials from AdmissionLead or AdmissionRegister are attached
+  try {
+    for (const app of rawApplications) {
+      if (!app.documents || app.documents.length === 0) {
+        const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
+        const cleanNo = (app.applicationNumber || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "");
+
+        const linkedLead = await basePrisma.admissionLead.findFirst({
+          where: {
+            schoolId: school.id,
+            OR: [
+              ...(leadId ? [{ id: leadId }] : []),
+              { id: app.id },
+              ...(cleanNo ? [
+                { id: { contains: cleanNo, mode: "insensitive" as const } },
+                { uploadToken: { contains: cleanNo, mode: "insensitive" as const } },
+              ] : []),
+              ...(app.email ? [{ studentEmail: app.email }, { parentEmail: app.email }] : []),
+              ...(app.phoneNumber ? [{ parentPhone: app.phoneNumber }, { parentContact: app.phoneNumber }] : []),
+            ],
+          },
+        });
+
+        if (linkedLead && linkedLead.documents && typeof linkedLead.documents === "object") {
+          const leadDocs = linkedLead.documents as Record<string, any>;
+          app.metadata = { ...((app.metadata as any) || {}), documents: leadDocs };
+          app.tierSpecificData = { ...((app.tierSpecificData as any) || {}), documents: leadDocs };
+
+          const docMapDefs: Record<string, string> = {
+            passportPhoto: "PASSPORT_PHOTOGRAPH",
+            academicResults: "ACADEMIC_TRANSCRIPT",
+            birthCertificate: "BIRTH_CERTIFICATE",
+            medicalRecords: "MEDICAL_REPORT",
+            ninSlip: "NIN_SLIP",
+            applicationFeeReceipt: "APPLICATION_FEE_RECEIPT",
+          };
+
+          if (!app.documents) app.documents = [];
+
+          for (const [fKey, dType] of Object.entries(docMapDefs)) {
+            const item = leadDocs[fKey];
+            const url =
+              item?.url ||
+              item?.fileUrl ||
+              (typeof item === "string" ? item : null) ||
+              (fKey === "applicationFeeReceipt" ? (leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl) : null);
+
+            if (url && !app.documents.some((d: any) => d.documentType === dType)) {
+              app.documents.push({
+                id: `lead-doc-${fKey}-${app.id}`,
+                documentType: dType,
+                storageKey: url,
+                verificationStatus: "PENDING",
+                rejectionReason: null,
+              });
+            }
+          }
+
+          if (leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl) {
+            const feeUrl = leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl;
+            if (!app.feeTransactions || app.feeTransactions.length === 0) {
+              app.feeTransactions = [
+                {
+                  id: `tx-lead-${app.id}`,
+                  paymentMethod: "MANUAL_BANK_TRANSFER",
+                  amount: 5000,
+                  currency: "NGN",
+                  paymentReference: `FEE-${app.applicationNumber}`,
+                  paymentStatus: "PENDING",
+                  proofOfPaymentUrl: feeUrl,
+                  createdAt: new Date(),
+                },
+              ];
+            }
+          }
+        }
+      }
+    }
+  } catch (hydrateErr) {
+    console.warn("[ADMISSIONS] Document hydration notice:", hydrateErr);
+  }
 
   // Serialize applications for client component
   const applications: SerializedApplication[] = (rawApplications || []).map((app: any) => ({

@@ -349,46 +349,57 @@ export default function AdmissionsWorkspaceClient({
   // Funnel bar metrics calculation - deduplicated inquiry counts
   const funnelMetrics = useMemo(() => {
     const inquiries = applications.filter(
-      (a) => a.status === "DRAFT"
+      (a) => ["DRAFT", "INQUIRY", "NEW"].includes((a.status || "").toUpperCase())
     ).length;
     const screening = applications.filter(
-      (a) => a.status === "PAYMENT_PENDING" || a.status === "SUBMITTED" || a.status === "UNDER_REVIEW"
+      (a) => ["PAYMENT_PENDING", "SUBMITTED", "UNDER_REVIEW", "ACTION_REQUIRED", "DOCS PENDING", "DOCS_PENDING", "APPLIED"].includes((a.status || "").toUpperCase())
     ).length;
     const exams = applications.filter(
-      (a) => a.status === "ASSESSMENT_SCHEDULED"
+      (a) => ["ASSESSMENT_SCHEDULED", "INTERVIEW", "EXAM"].includes((a.status || "").toUpperCase())
     ).length;
     const offers = applications.filter(
-      (a) => a.status === "OFFER_EXTENDED" || a.status === "OFFER_ACCEPTED"
+      (a) => ["OFFER_EXTENDED", "OFFER_ACCEPTED", "APPROVED"].includes((a.status || "").toUpperCase())
     ).length;
     const matriculated = applications.filter(
-      (a) => a.status === "ENROLLED"
+      (a) => ["ENROLLED", "ADMITTED", "MATRICULATED", "CONVERTED"].includes((a.status || "").toUpperCase())
     ).length;
 
     return { inquiries, screening, exams, offers, matriculated };
   }, [applications]);
 
-  // Stage mapping helper - INQUIRY is strictly top-level only, no inquiry column at bottom
+  // Stage mapping helper - accurately maps all pipeline states to visible Kanban columns
   const mapAppToKanbanStage = (status: string): string => {
-    switch (status) {
-      case "DRAFT":
-        return ""; // Inquiry only lives at top funnel bar
-      case "PAYMENT_PENDING":
-      case "ACTION_REQUIRED":
-        return "DOCS PENDING";
+    const s = (status || "").toUpperCase().trim();
+    switch (s) {
       case "SUBMITTED":
       case "UNDER_REVIEW":
+      case "VERIFIED":
       case "ASSESSMENT_SCHEDULED":
+      case "INTERVIEW":
+      case "SCREENED":
         return "VERIFIED";
       case "OFFER_EXTENDED":
       case "OFFER_ACCEPTED":
+      case "APPROVED":
         return "APPROVED";
       case "ENROLLED":
       case "ADMITTED":
+      case "MATRICULATED":
+      case "CONVERTED":
         return "ADMITTED";
       case "REJECTED":
+      case "DECLINED":
         return "";
+      case "DOCS PENDING":
+      case "DOCS_PENDING":
+      case "PAYMENT_PENDING":
+      case "ACTION_REQUIRED":
+      case "APPLIED":
+      case "NEW":
+      case "DRAFT":
+      case "INQUIRY":
       default:
-        return "";
+        return "DOCS PENDING";
     }
   };
 
