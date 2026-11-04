@@ -186,23 +186,11 @@ export class UploadthingStorage implements StorageAdapter {
 
 /**
  * Factory returning the optimal Storage implementation:
- * 1. UploadThing if UPLOADTHING_TOKEN is configured (Render primary persistent cloud storage)
- * 2. Base64 database fallback (0 external dependencies, 100% resilient, persists across deploys)
- * 3. Cloudinary fallback only if explicitly configured
+ * Always use UploadThing as the primary cloud storage adapter on Render.
+ * Cloudinary does not exist on Render and must NEVER overwrite UploadThing.
+ * Falls back to Base64DBStorage automatically if token is missing or external upload fails.
  */
 export function getStorage(): StorageAdapter {
-  const utToken = process.env.UPLOADTHING_TOKEN?.trim();
-  if (utToken) {
-    return new UploadthingStorage();
-  }
-
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-  if (cloudName && apiKey && apiSecret) {
-    return new CloudinaryStorage(cloudName, apiKey, apiSecret);
-  }
-
-  return new Base64DBStorage();
+  return new UploadthingStorage();
 }
 

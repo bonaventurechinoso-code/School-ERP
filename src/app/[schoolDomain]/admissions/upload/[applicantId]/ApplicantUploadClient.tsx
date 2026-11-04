@@ -696,13 +696,15 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const res = await fetch(
-        `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token)}`,
+        `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token || "")}`,
         {
           method: "POST",
           headers: {
-            "x-applicant-token": token,
-            "x-upload-token": token,
-            Authorization: `Bearer ${token}`,
+            ...(token ? {
+              "x-applicant-token": token,
+              "x-upload-token": token,
+              Authorization: `Bearer ${token}`,
+            } : {}),
           },
           body: formData,
           signal: controller.signal,
@@ -874,13 +876,15 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
       const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const res = await fetch(
-        `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token)}`,
+        `/api/v1/admissions/upload/${applicantId}?token=${encodeURIComponent(token || "")}`,
         {
           method: "POST",
           headers: {
-            "x-applicant-token": token,
-            "x-upload-token": token,
-            Authorization: `Bearer ${token}`,
+            ...(token ? {
+              "x-applicant-token": token,
+              "x-upload-token": token,
+              Authorization: `Bearer ${token}`,
+            } : {}),
           },
           body: formData,
           signal: controller.signal,
