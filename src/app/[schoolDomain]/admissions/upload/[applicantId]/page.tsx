@@ -351,9 +351,11 @@ export default async function ApplicantUploadPage({
   const tierName = activeTier?.name || lead.tier?.name || "PRIMARY";
 
   // 6. Complete Checklist Definition Template under tenant's academic profile rules
-  // Maps all 6 statutory credential categories directly for the active tier
-  const checklist = [
+  // Maps all 6 statutory credential categories directly for the active tier with unique string IDs
+  const checklistTemplates = [
     {
+      id: "template-applicationFeeReceipt",
+      type: "applicationFeeReceipt" as const,
       key: "applicationFeeReceipt" as const,
       label: "Application Fee Receipt",
       subLabel: "Direct Bank Transfer Verification",
@@ -361,11 +363,10 @@ export default async function ApplicantUploadPage({
       acceptedTypes: "image/*,application/pdf",
       badge: "PDF or Image",
       description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
-      url: existingFeeReceiptUrl,
-      status: (feeState === "PAID" ? "VERIFIED" : (feeState === "PENDING" || existingFeeReceiptUrl) ? "PENDING" : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
-      fileName: docs.applicationFeeReceipt?.fileName || docs.applicationFeeReceipt?.name || (existingFeeReceiptUrl ? "Payment_Receipt.pdf" : null),
     },
     {
+      id: "template-passportPhoto",
+      type: "passportPhoto" as const,
       key: "passportPhoto" as const,
       label: "Recent Passport Photograph",
       subLabel: "Official Identification Photo",
@@ -373,6 +374,67 @@ export default async function ApplicantUploadPage({
       acceptedTypes: "image/*",
       badge: "Image Only",
       description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
+    },
+    {
+      id: "template-birthCertificate",
+      type: "birthCertificate" as const,
+      key: "birthCertificate" as const,
+      label: "NPC National Birth Certificate / Age Declaration",
+      subLabel: "Statutory Age Verification",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+    },
+    {
+      id: "template-academicResults",
+      type: "academicResults" as const,
+      key: "academicResults" as const,
+      label: "Academic Transcripts / Previous Term Results",
+      subLabel: "Prior Academic Records",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "Certified termly report cards or official transcripts from the most recent school attended.",
+    },
+    {
+      id: "template-ninSlip",
+      type: "ninSlip" as const,
+      key: "ninSlip" as const,
+      label: "NIMC NIN Identification Slip",
+      subLabel: "National Identity Verification",
+      mandatory: false,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "Statutory NIN",
+      description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+    },
+    {
+      id: "template-medicalRecords",
+      type: "medicalRecords" as const,
+      key: "medicalRecords" as const,
+      label: "Medical Certificate of Fitness",
+      subLabel: "Health & Immunization Record",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+    },
+  ];
+
+  // 6b. Compile applicant existing submissions mapped by statutory type
+  const submissions = [
+    {
+      id: "sub-applicationFeeReceipt",
+      type: "applicationFeeReceipt" as const,
+      key: "applicationFeeReceipt" as const,
+      url: existingFeeReceiptUrl,
+      status: (feeState === "PAID" ? "VERIFIED" : (feeState === "PENDING" || existingFeeReceiptUrl) ? "PENDING" : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.applicationFeeReceipt?.fileName || docs.applicationFeeReceipt?.name || (existingFeeReceiptUrl ? "Payment_Receipt.pdf" : null),
+    },
+    {
+      id: "sub-passportPhoto",
+      type: "passportPhoto" as const,
+      key: "passportPhoto" as const,
       url: leadAny.passportPhotoUrl || docs.passportPhoto?.url || docs.passportPhoto?.fileUrl || (typeof docs.passportPhoto === "string" ? docs.passportPhoto : null) || docs.passport || null,
       status: ((docs.passportPhoto?.status === "VERIFIED" || docs.passportPhoto?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
         ? "VERIFIED"
@@ -384,13 +446,9 @@ export default async function ApplicantUploadPage({
       fileName: docs.passportPhoto?.fileName || docs.passportPhoto?.name || (leadAny.passportPhotoUrl ? "Passport_Photo.jpg" : null),
     },
     {
+      id: "sub-birthCertificate",
+      type: "birthCertificate" as const,
       key: "birthCertificate" as const,
-      label: "NPC National Birth Certificate / Age Declaration",
-      subLabel: "Statutory Age Verification",
-      mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
       url: leadAny.birthCertificateUrl || docs.birthCertificate?.url || docs.birthCertificate?.fileUrl || (typeof docs.birthCertificate === "string" ? docs.birthCertificate : null) || docs.birthCert || null,
       status: ((docs.birthCertificate?.status === "VERIFIED" || docs.birthCertificate?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
         ? "VERIFIED"
@@ -402,13 +460,9 @@ export default async function ApplicantUploadPage({
       fileName: docs.birthCertificate?.fileName || docs.birthCertificate?.name || (leadAny.birthCertificateUrl ? "Birth_Certificate.pdf" : null),
     },
     {
+      id: "sub-academicResults",
+      type: "academicResults" as const,
       key: "academicResults" as const,
-      label: "Academic Transcripts / Previous Term Results",
-      subLabel: "Prior Academic Records",
-      mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "Certified termly report cards or official transcripts from the most recent school attended.",
       url: leadAny.academicResultsUrl || docs.academicResults?.url || docs.academicResults?.fileUrl || (typeof docs.academicResults === "string" ? docs.academicResults : null) || docs.previousResults || docs.lastResult || null,
       status: ((docs.academicResults?.status === "VERIFIED" || docs.academicResults?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
         ? "VERIFIED"
@@ -420,13 +474,9 @@ export default async function ApplicantUploadPage({
       fileName: docs.academicResults?.fileName || docs.academicResults?.name || (leadAny.academicResultsUrl ? "Academic_Results.pdf" : null),
     },
     {
+      id: "sub-ninSlip",
+      type: "ninSlip" as const,
       key: "ninSlip" as const,
-      label: "NIMC NIN Identification Slip",
-      subLabel: "National Identity Verification",
-      mandatory: false,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "Statutory NIN",
-      description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
       url: leadAny.ninSlipUrl || docs.ninSlip?.url || docs.ninSlip?.fileUrl || (typeof docs.ninSlip === "string" ? docs.ninSlip : null) || docs.nin || null,
       status: ((docs.ninSlip?.status === "VERIFIED" || docs.ninSlip?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
         ? "VERIFIED"
@@ -438,13 +488,9 @@ export default async function ApplicantUploadPage({
       fileName: docs.ninSlip?.fileName || docs.ninSlip?.name || (leadAny.ninSlipUrl ? "NIN_Slip.pdf" : null),
     },
     {
+      id: "sub-medicalRecords",
+      type: "medicalRecords" as const,
       key: "medicalRecords" as const,
-      label: "Medical Certificate of Fitness",
-      subLabel: "Health & Immunization Record",
-      mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
       url: leadAny.medicalRecordsUrl || docs.medicalRecords?.url || docs.medicalRecords?.fileUrl || (typeof docs.medicalRecords === "string" ? docs.medicalRecords : null) || docs.medical || null,
       status: ((docs.medicalRecords?.status === "VERIFIED" || docs.medicalRecords?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
         ? "VERIFIED"
@@ -457,7 +503,18 @@ export default async function ApplicantUploadPage({
     },
   ];
 
-  // 7. Render interactive client portal with complete checklist slots
+  // Combined checklist backward-compatible representation
+  const checklist = checklistTemplates.map((template) => {
+    const sub = submissions.find((s) => s.type === template.type);
+    return {
+      ...template,
+      url: sub?.url || null,
+      status: sub?.status || "NOT_UPLOADED",
+      fileName: sub?.fileName || null,
+    };
+  });
+
+  // 7. Render interactive client portal with complete checklist templates & submissions
   return (
     <ApplicantUploadClient
       schoolDomain={schoolDomain}
@@ -479,6 +536,8 @@ export default async function ApplicantUploadPage({
       existingBirthCertificateUrl={leadAny.birthCertificateUrl}
       existingMedicalRecordsUrl={leadAny.medicalRecordsUrl}
       existingNinSlipUrl={leadAny.ninSlipUrl || (leadAny.documents?.ninSlip?.url || leadAny.documents?.ninSlip?.fileUrl || null)}
+      checklistTemplates={checklistTemplates}
+      submissions={submissions}
       checklist={checklist}
     />
   );

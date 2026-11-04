@@ -386,6 +386,130 @@ export async function GET(
       return NextResponse.json({ error: "Upload link has expired. Please request a new link." }, { status: 403, headers: corsHeaders });
     }
 
+    const checklistTemplates = [
+      {
+        id: "template-applicationFeeReceipt",
+        type: "applicationFeeReceipt",
+        key: "applicationFeeReceipt",
+        label: "Application Fee Receipt",
+        subLabel: "Direct Bank Transfer Verification",
+        mandatory: true,
+        acceptedTypes: "image/*,application/pdf",
+        badge: "PDF or Image",
+        description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
+      },
+      {
+        id: "template-passportPhoto",
+        type: "passportPhoto",
+        key: "passportPhoto",
+        label: "Recent Passport Photograph",
+        subLabel: "Official Identification Photo",
+        mandatory: true,
+        acceptedTypes: "image/*",
+        badge: "Image Only",
+        description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
+      },
+      {
+        id: "template-birthCertificate",
+        type: "birthCertificate",
+        key: "birthCertificate",
+        label: "NPC National Birth Certificate / Age Declaration",
+        subLabel: "Statutory Age Verification",
+        mandatory: true,
+        acceptedTypes: "image/*,application/pdf",
+        badge: "PDF or Image",
+        description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+      },
+      {
+        id: "template-academicResults",
+        type: "academicResults",
+        key: "academicResults",
+        label: "Academic Transcripts / Previous Term Results",
+        subLabel: "Prior Academic Records",
+        mandatory: true,
+        acceptedTypes: "image/*,application/pdf",
+        badge: "PDF or Image",
+        description: "Certified termly report cards or official transcripts from the most recent school attended.",
+      },
+      {
+        id: "template-ninSlip",
+        type: "ninSlip",
+        key: "ninSlip",
+        label: "NIMC NIN Identification Slip",
+        subLabel: "National Identity Verification",
+        mandatory: false,
+        acceptedTypes: "image/*,application/pdf",
+        badge: "Statutory NIN",
+        description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+      },
+      {
+        id: "template-medicalRecords",
+        type: "medicalRecords",
+        key: "medicalRecords",
+        label: "Medical Certificate of Fitness",
+        subLabel: "Health & Immunization Record",
+        mandatory: true,
+        acceptedTypes: "image/*,application/pdf",
+        badge: "PDF or Image",
+        description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+      },
+    ];
+
+    const isFeePaid = Boolean(leadAny.formFeePaid || leadAny.documents?.formFeePaid);
+    const existingFeeReceiptUrl = leadAny.applicationFeeReceiptUrl || leadAny.documents?.applicationFeeReceiptUrl || null;
+    const feeStatus = isFeePaid ? "VERIFIED" : (existingFeeReceiptUrl ? "PENDING" : "NOT_UPLOADED");
+
+    const submissions = [
+      {
+        id: "sub-applicationFeeReceipt",
+        type: "applicationFeeReceipt",
+        key: "applicationFeeReceipt",
+        url: existingFeeReceiptUrl,
+        status: feeStatus,
+        fileName: leadAny.documents?.applicationFeeReceipt?.fileName || (existingFeeReceiptUrl ? "Payment_Receipt.pdf" : null),
+      },
+      {
+        id: "sub-passportPhoto",
+        type: "passportPhoto",
+        key: "passportPhoto",
+        url: leadAny.passportPhotoUrl || leadAny.documents?.passportPhoto?.url || null,
+        status: (leadAny.documents?.passportPhoto?.status === "VERIFIED" || lead.status === "APPROVED") ? "VERIFIED" : (leadAny.passportPhotoUrl ? "PENDING" : "NOT_UPLOADED"),
+        fileName: leadAny.documents?.passportPhoto?.fileName || (leadAny.passportPhotoUrl ? "Passport_Photo.jpg" : null),
+      },
+      {
+        id: "sub-birthCertificate",
+        type: "birthCertificate",
+        key: "birthCertificate",
+        url: leadAny.birthCertificateUrl || leadAny.documents?.birthCertificate?.url || null,
+        status: (leadAny.documents?.birthCertificate?.status === "VERIFIED" || lead.status === "APPROVED") ? "VERIFIED" : (leadAny.birthCertificateUrl ? "PENDING" : "NOT_UPLOADED"),
+        fileName: leadAny.documents?.birthCertificate?.fileName || (leadAny.birthCertificateUrl ? "Birth_Certificate.pdf" : null),
+      },
+      {
+        id: "sub-academicResults",
+        type: "academicResults",
+        key: "academicResults",
+        url: leadAny.academicResultsUrl || leadAny.documents?.academicResults?.url || null,
+        status: (leadAny.documents?.academicResults?.status === "VERIFIED" || lead.status === "APPROVED") ? "VERIFIED" : (leadAny.academicResultsUrl ? "PENDING" : "NOT_UPLOADED"),
+        fileName: leadAny.documents?.academicResults?.fileName || (leadAny.academicResultsUrl ? "Academic_Results.pdf" : null),
+      },
+      {
+        id: "sub-ninSlip",
+        type: "ninSlip",
+        key: "ninSlip",
+        url: leadAny.ninSlipUrl || leadAny.documents?.ninSlip?.url || null,
+        status: (leadAny.documents?.ninSlip?.status === "VERIFIED" || lead.status === "APPROVED") ? "VERIFIED" : (leadAny.ninSlipUrl ? "PENDING" : "NOT_UPLOADED"),
+        fileName: leadAny.documents?.ninSlip?.fileName || (leadAny.ninSlipUrl ? "NIN_Slip.pdf" : null),
+      },
+      {
+        id: "sub-medicalRecords",
+        type: "medicalRecords",
+        key: "medicalRecords",
+        url: leadAny.medicalRecordsUrl || leadAny.documents?.medicalRecords?.url || null,
+        status: (leadAny.documents?.medicalRecords?.status === "VERIFIED" || lead.status === "APPROVED") ? "VERIFIED" : (leadAny.medicalRecordsUrl ? "PENDING" : "NOT_UPLOADED"),
+        fileName: leadAny.documents?.medicalRecords?.fileName || (leadAny.medicalRecordsUrl ? "Medical_Report.pdf" : null),
+      },
+    ];
+
     return NextResponse.json({
       success: true,
       applicant: {
@@ -407,6 +531,8 @@ export async function GET(
         formFeeReceiptUrl: leadAny.formFeeReceiptUrl || leadAny.documents?.formFeeReceiptUrl || null,
         formFeePaid: Boolean(leadAny.formFeePaid || leadAny.documents?.formFeePaid),
       },
+      checklistTemplates,
+      submissions,
     }, { headers: corsHeaders });
   } catch (err: any) {
     console.error("[UPLOAD_API_GET] Error validating applicant:", err);
