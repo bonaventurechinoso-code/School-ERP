@@ -673,18 +673,18 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
 export async function enrollApplicantAction(
   arg1:
     | {
-        applicationId?: string;
-        leadId?: string;
-        schoolId: string;
-        tenantId?: string;
-        schoolDomain?: string;
-        tierId?: string;
-        departmentId?: string;
-        classArm?: string;
-        termFeeAmount?: number;
-        actorId?: string;
-        ipAddress?: string;
-      }
+      applicationId?: string;
+      leadId?: string;
+      schoolId: string;
+      tenantId?: string;
+      schoolDomain?: string;
+      tierId?: string;
+      departmentId?: string;
+      classArm?: string;
+      termFeeAmount?: number;
+      actorId?: string;
+      ipAddress?: string;
+    }
     | string,
   arg2?: string,
   arg3?: string
@@ -1613,7 +1613,7 @@ export async function mergeDuplicateAction(payload: {
           where: { id: payload.duplicateLeadId },
           data: { status: "CONVERTED" },
         });
-      } catch {}
+      } catch { }
     }
 
     // 4. Log central audit
@@ -1633,7 +1633,7 @@ export async function mergeDuplicateAction(payload: {
           },
         },
       });
-    } catch {}
+    } catch { }
 
     safeRevalidate(`/${payload.schoolDomain}/admissions`);
     safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
@@ -1691,7 +1691,7 @@ export async function deleteAdmissionRegisterAction(payload: {
         },
         data: { status: "CONVERTED" },
       });
-    } catch {}
+    } catch { }
 
     // Audit log
     try {
@@ -1709,7 +1709,7 @@ export async function deleteAdmissionRegisterAction(payload: {
           },
         },
       });
-    } catch {}
+    } catch { }
 
     safeRevalidate(`/${payload.schoolDomain}/admissions`);
     safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
@@ -4025,9 +4025,8 @@ export async function sendMissingDocsReminderAction(payload: {
     const uploadUrl = `${baseUrl}/${sub}/admissions/upload/${effectiveTargetId}?token=${uploadToken}`;
     const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo || app?.applicationNumber || registerRecord?.applicationNo || "status")}`;
 
-    const applicantName =
-      rawApplicantName ||
-      (app ? `${app.firstName} ${app.lastName}` : lead?.applicantName || (registerRecord ? `${registerRecord.firstName} ${registerRecord.lastName}` : "Applicant"));
+    const regName = registerRecord ? `${registerRecord.firstName} ${registerRecord.lastName}` : "Applicant";
+    const applicantName = rawApplicantName || (app ? `${app.firstName} ${app.lastName}` : lead?.applicantName || regName);
     const parentName = (app?.tierSpecificData as any)?.parentName || (app?.tierSpecificData as any)?.parent?.name || lead?.parentName || "Parent / Guardian";
 
     // 1. Dispatch Email with exact missing items
