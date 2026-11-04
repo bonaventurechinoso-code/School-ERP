@@ -351,7 +351,7 @@ export default async function ApplicantUploadPage({
   const tierName = activeTier?.name || lead.tier?.name || "PRIMARY";
 
   // 6. Complete Checklist Definition Template under tenant's academic profile rules
-  // Maps all 6 statutory credential categories directly for the active tier with unique string IDs
+  // Maps all 6 statutory credential categories directly for the active tier with unique string IDs and 5MB limit
   const checklistTemplates = [
     {
       id: "template-applicationFeeReceipt",
@@ -360,9 +360,9 @@ export default async function ApplicantUploadPage({
       label: "Application Fee Receipt",
       subLabel: "Direct Bank Transfer Verification",
       mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
+      acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+      badge: "PDF / Image (5MB)",
+      description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form (PDF or Image • Max 5MB).",
     },
     {
       id: "template-passportPhoto",
@@ -371,8 +371,8 @@ export default async function ApplicantUploadPage({
       label: "Recent Passport Photograph",
       subLabel: "Official Identification Photo",
       mandatory: true,
-      acceptedTypes: "image/*",
-      badge: "Image Only",
+      acceptedTypes: "image/jpeg,image/png,image/webp,image/*,.jpg,.jpeg,.png,.webp",
+      badge: "Image Only (5MB)",
       description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
     },
     {
@@ -382,9 +382,9 @@ export default async function ApplicantUploadPage({
       label: "NPC National Birth Certificate / Age Declaration",
       subLabel: "Statutory Age Verification",
       mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+      acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+      badge: "PDF / Image (5MB)",
+      description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court (PDF or Image • Max 5MB).",
     },
     {
       id: "template-academicResults",
@@ -393,9 +393,9 @@ export default async function ApplicantUploadPage({
       label: "Academic Transcripts / Previous Term Results",
       subLabel: "Prior Academic Records",
       mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "Certified termly report cards or official transcripts from the most recent school attended.",
+      acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+      badge: "PDF / Image (5MB)",
+      description: "Certified termly report cards or official transcripts from the most recent school attended (PDF or Image • Max 5MB).",
     },
     {
       id: "template-ninSlip",
@@ -404,9 +404,9 @@ export default async function ApplicantUploadPage({
       label: "NIMC NIN Identification Slip",
       subLabel: "National Identity Verification",
       mandatory: false,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "Statutory NIN",
-      description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+      acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+      badge: "Statutory NIN (5MB)",
+      description: "National Identification Number (NIN) registration slip, card, or NIMC verification document (PDF or Image • Max 5MB).",
     },
     {
       id: "template-medicalRecords",
@@ -415,9 +415,9 @@ export default async function ApplicantUploadPage({
       label: "Medical Certificate of Fitness",
       subLabel: "Health & Immunization Record",
       mandatory: true,
-      acceptedTypes: "image/*,application/pdf",
-      badge: "PDF or Image",
-      description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+      acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+      badge: "PDF / Image (5MB)",
+      description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility (PDF or Image • Max 5MB).",
     },
   ];
 

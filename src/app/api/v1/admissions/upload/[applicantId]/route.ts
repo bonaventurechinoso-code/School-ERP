@@ -394,9 +394,9 @@ export async function GET(
         label: "Application Fee Receipt",
         subLabel: "Direct Bank Transfer Verification",
         mandatory: true,
-        acceptedTypes: "image/*,application/pdf",
-        badge: "PDF or Image",
-        description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
+        acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+        badge: "PDF / Image (5MB)",
+        description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form (PDF or Image • Max 5MB).",
       },
       {
         id: "template-passportPhoto",
@@ -405,8 +405,8 @@ export async function GET(
         label: "Recent Passport Photograph",
         subLabel: "Official Identification Photo",
         mandatory: true,
-        acceptedTypes: "image/*",
-        badge: "Image Only",
+        acceptedTypes: "image/jpeg,image/png,image/webp,image/*,.jpg,.jpeg,.png,.webp",
+        badge: "Image Only (5MB)",
         description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
       },
       {
@@ -416,9 +416,9 @@ export async function GET(
         label: "NPC National Birth Certificate / Age Declaration",
         subLabel: "Statutory Age Verification",
         mandatory: true,
-        acceptedTypes: "image/*,application/pdf",
-        badge: "PDF or Image",
-        description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+        acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+        badge: "PDF / Image (5MB)",
+        description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court (PDF or Image • Max 5MB).",
       },
       {
         id: "template-academicResults",
@@ -427,9 +427,9 @@ export async function GET(
         label: "Academic Transcripts / Previous Term Results",
         subLabel: "Prior Academic Records",
         mandatory: true,
-        acceptedTypes: "image/*,application/pdf",
-        badge: "PDF or Image",
-        description: "Certified termly report cards or official transcripts from the most recent school attended.",
+        acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+        badge: "PDF / Image (5MB)",
+        description: "Certified termly report cards or official transcripts from the most recent school attended (PDF or Image • Max 5MB).",
       },
       {
         id: "template-ninSlip",
@@ -438,9 +438,9 @@ export async function GET(
         label: "NIMC NIN Identification Slip",
         subLabel: "National Identity Verification",
         mandatory: false,
-        acceptedTypes: "image/*,application/pdf",
-        badge: "Statutory NIN",
-        description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+        acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+        badge: "Statutory NIN (5MB)",
+        description: "National Identification Number (NIN) registration slip, card, or NIMC verification document (PDF or Image • Max 5MB).",
       },
       {
         id: "template-medicalRecords",
@@ -449,9 +449,9 @@ export async function GET(
         label: "Medical Certificate of Fitness",
         subLabel: "Health & Immunization Record",
         mandatory: true,
-        acceptedTypes: "image/*,application/pdf",
-        badge: "PDF or Image",
-        description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+        acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+        badge: "PDF / Image (5MB)",
+        description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility (PDF or Image • Max 5MB).",
       },
     ];
 
@@ -879,8 +879,17 @@ export async function POST(
           );
         }
 
-        // MIME type check
-        if (!item.allowedMimes.includes(fileObj.type.toLowerCase())) {
+        // Resilient MIME & extension type check (Max 5MB)
+        const fileExt = path.extname(fileObj.name).toLowerCase();
+        const clientMime = (fileObj.type || "").toLowerCase().trim();
+        const isPdfExt = fileExt === ".pdf";
+        const isImgExt = [".jpg", ".jpeg", ".png", ".webp"].includes(fileExt);
+
+        const isAllowedType =
+          item.allowedMimes.includes(clientMime) ||
+          (item.type === "IMAGE" ? isImgExt : (isPdfExt || isImgExt));
+
+        if (!isAllowedType) {
           return NextResponse.json(
             {
               error: `Invalid file type for ${item.field}. Allowed types: ${

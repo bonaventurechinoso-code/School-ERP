@@ -89,7 +89,7 @@ export interface UploadClientProps {
   checklist?: ChecklistSlot[];
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit across all slots
 
 export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
   {
@@ -99,9 +99,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Application Fee Receipt",
     subLabel: "Direct Bank Transfer Verification",
     mandatory: true,
-    acceptedTypes: "image/*,application/pdf",
-    badge: "PDF or Image",
-    description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
+    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    badge: "PDF / Image (5MB)",
+    description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form (PDF or Image • Max 5MB).",
   },
   {
     id: "template-passportPhoto",
@@ -110,8 +110,8 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Recent Passport Photograph",
     subLabel: "Official Identification Photo",
     mandatory: true,
-    acceptedTypes: "image/*",
-    badge: "Image Only",
+    acceptedTypes: "image/jpeg,image/png,image/webp,image/*,.jpg,.jpeg,.png,.webp",
+    badge: "Image Only (5MB)",
     description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
   },
   {
@@ -121,9 +121,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NPC National Birth Certificate / Age Declaration",
     subLabel: "Statutory Age Verification",
     mandatory: true,
-    acceptedTypes: "image/*,application/pdf",
-    badge: "PDF or Image",
-    description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    badge: "PDF / Image (5MB)",
+    description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court (PDF or Image • Max 5MB).",
   },
   {
     id: "template-academicResults",
@@ -132,9 +132,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Academic Transcripts / Previous Term Results",
     subLabel: "Prior Academic Records",
     mandatory: true,
-    acceptedTypes: "image/*,application/pdf",
-    badge: "PDF or Image",
-    description: "Certified termly report cards or official transcripts from the most recent school attended.",
+    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    badge: "PDF / Image (5MB)",
+    description: "Certified termly report cards or official transcripts from the most recent school attended (PDF or Image • Max 5MB).",
   },
   {
     id: "template-ninSlip",
@@ -143,9 +143,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "NIMC NIN Identification Slip",
     subLabel: "National Identity Verification",
     mandatory: false,
-    acceptedTypes: "image/*,application/pdf",
-    badge: "Statutory NIN",
-    description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    badge: "Statutory NIN (5MB)",
+    description: "National Identification Number (NIN) registration slip, card, or NIMC verification document (PDF or Image • Max 5MB).",
   },
   {
     id: "template-medicalRecords",
@@ -154,9 +154,9 @@ export const CANONICAL_CHECKLIST_TEMPLATES: ChecklistTemplateSlot[] = [
     label: "Medical Certificate of Fitness",
     subLabel: "Health & Immunization Record",
     mandatory: true,
-    acceptedTypes: "image/*,application/pdf",
-    badge: "PDF or Image",
-    description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+    acceptedTypes: ".pdf,application/pdf,image/jpeg,image/png,image/webp,image/*",
+    badge: "PDF / Image (5MB)",
+    description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility (PDF or Image • Max 5MB).",
   },
 ];
 
@@ -214,6 +214,19 @@ export function UploadCard({
   const isUnderReview = existingSubmission?.status === "PENDING" || (hasExistingUrl && !isVerified);
   const isRejected = existingSubmission?.status === "REJECTED";
 
+  // PDF Detection: Skip <img> rendering on PDFs to prevent layout crashes
+  const isPdf =
+    Boolean(
+      selectedFile &&
+        (selectedFile.type === "application/pdf" ||
+          selectedFile.name.toLowerCase().endsWith(".pdf"))
+    ) ||
+    Boolean(
+      !selectedFile &&
+        (existingSubmission?.fileName?.toLowerCase().endsWith(".pdf") ||
+          existingSubmission?.url?.toLowerCase().includes(".pdf"))
+    );
+
   return (
     <div
       key={template.id}
@@ -221,7 +234,7 @@ export function UploadCard({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={handleCardClick}
-      className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] bg-white dark:bg-zinc-900 ${
+      className={`relative p-5 sm:p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col justify-between min-h-[260px] h-auto overflow-visible bg-white dark:bg-zinc-900 ${
         isUploading
           ? "border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20"
           : selectedFile
@@ -331,95 +344,118 @@ export function UploadCard({
         </div>
       ) : selectedFile ? (
         /* File Selected State (Pending Submit) */
-        <div className="flex items-center gap-3 p-3 bg-amber-50/50 dark:bg-zinc-950 rounded-xl border border-amber-200 dark:border-zinc-800">
-          {previewImg ? (
-            <Image
-              src={previewImg}
-              alt="Preview"
-              width={44}
-              height={44}
-              unoptimized
-              className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0"
-            />
-          ) : (
-            <FileText className="w-8 h-8 text-amber-600 shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
-              {selectedFile.name}
-            </p>
-            <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
-              {formatFileSize(selectedFile.size)} &bull; Ready to submit
-            </p>
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 p-3 bg-amber-50/50 dark:bg-zinc-950 rounded-xl border border-amber-200 dark:border-zinc-800">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {isPdf ? (
+              <div className="w-10 h-10 rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 border border-red-200 dark:border-red-900/50">
+                <FileText className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+            ) : previewImg ? (
+              <Image
+                src={previewImg}
+                alt="Preview"
+                width={40}
+                height={40}
+                unoptimized
+                className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-zinc-700 shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5 text-amber-700 dark:text-amber-300" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200"
+                title={selectedFile.name}
+              >
+                {selectedFile.name}
+              </p>
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold truncate">
+                {formatFileSize(selectedFile.size)} &bull; Ready to submit
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDirectUpload();
-            }}
-            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shrink-0 cursor-pointer shadow-2xs"
-          >
-            Upload
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClearFile();
-            }}
-            className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600 shrink-0 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDirectUpload();
+              }}
+              className="px-2.5 py-1 text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform"
+            >
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClearFile();
+              }}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full text-slate-400 hover:text-rose-600 shrink-0 cursor-pointer"
+              title="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       ) : hasExistingUrl || isVerified || isUnderReview ? (
         /* Existing Uploaded Document State */
-        <div className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
-          {previewImg || (template.key === "passportPhoto" && existingSubmission?.url) ? (
-            <Image
-              src={previewImg || existingSubmission?.url || ""}
-              alt="Document preview"
-              width={44}
-              height={44}
-              unoptimized
-              className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0"
-            />
-          ) : (
-            <FileCheck className="w-8 h-8 text-emerald-600 shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200">
-              {existingSubmission?.fileName || `${template.label} Recorded`}
-            </p>
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-              {isVerified ? "Verified by Admissions Board" : "Uploaded • Under Admissions Review"}
-            </p>
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {isPdf || !(previewImg || (template.key === "passportPhoto" && existingSubmission?.url)) ? (
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800/60">
+                <FileCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            ) : (
+              <Image
+                src={previewImg || existingSubmission?.url || ""}
+                alt="Document preview"
+                width={40}
+                height={40}
+                unoptimized
+                className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-zinc-700 shrink-0"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-xs font-bold truncate text-slate-800 dark:text-zinc-200"
+                title={existingSubmission?.fileName || template.label}
+              >
+                {existingSubmission?.fileName || `${template.label} Recorded`}
+              </p>
+              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+                {isVerified ? "Verified by Admissions Board" : "Uploaded • Under Admissions Review"}
+              </p>
+            </div>
           </div>
-          {existingSubmission?.url && (
-            <a
-              href={existingSubmission.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1 shrink-0 flex items-center gap-1"
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {existingSubmission?.url && (
+              <a
+                href={existingSubmission.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1 shrink-0 flex items-center gap-1"
+              >
+                <span>View</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+              className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 shrink-0 cursor-pointer"
             >
-              <span>View</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              fileInputRef.current?.click();
-            }}
-            className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 shrink-0 cursor-pointer"
-          >
-            Replace
-          </button>
+              Replace
+            </button>
+          </div>
         </div>
       ) : (
         /* Empty Slot Dropzone State */
@@ -471,7 +507,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     checklist: incomingChecklist,
   } = props;
 
-  // 1. Definition template slots: Always maintains all 6 canonical statutory items
+  // 1. Definition template slots: Always maintains all 6 canonical statutory items with 5MB limit
   const checklistTemplates: ChecklistTemplateSlot[] =
     incomingChecklistTemplates && incomingChecklistTemplates.length > 0
       ? incomingChecklistTemplates
@@ -484,7 +520,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
           subLabel: c.subLabel,
           mandatory: c.mandatory,
           acceptedTypes: c.acceptedTypes,
-          badge: c.badge,
+          badge: c.badge || "5MB Limit",
           description: c.description,
         }))
       : CANONICAL_CHECKLIST_TEMPLATES;
@@ -625,7 +661,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
   // Image previews
   const [previews, setPreviews] = useState<{ [K in ChecklistKey]?: string | null }>({
     passportPhoto: existingPassportUrl || null,
-    applicationFeeReceipt: existingFeeReceiptUrl || null,
+    applicationFeeReceipt: existingFeeReceiptUrl && !existingFeeReceiptUrl.toLowerCase().includes(".pdf") ? existingFeeReceiptUrl : null,
   });
 
   // UI state
@@ -729,15 +765,24 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
     setErrorMsg(null);
     if (!file) {
       setFiles((prev) => ({ ...prev, [key]: null }));
+      setPreviews((prev) => ({ ...prev, [key]: null }));
       return;
     }
 
+    // 5MB maximum file size check enforced across all slots
     if (file.size > MAX_FILE_SIZE) {
+      const formatBytes = (b: number) => {
+        if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+        return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+      };
       setErrorMsg(
-        `File "${file.name}" exceeds the 5MB maximum limit. Please select a smaller file.`
+        `File "${file.name}" (${formatBytes(file.size)}) exceeds the 5MB maximum limit. Please select a smaller file.`
       );
       return;
     }
+
+    const isPdfFile =
+      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
     if (key === "passportPhoto") {
       if (!file.type.startsWith("image/")) {
@@ -749,12 +794,17 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
         setPreviews((prev) => ({ ...prev, [key]: e.target?.result as string }));
       };
       reader.readAsDataURL(file);
+    } else if (isPdfFile) {
+      // PDF documents: skip image preview / objectURL to prevent layout crashes
+      setPreviews((prev) => ({ ...prev, [key]: null }));
     } else if (file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = (e) => {
         setPreviews((prev) => ({ ...prev, [key]: e.target?.result as string }));
       };
       reader.readAsDataURL(file);
+    } else {
+      setPreviews((prev) => ({ ...prev, [key]: null }));
     }
 
     setFiles((prev) => ({ ...prev, [key]: file }));
@@ -1018,7 +1068,7 @@ export default function ApplicantUploadClient(props: UploadClientProps) {
                 Statutory Credential Slots ({checklistTemplates.length})
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                All 6 required admission checklist categories are unlocked. You may upload credentials concurrently.
+                All 6 required admission checklist categories are unlocked (Max 5MB each). You may upload credentials concurrently.
               </p>
             </div>
             <div className="flex items-center gap-2">
