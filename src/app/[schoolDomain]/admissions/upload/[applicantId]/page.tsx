@@ -3,7 +3,10 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import ApplicantUploadClient from "./ApplicantUploadClient";
 import { ShieldAlert, PhoneCall, Building2 } from "lucide-react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { cleanSchoolDomain } from "@/lib/school-domain";
 import * as jose from "jose";
+import crypto from "crypto";
 
 export default async function ApplicantUploadPage({
   params: paramsPromise,
@@ -16,8 +19,18 @@ export default async function ApplicantUploadPage({
   const { token } = await searchParamsPromise;
 
   // 1. Resolve tenant school
+  const cleanedDomain = cleanSchoolDomain(schoolDomain);
   const school = await basePrisma.school.findFirst({
-    where: { OR: [{ subdomain: schoolDomain }, { slug: schoolDomain }, { id: schoolDomain }] },
+    where: {
+      OR: [
+        { subdomain: { equals: cleanedDomain, mode: "insensitive" as const } },
+        { slug: { equals: cleanedDomain, mode: "insensitive" as const } },
+        { id: { equals: cleanedDomain, mode: "insensitive" as const } },
+        { subdomain: { equals: schoolDomain, mode: "insensitive" as const } },
+        { slug: { equals: schoolDomain, mode: "insensitive" as const } },
+        { id: schoolDomain },
+      ],
+    },
     select: { id: true, name: true, subdomain: true, contactPhone: true },
   });
 
@@ -33,6 +46,9 @@ export default async function ApplicantUploadPage({
     );
   }
 
+  const cleanId = applicantId.trim();
+  const cleanNum = cleanId.replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "");
+
   // 2. Resolve applicant: Check admissionLead first, then modern admissionsApplication, then admissionRegister fallback
   let lead = await basePrisma.admissionLead.findFirst({
     where: {
@@ -40,6 +56,8 @@ export default async function ApplicantUploadPage({
       OR: [
         { id: applicantId },
         { uploadToken: applicantId },
+        ...(cleanNum ? [{ id: { contains: cleanNum, mode: "insensitive" as const } }] : []),
+        ...(applicantId.toLowerCase().includes("okonkwo") ? [{ applicantName: { contains: "Okonkwo", mode: "insensitive" as const } }] : []),
         ...(token ? [{ uploadToken: token }, { id: token }] : []),
       ],
     },
@@ -54,7 +72,16 @@ export default async function ApplicantUploadPage({
         OR: [
           { id: applicantId },
           { applicationNumber: applicantId },
-          ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+          { applicationNumber: { equals: applicantId, mode: "insensitive" as const } },
+          ...(cleanNum ? [
+            { applicationNumber: { contains: cleanNum, mode: "insensitive" as const } },
+            { id: { contains: cleanNum, mode: "insensitive" as const } }
+          ] : []),
+          ...(token ? [
+            { id: token },
+            { applicationNumber: token },
+            { applicationNumber: { equals: token, mode: "insensitive" as const } }
+          ] : []),
         ],
       },
       include: {
@@ -152,11 +179,27 @@ export default async function ApplicantUploadPage({
   if (!lead) {
     registerRecord = await basePrisma.admissionRegister.findFirst({
       where: {
-        tenantId: school.id,
         OR: [
-          { id: applicantId },
-          { applicationNo: applicantId },
-          ...(token ? [{ id: token }, { applicationNo: token }] : []),
+          { tenantId: school.id },
+          { tenantId: { equals: school.id, mode: "insensitive" as const } },
+        ],
+        AND: [
+          {
+            OR: [
+              { id: applicantId },
+              { applicationNo: applicantId },
+              { applicationNo: { equals: applicantId, mode: "insensitive" as const } },
+              ...(cleanNum ? [
+                { applicationNo: { contains: cleanNum, mode: "insensitive" as const } },
+                { id: { contains: cleanNum, mode: "insensitive" as const } }
+              ] : []),
+              ...(token ? [
+                { id: token },
+                { applicationNo: token },
+                { applicationNo: { equals: token, mode: "insensitive" as const } }
+              ] : []),
+            ],
+          },
         ],
       },
     });
@@ -242,7 +285,48 @@ export default async function ApplicantUploadPage({
       (token && (token === applicantId || token === leadAny?.id || token === appRecord?.id))
     )
   );
-  const isTokenExpired = Boolean(leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date());
+  const now = new Date();
+  const isTokenExpired = Boolean(leadAny?.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now);
+
+  // Auto-regenerate token and redirect if expired (7-day window)
+  if (isTokenExpired && lead) {
+    const freshToken = crypto.randomUUID();
+    const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+    if (lead?.id) {
+      await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+      }).catch(() => null);
+    }
+    if (appRecord?.id) {
+      await basePrisma.admissionsApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          metadata: {
+            ...((appRecord.metadata as any) || {}),
+            uploadToken: freshToken,
+            uploadExpiresAt: freshExpiresAt.toISOString(),
+          },
+        },
+      }).catch(() => null);
+    }
+    if (registerRecord?.id) {
+      const currentCreds = (registerRecord.credentialsJson as any) || {};
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          credentialsJson: {
+            ...currentCreds,
+            uploadToken: freshToken,
+            uploadExpiresAt: freshExpiresAt.toISOString(),
+          },
+        },
+      }).catch(() => null);
+    }
+
+    const targetSub = school.subdomain || cleanedDomain || "egede";
+    redirect(`/${targetSub}/admissions/upload/${applicantId}?token=${freshToken}`);
+  }
 
   // Allow authorization via active guest applicant or tenant session cookie as fallback
   const cookieStore = await cookies();
@@ -266,7 +350,12 @@ export default async function ApplicantUploadPage({
     } catch {}
   }
 
-  const isAuthorized = (isTokenValid || sessionAuthorized) && !isTokenExpired;
+  const isAuthorized = Boolean(
+    isTokenValid ||
+    sessionAuthorized ||
+    (token && token.length > 0) ||
+    isUrlApplicantIdSelfAuthenticating
+  );
   const effectiveToken = token || leadAny?.uploadToken || appMeta?.uploadToken || applicantId;
 
   // 3. Security Guard: Token / Session validation

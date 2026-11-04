@@ -159,6 +159,7 @@ export default function ApplicantDossierDrawer({
 
   // Missing Documents Reminder State
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
 
   // Email Guardian Composer Modal State
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
@@ -1192,20 +1193,50 @@ export default function ApplicantDossierDrawer({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    const token = activeCandidate.uploadToken || activeCandidate.documents?.uploadToken || activeCandidate.id;
-                    const link = `${window.location.origin}/${schoolDomain}/admissions/upload/${activeCandidate.id}?token=${token}`;
-                    const candidateName =
-                      activeCandidate.applicantName ||
-                      `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() ||
-                      "Applicant";
-                    const descriptiveMessage = `Dear Parent/Guardian, please use this secure link to upload the remaining pending credentials for ${candidateName}: ${link}`;
-                    handleCopy(descriptiveMessage, "link");
+                  disabled={isGeneratingLink}
+                  onClick={async () => {
+                    setIsGeneratingLink(true);
+                    try {
+                      const targetId = activeCandidate.leadId || activeCandidate.id;
+                      const candidateName =
+                        activeCandidate.applicantName ||
+                        `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() ||
+                        "Applicant";
+
+                      // Call fresh token generation endpoint
+                      const res = await fetch(
+                        `/api/v1/admissions/upload/${targetId}/generate-link?schoolDomain=${encodeURIComponent(schoolDomain || "")}&schoolId=${encodeURIComponent(schoolId || "")}`,
+                        { method: "POST" }
+                      );
+                      const data = await res.json().catch(() => ({}));
+                      let link = data?.uploadUrl;
+
+                      if (!link) {
+                        const token = data?.token || activeCandidate.uploadToken || activeCandidate.documents?.uploadToken || targetId;
+                        link = `${window.location.origin}/${schoolDomain}/admissions/upload/${targetId}?token=${token}`;
+                      }
+
+                      const descriptiveMessage = `Dear Parent/Guardian, please use this secure link to upload the remaining pending credentials for ${candidateName}: ${link}`;
+                      handleCopy(descriptiveMessage, "link");
+                    } catch (err) {
+                      console.error("[GENERATE_LINK_ERROR]:", err);
+                      const targetId = activeCandidate.leadId || activeCandidate.id;
+                      const token = activeCandidate.uploadToken || activeCandidate.documents?.uploadToken || targetId;
+                      const link = `${window.location.origin}/${schoolDomain}/admissions/upload/${targetId}?token=${token}`;
+                      const candidateName =
+                        activeCandidate.applicantName ||
+                        `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() ||
+                        "Applicant";
+                      const descriptiveMessage = `Dear Parent/Guardian, please use this secure link to upload the remaining pending credentials for ${candidateName}: ${link}`;
+                      handleCopy(descriptiveMessage, "link");
+                    } finally {
+                      setIsGeneratingLink(false);
+                    }
                   }}
-                  className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs"
+                  className="px-3.5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>{copiedLink ? "Message Copied!" : "Copy Portal Link"}</span>
+                  <span>{copiedLink ? "Message Copied!" : isGeneratingLink ? "Generating Link..." : "Copy Portal Link"}</span>
                 </button>
               </div>
 

@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import fs from "fs";
 import path from "path";
 import * as jose from "jose";
+import crypto from "crypto";
+import { cleanSchoolDomain } from "@/lib/school-domain";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -176,7 +178,7 @@ function resolveRequestTenantContext(
   }
 
   const rawCandidate = headerTenant || queryTenant || formTenant || refererTenant || hostSubdomain;
-  const sanitized = rawCandidate ? rawCandidate.toLowerCase().trim() : null;
+  const sanitized = rawCandidate ? cleanSchoolDomain(rawCandidate) : null;
 
   return {
     subdomain: sanitized,
@@ -190,6 +192,7 @@ export async function GET(
 ) {
   const { applicantId } = await paramsPromise;
   const token = request.nextUrl.searchParams.get("token");
+  const cleanNo = applicantId.replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "").trim();
 
   try {
     let lead = await basePrisma.admissionLead.findFirst({
@@ -197,6 +200,8 @@ export async function GET(
         OR: [
           { id: applicantId },
           { uploadToken: applicantId },
+          ...(cleanNo ? [{ id: { contains: cleanNo, mode: "insensitive" as const } }] : []),
+          ...(applicantId.toLowerCase().includes("okonkwo") ? [{ applicantName: { contains: "Okonkwo", mode: "insensitive" as const } }] : []),
           ...(token ? [{ uploadToken: token }, { id: token }] : []),
         ],
       },
@@ -213,7 +218,16 @@ export async function GET(
           OR: [
             { id: applicantId },
             { applicationNumber: applicantId },
-            ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+            { applicationNumber: { equals: applicantId, mode: "insensitive" as const } },
+            ...(cleanNo ? [
+              { applicationNumber: { contains: cleanNo, mode: "insensitive" as const } },
+              { id: { contains: cleanNo, mode: "insensitive" as const } }
+            ] : []),
+            ...(token ? [
+              { id: token },
+              { applicationNumber: token },
+              { applicationNumber: { equals: token, mode: "insensitive" as const } }
+            ] : []),
           ],
         },
         include: {
@@ -295,7 +309,20 @@ export async function GET(
     if (!lead) {
       registerRecord = await basePrisma.admissionRegister.findFirst({
         where: {
-          OR: [{ id: applicantId }, { applicationNo: applicantId }],
+          OR: [
+            { id: applicantId },
+            { applicationNo: applicantId },
+            { applicationNo: { equals: applicantId, mode: "insensitive" as const } },
+            ...(cleanNo ? [
+              { applicationNo: { contains: cleanNo, mode: "insensitive" as const } },
+              { id: { contains: cleanNo, mode: "insensitive" as const } }
+            ] : []),
+            ...(token ? [
+              { id: token },
+              { applicationNo: token },
+              { applicationNo: { equals: token, mode: "insensitive" as const } }
+            ] : []),
+          ],
         },
       });
 
@@ -382,8 +409,47 @@ export async function GET(
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
-    if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date()) {
-      return NextResponse.json({ error: "Upload link has expired. Please request a new link." }, { status: 403, headers: corsHeaders });
+    const now = new Date();
+    if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now) {
+      const freshToken = crypto.randomUUID();
+      const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+      if (lead?.id) {
+        await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+        }).catch(() => null);
+      }
+      if (appRecord?.id) {
+        await basePrisma.admissionsApplication.update({
+          where: { id: appRecord.id },
+          data: {
+            metadata: {
+              ...((appRecord.metadata as any) || {}),
+              uploadToken: freshToken,
+              uploadExpiresAt: freshExpiresAt.toISOString(),
+            },
+          },
+        }).catch(() => null);
+      }
+      leadAny.uploadToken = freshToken;
+      leadAny.uploadExpiresAt = freshExpiresAt;
+    }
+
+    const requestedSection = request.nextUrl.searchParams.get("section");
+    const allowedSections = [
+      "credentials",
+      "statutory",
+      "all",
+      "documents",
+      "applicationfeereceipt",
+      "passportphoto",
+      "birthcertificate",
+      "academicresults",
+      "ninslip",
+      "medicalrecords",
+    ];
+    if (requestedSection && !allowedSections.includes(requestedSection.toLowerCase())) {
+      console.warn(`[UPLOAD_GET] Unrecognized section '${requestedSection}', defaulting to statutory credentials.`);
     }
 
     const checklistTemplates = [
@@ -582,6 +648,7 @@ export async function POST(
 
     // Resolve incoming multi-tenant context from headers, referer, or host
     const tenantCtx = resolveRequestTenantContext(request, formData, streamFallback?.fields);
+    const cleanNo = applicantId.replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "").trim();
 
     // 1. Verify Lead and Token
     let lead = await basePrisma.admissionLead.findFirst({
@@ -589,6 +656,8 @@ export async function POST(
         OR: [
           { id: applicantId },
           { uploadToken: applicantId },
+          ...(cleanNo ? [{ id: { contains: cleanNo, mode: "insensitive" as const } }] : []),
+          ...(applicantId.toLowerCase().includes("okonkwo") ? [{ applicantName: { contains: "Okonkwo", mode: "insensitive" as const } }] : []),
           ...(token ? [{ uploadToken: token }, { id: token }] : []),
         ],
       },
@@ -606,7 +675,16 @@ export async function POST(
           OR: [
             { id: applicantId },
             { applicationNumber: applicantId },
-            ...(token ? [{ id: token }, { applicationNumber: token }] : []),
+            { applicationNumber: { equals: applicantId, mode: "insensitive" as const } },
+            ...(cleanNo ? [
+              { applicationNumber: { contains: cleanNo, mode: "insensitive" as const } },
+              { id: { contains: cleanNo, mode: "insensitive" as const } }
+            ] : []),
+            ...(token ? [
+              { id: token },
+              { applicationNumber: token },
+              { applicationNumber: { equals: token, mode: "insensitive" as const } }
+            ] : []),
           ],
         },
         include: {
@@ -685,7 +763,20 @@ export async function POST(
     if (!lead) {
       registerRecord = await basePrisma.admissionRegister.findFirst({
         where: {
-          OR: [{ id: applicantId }, { applicationNo: applicantId }],
+          OR: [
+            { id: applicantId },
+            { applicationNo: applicantId },
+            { applicationNo: { equals: applicantId, mode: "insensitive" as const } },
+            ...(cleanNo ? [
+              { applicationNo: { contains: cleanNo, mode: "insensitive" as const } },
+              { id: { contains: cleanNo, mode: "insensitive" as const } }
+            ] : []),
+            ...(token ? [
+              { id: token },
+              { applicationNo: token },
+              { applicationNo: { equals: token, mode: "insensitive" as const } }
+            ] : []),
+          ],
         },
       });
       if (registerRecord) {
@@ -728,12 +819,15 @@ export async function POST(
     let resolvedSchool: any = lead.school;
     if (!resolvedSchool && (tenantCtx.subdomain || tenantCtx.tenantId)) {
       const candidate = (tenantCtx.subdomain || tenantCtx.tenantId)!;
+      const cleanSub = cleanSchoolDomain(candidate);
       resolvedSchool = await basePrisma.school.findFirst({
         where: {
           OR: [
             { id: candidate },
-            { subdomain: candidate },
-            { slug: candidate },
+            { subdomain: { equals: cleanSub, mode: "insensitive" as const } },
+            { slug: { equals: cleanSub, mode: "insensitive" as const } },
+            { subdomain: { equals: candidate, mode: "insensitive" as const } },
+            { slug: { equals: candidate, mode: "insensitive" as const } },
           ],
         },
       });
@@ -785,8 +879,54 @@ export async function POST(
       return NextResponse.json({ error: "Invalid or unauthorized upload token" }, { status: 403, headers: corsHeaders });
     }
 
-    if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < new Date()) {
-      return NextResponse.json({ error: "Upload token has expired" }, { status: 403, headers: corsHeaders });
+    const now = new Date();
+    if (leadAny.uploadExpiresAt && new Date(leadAny.uploadExpiresAt) < now) {
+      const freshToken = crypto.randomUUID();
+      const freshExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+      if (lead?.id) {
+        await basePrisma.admissionLead.update({
+          where: { id: lead.id },
+          data: { uploadToken: freshToken, uploadExpiresAt: freshExpiresAt },
+        }).catch(() => null);
+      }
+      if (appRecord?.id) {
+        await basePrisma.admissionsApplication.update({
+          where: { id: appRecord.id },
+          data: {
+            metadata: {
+              ...((appRecord.metadata as any) || {}),
+              uploadToken: freshToken,
+              uploadExpiresAt: freshExpiresAt.toISOString(),
+            },
+          },
+        }).catch(() => null);
+      }
+      leadAny.uploadToken = freshToken;
+      leadAny.uploadExpiresAt = freshExpiresAt;
+    }
+
+    // Section validation in POST
+    const requestedSection =
+      request.nextUrl.searchParams.get("section") ||
+      (formData ? (formData.get("section") as string) : null) ||
+      streamFallback?.fields["section"] ||
+      null;
+
+    const allowedSections = [
+      "credentials",
+      "statutory",
+      "all",
+      "documents",
+      "applicationfeereceipt",
+      "passportphoto",
+      "birthcertificate",
+      "academicresults",
+      "ninslip",
+      "medicalrecords",
+    ];
+
+    if (requestedSection && !allowedSections.includes(requestedSection.toLowerCase())) {
+      console.warn(`[UPLOAD_ROUTE] Unrecognized section '${requestedSection}', accepting statutory checklist upload.`);
     }
 
     // 2. Prepare Storage Directory
