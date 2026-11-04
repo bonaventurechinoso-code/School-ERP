@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import {
   UploadCloud,
   FileCheck,
@@ -516,9 +517,12 @@ export default function PaymentReceiptUpload({
 
               {filePreview && (
                 <div className="mt-3 flex items-center gap-3 p-3 bg-slate-50 dark:bg-zinc-800/60 rounded-xl border border-slate-200 dark:border-zinc-700">
-                  <img
+                  <Image
                     src={filePreview}
                     alt="Receipt Preview"
+                    width={48}
+                    height={48}
+                    unoptimized
                     className="w-12 h-12 object-cover rounded-lg border border-slate-300 dark:border-zinc-600"
                   />
                   <div className="min-w-0 flex-1">

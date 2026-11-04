@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import {
   FileCheck,
   Clock,
@@ -783,9 +784,12 @@ export default function BursarReceiptsHub({
                           {item.fileUrl && (
                             <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 relative group aspect-video flex items-center justify-center">
                               {item.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? (
-                                <img
+                                <Image
                                   src={item.fileUrl}
                                   alt="Payment Proof"
+                                  width={400}
+                                  height={225}
+                                  unoptimized
                                   className="w-full h-full object-cover"
                                 />
                               ) : (

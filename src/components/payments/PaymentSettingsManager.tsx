@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   CreditCard,
   CheckCircle2,
@@ -64,7 +64,7 @@ export default function PaymentSettingsManager({
   const [tenantGovernance, setTenantGovernance] = useState<any | null>(null);
   const [savingGovernance, setSavingGovernance] = useState(false);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const [res, govRes] = await Promise.all([
@@ -88,7 +88,7 @@ export default function PaymentSettingsManager({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [tenantId, isSuperAdmin]);
 
   const handleSaveTenantGovernance = async () => {
     if (!tenantGovernance) return;
@@ -132,7 +132,7 @@ export default function PaymentSettingsManager({
 
   useEffect(() => {
     fetchSettings();
-  }, [tenantId]);
+  }, [fetchSettings]);
 
   const handleFieldChange = (moduleType: string, field: keyof PaymentSettingItem, value: any) => {
     setSettings((prev) =>
