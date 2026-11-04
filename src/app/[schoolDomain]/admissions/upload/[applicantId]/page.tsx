@@ -86,22 +86,26 @@ export default async function ApplicantUploadPage({
         // Populate from appRecord.documents relations
         if (Array.isArray(appRecord.documents)) {
           for (const d of appRecord.documents) {
-            const key = d.documentType === "PASSPORT_PHOTOGRAPH"
+            const rawType = (d.documentType || "").toUpperCase().replace(/[\s-]/g, "_");
+            const key = rawType.includes("PASSPORT")
               ? "passportPhoto"
-              : d.documentType === "ACADEMIC_TRANSCRIPT"
+              : rawType.includes("ACADEMIC") || rawType.includes("TRANSCRIPT") || rawType.includes("RESULT")
               ? "academicResults"
-              : d.documentType === "BIRTH_CERTIFICATE"
+              : rawType.includes("BIRTH")
               ? "birthCertificate"
-              : d.documentType === "MEDICAL_REPORT"
+              : rawType.includes("MEDICAL") || rawType.includes("FITNESS") || rawType.includes("HEALTH")
               ? "medicalRecords"
-              : d.documentType === "NIN_SLIP"
+              : rawType.includes("NIN")
               ? "ninSlip"
+              : rawType.includes("RECEIPT") || rawType.includes("FEE")
+              ? "applicationFeeReceipt"
               : d.documentType.toLowerCase();
 
             docsMap[key] = {
               url: d.storageKey,
               fileUrl: d.storageKey,
               name: d.documentType,
+              fileName: d.documentType,
               status: d.verificationStatus,
             };
           }
@@ -329,7 +333,131 @@ export default async function ApplicantUploadPage({
     null;
   const applicationNo = registerRecord?.applicationNo || (lead as any).applicationNo || `APP-${lead.id.slice(0, 6).toUpperCase()}`;
 
-  // 5. Render interactive client portal
+  // 5. Multi-Tenant Tier Resolution: Ensure active academic tier context is loaded (e.g., PRIMARY)
+  let activeTier: any = lead.tier;
+  if (!activeTier) {
+    activeTier = await basePrisma.academicTier.findFirst({
+      where: {
+        schoolId: school.id,
+        OR: [
+          ...(lead.tierId ? [{ id: lead.tierId }] : []),
+          { name: { contains: "Primary", mode: "insensitive" } },
+          { name: { contains: "Elementary", mode: "insensitive" } },
+          { name: { contains: "Basic", mode: "insensitive" } },
+        ],
+      },
+    });
+  }
+  const tierName = activeTier?.name || lead.tier?.name || "PRIMARY";
+
+  // 6. Complete Checklist Definition Template under tenant's academic profile rules
+  // Maps all 6 statutory credential categories directly for the active tier
+  const checklist = [
+    {
+      key: "applicationFeeReceipt" as const,
+      label: "Application Fee Receipt",
+      subLabel: "Direct Bank Transfer Verification",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "Official bank deposit teller, electronic transfer receipt, or proof of payment for admission form.",
+      url: existingFeeReceiptUrl,
+      status: (feeState === "PAID" ? "VERIFIED" : (feeState === "PENDING" || existingFeeReceiptUrl) ? "PENDING" : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.applicationFeeReceipt?.fileName || docs.applicationFeeReceipt?.name || (existingFeeReceiptUrl ? "Payment_Receipt.pdf" : null),
+    },
+    {
+      key: "passportPhoto" as const,
+      label: "Recent Passport Photograph",
+      subLabel: "Official Identification Photo",
+      mandatory: true,
+      acceptedTypes: "image/*",
+      badge: "Image Only",
+      description: "Clear color photo of applicant with plain white background (JPG, PNG, WebP • Max 5MB).",
+      url: leadAny.passportPhotoUrl || docs.passportPhoto?.url || docs.passportPhoto?.fileUrl || (typeof docs.passportPhoto === "string" ? docs.passportPhoto : null) || docs.passport || null,
+      status: ((docs.passportPhoto?.status === "VERIFIED" || docs.passportPhoto?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
+        ? "VERIFIED"
+        : docs.passportPhoto?.status === "REJECTED"
+        ? "REJECTED"
+        : (leadAny.passportPhotoUrl || docs.passportPhoto?.url)
+        ? "PENDING"
+        : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.passportPhoto?.fileName || docs.passportPhoto?.name || (leadAny.passportPhotoUrl ? "Passport_Photo.jpg" : null),
+    },
+    {
+      key: "birthCertificate" as const,
+      label: "NPC National Birth Certificate / Age Declaration",
+      subLabel: "Statutory Age Verification",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "NPC National Birth Certificate or statutory declaration of age issued by a competent court.",
+      url: leadAny.birthCertificateUrl || docs.birthCertificate?.url || docs.birthCertificate?.fileUrl || (typeof docs.birthCertificate === "string" ? docs.birthCertificate : null) || docs.birthCert || null,
+      status: ((docs.birthCertificate?.status === "VERIFIED" || docs.birthCertificate?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
+        ? "VERIFIED"
+        : docs.birthCertificate?.status === "REJECTED"
+        ? "REJECTED"
+        : (leadAny.birthCertificateUrl || docs.birthCertificate?.url)
+        ? "PENDING"
+        : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.birthCertificate?.fileName || docs.birthCertificate?.name || (leadAny.birthCertificateUrl ? "Birth_Certificate.pdf" : null),
+    },
+    {
+      key: "academicResults" as const,
+      label: "Academic Transcripts / Previous Term Results",
+      subLabel: "Prior Academic Records",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "Certified termly report cards or official transcripts from the most recent school attended.",
+      url: leadAny.academicResultsUrl || docs.academicResults?.url || docs.academicResults?.fileUrl || (typeof docs.academicResults === "string" ? docs.academicResults : null) || docs.previousResults || docs.lastResult || null,
+      status: ((docs.academicResults?.status === "VERIFIED" || docs.academicResults?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
+        ? "VERIFIED"
+        : docs.academicResults?.status === "REJECTED"
+        ? "REJECTED"
+        : (leadAny.academicResultsUrl || docs.academicResults?.url)
+        ? "PENDING"
+        : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.academicResults?.fileName || docs.academicResults?.name || (leadAny.academicResultsUrl ? "Academic_Results.pdf" : null),
+    },
+    {
+      key: "ninSlip" as const,
+      label: "NIMC NIN Identification Slip",
+      subLabel: "National Identity Verification",
+      mandatory: false,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "Statutory NIN",
+      description: "National Identification Number (NIN) registration slip, card, or NIMC verification document.",
+      url: leadAny.ninSlipUrl || docs.ninSlip?.url || docs.ninSlip?.fileUrl || (typeof docs.ninSlip === "string" ? docs.ninSlip : null) || docs.nin || null,
+      status: ((docs.ninSlip?.status === "VERIFIED" || docs.ninSlip?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
+        ? "VERIFIED"
+        : docs.ninSlip?.status === "REJECTED"
+        ? "REJECTED"
+        : (leadAny.ninSlipUrl || docs.ninSlip?.url)
+        ? "PENDING"
+        : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.ninSlip?.fileName || docs.ninSlip?.name || (leadAny.ninSlipUrl ? "NIN_Slip.pdf" : null),
+    },
+    {
+      key: "medicalRecords" as const,
+      label: "Medical Certificate of Fitness",
+      subLabel: "Health & Immunization Record",
+      mandatory: true,
+      acceptedTypes: "image/*,application/pdf",
+      badge: "PDF or Image",
+      description: "Medical clearance, immunization records, or clinical fitness certificate from a registered healthcare facility.",
+      url: leadAny.medicalRecordsUrl || docs.medicalRecords?.url || docs.medicalRecords?.fileUrl || (typeof docs.medicalRecords === "string" ? docs.medicalRecords : null) || docs.medical || null,
+      status: ((docs.medicalRecords?.status === "VERIFIED" || docs.medicalRecords?.verified || lead.status === "APPROVED" || lead.status === "ENROLLED")
+        ? "VERIFIED"
+        : docs.medicalRecords?.status === "REJECTED"
+        ? "REJECTED"
+        : (leadAny.medicalRecordsUrl || docs.medicalRecords?.url)
+        ? "PENDING"
+        : "NOT_UPLOADED") as "VERIFIED" | "PENDING" | "NOT_UPLOADED" | "REJECTED",
+      fileName: docs.medicalRecords?.fileName || docs.medicalRecords?.name || (leadAny.medicalRecordsUrl ? "Medical_Report.pdf" : null),
+    },
+  ];
+
+  // 7. Render interactive client portal with complete checklist slots
   return (
     <ApplicantUploadClient
       schoolDomain={schoolDomain}
@@ -340,7 +468,7 @@ export default async function ApplicantUploadPage({
       applicantName={lead.applicantName}
       parentName={lead.parentName || "Parent / Guardian"}
       targetGrade={lead.targetGrade}
-      tierName={lead.tier?.name || "Standard Tier"}
+      tierName={tierName}
       status={lead.status}
       applicationNo={applicationNo}
       feeState={feeState}
@@ -351,6 +479,7 @@ export default async function ApplicantUploadPage({
       existingBirthCertificateUrl={leadAny.birthCertificateUrl}
       existingMedicalRecordsUrl={leadAny.medicalRecordsUrl}
       existingNinSlipUrl={leadAny.ninSlipUrl || (leadAny.documents?.ninSlip?.url || leadAny.documents?.ninSlip?.fileUrl || null)}
+      checklist={checklist}
     />
   );
 }
