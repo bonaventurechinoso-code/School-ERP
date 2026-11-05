@@ -8,3 +8,4 @@ export default async function SettingsPage({
   const params = await Promise.resolve(paramsPromise);
   redirect(`/${params.schoolDomain}/portal-settings`);
 }
+
