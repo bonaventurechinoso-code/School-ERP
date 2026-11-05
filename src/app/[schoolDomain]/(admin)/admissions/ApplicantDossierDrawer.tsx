@@ -195,6 +195,75 @@ export function resolveDocUrl(candidate: any, key: string): string | null {
   return null;
 }
 
+export function resolveDocRecord(candidate: any, key: string): any {
+  if (!candidate) return {};
+
+  const docs = candidate.documents || {};
+  const metaDocs = (candidate.metadata as any)?.documents || {};
+  const tierDocs = (candidate.tierSpecificData as any)?.documents || {};
+
+  // Check direct key in objects
+  for (const map of [docs, metaDocs, tierDocs]) {
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      if (map[key] && typeof map[key] === "object") return map[key];
+    }
+  }
+
+  // Common aliases across diverse data sources
+  const aliasKeys: Record<string, string[]> = {
+    passportPhoto: [
+      "PASSPORT_PHOTOGRAPH", "PASSPORT_PHOTO", "PASSPORT", "passportPhoto", "passport_photo", "passport", "photo"
+    ],
+    birthCertificate: [
+      "BIRTH_CERTIFICATE", "BIRTH_CERT", "birthCertificate", "birth_certificate", "birthCert", "ageDeclaration"
+    ],
+    academicResults: [
+      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult"
+    ],
+    medicalRecords: [
+      "MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "fitness"
+    ],
+    ninSlip: [
+      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nationalId", "nimc"
+    ],
+    applicationFeeReceipt: [
+      "APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "PAYMENT_RECEIPT", "RECEIPT", "applicationFeeReceipt", "formFeeReceipt", "receipt", "feeReceipt", "paymentReceipt"
+    ],
+  };
+
+  const aliases = aliasKeys[key] || [key];
+
+  for (const map of [docs, metaDocs, tierDocs]) {
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      for (const a of aliases) {
+        if (map[a] && typeof map[a] === "object") return map[a];
+      }
+    }
+  }
+
+  // Check array sources (rawDocuments, credentialsJson, candidate.documents)
+  const arrays: any[] = [
+    ...(Array.isArray(candidate.rawDocuments) ? [candidate.rawDocuments] : []),
+    ...(Array.isArray(candidate.documents) ? [candidate.documents] : []),
+    ...(Array.isArray(candidate.credentialsJson) ? [candidate.credentialsJson] : []),
+    ...(Array.isArray(docs.documents) ? [docs.documents] : []),
+  ];
+
+  for (const arr of arrays) {
+    for (const d of arr) {
+      if (!d || typeof d !== "object") continue;
+      const dType = (d.documentType || d.type || d.key || d.docType || "").toUpperCase().replace(/[\s-_]/g, "");
+      const matches = aliases.some((a) => {
+        const aNorm = a.toUpperCase().replace(/[\s-_]/g, "");
+        return dType === aNorm || dType.includes(aNorm) || aNorm.includes(dType);
+      });
+      if (matches) return d;
+    }
+  }
+
+  return {};
+}
+
 export default function ApplicantDossierDrawer({
   lead,
   applicant,
@@ -211,56 +280,59 @@ export default function ApplicantDossierDrawer({
 }: ApplicantDossierDrawerProps) {
   // Normalize lead or applicant data into unified structure
   const activeCandidate = useMemo(() => {
-    if (lead && applicant) {
-      const creds =
-        typeof applicant.credentialsJson === "object" && applicant.credentialsJson !== null
-          ? applicant.credentialsJson
-          : {};
-      return {
-        ...applicant,
-        ...lead,
-        applicantName:
-          lead.applicantName ||
-          applicant.fullName ||
-          `${applicant.firstName || ""} ${applicant.lastName || ""}`.trim() ||
-          "Candidate",
-        targetGrade: lead.targetGrade || applicant.assignedClass || applicant.classApplied || "Primary 1",
-        targetClass: lead.targetClass || applicant.assignedClass || applicant.classApplied || "Primary 1",
-        documents: {
-          ...(typeof creds === "object" && !Array.isArray(creds) ? creds : {}),
-          ...(typeof lead.documents === "object" && !Array.isArray(lead.documents) ? lead.documents : {}),
-          ...(typeof (lead.metadata as any)?.documents === "object" ? (lead.metadata as any).documents : {}),
-          ...(typeof (applicant.metadata as any)?.documents === "object" ? (applicant.metadata as any).documents : {}),
-        },
-        rawDocuments: [
-          ...(Array.isArray(lead.documents) ? lead.documents : []),
-          ...(Array.isArray(lead.rawDocuments) ? lead.rawDocuments : []),
-          ...(Array.isArray(applicant.documents) ? applicant.documents : []),
-          ...(Array.isArray(applicant.rawDocuments) ? applicant.rawDocuments : []),
-          ...(Array.isArray(creds.documents) ? creds.documents : []),
-          ...(Array.isArray(creds) ? creds : []),
-        ],
-        logs: lead.logs || creds.statusLogs || [],
-      };
-    }
-    if (lead) return lead;
-    if (!applicant) return null;
+    const rawApplicant = applicant || {};
+    const rawLead = lead || {};
+    if (!lead && !applicant) return null;
 
     const creds =
-      typeof applicant.credentialsJson === "object" && applicant.credentialsJson !== null
-        ? applicant.credentialsJson
+      typeof rawApplicant.credentialsJson === "object" && rawApplicant.credentialsJson !== null
+        ? rawApplicant.credentialsJson
         : {};
 
+    const rawDocs = [
+      ...(Array.isArray(rawLead.documents) ? rawLead.documents : []),
+      ...(Array.isArray(rawLead.rawDocuments) ? rawLead.rawDocuments : []),
+      ...(Array.isArray(rawApplicant.documents) ? rawApplicant.documents : []),
+      ...(Array.isArray(rawApplicant.rawDocuments) ? rawApplicant.rawDocuments : []),
+      ...(Array.isArray(creds.documents) ? creds.documents : []),
+      ...(Array.isArray(creds) ? creds : []),
+    ];
+
+    const mergedDocs = {
+      ...(typeof creds === "object" && !Array.isArray(creds) ? creds : {}),
+      ...(typeof rawLead.documents === "object" && !Array.isArray(rawLead.documents) ? rawLead.documents : {}),
+      ...(typeof (rawLead.metadata as any)?.documents === "object" ? (rawLead.metadata as any).documents : {}),
+      ...(typeof (rawApplicant.metadata as any)?.documents === "object" ? (rawApplicant.metadata as any).documents : {}),
+      ...(typeof (rawLead.tierSpecificData as any)?.documents === "object" ? (rawLead.tierSpecificData as any).documents : {}),
+      ...(typeof (rawApplicant.tierSpecificData as any)?.documents === "object" ? (rawApplicant.tierSpecificData as any).documents : {}),
+    };
+
     return {
-      ...applicant,
+      ...rawApplicant,
+      ...rawLead,
+      id: rawLead.id || rawApplicant.id,
+      leadId: rawLead.id || rawApplicant.leadId,
+      applicationNo:
+        rawLead.applicationNo ||
+        rawApplicant.applicationNo ||
+        rawLead.applicationNumber ||
+        rawApplicant.applicationNumber ||
+        (rawLead.id?.startsWith("ADM-") || rawLead.id?.startsWith("APP-") ? rawLead.id : undefined),
+      applicationNumber:
+        rawApplicant.applicationNumber ||
+        rawLead.applicationNumber ||
+        rawApplicant.applicationNo ||
+        rawLead.applicationNo,
       applicantName:
-        applicant.fullName ||
-        `${applicant.firstName || ""} ${applicant.lastName || ""}`.trim() ||
+        rawLead.applicantName ||
+        rawApplicant.fullName ||
+        `${rawApplicant.firstName || rawLead.firstName || ""} ${rawApplicant.lastName || rawLead.lastName || ""}`.trim() ||
         "Candidate",
-      targetGrade: applicant.assignedClass || applicant.classApplied || "Primary 1",
-      targetClass: applicant.assignedClass || applicant.classApplied || "Primary 1",
-      documents: creds,
-      logs: creds.statusLogs || [],
+      targetGrade: rawLead.targetGrade || rawApplicant.assignedClass || rawApplicant.classApplied || rawLead.targetClass || "Primary 1",
+      targetClass: rawLead.targetClass || rawApplicant.assignedClass || rawApplicant.classApplied || rawLead.targetGrade || "Primary 1",
+      documents: mergedDocs,
+      rawDocuments: rawDocs,
+      logs: rawLead.logs || creds.statusLogs || rawApplicant.logs || [],
     };
   }, [lead, applicant]);
 
@@ -718,7 +790,7 @@ export default function ApplicantDossierDrawer({
     setAlertMsg(null);
     startTransition(async () => {
       try {
-        const targetId = activeCandidate.leadId || activeCandidate.id;
+        const targetId = activeCandidate.leadId || activeCandidate.id || activeCandidate.applicationNo || activeCandidate.applicationNumber;
         const res = await updateLeadDocumentsAction({
           leadId: targetId,
           documentType: docType,
@@ -732,12 +804,21 @@ export default function ApplicantDossierDrawer({
             if (!prev) return prev;
             const currentDocs = { ...(prev.documents || {}) };
             currentDocs[docType] = {
-              ...(currentDocs[docType] || {}),
+              ...(typeof currentDocs[docType] === "object" ? currentDocs[docType] : {}),
               status,
+              verificationStatus: status === "VERIFIED" ? "MANUALLY_VERIFIED" : "REJECTED",
               verified: status === "VERIFIED",
               rejected: status === "REJECTED",
             };
-            return { ...prev, documents: currentDocs };
+            if (docType === "applicationFeeReceipt" && status === "VERIFIED") {
+              currentDocs.formFeePaid = true;
+              currentDocs.formFeeStatus = "PAID";
+            }
+            return {
+              ...prev,
+              documents: currentDocs,
+              ...(docType === "applicationFeeReceipt" && status === "VERIFIED" ? { formFeePaid: true, formFeeStatus: "PAID" } : {}),
+            };
           });
           if (onLeadUpdated) onLeadUpdated();
           if (onRecordUpdated) onRecordUpdated();
@@ -1441,14 +1522,40 @@ export default function ApplicantDossierDrawer({
 
                 <div className="divide-y divide-slate-100 dark:divide-zinc-800 space-y-2">
                   {kycChecklist.map((doc) => {
-                    const docRecord = docs?.[doc.key] || {};
+                    const docRecord = resolveDocRecord(localCandidate || activeCandidate, doc.key);
                     const isFeeDoc = doc.key === "applicationFeeReceipt";
                     const isVerified = isFeeDoc
-                      ? Boolean(isFeePaid || docRecord.verified || docRecord.status === "VERIFIED" || docs.formFeeStatus === "PAID")
-                      : Boolean(docRecord.verified || docRecord.status === "VERIFIED");
+                      ? Boolean(
+                          isFeePaid ||
+                          docRecord.verified ||
+                          docRecord.status === "VERIFIED" ||
+                          docRecord.status === "MANUALLY_VERIFIED" ||
+                          docRecord.status === "AUTO_VERIFIED" ||
+                          docRecord.verificationStatus === "MANUALLY_VERIFIED" ||
+                          docRecord.verificationStatus === "AUTO_VERIFIED" ||
+                          docs.formFeeStatus === "PAID"
+                        )
+                      : Boolean(
+                          docRecord.verified ||
+                          docRecord.status === "VERIFIED" ||
+                          docRecord.status === "MANUALLY_VERIFIED" ||
+                          docRecord.status === "AUTO_VERIFIED" ||
+                          docRecord.verificationStatus === "MANUALLY_VERIFIED" ||
+                          docRecord.verificationStatus === "AUTO_VERIFIED"
+                        );
                     const isRejected = isFeeDoc
-                      ? Boolean(docRecord.rejected || docRecord.status === "REJECTED" || docs.formFeeStatus === "REJECTED")
-                      : Boolean(docRecord.rejected || docRecord.status === "REJECTED");
+                      ? Boolean(
+                          docRecord.rejected ||
+                          docRecord.status === "REJECTED" ||
+                          docRecord.status === "REJECTED" ||
+                          docRecord.verificationStatus === "REJECTED" ||
+                          docs.formFeeStatus === "REJECTED"
+                        )
+                      : Boolean(
+                          docRecord.rejected ||
+                          docRecord.status === "REJECTED" ||
+                          docRecord.verificationStatus === "REJECTED"
+                        );
                     const hasFile = Boolean(doc.url);
 
                     return (

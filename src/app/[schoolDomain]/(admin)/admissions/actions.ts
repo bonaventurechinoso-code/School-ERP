@@ -274,62 +274,292 @@ export async function updateLeadDocumentsAction(payload: {
       };
     }
 
-    const lead = await basePrisma.admissionLead.findUnique({
-      where: { id: payload.leadId },
-    });
-    if (!lead) return { success: false, error: "Applicant lead not found." };
+    const targetRef = (payload.leadId || "").trim();
+    const cleanRef = targetRef.replace(/^ADM-|^APP-/i, "").trim().toLowerCase();
 
-    const docs = (lead.documents as any) || {};
-    docs[payload.documentType] = {
-      status: payload.status,
-      verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
-      rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
-    };
-
-    const updated = await basePrisma.admissionLead.update({
-      where: { id: payload.leadId },
-      data: {
-        documents: docs,
-      },
+    // 1. Locate applicant across models (AdmissionLead, AdmissionsApplication, AdmissionRegister)
+    let lead = await basePrisma.admissionLead.findUnique({
+      where: { id: targetRef },
       include: { tier: true },
     });
 
-    // 2. Sync to AdmissionRegister so applicant's tracking dashboard reflects REJECTED in real-time
-    const cleanRef = lead.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
-    const nameParts = (lead.applicantName || "").trim().split(" ");
-    const firstName = nameParts[0] || "Student";
-    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+    let appRecord: any = null;
+    let registerRecord: any = null;
 
-    let registerRecord = await basePrisma.admissionRegister.findFirst({
+    // Search AdmissionsApplication
+    appRecord = await basePrisma.admissionsApplication.findFirst({
       where: {
-        tenantId: schoolId,
         OR: [
-          { id: lead.id },
+          { id: targetRef },
+          { applicationNumber: targetRef },
+          ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+        ],
+      },
+      include: { documents: true, feeTransactions: true },
+    });
+
+    // Search AdmissionRegister
+    registerRecord = await basePrisma.admissionRegister.findFirst({
+      where: {
+        OR: [
+          { id: targetRef },
+          { applicationNo: targetRef },
           ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
-          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
-          ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
-          ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
-          { firstName, lastName },
         ],
       },
     });
 
+    // If lead not found directly, attempt linking via appRecord or registerRecord
+    if (!lead) {
+      const linkedLeadId =
+        (appRecord?.metadata as any)?.leadId ||
+        (appRecord?.tierSpecificData as any)?.leadId ||
+        (registerRecord?.credentialsJson as any)?.leadId;
+
+      if (linkedLeadId) {
+        lead = await basePrisma.admissionLead.findUnique({
+          where: { id: linkedLeadId },
+          include: { tier: true },
+        });
+      }
+
+      if (!lead && (appRecord || registerRecord)) {
+        const studentEmail = appRecord?.email || registerRecord?.email;
+        const applicantName = appRecord
+          ? `${appRecord.firstName} ${appRecord.lastName}`.trim()
+          : registerRecord
+          ? `${registerRecord.firstName} ${registerRecord.lastName}`.trim()
+          : "";
+
+        if (studentEmail || applicantName) {
+          lead = await basePrisma.admissionLead.findFirst({
+            where: {
+              schoolId,
+              OR: [
+                ...(studentEmail ? [{ studentEmail }, { parentEmail: studentEmail }] : []),
+                ...(applicantName ? [{ applicantName }] : []),
+              ],
+            },
+            include: { tier: true },
+          });
+        }
+      }
+    } else {
+      // lead was found directly, also resolve registerRecord and appRecord if not yet loaded
+      if (!registerRecord) {
+        const nameParts = (lead.applicantName || "").trim().split(" ");
+        const firstName = nameParts[0] || "Student";
+        const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+        registerRecord = await basePrisma.admissionRegister.findFirst({
+          where: {
+            tenantId: schoolId,
+            OR: [
+              { id: lead.id },
+              ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+              ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+              ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
+              ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+              { firstName, lastName },
+            ],
+          },
+        });
+      }
+
+      if (!appRecord) {
+        appRecord = await basePrisma.admissionsApplication.findFirst({
+          where: {
+            schoolId,
+            OR: [
+              { id: lead.id },
+              ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+              ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+            ],
+          },
+          include: { documents: true, feeTransactions: true },
+        });
+      }
+    }
+
+    if (!lead && !appRecord && !registerRecord) {
+      return { success: false, error: "Applicant lead not found." };
+    }
+
+    const docAliasMap: Record<string, string[]> = {
+      passportPhoto: [
+        "PASSPORT_PHOTOGRAPH", "PASSPORT_PHOTO", "PASSPORT", "passportPhoto", "passport_photo", "passport", "photo"
+      ],
+      birthCertificate: [
+        "BIRTH_CERTIFICATE", "BIRTH_CERT", "birthCertificate", "birth_certificate", "birthCert", "ageDeclaration"
+      ],
+      academicResults: [
+        "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult"
+      ],
+      medicalRecords: [
+        "MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "fitness"
+      ],
+      ninSlip: [
+        "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nationalId", "nimc"
+      ],
+      applicationFeeReceipt: [
+        "APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "PAYMENT_RECEIPT", "RECEIPT", "applicationFeeReceipt", "formFeeReceipt", "receipt", "feeReceipt", "paymentReceipt"
+      ],
+    };
+
+    const targetAliases = docAliasMap[payload.documentType] || [payload.documentType];
+    const isFeeReceipt =
+      payload.documentType === "applicationFeeReceipt" ||
+      payload.documentType === "APPLICATION_FEE_RECEIPT" ||
+      payload.documentType === "formFeeReceipt" ||
+      targetAliases.includes("APPLICATION_FEE_RECEIPT");
+
+    // 2. Update AdmissionsDocument table and AdmissionsApplication metadata
+    if (appRecord) {
+      const allMatchingDocs = await basePrisma.admissionsDocument.findMany({
+        where: { applicationId: appRecord.id },
+      });
+
+      const matchedDoc = allMatchingDocs.find((d) => {
+        const dTypeNorm = (d.documentType || "").toUpperCase().replace(/[\s-_]/g, "");
+        return targetAliases.some((alias) => {
+          const aNorm = alias.toUpperCase().replace(/[\s-_]/g, "");
+          return dTypeNorm === aNorm || dTypeNorm.includes(aNorm) || aNorm.includes(dTypeNorm);
+        });
+      });
+
+      const verificationStatus =
+        payload.status === "VERIFIED"
+          ? "MANUALLY_VERIFIED"
+          : payload.status === "REJECTED"
+          ? "REJECTED"
+          : "PENDING";
+
+      if (matchedDoc) {
+        await basePrisma.admissionsDocument.update({
+          where: { id: matchedDoc.id },
+          data: {
+            verificationStatus,
+            verifiedAt: payload.status === "VERIFIED" ? new Date() : null,
+            verifiedByUserId: session?.userId || null,
+            rejectionReason: payload.status === "REJECTED" ? "Rejected by Admissions Officer" : null,
+          },
+        });
+      }
+
+      const appMetadata = (appRecord.metadata as any) || {};
+      const currentMetaDocs = { ...(appMetadata.documents || {}) };
+      currentMetaDocs[payload.documentType] = {
+        ...(typeof currentMetaDocs[payload.documentType] === "object" ? currentMetaDocs[payload.documentType] : { url: currentMetaDocs[payload.documentType] }),
+        status: payload.status,
+        verificationStatus,
+        verified: payload.status === "VERIFIED",
+        rejected: payload.status === "REJECTED",
+        verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
+        rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
+      };
+
+      if (isFeeReceipt && payload.status === "VERIFIED") {
+        currentMetaDocs.formFeePaid = true;
+        currentMetaDocs.formFeeStatus = "PAID";
+      }
+
+      const tierData = (appRecord.tierSpecificData as any) || {};
+      const tierDocs = { ...(tierData.documents || {}) };
+      tierDocs[payload.documentType] = {
+        ...(typeof tierDocs[payload.documentType] === "object" ? tierDocs[payload.documentType] : { url: tierDocs[payload.documentType] }),
+        status: payload.status,
+        verificationStatus,
+        verified: payload.status === "VERIFIED",
+        rejected: payload.status === "REJECTED",
+      };
+
+      await basePrisma.admissionsApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          metadata: {
+            ...appMetadata,
+            documents: currentMetaDocs,
+          },
+          tierSpecificData: {
+            ...tierData,
+            documents: tierDocs,
+            ...(isFeeReceipt && payload.status === "VERIFIED" ? { formFeePaid: true, formFeeStatus: "PAID" } : {}),
+          },
+          updatedAt: new Date(),
+        },
+      });
+
+      if (isFeeReceipt && payload.status === "VERIFIED") {
+        await basePrisma.admissionsFeeTransaction.updateMany({
+          where: { applicationId: appRecord.id },
+          data: {
+            paymentStatus: "VERIFIED",
+            verifiedAt: new Date(),
+            verifiedByUserId: session?.userId || null,
+          },
+        });
+      }
+    }
+
+    // 3. Update AdmissionLead if present
+    let updated: any = null;
+    if (lead) {
+      const docs = (lead.documents as any) || {};
+      docs[payload.documentType] = {
+        ...(typeof docs[payload.documentType] === "object" ? docs[payload.documentType] : { url: docs[payload.documentType] }),
+        status: payload.status,
+        verified: payload.status === "VERIFIED",
+        rejected: payload.status === "REJECTED",
+        verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
+        rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
+      };
+
+      if (isFeeReceipt && payload.status === "VERIFIED") {
+        docs.formFeePaid = true;
+        docs.formFeeStatus = "PAID";
+        docs.feePaid = true;
+      }
+
+      updated = await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          documents: docs,
+        },
+        include: { tier: true },
+      });
+    }
+
+    // 4. Update AdmissionRegister so applicant's tracking dashboard reflects changes in real-time
     if (registerRecord) {
-      const creds = Array.isArray(registerRecord.credentialsJson) ? [...registerRecord.credentialsJson] : [];
+      let rawCreds = registerRecord.credentialsJson;
+      let credsArr: any[] = [];
+      let credsObj: any = {};
+
+      if (Array.isArray(rawCreds)) {
+        credsArr = [...rawCreds];
+      } else if (rawCreds && typeof rawCreds === "object") {
+        credsObj = { ...rawCreds };
+        if (Array.isArray(credsObj.documents)) {
+          credsArr = [...credsObj.documents];
+        }
+      }
+
       let found = false;
-      const updatedCreds = creds.map((c: any) => {
-        if (
-          c.type === payload.documentType ||
-          c.key === payload.documentType ||
-          c.docType === payload.documentType ||
-          c.altType === payload.documentType
-        ) {
+      const updatedCredsArr = credsArr.map((c: any) => {
+        const cTypeNorm = (c.type || c.key || c.docType || c.altType || c.name || "").toUpperCase().replace(/[\s-_]/g, "");
+        const matches = targetAliases.some((alias) => {
+          const aNorm = alias.toUpperCase().replace(/[\s-_]/g, "");
+          return cTypeNorm === aNorm || cTypeNorm.includes(aNorm) || aNorm.includes(cTypeNorm);
+        });
+
+        if (matches) {
           found = true;
           return {
             ...c,
             status: payload.status,
             verified: payload.status === "VERIFIED",
             rejected: payload.status === "REJECTED",
+            verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : c.verifiedAt,
             rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : c.rejectedAt,
           };
         }
@@ -337,7 +567,7 @@ export async function updateLeadDocumentsAction(payload: {
       });
 
       if (!found && payload.status === "REJECTED") {
-        updatedCreds.push({
+        updatedCredsArr.push({
           type: payload.documentType,
           name: payload.documentType,
           docType: payload.documentType,
@@ -347,43 +577,72 @@ export async function updateLeadDocumentsAction(payload: {
         });
       }
 
+      credsObj[payload.documentType] = {
+        ...(typeof credsObj[payload.documentType] === "object" ? credsObj[payload.documentType] : {}),
+        status: payload.status,
+        verified: payload.status === "VERIFIED",
+        rejected: payload.status === "REJECTED",
+        verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
+        rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
+      };
+
+      if (isFeeReceipt && payload.status === "VERIFIED") {
+        credsObj.formFeePaid = true;
+        credsObj.formFeeStatus = "PAID";
+        credsObj.paymentState = "SETTLED";
+      }
+
+      const finalCreds = Array.isArray(rawCreds) ? updatedCredsArr : { ...credsObj, documents: updatedCredsArr };
+
       await basePrisma.admissionRegister.update({
         where: { id: registerRecord.id },
         data: {
           ...(payload.status === "REJECTED" ? { status: "rejected" } : {}),
-          credentialsJson: updatedCreds as any,
+          credentialsJson: finalCreds as any,
           updatedAt: new Date(),
         },
       });
     }
 
-    // 3. Dispatch rejection email via Resend if rejected
+    // 5. Dispatch rejection email via Resend if rejected
     if (payload.status === "REJECTED") {
       const recipientEmail = (
-        lead.studentEmail ||
-        lead.parentEmail ||
+        lead?.studentEmail ||
+        lead?.parentEmail ||
+        appRecord?.email ||
+        (appRecord?.metadata as any)?.parentEmail ||
+        (appRecord?.tierSpecificData as any)?.parentEmail ||
         registerRecord?.email ||
-        (lead.parentContact?.includes("@") ? lead.parentContact : null) ||
+        (lead?.parentContact?.includes("@") ? lead.parentContact : null) ||
         ""
       ).trim();
 
+      const applicantName =
+        lead?.applicantName ||
+        (appRecord ? `${appRecord.firstName} ${appRecord.lastName}`.trim() : "") ||
+        (registerRecord ? `${registerRecord.firstName} ${registerRecord.lastName}`.trim() : "Applicant");
+
+      const appNo =
+        registerRecord?.applicationNo ||
+        appRecord?.applicationNumber ||
+        (lead ? `APP-${lead.id.slice(0, 6).toUpperCase()}` : "ADMISSIONS");
+
       if (recipientEmail && recipientEmail.includes("@")) {
         try {
-          const appNo = registerRecord?.applicationNo || `APP-${lead.id.slice(0, 6).toUpperCase()}`;
           const sub = payload.schoolDomain || "portal";
           const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-          const uploadUrl = (lead as any).uploadToken
-            ? `${baseUrl}/${sub}/admissions/upload/${lead.id}?token=${(lead as any).uploadToken}`
+          const uploadUrl = (lead as any)?.uploadToken
+            ? `${baseUrl}/${sub}/admissions/upload/${lead?.id || appRecord?.id}?token=${(lead as any).uploadToken}`
             : `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
           const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(appNo)}`;
 
           const { sendDocumentRejectedEmail } = await import("@/lib/email-service");
           await sendDocumentRejectedEmail({
             schoolId,
-            applicantName: lead.applicantName,
-            parentName: lead.parentName || "Parent / Guardian",
+            applicantName,
+            parentName: lead?.parentName || (appRecord?.tierSpecificData as any)?.parentName || "Parent / Guardian",
             applicationNo: appNo,
-            targetGrade: lead.targetGrade || "Selected Grade",
+            targetGrade: lead?.targetGrade || appRecord?.programId || registerRecord?.assignedClass || "Selected Grade",
             recipientEmail,
             documentType: payload.documentType,
             uploadUrl,
@@ -402,7 +661,10 @@ export async function updateLeadDocumentsAction(payload: {
     if (registerRecord) {
       safeRevalidate(`/${payload.schoolDomain || ""}/admissions/track/${registerRecord.applicationNo}`);
     }
-    return { success: true, lead: updated };
+    if (appRecord?.applicationNumber) {
+      safeRevalidate(`/${payload.schoolDomain || ""}/admissions/track/${appRecord.applicationNumber}`);
+    }
+    return { success: true, lead: updated || appRecord || registerRecord };
   } catch (error: any) {
     console.error("[updateLeadDocumentsAction] Error:", error);
     return { success: false, error: error.message || "Failed to update document status." };
@@ -424,42 +686,154 @@ export async function updateLeadScreeningAction(payload: {
 }) {
   try {
     const schoolId = await resolveSchoolId(payload.schoolId);
-    const lead = await basePrisma.admissionLead.findUnique({
-      where: { id: payload.leadId },
-    });
-    if (!lead) return { success: false, error: "Applicant lead not found." };
+    const targetRef = (payload.leadId || "").trim();
+    const cleanRef = targetRef.replace(/^ADM-|^APP-/i, "").trim().toLowerCase();
 
-    const docs = (lead.documents as any) || {};
-    if (payload.subjectScores) {
-      docs.examScores = payload.subjectScores;
-    }
-    if (payload.examScore !== undefined) {
-      docs.examAggregate = payload.examScore;
-    }
-
-    const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
-    logs.push({
-      timestamp: new Date().toISOString(),
-      action: "SCREENING_EVALUATED",
-      examScore: payload.examScore ?? null,
-      subjectScores: payload.subjectScores ?? null,
-      interviewRating: payload.interviewRating ?? null,
-      recommendation: payload.recommendation ?? "RECOMMENDED",
-      notes: payload.notes || "",
-    });
-
-    const updated = await basePrisma.admissionLead.update({
-      where: { id: payload.leadId },
-      data: {
-        documents: docs,
-        logs,
-      },
+    let lead = await basePrisma.admissionLead.findUnique({
+      where: { id: targetRef },
       include: { tier: true },
     });
 
+    let appRecord: any = null;
+    let registerRecord: any = null;
+
+    if (!lead) {
+      appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [
+            { id: targetRef },
+            { applicationNumber: targetRef },
+            ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      });
+
+      registerRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [
+            { id: targetRef },
+            { applicationNo: targetRef },
+            ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      });
+
+      const linkedLeadId =
+        (appRecord?.metadata as any)?.leadId ||
+        (appRecord?.tierSpecificData as any)?.leadId ||
+        (registerRecord?.credentialsJson as any)?.leadId;
+
+      if (linkedLeadId) {
+        lead = await basePrisma.admissionLead.findUnique({
+          where: { id: linkedLeadId },
+          include: { tier: true },
+        });
+      }
+    }
+
+    if (!lead && !appRecord && !registerRecord) {
+      return { success: false, error: "Applicant lead not found." };
+    }
+
+    let updated: any = null;
+
+    if (lead) {
+      const docs = (lead.documents as any) || {};
+      if (payload.subjectScores) {
+        docs.examScores = payload.subjectScores;
+      }
+      if (payload.examScore !== undefined) {
+        docs.examAggregate = payload.examScore;
+        docs.entranceScore = payload.examScore;
+      }
+
+      const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
+      logs.push({
+        timestamp: new Date().toISOString(),
+        action: "SCREENING_EVALUATED",
+        examScore: payload.examScore ?? null,
+        subjectScores: payload.subjectScores ?? null,
+        interviewRating: payload.interviewRating ?? null,
+        recommendation: payload.recommendation ?? "RECOMMENDED",
+        notes: payload.notes || "",
+      });
+
+      updated = await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          documents: docs,
+          logs,
+        },
+        include: { tier: true },
+      });
+    }
+
+    if (appRecord) {
+      const tierData = (appRecord.tierSpecificData as any) || {};
+      if (payload.subjectScores) tierData.examScores = payload.subjectScores;
+      if (payload.examScore !== undefined) {
+        tierData.examAggregate = payload.examScore;
+        tierData.entranceScore = payload.examScore;
+      }
+      if (payload.interviewRating !== undefined) tierData.interviewRating = payload.interviewRating;
+      if (payload.recommendation) tierData.recommendation = payload.recommendation;
+      if (payload.notes) tierData.screeningNotes = payload.notes;
+
+      const appMeta = (appRecord.metadata as any) || {};
+      const metaDocs = { ...(appMeta.documents || {}) };
+      if (payload.subjectScores) metaDocs.examScores = payload.subjectScores;
+      if (payload.examScore !== undefined) {
+        metaDocs.examAggregate = payload.examScore;
+        metaDocs.entranceScore = payload.examScore;
+      }
+
+      await basePrisma.admissionsApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          tierSpecificData: tierData,
+          metadata: { ...appMeta, documents: metaDocs },
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    if (registerRecord) {
+      const rawCreds = registerRecord.credentialsJson || {};
+      const credsObj = Array.isArray(rawCreds) ? { documents: rawCreds } : { ...(rawCreds || {}) };
+      if (payload.subjectScores) credsObj.examScores = payload.subjectScores;
+      if (payload.examScore !== undefined) {
+        credsObj.examAggregate = payload.examScore;
+        credsObj.entranceScore = payload.examScore;
+      }
+      if (payload.interviewRating !== undefined) credsObj.interviewRating = payload.interviewRating;
+      if (payload.recommendation) credsObj.recommendation = payload.recommendation;
+
+      const existingLogs = Array.isArray(credsObj.statusLogs) ? credsObj.statusLogs : [];
+      credsObj.statusLogs = [
+        ...existingLogs,
+        {
+          timestamp: new Date().toISOString(),
+          action: "SCREENING_EVALUATED",
+          examScore: payload.examScore ?? null,
+          subjectScores: payload.subjectScores ?? null,
+          interviewRating: payload.interviewRating ?? null,
+          recommendation: payload.recommendation ?? "RECOMMENDED",
+          notes: payload.notes || "",
+        },
+      ];
+
+      await basePrisma.admissionRegister.update({
+        where: { id: registerRecord.id },
+        data: {
+          credentialsJson: credsObj,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     await invalidateAdmissionsNamespace(schoolId);
     safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
-    return { success: true, lead: updated };
+    return { success: true, lead: updated || appRecord || registerRecord };
   } catch (error: any) {
     console.error("[updateLeadScreeningAction] Error:", error);
     return { success: false, error: error.message || "Failed to update screening data." };
@@ -571,7 +945,7 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
     });
 
     const updated = await basePrisma.admissionLead.update({
-      where: { id: payload.leadId },
+      where: { id: lead.id },
       data: {
         documents: docs,
         logs,
@@ -740,12 +1114,47 @@ export async function enrollApplicantAction(
     }
 
     // 1. Fetch applicant lead with academic tier context
-    const lead = await basePrisma.admissionLead.findUnique({
+    let lead = await basePrisma.admissionLead.findUnique({
       where: { id: leadId },
       include: { tier: true },
     });
 
     if (!lead) {
+      // Check if leadId is actually an AdmissionsApplication ID or applicationNumber
+      const appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [{ id: leadId }, { applicationNumber: leadId }],
+        },
+      });
+      if (appRecord) {
+        return enrollAdmissionsApplicationAction({
+          applicationId: appRecord.id,
+          schoolId: schoolIdArg,
+          tenantId: tenantIdArg,
+          schoolDomain: isObject ? arg1.schoolDomain : undefined,
+          tierId: isObject ? arg1.tierId : undefined,
+          departmentId: isObject ? arg1.departmentId : undefined,
+          classArm: isObject ? arg1.classArm : undefined,
+          termFeeAmount: isObject ? arg1.termFeeAmount : undefined,
+          actorId: isObject ? arg1.actorId : undefined,
+          ipAddress: isObject ? arg1.ipAddress : undefined,
+        });
+      }
+
+      // Check if leadId is an AdmissionRegister ID or applicationNo
+      const regRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [{ id: leadId }, { applicationNo: leadId }],
+        },
+      });
+      if (regRecord) {
+        return enrollApplicantFromRegisterAction({
+          registerId: regRecord.id,
+          schoolId: schoolIdArg,
+          schoolDomain: (isObject ? arg1.schoolDomain : undefined) || schoolDomain || "portal",
+        });
+      }
+
       return { success: false, error: "Applicant lead not found." };
     }
 
@@ -1094,13 +1503,86 @@ export async function updateLeadStatusAction(payload: {
     }
 
     // STAGE CONSTRAINT GUARDRAIL ENFORCEMENT
-    const existingLead = await basePrisma.admissionLead.findUnique({
+    let existingLead = await basePrisma.admissionLead.findUnique({
       where: { id: leadId },
       include: { stage: true, track: { include: { stages: true } } },
     });
 
-    if (!existingLead || existingLead.schoolId !== schoolId) {
-      return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
+    if (!existingLead) {
+      // Check AdmissionsApplication or AdmissionRegister
+      const appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [{ id: leadId }, { applicationNumber: leadId }],
+        },
+      });
+      const regRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [{ id: leadId }, { applicationNo: leadId }],
+        },
+      });
+
+      if (!appRecord && !regRecord) {
+        return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
+      }
+
+      if (status === "ENROLLED") {
+        if (appRecord) {
+          return await enrollAdmissionsApplicationAction({
+            applicationId: appRecord.id,
+            schoolId,
+            schoolDomain,
+          });
+        }
+        if (regRecord) {
+          return await enrollApplicantFromRegisterAction({
+            registerId: regRecord.id,
+            schoolId,
+            schoolDomain,
+          });
+        }
+      }
+
+      if (appRecord) {
+        const statusMap: Record<string, any> = {
+          INQUIRY: "DRAFT",
+          APPLIED: "SUBMITTED",
+          SUBMITTED: "SUBMITTED",
+          SCREENING: "UNDER_REVIEW",
+          ASSESSMENT: "ASSESSMENT_SCHEDULED",
+          OFFERED: "OFFER_EXTENDED",
+          APPROVED: "OFFER_EXTENDED",
+          ACCEPTED: "OFFER_ACCEPTED",
+          ENROLLED: "ENROLLED",
+          REJECTED: "REJECTED",
+        };
+        const mappedStatus = statusMap[status.toUpperCase()] || "UNDER_REVIEW";
+
+        await basePrisma.admissionsApplication.update({
+          where: { id: appRecord.id },
+          data: {
+            status: mappedStatus,
+            metadata: {
+              ...((appRecord.metadata as any) || {}),
+              admissionStage: status,
+            },
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      if (regRecord) {
+        await basePrisma.admissionRegister.update({
+          where: { id: regRecord.id },
+          data: {
+            status: status.toLowerCase(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      await invalidateAdmissionsNamespace(schoolId);
+      safeRevalidate(`/${schoolDomain}/admissions`);
+      return { success: true };
     }
 
     let targetStage: any = null;
@@ -1906,17 +2388,26 @@ export async function markFormFeePaidAction(payload: {
       },
     });
 
+    let appRecord = await basePrisma.admissionsApplication.findFirst({
+      where: {
+        OR: [{ id: payload.registerId }, { applicationNumber: payload.registerId }],
+      },
+      include: { feeTransactions: true },
+    });
+
     let lead = await basePrisma.admissionLead.findFirst({
       where: {
         OR: [
           { id: payload.registerId },
           ...(registerRecord?.email ? [{ studentEmail: registerRecord.email }, { parentEmail: registerRecord.email }] : []),
+          ...(appRecord?.email ? [{ studentEmail: appRecord.email }, { parentEmail: appRecord.email }] : []),
           ...(registerRecord?.parentPhone ? [{ parentPhone: registerRecord.parentPhone }, { parentContact: registerRecord.parentPhone }] : []),
+          ...(appRecord?.phoneNumber ? [{ parentPhone: appRecord.phoneNumber }, { parentContact: appRecord.phoneNumber }] : []),
         ],
       },
     });
 
-    if (!registerRecord && !lead) {
+    if (!registerRecord && !lead && !appRecord) {
       return { success: false, error: "Applicant record not found" };
     }
 
@@ -1924,6 +2415,46 @@ export async function markFormFeePaidAction(payload: {
     const verifiedAt = new Date().toISOString();
 
     let updated: any = null;
+
+    if (appRecord) {
+      const appMetadata = (appRecord.metadata as any) || {};
+      const currentMetaDocs = { ...(appMetadata.documents || {}) };
+      currentMetaDocs.formFeePaid = true;
+      currentMetaDocs.formFeeStatus = "PAID";
+      currentMetaDocs.applicationFeeReceipt = {
+        ...(typeof currentMetaDocs.applicationFeeReceipt === "object" ? currentMetaDocs.applicationFeeReceipt : {}),
+        status: "VERIFIED",
+        verificationStatus: "MANUALLY_VERIFIED",
+        verified: true,
+        verifiedAt,
+        verifiedBy,
+      };
+
+      const tierData = (appRecord.tierSpecificData as any) || {};
+      tierData.formFeePaid = true;
+      tierData.formFeeStatus = "PAID";
+      tierData.paymentState = "SETTLED";
+
+      const updatedApp = await basePrisma.admissionsApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          metadata: { ...appMetadata, documents: currentMetaDocs },
+          tierSpecificData: tierData,
+          status: appRecord.status === "PAYMENT_PENDING" || appRecord.status === "DRAFT" ? "SUBMITTED" : appRecord.status,
+          updatedAt: new Date(),
+        },
+      });
+      if (!updated) updated = updatedApp;
+
+      await basePrisma.admissionsFeeTransaction.updateMany({
+        where: { applicationId: appRecord.id },
+        data: {
+          paymentStatus: "VERIFIED",
+          verifiedAt: new Date(),
+          verifiedByUserId: verifiedBy,
+        },
+      });
+    }
 
     if (registerRecord) {
       let rawCreds: any = registerRecord.credentialsJson || {};
@@ -2292,10 +2823,50 @@ export async function saveManualEntranceScoreAction(payload: {
       return { success: false, error: auth.reason || "403 Forbidden: Unauthorized to record exam scores." };
     }
 
-    const lead = await basePrisma.admissionLead.findUnique({
-      where: { id: payload.leadId },
+    const targetRef = (payload.leadId || "").trim();
+    const cleanRef = targetRef.replace(/^ADM-|^APP-/i, "").trim().toLowerCase();
+
+    let lead = await basePrisma.admissionLead.findUnique({
+      where: { id: targetRef },
     });
-    if (!lead || lead.schoolId !== schoolId) {
+
+    let appRecord: any = null;
+    let registerRecord: any = null;
+
+    if (!lead) {
+      appRecord = await basePrisma.admissionsApplication.findFirst({
+        where: {
+          OR: [
+            { id: targetRef },
+            { applicationNumber: targetRef },
+            ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      });
+
+      registerRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          OR: [
+            { id: targetRef },
+            { applicationNo: targetRef },
+            ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      });
+
+      const linkedLeadId =
+        (appRecord?.metadata as any)?.leadId ||
+        (appRecord?.tierSpecificData as any)?.leadId ||
+        (registerRecord?.credentialsJson as any)?.leadId;
+
+      if (linkedLeadId) {
+        lead = await basePrisma.admissionLead.findUnique({
+          where: { id: linkedLeadId },
+        });
+      }
+    }
+
+    if (!lead && !appRecord && !registerRecord) {
       return { success: false, error: "404 Not Found: Candidate dossier not found in this tenant." };
     }
 
@@ -2304,51 +2875,80 @@ export async function saveManualEntranceScoreAction(payload: {
       return { success: false, error: "Invalid entrance score. Please provide a score between 0 and 100." };
     }
 
-    const docs = (lead.documents as any) || {};
-    docs.entranceScore = parsedScore;
-    docs.examScore = parsedScore;
-    docs.examAggregate = parsedScore;
-    docs.manualScoreEntry = true;
-    docs.examPassed = parsedScore >= 50;
-    docs.scoreRecordedAt = new Date().toISOString();
+    let updated: any = null;
 
-    const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
-    logs.push({
-      timestamp: new Date().toISOString(),
-      action: "MANUAL_SCORE_OVERRIDE",
-      score: parsedScore,
-      recordedBy: session?.user?.name || session?.email || "Admissions Officer",
-      notes: payload.notes || "Offline Entrance Assessment score recorded",
-    });
+    if (lead) {
+      const docs = (lead.documents as any) || {};
+      docs.entranceScore = parsedScore;
+      docs.examScore = parsedScore;
+      docs.examAggregate = parsedScore;
+      docs.manualScoreEntry = true;
+      docs.examPassed = parsedScore >= 50;
+      docs.scoreRecordedAt = new Date().toISOString();
 
-    const updated = await basePrisma.admissionLead.update({
-      where: { id: payload.leadId },
-      data: {
-        documents: docs,
-        logs,
-      },
-      include: { tier: true, track: true, stage: true },
-    });
+      const logs = Array.isArray(lead.logs) ? [...(lead.logs as any[])] : [];
+      logs.push({
+        timestamp: new Date().toISOString(),
+        action: "MANUAL_SCORE_OVERRIDE",
+        score: parsedScore,
+        recordedBy: session?.user?.name || session?.email || "Admissions Officer",
+        notes: payload.notes || "Offline Entrance Assessment score recorded",
+      });
+
+      updated = await basePrisma.admissionLead.update({
+        where: { id: lead.id },
+        data: {
+          documents: docs,
+          logs,
+        },
+        include: { tier: true, track: true, stage: true },
+      });
+    }
+
+    if (appRecord) {
+      const tierData = (appRecord.tierSpecificData as any) || {};
+      tierData.entranceScore = parsedScore;
+      tierData.examScore = parsedScore;
+      tierData.examAggregate = parsedScore;
+      tierData.manualScoreEntry = true;
+      tierData.examPassed = parsedScore >= 50;
+      tierData.scoreRecordedAt = new Date().toISOString();
+
+      const appMeta = (appRecord.metadata as any) || {};
+      const metaDocs = { ...(appMeta.documents || {}) };
+      metaDocs.entranceScore = parsedScore;
+      metaDocs.examScore = parsedScore;
+
+      await basePrisma.admissionsApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          tierSpecificData: tierData,
+          metadata: { ...appMeta, documents: metaDocs },
+          updatedAt: new Date(),
+        },
+      });
+    }
 
     // Also sync to matching AdmissionRegister record if present
-    const cleanRef = lead.id.replace(/^ADM-|^APP-/, "").trim().toLowerCase();
-    const nameParts = (lead.applicantName || "").trim().split(" ");
-    const firstName = nameParts[0] || "Student";
-    const lastName = nameParts.slice(1).join(" ") || "Applicant";
+    if (!registerRecord && lead) {
+      const nameParts = (lead.applicantName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.slice(1).join(" ") || "Applicant";
 
-    const registerRecord = await basePrisma.admissionRegister.findFirst({
-      where: {
-        tenantId: schoolId,
-        OR: [
-          { id: lead.id },
-          ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
-          ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
-          ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
-          ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
-          { firstName, lastName },
-        ],
-      },
-    });
+      registerRecord = await basePrisma.admissionRegister.findFirst({
+        where: {
+          tenantId: schoolId,
+          OR: [
+            { id: lead.id },
+            ...(cleanRef ? [{ applicationNo: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+            ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+            ...(lead.parentEmail ? [{ email: lead.parentEmail }] : []),
+            ...(lead.parentPhone ? [{ parentPhone: lead.parentPhone }] : []),
+            { firstName, lastName },
+          ],
+        },
+      });
+    }
 
     if (registerRecord) {
       const creds =
@@ -2370,17 +2970,18 @@ export async function saveManualEntranceScoreAction(payload: {
 
     // Also sync to AdmissionsApplication (Modern Admissions Workspace)
     try {
-      const appRecord = await basePrisma.admissionsApplication.findFirst({
-        where: {
-          schoolId,
-          OR: [
-            { id: payload.leadId },
-            ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
-            ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
-            { firstName, lastName },
-          ],
-        },
-      });
+      if (!appRecord) {
+        appRecord = await basePrisma.admissionsApplication.findFirst({
+          where: {
+            schoolId,
+            OR: [
+              { id: targetRef },
+              ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+              ...(lead?.studentEmail ? [{ email: lead.studentEmail }] : []),
+            ],
+          },
+        });
+      }
 
       if (appRecord) {
         const appTierData = (appRecord.tierSpecificData as any) || {};
@@ -2403,7 +3004,7 @@ export async function saveManualEntranceScoreAction(payload: {
 
     await invalidateAdmissionsNamespace(schoolId);
     safeRevalidate(`/${payload.schoolDomain || ""}/admissions`);
-    return { success: true, lead: updated, score: parsedScore };
+    return { success: true, lead: updated || appRecord || registerRecord, score: parsedScore };
   } catch (err: any) {
     console.error("[saveManualEntranceScoreAction] Error:", err);
     return { success: false, error: err.message || "Failed to save entrance score." };
