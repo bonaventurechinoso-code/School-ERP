@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Users,
   ShieldCheck,
@@ -254,6 +255,12 @@ export default function AdmissionsWorkspaceClient({
 
   const copy = TIER_COPY[tier] || TIER_COPY.PRIMARY;
   const tierConfig = incomingTierConfig || DEFAULT_TIER_CONFIG;
+  const router = useRouter();
+
+  useEffect(() => {
+    setApplications(initialApplications);
+  }, [initialApplications]);
+
   const [applications, setApplications] = useState<SerializedApplication[]>(initialApplications);
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
   const [activeTab, setActiveTab] = useState("kanban");
@@ -2631,21 +2638,26 @@ export default function AdmissionsWorkspaceClient({
             status: dossierApp.status,
           }}
           isOpen={Boolean(dossierApp)}
-          onClose={() => setDossierApp(null)}
+          onClose={() => {
+            setDossierApp(null);
+            startTransition(() => {
+              router.refresh();
+            });
+          }}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
           canMutate={canMutate}
           onLeadUpdated={() => {
-            // Re-fetch or refresh current view
-            if (typeof window !== "undefined") {
-              window.location.reload();
-            }
+            // Silently keep background state fresh without reloading the page or closing the drawer
+            startTransition(() => {
+              router.refresh();
+            });
           }}
           onRecordUpdated={() => {
-            if (typeof window !== "undefined") {
-              window.location.reload();
-            }
+            startTransition(() => {
+              router.refresh();
+            });
           }}
         />
       )}

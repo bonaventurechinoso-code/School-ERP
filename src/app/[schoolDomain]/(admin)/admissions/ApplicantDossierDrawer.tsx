@@ -20,6 +20,7 @@ import {
   Copy,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   Star,
   Save,
   Maximize2,
@@ -372,8 +373,10 @@ export default function ApplicantDossierDrawer({
   const [screeningNotes, setScreeningNotes] = useState<string>("");
 
   useEffect(() => {
-    setLocalCandidate(activeCandidate);
-  }, [activeCandidate]);
+    if (isOpen) {
+      setLocalCandidate(activeCandidate);
+    }
+  }, [activeCandidate?.id, isOpen]);
 
   useEffect(() => {
     if (activeCandidate && isOpen) {
@@ -1081,7 +1084,16 @@ export default function ApplicantDossierDrawer({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3 py-1.5 text-xs font-bold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Done verifying? Return to admissions workspace"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back to Workspace</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setIsMaximized((prev) => !prev)}
