@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition, useRef } from "react";
-import { updatePortalSettings } from "./actions";
+import { updatePortalSettings, EntranceExamSettings, EntranceExamTierConfig } from "./actions";
 import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
 import { 
   Globe, 
@@ -26,6 +26,10 @@ import {
   Clock,
   ArrowRight,
   Search,
+  MapPin,
+  BookOpen,
+  Sliders,
+  Send,
 } from "lucide-react";
 
 export interface PortalSettingsFormProps {
@@ -41,6 +45,7 @@ export interface PortalSettingsFormProps {
   initialAccountNumber?: string;
   initialAccountName?: string;
   initialPaymentInstruction?: string;
+  initialEntranceExamSettings?: EntranceExamSettings;
 }
 
 export default function PortalSettingsForm({
@@ -56,9 +61,10 @@ export default function PortalSettingsForm({
   initialAccountNumber = "",
   initialAccountName = "",
   initialPaymentInstruction = "Use Student Admission No as transfer narration",
+  initialEntranceExamSettings,
 }: PortalSettingsFormProps) {
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<"branding" | "bank" | "academic">("branding");
+  const [activeTab, setActiveTab] = useState<"branding" | "bank" | "academic" | "entrance-exam">("branding");
 
   // Tab 1: Institutional & Public Portal
   const [name, setName] = useState(initialName);
@@ -77,6 +83,52 @@ export default function PortalSettingsForm({
   const [academicSession, setAcademicSession] = useState("2026/2027");
   const [academicTerm, setAcademicTerm] = useState("First Term");
   const [nextTermResumption, setNextTermResumption] = useState("2027-01-11");
+  // Tab 4: Entrance Examination Scheduling State (Institution Choice per Tier)
+  const [masterExamEnabled, setMasterExamEnabled] = useState(
+    initialEntranceExamSettings?.enabled !== false
+  );
+  const [tierExamSettings, setTierExamSettings] = useState<Record<string, EntranceExamTierConfig>>(() => {
+    const existing = initialEntranceExamSettings?.tiers || {};
+    const initialMap: Record<string, EntranceExamTierConfig> = { ...existing };
+    const tiersToSeed = academicTiers.length > 0 ? academicTiers : ["General / All Tiers"];
+    for (const t of tiersToSeed) {
+      if (!initialMap[t]) {
+        initialMap[t] = {
+          enabled: true,
+          examDate: "2026-09-27",
+          arrivalTime: "08:30 AM Prompt",
+          venue: "Main ICT Complex / Hall A",
+          subjects: t.toLowerCase().includes("nursery") 
+            ? "Verbal Reasoning, Quantitative, General Knowledge"
+            : t.toLowerCase().includes("primary")
+            ? "English Language, Mathematics, General Paper"
+            : "Mathematics, English Language, Basic Science & Aptitude",
+          cutOffScore: 50,
+          instructions: "Candidates must bring their printed Examination Slip, HB pencils, and arrive 30 minutes before accreditation.",
+        };
+      }
+    }
+    return initialMap;
+  });
+
+  const handleTierExamChange = (tierName: string, field: keyof EntranceExamTierConfig, value: any) => {
+    setTierExamSettings((prev) => ({
+      ...prev,
+      [tierName]: {
+        ...(prev[tierName] || {
+          enabled: true,
+          examDate: "2026-09-27",
+          arrivalTime: "08:30 AM Prompt",
+          venue: "Main ICT Complex / Hall A",
+          subjects: "Mathematics, English Language",
+          cutOffScore: 50,
+          instructions: "Bring printed exam slip and writing materials.",
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
 
   // Feedback and UI state
   const [isPending, startTransition] = useTransition();
@@ -229,6 +281,10 @@ export default function PortalSettingsForm({
           settlementAccountNumber: accountNumber,
           settlementAccountName: accountName,
           paymentInstruction: paymentInstruction,
+          entranceExamSettings: {
+            enabled: masterExamEnabled,
+            tiers: tierExamSettings,
+          },
         },
         subdomain
       );
@@ -236,7 +292,7 @@ export default function PortalSettingsForm({
       if (res.success) {
         setMsg({
           type: "success",
-          text: "Institution profile, public portal gateways, and direct settlement bank settings published and synchronized!",
+          text: "Institution profile, public portal gateways, settlement bank, and entrance examination schedules published and synchronized!",
         });
       } else {
         setMsg({
@@ -889,6 +945,272 @@ export default function PortalSettingsForm({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: ENTRANCE EXAMINATION SCHEDULING PER TIER */}
+      {activeTab === "entrance-exam" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Master Toggle Banner */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xs border border-slate-200 dark:border-zinc-800 p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Institution Choice Policy
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                    masterExamEnabled
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700"
+                      : "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700"
+                  }`}>
+                    {masterExamEnabled ? "Entrance Exams Mandatory" : "Direct Admission Only (Exams Off)"}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Mandate Entrance Examination &amp; Screening
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400 max-w-2xl">
+                  Decide whether candidates must sit for an entrance examination before receiving admission offers, or if your institution grants direct admission upon document review.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                  {masterExamEnabled ? "Require Entrance Exam" : "Exams Disabled"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMasterExamEnabled(!masterExamEnabled)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    masterExamEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-zinc-700"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      masterExamEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {!masterExamEnabled && (
+              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
+                <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">Direct Admission Mode Activated</p>
+                  <p className="text-amber-700 dark:text-amber-300">
+                    Your institution has turned off entrance examination requirements. Admissions officers can review credentials and grant admission offers directly without scoring candidates on entrance examinations.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tier-by-Tier Examination Schedules */}
+          {masterExamEnabled && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Academic Tier Examination Schedules &amp; Venues
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Configure specific examination dates, arrival times, centers, and test subjects for each registered curriculum tier.
+                </p>
+              </div>
+
+              {(academicTiers.length > 0 ? academicTiers : ["General / All Tiers"]).map((tierName) => {
+                const cfg = tierExamSettings[tierName] || {
+                  enabled: true,
+                  examDate: "2026-09-27",
+                  arrivalTime: "08:30 AM Prompt",
+                  venue: "Main ICT Complex / Hall A",
+                  subjects: "Mathematics, English Language",
+                  cutOffScore: 50,
+                  instructions: "Bring printed exam slip and writing materials.",
+                };
+
+                return (
+                  <div
+                    key={tierName}
+                    className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xs border border-slate-200 dark:border-zinc-800 p-6 space-y-5"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300">
+                          <Layers className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            {tierName}
+                          </h4>
+                          <span className="text-[11px] text-slate-400">
+                            Academic Tier Cohort
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-slate-600 dark:text-zinc-400">
+                          {cfg.enabled ? "Exam Required" : "Direct Admission (No Exam)"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleTierExamChange(tierName, "enabled", !cfg.enabled)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            cfg.enabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-zinc-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              cfg.enabled ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {cfg.enabled ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                              Examination Date
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={cfg.examDate || ""}
+                                onChange={(e) => handleTierExamChange(tierName, "examDate", e.target.value)}
+                                placeholder="e.g. Saturday, 27th September 2026"
+                                className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pl-9 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                              />
+                              <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Rendered on applicant Exam Slip &amp; dispatch email.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                              Arrival &amp; Accreditation Time
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={cfg.arrivalTime || ""}
+                                onChange={(e) => handleTierExamChange(tierName, "arrivalTime", e.target.value)}
+                                placeholder="e.g. 08:30 AM Prompt"
+                                className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pl-9 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                              />
+                              <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Reporting time for biometric check-in.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                              Examination Venue / Hall
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={cfg.venue || ""}
+                                onChange={(e) => handleTierExamChange(tierName, "venue", e.target.value)}
+                                placeholder="e.g. Main ICT Complex / Hall A"
+                                className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pl-9 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                              />
+                              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Campus building or designated screening center.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                              Exam Subjects / Test Papers
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={cfg.subjects || ""}
+                                onChange={(e) => handleTierExamChange(tierName, "subjects", e.target.value)}
+                                placeholder="e.g. Mathematics, English Language, General Knowledge"
+                                className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pl-9 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                              />
+                              <BookOpen className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Comma-separated subjects listed on candidate schedule.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                              Minimum Cut-Off Score (%)
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={cfg.cutOffScore ?? 50}
+                                onChange={(e) => handleTierExamChange(tierName, "cutOffScore", Number(e.target.value))}
+                                className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pl-9 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                              />
+                              <Sliders className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Enforced by admission stage guardrails.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-1">
+                            Candidate Instructions &amp; Requirements
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={cfg.instructions || ""}
+                            onChange={(e) => handleTierExamChange(tierName, "instructions", e.target.value)}
+                            placeholder="e.g. Candidates must bring their printed Examination Slip, HB pencils, and arrive 30 minutes before accreditation."
+                            className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white bg-white dark:bg-zinc-950 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                          />
+                        </div>
+
+                        {/* Exam Slip Live Preview Box */}
+                        <div className="p-3 bg-slate-50 dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                              Candidate Examination Slip Preview
+                            </span>
+                            <p className="text-slate-700 dark:text-zinc-300 font-medium">
+                              <strong>Date:</strong> {cfg.examDate || "Not scheduled"} • <strong>Time:</strong> {cfg.arrivalTime || "TBA"} • <strong>Venue:</strong> {cfg.venue || "TBA"}
+                            </p>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                            Dispatched via Resend
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-slate-50 dark:bg-zinc-950 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 text-xs text-slate-500">
+                        Entrance examination is turned off for <strong>{tierName}</strong>. Candidates for this tier will be reviewed and admitted directly without exam slips.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

@@ -167,11 +167,38 @@ export default async function AdmissionsPage({
 
       if (matchApp) {
         // If matching application has temporary ID (APP-XXXXXX), upgrade to finalized institutional format!
+        // Safe document extraction - NEVER overwrite valid documents with empty credentialsJson
+        const existingMetaDocs = (matchApp.metadata as any)?.documents || {};
+        const rawRegCreds = reg.credentialsJson;
+        let regDocs: any = {};
+        if (Array.isArray(rawRegCreds)) {
+          for (const d of (rawRegCreds as any[])) {
+            if (d && typeof d === "object" && ((d as any).key || (d as any).type) && ((d as any).url || (d as any).fileUrl || (d as any).path)) {
+              regDocs[(d as any).key || (d as any).type] = d;
+            }
+          }
+        } else if (rawRegCreds && typeof rawRegCreds === "object") {
+          if (Array.isArray((rawRegCreds as any).documents)) {
+            for (const d of (rawRegCreds as any).documents) {
+              if (d && typeof d === "object" && (d.key || d.type) && (d.url || d.fileUrl || d.path)) {
+                regDocs[d.key || d.type] = d;
+              }
+            }
+          } else {
+            for (const [k, v] of Object.entries(rawRegCreds)) {
+              if (v && typeof v === "object" && ((v as any).url || (v as any).fileUrl || (v as any).path)) {
+                regDocs[k] = v;
+              }
+            }
+          }
+        }
+        const mergedDocs = { ...existingMetaDocs, ...regDocs };
+
         const updateData: any = {
           metadata: {
             ...((matchApp.metadata as any) || {}),
             registerId: reg.id,
-            documents: reg.credentialsJson || (matchApp.metadata as any)?.documents,
+            documents: Object.keys(mergedDocs).length > 0 ? mergedDocs : existingMetaDocs,
             applicationFeeReceiptUrl: reg.applicationFeeReceiptUrl || reg.formFeeReceiptUrl || (matchApp.metadata as any)?.applicationFeeReceiptUrl,
           },
         };
@@ -462,83 +489,187 @@ export default async function AdmissionsPage({
   }
   rawApplications = deduplicatedApps;
 
-  // Real-time document hydration pass: Ensure any uploaded credentials from AdmissionLead or AdmissionRegister are attached
+  // Real-time document hydration pass: Ensure all uploaded credentials across AdmissionsDocument, AdmissionLead & AdmissionRegister are synchronized and rendered
   try {
     for (const app of rawApplications) {
-      if (!app.documents || app.documents.length === 0) {
-        const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
-        const cleanNo = (app.applicationNumber || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "");
+      if (!app.documents) app.documents = [];
 
-        const linkedLead = await basePrisma.admissionLead.findFirst({
-          where: {
-            schoolId: school.id,
-            OR: [
-              ...(leadId ? [{ id: leadId }] : []),
-              { id: app.id },
-              ...(cleanNo ? [
-                { id: { contains: cleanNo, mode: "insensitive" as const } },
-                { uploadToken: { contains: cleanNo, mode: "insensitive" as const } },
-              ] : []),
-              ...(app.email ? [{ studentEmail: app.email }, { parentEmail: app.email }] : []),
-              ...(app.phoneNumber ? [{ parentPhone: app.phoneNumber }, { parentContact: app.phoneNumber }] : []),
-            ],
-          },
-        });
+      const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
+      const cleanNo = (app.applicationNumber || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "");
 
-        if (linkedLead && linkedLead.documents && typeof linkedLead.documents === "object") {
-          const leadDocs = linkedLead.documents as Record<string, any>;
-          app.metadata = { ...((app.metadata as any) || {}), documents: leadDocs };
-          app.tierSpecificData = { ...((app.tierSpecificData as any) || {}), documents: leadDocs };
+      const linkedLead = await basePrisma.admissionLead.findFirst({
+        where: {
+          schoolId: school.id,
+          OR: [
+            ...(leadId ? [{ id: leadId }] : []),
+            { id: app.id },
+            ...(cleanNo ? [
+              { id: { contains: cleanNo, mode: "insensitive" as const } },
+              { uploadToken: { contains: cleanNo, mode: "insensitive" as const } },
+            ] : []),
+            ...(app.email ? [{ studentEmail: app.email }, { parentEmail: app.email }] : []),
+            ...(app.phoneNumber ? [{ parentPhone: app.phoneNumber }, { parentContact: app.phoneNumber }] : []),
+          ],
+        },
+      });
 
-          const docMapDefs: Record<string, string> = {
-            passportPhoto: "PASSPORT_PHOTOGRAPH",
-            academicResults: "ACADEMIC_TRANSCRIPT",
-            birthCertificate: "BIRTH_CERTIFICATE",
-            medicalRecords: "MEDICAL_REPORT",
-            ninSlip: "NIN_SLIP",
-            applicationFeeReceipt: "APPLICATION_FEE_RECEIPT",
+      const linkedReg = await basePrisma.admissionRegister.findFirst({
+        where: {
+          tenantId: school.id,
+          OR: [
+            { applicationNo: app.applicationNumber },
+            ...(cleanNo ? [{ applicationNo: { contains: cleanNo, mode: "insensitive" as const } }] : []),
+            ...(app.email ? [{ email: app.email }] : []),
+          ],
+        },
+      });
+
+      // Gather all documents from AdmissionsDocument table
+      const dbDocs = await basePrisma.admissionsDocument.findMany({
+        where: { applicationId: app.id },
+      });
+
+      for (const d of dbDocs) {
+        if (!app.documents.some((existing: any) => existing.id === d.id || existing.documentType === d.documentType)) {
+          app.documents.push({
+            id: d.id,
+            documentType: d.documentType,
+            storageKey: d.storageKey,
+            verificationStatus: d.verificationStatus,
+            rejectionReason: d.rejectionReason,
+          });
+        }
+      }
+
+      const metaDocs: Record<string, any> = {
+        ...((app.metadata as any)?.documents || {}),
+        ...((app.tierSpecificData as any)?.documents || {}),
+      };
+
+      // Pull from AdmissionsDocument rows into metaDocs
+      const revDocMapDefs: Record<string, string> = {
+        PASSPORT_PHOTOGRAPH: "passportPhoto",
+        PASSPORT_PHOTO: "passportPhoto",
+        PASSPORT: "passportPhoto",
+        BIRTH_CERTIFICATE: "birthCertificate",
+        BIRTH_CERT: "birthCertificate",
+        ACADEMIC_TRANSCRIPT: "academicResults",
+        ACADEMIC_RESULTS: "academicResults",
+        O_LEVEL_RESULT: "academicResults",
+        MEDICAL_REPORT: "medicalRecords",
+        MEDICAL_RECORDS: "medicalRecords",
+        NIN_SLIP: "ninSlip",
+        NIN: "ninSlip",
+        APPLICATION_FEE_RECEIPT: "applicationFeeReceipt",
+        FEE_RECEIPT: "applicationFeeReceipt",
+      };
+
+      for (const d of app.documents) {
+        const fieldKey = revDocMapDefs[d.documentType?.toUpperCase()] || d.documentType;
+        if (d.storageKey && !metaDocs[fieldKey]) {
+          metaDocs[fieldKey] = {
+            url: d.storageKey,
+            fileUrl: d.storageKey,
+            fileName: `${fieldKey}.pdf`,
+            verified: d.verificationStatus === "MANUALLY_VERIFIED" || d.verificationStatus === "AUTO_VERIFIED",
+            status: d.verificationStatus,
           };
+        }
+      }
 
-          if (!app.documents) app.documents = [];
+      // Supplement from linkedLead
+      if (linkedLead && linkedLead.documents && typeof linkedLead.documents === "object") {
+        const leadDocs = linkedLead.documents as Record<string, any>;
+        for (const [k, v] of Object.entries(leadDocs)) {
+          if (v && typeof v === "object" && (v.url || v.fileUrl)) {
+            if (!metaDocs[k]) metaDocs[k] = v;
+          } if (typeof v === "string" && v) {
+            if (!metaDocs[k]) metaDocs[k] = { url: v, fileUrl: v, fileName: `${k}.pdf`, verified: false };
+          }
+        }
+      }
 
-          for (const [fKey, dType] of Object.entries(docMapDefs)) {
-            const item = leadDocs[fKey];
-            const url =
-              item?.url ||
-              item?.fileUrl ||
-              (typeof item === "string" ? item : null) ||
-              (fKey === "applicationFeeReceipt" ? (leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl) : null);
-
-            if (url && !app.documents.some((d: any) => d.documentType === dType)) {
-              app.documents.push({
-                id: `lead-doc-${fKey}-${app.id}`,
-                documentType: dType,
-                storageKey: url,
-                verificationStatus: "PENDING",
-                rejectionReason: null,
-              });
+      // Supplement from linkedReg
+      if (linkedReg && linkedReg.credentialsJson) {
+        const rawReg = linkedReg.credentialsJson;
+        if (Array.isArray(rawReg)) {
+          for (const item of (rawReg as any[])) {
+            if (item && ((item as any).key || (item as any).type) && ((item as any).url || (item as any).fileUrl)) {
+              const k = (item as any).key || (item as any).type;
+              if (!metaDocs[k]) metaDocs[k] = item;
             }
           }
-
-          if (leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl) {
-            const feeUrl = leadDocs.applicationFeeReceiptUrl || (linkedLead as any).applicationFeeReceiptUrl;
-            if (!app.feeTransactions || app.feeTransactions.length === 0) {
-              app.feeTransactions = [
-                {
-                  id: `tx-lead-${app.id}`,
-                  paymentMethod: "MANUAL_BANK_TRANSFER",
-                  amount: 5000,
-                  currency: "NGN",
-                  paymentReference: `FEE-${app.applicationNumber}`,
-                  paymentStatus: "PENDING",
-                  proofOfPaymentUrl: feeUrl,
-                  createdAt: new Date(),
-                },
-              ];
+        } else if (typeof rawReg === "object") {
+          if (Array.isArray((rawReg as any).documents)) {
+            for (const item of (rawReg as any).documents) {
+              if (item && (item.key || item.type) && (item.url || item.fileUrl)) {
+                const k = item.key || item.type;
+                if (!metaDocs[k]) metaDocs[k] = item;
+              }
+            }
+          } else {
+            for (const [k, v] of Object.entries(rawReg)) {
+              if (v && typeof v === "object" && ((v as any).url || (v as any).fileUrl)) {
+                if (!metaDocs[k]) metaDocs[k] = v;
+              }
             }
           }
         }
       }
+
+      // Reverse supplement to app.documents
+      const docMapDefs: Record<string, string> = {
+        passportPhoto: "PASSPORT_PHOTOGRAPH",
+        academicResults: "ACADEMIC_TRANSCRIPT",
+        birthCertificate: "BIRTH_CERTIFICATE",
+        medicalRecords: "MEDICAL_REPORT",
+        ninSlip: "NIN_SLIP",
+        applicationFeeReceipt: "APPLICATION_FEE_RECEIPT",
+      };
+
+      for (const [fKey, dType] of Object.entries(docMapDefs)) {
+        const item = metaDocs[fKey];
+        const url =
+          item?.url ||
+          item?.fileUrl ||
+          (typeof item === "string" ? item : null) ||
+          (fKey === "applicationFeeReceipt" ? (metaDocs.applicationFeeReceiptUrl || linkedReg?.applicationFeeReceiptUrl || (linkedLead as any)?.applicationFeeReceiptUrl) : null);
+
+        if (url && !app.documents.some((d: any) => d.documentType === dType || d.documentType?.toUpperCase().includes(fKey.toUpperCase()))) {
+          app.documents.push({
+            id: `lead-doc-${fKey}-${app.id}`,
+            documentType: dType,
+            storageKey: url,
+            verificationStatus: item?.verified ? "MANUALLY_VERIFIED" : "PENDING",
+            rejectionReason: null,
+          });
+        }
+      }
+
+      const feeReceiptUrl =
+        metaDocs.applicationFeeReceiptUrl ||
+        metaDocs.formFeeReceiptUrl ||
+        metaDocs.applicationFeeReceipt?.url ||
+        linkedReg?.applicationFeeReceiptUrl ||
+        (linkedLead as any)?.applicationFeeReceiptUrl;
+
+      if (feeReceiptUrl && (!app.feeTransactions || app.feeTransactions.length === 0)) {
+        app.feeTransactions = [
+          {
+            id: `tx-lead-${app.id}`,
+            paymentMethod: "MANUAL_BANK_TRANSFER",
+            amount: 5000,
+            currency: "NGN",
+            paymentReference: `FEE-${app.applicationNumber}`,
+            paymentStatus: "PENDING",
+            proofOfPaymentUrl: feeReceiptUrl,
+            createdAt: new Date(),
+          },
+        ];
+      }
+
+      app.metadata = { ...((app.metadata as any) || {}), documents: metaDocs };
+      app.tierSpecificData = { ...((app.tierSpecificData as any) || {}), documents: metaDocs };
     }
   } catch (hydrateErr) {
     console.warn("[ADMISSIONS] Document hydration notice:", hydrateErr);

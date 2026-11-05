@@ -1017,10 +1017,10 @@ export default function ApplicantDossierDrawer({
         });
         if (onLeadUpdated) onLeadUpdated();
       } else {
-        setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch Admit Slip." });
+        setAlertMsg({ type: "error", text: res?.error || "Failed to dispatch Exam Slip." });
       }
     } catch (err: any) {
-      setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch Admit Slip." });
+      setAlertMsg({ type: "error", text: err?.message || "Failed to dispatch Exam Slip." });
     } finally {
       setIsDispatchingSlip(false);
     }
@@ -1707,7 +1707,7 @@ export default function ApplicantDossierDrawer({
               {/* DISPATCH SCREENING SCHEDULE CARD */}
               <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-900 text-white p-4 sm:p-5 rounded-xl border border-indigo-800/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-bold">Entrance Screening Admit Slip</h4>
+                  <h4 className="text-sm font-bold">Entrance Examination Slip</h4>
                   <p className="text-xs text-indigo-200 mt-0.5 leading-relaxed">
                     Official examination schedule dispatched automatically via Resend.
                   </p>
@@ -1719,7 +1719,7 @@ export default function ApplicantDossierDrawer({
                   className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer disabled:opacity-50 shadow-xs"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>{isDispatchingSlip ? "Dispatching..." : "Dispatch Admit Slip"}</span>
+                  <span>{isDispatchingSlip ? "Dispatching Exam Slip..." : "Dispatch Exam Slip"}</span>
                 </button>
               </div>
 

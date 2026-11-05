@@ -267,7 +267,8 @@ export async function verifyAdmissionsMutatorRole(
  */
 export function evaluateStageConstraints(
   candidate: any,
-  constraints: StageConstraints | null | undefined
+  constraints: StageConstraints | null | undefined,
+  options?: { enableEntranceExam?: boolean }
 ): { satisfied: boolean; missingPrerequisites: string[] } {
   const missing: string[] = [];
   if (!constraints || typeof constraints !== "object") {
@@ -396,8 +397,8 @@ export function evaluateStageConstraints(
     }
   }
 
-  // 7. require_exam_score constraint check
-  if (constraints.require_exam_score) {
+  // 7. require_exam_score constraint check (bypassed if institution turned off entrance exams)
+  if (constraints.require_exam_score && options?.enableEntranceExam !== false) {
     const minPassingScore =
       typeof constraints.min_exam_score === "number" ? constraints.min_exam_score : 50;
     const credsJson = (candidate?.credentialsJson as any) || {};

@@ -912,11 +912,21 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
 
     const school = lead.school || (await basePrisma.school.findUnique({ where: { id: schoolId } }));
     const sub = payload.schoolDomain || school?.subdomain || "portal";
+
+    // Resolve Entrance Examination configuration from Portal Settings
+    const examSettings: any = (school?.tierDatabasesConfig as any)?.entranceExamSettings;
+    const tierName = lead.tier?.name || "";
+    const tierConfig = (tierName && examSettings?.tiers?.[tierName]) ||
+                       Object.entries(examSettings?.tiers || {}).find(([k]) => k.toLowerCase() === tierName.toLowerCase())?.[1] ||
+                       examSettings?.tiers?.default ||
+                       examSettings?.tiers?.["General / All Tiers"];
+
     const rollNo = `EXM-${sub.toUpperCase()}-2026-${lead.id.substring(0, 5).toUpperCase()}`;
-    const examDate = payload.examDate || "Saturday, 27th September 2026";
-    const arrivalTime = payload.arrivalTime || "08:30 AM Prompt";
-    const venue = payload.venue || "Main ICT Complex / Hall A";
-    const subjects = payload.subjects || getExamSubjectsForTier(lead.tier?.name, lead.targetGrade).join(", ");
+    const examDate = payload.examDate || tierConfig?.examDate || "Saturday, 27th September 2026";
+    const arrivalTime = payload.arrivalTime || tierConfig?.arrivalTime || "08:30 AM Prompt";
+    const venue = payload.venue || tierConfig?.venue || "Main ICT Complex / Hall A";
+    const subjects = payload.subjects || tierConfig?.subjects || getExamSubjectsForTier(lead.tier?.name, lead.targetGrade).join(", ");
+    const instructions = tierConfig?.instructions || "Candidates must present a printed copy of this Examination Slip at the accreditation checkpoint.";
 
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
     const admitSlipUrl = `${baseUrl}/${sub}/admissions/admit-slip/${lead.id}`;
@@ -927,6 +937,7 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
       arrivalTime,
       venue,
       subjects,
+      instructions,
       admitSlipUrl,
       dispatchedAt: new Date().toISOString(),
     };
@@ -1505,7 +1516,7 @@ export async function updateLeadStatusAction(payload: {
     // STAGE CONSTRAINT GUARDRAIL ENFORCEMENT
     let existingLead = await basePrisma.admissionLead.findUnique({
       where: { id: leadId },
-      include: { stage: true, track: { include: { stages: true } } },
+      include: { stage: true, track: { include: { stages: true } }, tier: true },
     });
 
     if (!existingLead) {
@@ -1598,7 +1609,10 @@ export async function updateLeadStatusAction(payload: {
     }
 
     if (targetStage?.constraints) {
-      const evaluation = evaluateStageConstraints(existingLead, targetStage.constraints as any);
+      const schoolRec = await basePrisma.school.findUnique({ where: { id: schoolId }, select: { tierDatabasesConfig: true } });
+      const examCfg: any = (schoolRec?.tierDatabasesConfig as any)?.entranceExamSettings;
+      const isExamOff = examCfg?.enabled === false || (existingLead?.tier?.name && examCfg?.tiers?.[existingLead.tier.name]?.enabled === false);
+      const evaluation = evaluateStageConstraints(existingLead, targetStage.constraints as any, { enableEntranceExam: !isExamOff });
       if (!evaluation.satisfied) {
         return {
           success: false,
@@ -2765,7 +2779,10 @@ export async function transitionCandidateStageAction(payload: {
     }
 
     if (targetStage?.constraints) {
-      const evaluation = evaluateStageConstraints(lead, targetStage.constraints);
+      const schoolRec = await basePrisma.school.findUnique({ where: { id: schoolId }, select: { tierDatabasesConfig: true } });
+      const examCfg: any = (schoolRec?.tierDatabasesConfig as any)?.entranceExamSettings;
+      const isExamOff = examCfg?.enabled === false || (lead?.tier?.name && examCfg?.tiers?.[lead.tier.name]?.enabled === false);
+      const evaluation = evaluateStageConstraints(lead, targetStage.constraints, { enableEntranceExam: !isExamOff });
       if (!evaluation.satisfied) {
         return {
           success: false,

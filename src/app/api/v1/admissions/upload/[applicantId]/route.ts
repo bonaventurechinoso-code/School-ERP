@@ -1458,6 +1458,35 @@ export async function POST(
             const raw = reg.credentialsJson || {};
             const credsObj: Record<string, any> =
               typeof raw === "object" && raw !== null && !Array.isArray(raw) ? { ...(raw as any) } : {};
+
+            // Preserve all existing uploaded documents in credentialsJson
+            let docsList: any[] = [];
+            if (Array.isArray(raw)) {
+              docsList = [...raw];
+            } else if (Array.isArray(credsObj.documents)) {
+              docsList = [...credsObj.documents];
+            }
+
+            // Merge uploaded documents into docsList and direct credsObj keys
+            for (const [fKey, docObj] of Object.entries((mergedDocuments || currentDocs) as Record<string, any>)) {
+              if (fKey === "formFeePaid" || fKey === "formFeeStatus") continue;
+              if (docObj && typeof docObj === "object" && (docObj.url || docObj.fileUrl)) {
+                docsList = docsList.filter((d: any) => (d.key || d.type || "").toLowerCase() !== fKey.toLowerCase());
+                docsList.push({
+                  key: fKey,
+                  type: fKey,
+                  label: fKey,
+                  url: docObj.url || docObj.fileUrl,
+                  fileUrl: docObj.url || docObj.fileUrl,
+                  fileName: docObj.fileName,
+                  verified: Boolean(docObj.verified),
+                  status: docObj.status || (docObj.verified ? "VERIFIED" : "UPLOADED"),
+                });
+                credsObj[fKey] = docObj;
+              }
+            }
+            credsObj.documents = docsList;
+
             credsObj.formFeeStatus = "PENDING";
             credsObj.formFeePaid = false;
             credsObj.applicationFeeReceiptUrl = currentDocs.applicationFeeReceiptUrl;

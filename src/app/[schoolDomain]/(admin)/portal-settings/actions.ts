@@ -13,6 +13,21 @@ function safeRevalidatePath(path: string, type?: "page" | "layout") {
   }
 }
 
+export interface EntranceExamTierConfig {
+  enabled: boolean;
+  examDate?: string;
+  arrivalTime?: string;
+  venue?: string;
+  subjects?: string;
+  cutOffScore?: number;
+  instructions?: string;
+}
+
+export interface EntranceExamSettings {
+  enabled: boolean; // Institution master choice: require entrance exam before admission
+  tiers: Record<string, EntranceExamTierConfig>;
+}
+
 export interface UpdatePortalSettingsPayload {
   name?: string;
   contactPhone?: string;
@@ -23,6 +38,7 @@ export interface UpdatePortalSettingsPayload {
   settlementAccountNumber?: string | null;
   settlementAccountName?: string | null;
   paymentInstruction?: string | null;
+  entranceExamSettings?: EntranceExamSettings;
 }
 
 export async function updatePortalSettings(
@@ -70,6 +86,19 @@ export async function updatePortalSettings(
       updatePayload.paymentInstruction = data.paymentInstruction 
         ? data.paymentInstruction.trim() 
         : "Use Student Admission No as transfer narration";
+    }
+
+    // Entrance Examination & Screening Scheduling per Academic Tier
+    if (data.entranceExamSettings !== undefined) {
+      const currentSchool = await basePrisma.school.findUnique({
+        where: { id: schoolId },
+        select: { tierDatabasesConfig: true },
+      });
+      const existingConfig: any = (currentSchool?.tierDatabasesConfig as object) || {};
+      updatePayload.tierDatabasesConfig = {
+        ...existingConfig,
+        entranceExamSettings: data.entranceExamSettings,
+      };
     }
 
     // Enforce CBN Model A Direct Manual Transfer

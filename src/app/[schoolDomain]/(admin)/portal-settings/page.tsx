@@ -2,6 +2,7 @@ import { basePrisma } from "@/lib/tenant-prisma";
 import PortalSettingsForm from "./PortalSettingsForm";
 import { notFound } from "next/navigation";
 import { Globe, Settings, ExternalLink, ShieldCheck, Sparkles, Landmark, CheckCircle2, AlertTriangle } from "lucide-react";
+import { EntranceExamSettings } from "./actions";
 
 export default async function PortalSettingsPage({
   params: paramsPromise,
@@ -31,6 +32,12 @@ export default async function PortalSettingsPage({
     school.settlementAccountNumber && 
     school.settlementAccountName
   );
+
+  const schoolConfig = (school.tierDatabasesConfig as any) || {};
+  const initialEntranceExamSettings: EntranceExamSettings = schoolConfig.entranceExamSettings || {
+    enabled: true,
+    tiers: {},
+  };
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -106,6 +113,7 @@ export default async function PortalSettingsPage({
         initialAccountNumber={school.settlementAccountNumber || ""}
         initialAccountName={school.settlementAccountName || ""}
         initialPaymentInstruction={school.paymentInstruction || "Use Student Admission No as transfer narration"}
+        initialEntranceExamSettings={initialEntranceExamSettings}
       />
     </div>
   );
