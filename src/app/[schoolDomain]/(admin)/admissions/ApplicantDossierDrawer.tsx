@@ -19,6 +19,7 @@ import {
   DollarSign,
   Copy,
   ExternalLink,
+  Eye,
   ChevronRight,
   ChevronLeft,
   Star,
@@ -273,7 +274,7 @@ export default function ApplicantDossierDrawer({
   schoolId,
   schoolDomain,
   schoolName = "Institution Admissions Desk",
-  canMutate = false,
+  canMutate = true,
   onLeadUpdated,
   onRecordUpdated,
   onPrintOfferLetter,
@@ -346,6 +347,13 @@ export default function ApplicantDossierDrawer({
   const [copiedAppNo, setCopiedAppNo] = useState(false);
   const [localCandidate, setLocalCandidate] = useState<any>(activeCandidate);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{
+    title: string;
+    url: string;
+    key: string;
+    isVerified: boolean;
+    isRejected: boolean;
+  } | null>(null);
 
   // Form Fee & Bank Details State
   const [isSendingBankEmail, setIsSendingBankEmail] = useState(false);
@@ -491,7 +499,10 @@ export default function ApplicantDossierDrawer({
         localCandidate?.applicationFeeReceiptUrl ||
         activeCandidate?.applicationFeeReceiptUrl ||
         docs?.applicationFeeReceiptUrl ||
-        docs?.formFeeReceiptUrl,
+        docs?.formFeeReceiptUrl ||
+        (docs?.applicationFeeReceipt as any)?.url ||
+        (docs?.applicationFeeReceipt as any)?.fileUrl ||
+        (docs?.applicationFeeReceipt as any)?.storageKey,
     },
     {
       key: "passportPhoto",
@@ -500,8 +511,10 @@ export default function ApplicantDossierDrawer({
       url:
         resolveDocUrl(localCandidate || activeCandidate, "passportPhoto") ||
         localCandidate?.passportPhotoUrl ||
+        docs?.passportPhotoUrl ||
         docs?.passportPhoto?.url ||
         docs?.passportPhoto?.fileUrl ||
+        docs?.passportPhoto?.storageKey ||
         docs?.passport,
     },
     {
@@ -511,8 +524,10 @@ export default function ApplicantDossierDrawer({
       url:
         resolveDocUrl(localCandidate || activeCandidate, "birthCertificate") ||
         localCandidate?.birthCertificateUrl ||
+        docs?.birthCertificateUrl ||
         docs?.birthCertificate?.url ||
         docs?.birthCertificate?.fileUrl ||
+        docs?.birthCertificate?.storageKey ||
         docs?.birthCert,
     },
     {
@@ -522,8 +537,10 @@ export default function ApplicantDossierDrawer({
       url:
         resolveDocUrl(localCandidate || activeCandidate, "academicResults") ||
         localCandidate?.academicResultsUrl ||
+        docs?.academicResultsUrl ||
         docs?.academicResults?.url ||
         docs?.academicResults?.fileUrl ||
+        docs?.academicResults?.storageKey ||
         docs?.previousResults,
     },
     {
@@ -533,8 +550,10 @@ export default function ApplicantDossierDrawer({
       url:
         resolveDocUrl(localCandidate || activeCandidate, "medicalRecords") ||
         localCandidate?.medicalRecordsUrl ||
+        docs?.medicalRecordsUrl ||
         docs?.medicalRecords?.url ||
         docs?.medicalRecords?.fileUrl ||
+        docs?.medicalRecords?.storageKey ||
         docs?.medical,
     },
     {
@@ -543,8 +562,11 @@ export default function ApplicantDossierDrawer({
       mandatory: false,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "ninSlip") ||
+        localCandidate?.ninSlipUrl ||
+        docs?.ninSlipUrl ||
         docs?.ninSlip?.url ||
         docs?.ninSlip?.fileUrl ||
+        docs?.ninSlip?.storageKey ||
         docs?.ninSlip ||
         docs?.nin,
     },
@@ -806,13 +828,28 @@ export default function ApplicantDossierDrawer({
           setLocalCandidate((prev: any) => {
             if (!prev) return prev;
             const currentDocs = { ...(prev.documents || {}) };
+            const prevEntry = currentDocs[docType];
+            const propUrlKey = docType + "Url";
+            const existingUrl =
+              (typeof prevEntry === "object" ? prevEntry?.url || prevEntry?.fileUrl || prevEntry?.storageKey : null) ||
+              (typeof prevEntry === "string" ? prevEntry : null) ||
+              resolveDocUrl(prev, docType) ||
+              (prev as any)[propUrlKey] ||
+              (prev.documents as any)?.[propUrlKey];
+
             currentDocs[docType] = {
-              ...(typeof currentDocs[docType] === "object" ? currentDocs[docType] : {}),
+              ...(typeof prevEntry === "object" ? prevEntry : {}),
+              url: existingUrl || (typeof prevEntry === "object" ? prevEntry?.url : null),
+              fileUrl: existingUrl || (typeof prevEntry === "object" ? prevEntry?.fileUrl : null),
+              storageKey: existingUrl || (typeof prevEntry === "object" ? prevEntry?.storageKey : null),
               status,
               verificationStatus: status === "VERIFIED" ? "MANUALLY_VERIFIED" : "REJECTED",
               verified: status === "VERIFIED",
               rejected: status === "REJECTED",
             };
+            if (existingUrl) {
+              currentDocs[propUrlKey] = existingUrl;
+            }
             if (docType === "applicationFeeReceipt" && status === "VERIFIED") {
               currentDocs.formFeePaid = true;
               currentDocs.formFeeStatus = "PAID";
@@ -820,6 +857,7 @@ export default function ApplicantDossierDrawer({
             return {
               ...prev,
               documents: currentDocs,
+              ...(existingUrl ? { [propUrlKey]: existingUrl } : {}),
               ...(docType === "applicationFeeReceipt" && status === "VERIFIED" ? { formFeePaid: true, formFeeStatus: "PAID" } : {}),
             };
           });
@@ -1442,6 +1480,118 @@ export default function ApplicantDossierDrawer({
                   )}
                 </div>
               </div>
+
+              {/* STATUTORY KYC & CREDENTIALS OVERVIEW CARD IN TAB 1 */}
+              <div className="bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                      Statutory Credentials &amp; KYC Verification
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("credentials")}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Inspect Credentials Tab</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {kycChecklist.map((doc) => {
+                    const docRecord = resolveDocRecord(localCandidate || activeCandidate, doc.key);
+                    const isFeeDoc = doc.key === "applicationFeeReceipt";
+                    const isVerified = isFeeDoc
+                      ? Boolean(
+                          isFeePaid ||
+                          docRecord.verified ||
+                          docRecord.status === "VERIFIED" ||
+                          docRecord.status === "MANUALLY_VERIFIED" ||
+                          docRecord.status === "AUTO_VERIFIED" ||
+                          docRecord.verificationStatus === "MANUALLY_VERIFIED" ||
+                          docRecord.verificationStatus === "AUTO_VERIFIED" ||
+                          docs.formFeeStatus === "PAID"
+                        )
+                      : Boolean(
+                          docRecord.verified ||
+                          docRecord.status === "VERIFIED" ||
+                          docRecord.status === "MANUALLY_VERIFIED" ||
+                          docRecord.status === "AUTO_VERIFIED" ||
+                          docRecord.verificationStatus === "MANUALLY_VERIFIED" ||
+                          docRecord.verificationStatus === "AUTO_VERIFIED"
+                        );
+
+                    const resolvedUrl =
+                      doc.url ||
+                      (typeof docRecord === "object" ? docRecord?.url || docRecord?.fileUrl || docRecord?.storageKey || docRecord?.path : null) ||
+                      (typeof docRecord === "string" ? docRecord : null) ||
+                      resolveDocUrl(localCandidate || activeCandidate, doc.key);
+                    const hasFile = Boolean(resolvedUrl);
+
+                    return (
+                      <div
+                        key={doc.key}
+                        className="p-2.5 rounded-lg border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/40 flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 dark:text-zinc-200 truncate text-[11px]">
+                            {doc.label}
+                          </p>
+                          <span
+                            className={`text-[10px] font-bold ${
+                              isVerified
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : hasFile
+                                ? "text-blue-600 dark:text-blue-400"
+                                : "text-slate-400 dark:text-zinc-500"
+                            }`}
+                          >
+                            {isVerified ? "Verified ✓" : hasFile ? "Uploaded" : "Pending"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {hasFile && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewDoc({
+                                  title: doc.label,
+                                  url: resolvedUrl,
+                                  key: doc.key,
+                                  isVerified,
+                                  isRejected: false,
+                                })
+                              }
+                              className="px-2 py-1 text-[11px] font-bold rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 transition"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Review</span>
+                            </button>
+                          )}
+                          {canMutate && !isVerified && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (doc.key === "applicationFeeReceipt") {
+                                  await handleMarkAsPaid();
+                                }
+                                handleSetDocumentStatus(doc.key, "VERIFIED");
+                              }}
+                              className="px-2 py-1 text-[11px] font-bold rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 transition"
+                            >
+                              Verify
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1559,7 +1709,6 @@ export default function ApplicantDossierDrawer({
                       ? Boolean(
                           docRecord.rejected ||
                           docRecord.status === "REJECTED" ||
-                          docRecord.status === "REJECTED" ||
                           docRecord.verificationStatus === "REJECTED" ||
                           docs.formFeeStatus === "REJECTED"
                         )
@@ -1568,7 +1717,13 @@ export default function ApplicantDossierDrawer({
                           docRecord.status === "REJECTED" ||
                           docRecord.verificationStatus === "REJECTED"
                         );
-                    const hasFile = Boolean(doc.url);
+
+                    const resolvedUrl =
+                      doc.url ||
+                      (typeof docRecord === "object" ? docRecord?.url || docRecord?.fileUrl || docRecord?.storageKey || docRecord?.path : null) ||
+                      (typeof docRecord === "string" ? docRecord : null) ||
+                      resolveDocUrl(localCandidate || activeCandidate, doc.key);
+                    const hasFile = Boolean(resolvedUrl);
 
                     return (
                       <div
@@ -1619,7 +1774,7 @@ export default function ApplicantDossierDrawer({
                                 </span>
                               ) : (
                                 <span className="text-slate-400 dark:text-zinc-500 italic">
-                                  Not yet uploaded
+                                  Physical / Desk Sighted
                                 </span>
                               )}
                             </div>
@@ -1629,20 +1784,40 @@ export default function ApplicantDossierDrawer({
                         {/* Document Actions */}
                         <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
                           {hasFile && (
-                            <button
-                              type="button"
-                              onClick={() => window.open(doc.url, "_blank", "noopener,noreferrer")}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
-                              title={`View ${doc.label}`}
-                            >
-                              <ExternalLink className="w-3 h-3 text-slate-400" />
-                              <span>View</span>
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewDoc({
+                                    title: doc.label,
+                                    url: resolvedUrl,
+                                    key: doc.key,
+                                    isVerified,
+                                    isRejected,
+                                  })
+                                }
+                                className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs border border-indigo-200 dark:border-indigo-800"
+                                title={`Review & Inspect ${doc.label}`}
+                              >
+                                <Eye className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>Review</span>
+                              </button>
+
+                              <a
+                                href={resolvedUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 transition"
+                                title={`Open ${doc.label} in new tab`}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </>
                           )}
 
                           {canMutate && (
-                            <label className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-bold text-xs transition flex items-center gap-1 cursor-pointer">
-                              <UploadCloud className="w-3 h-3 text-indigo-500" />
+                            <label className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs">
+                              <UploadCloud className="w-3.5 h-3.5 text-indigo-500" />
                               <span>{hasFile ? "Replace" : "Upload"}</span>
                               <input
                                 type="file"
@@ -1657,37 +1832,48 @@ export default function ApplicantDossierDrawer({
                             </label>
                           )}
 
-                          {canMutate && hasFile && (
+                          {canMutate && (
                             <>
                               <button
                                 type="button"
-                                disabled={isVerified}
+                                disabled={isVerified || isPending}
                                 onClick={async () => {
                                   if (doc.key === "applicationFeeReceipt") {
                                     await handleMarkAsPaid();
                                   }
                                   handleSetDocumentStatus(doc.key, "VERIFIED");
                                 }}
-                                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
+                                className={`px-2.5 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs ${
                                   isVerified
                                     ? "bg-emerald-600 text-white cursor-default"
-                                    : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
                                 }`}
                               >
-                                {isVerified ? "Verified ✓" : "Verify"}
+                                {isVerified ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Verified ✓</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                    <span>Verify</span>
+                                  </>
+                                )}
                               </button>
 
                               {!isVerified && (
                                 <button
                                   type="button"
+                                  disabled={isPending}
                                   onClick={() => handleSetDocumentStatus(doc.key, "REJECTED")}
-                                  className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
+                                  className={`px-2.5 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs ${
                                     isRejected
                                       ? "bg-rose-600 text-white"
-                                      : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+                                      : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
                                   }`}
                                 >
-                                  {isRejected ? "Rejected ✗" : "Reject"}
+                                  <span>{isRejected ? "Rejected ✗" : "Reject"}</span>
                                 </button>
                               )}
                             </>
@@ -1846,6 +2032,115 @@ export default function ApplicantDossierDrawer({
           )}
         </div>
       </div>
+
+      {/* DOCUMENT INSPECTION & REVIEW MODAL */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="font-extrabold text-slate-900 dark:text-zinc-50 text-base">
+                  {previewDoc.title}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1.5 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open in Tab</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-100 dark:bg-zinc-950/80 min-h-[350px]">
+              {previewDoc.url.toLowerCase().endsWith(".pdf") || previewDoc.url.includes("pdf") ? (
+                <iframe
+                  src={previewDoc.url}
+                  className="w-full h-[60vh] rounded-lg border border-slate-200 dark:border-zinc-800 bg-white"
+                  title={previewDoc.title}
+                />
+              ) : (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.title}
+                  className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm"
+                />
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 bg-white dark:bg-zinc-900">
+              <div className="text-xs text-slate-500 dark:text-zinc-400">
+                Status:{" "}
+                <span className="font-bold text-slate-800 dark:text-zinc-200">
+                  {previewDoc.isVerified ? "Verified ✓" : previewDoc.isRejected ? "Rejected ✗" : "Pending Review"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {canMutate && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={previewDoc.isVerified || isPending}
+                      onClick={async () => {
+                        if (previewDoc.key === "applicationFeeReceipt") {
+                          await handleMarkAsPaid();
+                        }
+                        handleSetDocumentStatus(previewDoc.key, "VERIFIED");
+                        setPreviewDoc((prev) => prev ? { ...prev, isVerified: true, isRejected: false } : null);
+                      }}
+                      className={`px-3.5 py-2 rounded-lg font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                        previewDoc.isVerified
+                          ? "bg-emerald-600 text-white cursor-default"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{previewDoc.isVerified ? "Verified ✓" : "Verify Document"}</span>
+                    </button>
+
+                    {!previewDoc.isVerified && (
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          handleSetDocumentStatus(previewDoc.key, "REJECTED");
+                          setPreviewDoc((prev) => prev ? { ...prev, isVerified: false, isRejected: true } : null);
+                        }}
+                        className={`px-3.5 py-2 rounded-lg font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                          previewDoc.isRejected
+                            ? "bg-rose-600 text-white"
+                            : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300"
+                        }`}
+                      >
+                        <span>{previewDoc.isRejected ? "Rejected ✗" : "Reject Document"}</span>
+                      </button>
+                    )}
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-xs font-bold transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===================== EMAIL GUARDIAN COMPOSER MODAL OVERLAY ===================== */}
       {isEmailModalOpen && (

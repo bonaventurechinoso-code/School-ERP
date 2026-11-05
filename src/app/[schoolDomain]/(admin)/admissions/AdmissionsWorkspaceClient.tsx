@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Users,
   ShieldCheck,
@@ -34,6 +35,7 @@ import {
   Sparkles,
   Edit,
   Trash2,
+  Calendar,
 } from "lucide-react";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -943,6 +945,15 @@ export default function AdmissionsWorkspaceClient({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href={`/${schoolDomain}/portal-settings?tab=entrance-exam`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs hover:bg-indigo-50 dark:hover:bg-zinc-700 transition"
+            title="Configure Entrance Examination dates, venues, subjects, and cut-off scores"
+          >
+            <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Entrance Exam Settings</span>
+          </Link>
+
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
             <span>{schoolName || school?.name}</span>

@@ -6,10 +6,15 @@ import { EntranceExamSettings } from "./actions";
 
 export default async function PortalSettingsPage({
   params: paramsPromise,
+  searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }> | { schoolDomain: string };
+  searchParams?: Promise<{ tab?: string }> | { tab?: string };
 }) {
   const params = await Promise.resolve(paramsPromise);
+  const searchParams = searchParamsPromise ? await Promise.resolve(searchParamsPromise) : {};
+  const initialTab = searchParams?.tab;
+
   const school = await basePrisma.school.findUnique({
     where: { subdomain: params.schoolDomain },
     include: {
@@ -114,6 +119,7 @@ export default async function PortalSettingsPage({
         initialAccountName={school.settlementAccountName || ""}
         initialPaymentInstruction={school.paymentInstruction || "Use Student Admission No as transfer narration"}
         initialEntranceExamSettings={initialEntranceExamSettings}
+        initialTab={initialTab}
       />
     </div>
   );

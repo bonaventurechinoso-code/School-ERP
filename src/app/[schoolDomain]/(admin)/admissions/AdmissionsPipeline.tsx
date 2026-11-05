@@ -124,7 +124,7 @@ export default function AdmissionsPipeline({
   schoolDomain,
   tiers,
   schoolName = "Institution Admissions Desk",
-  canMutate = false,
+  canMutate = true,
   isTenantAdmin = false,
   initialTracks = [],
 }: {

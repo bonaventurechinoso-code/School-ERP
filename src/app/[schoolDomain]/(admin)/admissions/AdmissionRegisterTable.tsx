@@ -77,7 +77,7 @@ export default function AdmissionRegisterTable({
   schoolId,
   schoolDomain,
   schoolName = "Institution Admissions Desk",
-  canMutate = false,
+  canMutate = true,
   isTenantAdmin = false,
   leads = [],
   stages = [],
