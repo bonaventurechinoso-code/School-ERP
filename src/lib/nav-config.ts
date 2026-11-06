@@ -136,10 +136,17 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
           },
           {
             id: "admissions",
-            label: "Admissions",
+            label: "Admissions Pipeline",
             href: (domain) => `/${domain}/admissions`,
             icon: UserPlus,
             matchPaths: ["/admissions", "/admin/admissions", "/settings/admissions"],
+          },
+          {
+            id: "entrance-exam-schedules",
+            label: "Entrance Exam Schedules",
+            href: (domain) => `/${domain}/admissions?tab=exams`,
+            icon: Calendar,
+            matchPaths: ["/admissions?tab=exams"],
           },
           {
             id: "parents-directory",
@@ -527,7 +534,76 @@ export function getTenantNavigation(
     ];
   }
 
-  // 3. PARENT TIER
+  // 3. REGISTRAR & ADMISSIONS OFFICER TIER
+  // Strictly restricted from institutional bank modules & payment settings.
+  // Granted authority over admissions, student enrollment, and entrance examination schedules.
+  if (
+    normalized.includes("REGISTRAR") ||
+    normalized.includes("ADMISSION")
+  ) {
+    return [
+      {
+        id: "admissions-engine",
+        title: "ADMISSIONS & ENTRANCE EXAMINATION",
+        items: [
+          {
+            id: "admissions-pipeline",
+            label: "Admissions Pipeline",
+            href: (d) => `/${d}/admissions`,
+            icon: UserPlus,
+            matchPaths: ["/admissions", "/admin/admissions"],
+          },
+          {
+            id: "entrance-exam-schedules",
+            label: "Entrance Examination Schedules",
+            href: (d) => `/${d}/admissions?tab=exams`,
+            icon: Calendar,
+            badge: "EXAM",
+            matchPaths: ["/admissions?tab=exams"],
+          },
+          {
+            id: "admissions-register-table",
+            label: "Admissions Register Table",
+            href: (d) => `/${d}/admissions?tab=register`,
+            icon: FileSpreadsheet,
+            matchPaths: ["/admissions?tab=register"],
+          },
+          {
+            id: "students-enrollment-roster",
+            label: "Students Roster & Enrollment",
+            href: (d) => `/${d}/students`,
+            icon: Users,
+          },
+        ],
+      },
+      {
+        id: "academic-records",
+        title: "ACADEMICS & EXAMINATIONS",
+        items: [
+          {
+            id: "classes-sections",
+            label: "Classes & Sections",
+            href: (d) => `/${d}/classes`,
+            icon: Building2,
+          },
+          {
+            id: "assessments-results",
+            label: "Assessments, Records & Results",
+            href: (d) => `/${d}/exams`,
+            icon: Award,
+          },
+          {
+            id: "communications-desk",
+            label: "Communications Desk",
+            href: (d) => `/${d}/communications`,
+            icon: MessageSquare,
+          },
+        ],
+      },
+    ];
+  }
+
+  // 4. PARENT TIER
   if (normalized.includes("PARENT") || normalized.includes("GUARDIAN")) {
     return [
       {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Users,
@@ -59,6 +59,7 @@ import {
   updateAdmissionsApplicationBioAction,
   deleteAdmissionsApplicationAction,
   deduplicateAllAdmissionsAction,
+  saveManualEntranceScoreAction,
 } from "./actions";
 import { recordWalkInApplication } from "./walk-in/actions";
 
@@ -287,6 +288,22 @@ export default function AdmissionsWorkspaceClient({
       }
     }
   }, [applications, initialApplications]);
+
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ["kanban", "exams", "register", "walkin", "reconciliation"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  // Entrance examination schedules state
+  const [examSearch, setExamSearch] = useState("");
+  const [examGradeFilter, setExamGradeFilter] = useState("ALL");
+  const [examStatusFilter, setExamStatusFilter] = useState("ALL");
+  const [savingExamScoreId, setSavingExamScoreId] = useState<string | null>(null);
+  const [editingExamScoreId, setEditingExamScoreId] = useState<string | null>(null);
+  const [examScoreInputs, setExamScoreInputs] = useState<Record<string, string>>({});
 
   // Edit Applicant Modal state
   const [editingApp, setEditingApp] = useState<SerializedApplication | null>(null);
@@ -957,6 +974,72 @@ export default function AdmissionsWorkspaceClient({
     return filteredRegister.slice(start, start + pageSize);
   }, [filteredRegister, currentPage, pageSize]);
 
+  const examCandidates = useMemo(() => {
+    return applications.filter((app) => {
+      const q = examSearch.toLowerCase().trim();
+      const fullName = `${app.firstName} ${app.middleName || ""} ${app.lastName}`.toLowerCase();
+      const appNo = (app.applicationNumber || "").toLowerCase();
+      const phone = (app.phoneNumber || "").toLowerCase();
+
+      const matchesSearch = !q || fullName.includes(q) || appNo.includes(q) || phone.includes(q);
+      const matchesGrade = examGradeFilter === "ALL" || app.programId === examGradeFilter;
+
+      const tierData = (app.tierSpecificData as any) || {};
+      const score = tierData.examScore ?? tierData.entranceScore ?? (app.metadata as any)?.examScore;
+      const numScore = score !== undefined && score !== null && score !== "" ? Number(score) : null;
+
+      let matchesStatus = true;
+      if (examStatusFilter === "PENDING") {
+        matchesStatus = numScore === null;
+      } else if (examStatusFilter === "PASSED") {
+        matchesStatus = numScore !== null && numScore >= 50;
+      } else if (examStatusFilter === "FAILED") {
+        matchesStatus = numScore !== null && numScore < 50;
+      }
+
+      return matchesSearch && matchesGrade && matchesStatus;
+    });
+  }, [applications, examSearch, examGradeFilter, examStatusFilter]);
+
+  const handleSaveExamScore = async (app: SerializedApplication, scoreVal: string) => {
+    const num = Number(scoreVal);
+    if (isNaN(num) || num < 0 || num > 100) {
+      setFeedback({ type: "error", message: "Please enter a valid exam score between 0 and 100." });
+      return;
+    }
+    setSavingExamScoreId(app.id);
+    try {
+      const res = await saveManualEntranceScoreAction({
+        leadId: app.id,
+        score: num,
+        schoolId,
+        schoolDomain,
+      });
+      if (res.success) {
+        setApplications((prev) =>
+          prev.map((a) => {
+            if (a.id === app.id) {
+              const updatedTier = { ...((a.tierSpecificData as any) || {}), examScore: num, entranceScore: num };
+              return { ...a, tierSpecificData: updatedTier };
+            }
+            return a;
+          })
+        );
+        setEditingExamScoreId(null);
+        setFeedback({
+          type: "success",
+          message: `Entrance examination score for ${app.firstName} ${app.lastName} saved: ${num}%.`,
+        });
+      } else {
+        setFeedback({ type: "error", message: res.error || "Failed to record exam score." });
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Failed to save exam score." });
+    } finally {
+      setSavingExamScoreId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 w-full animate-in fade-in duration-300">
       {/* Feedback Toast Banner */}
@@ -1065,6 +1148,10 @@ export default function AdmissionsWorkspaceClient({
           <TabsList className="bg-slate-100 dark:bg-zinc-800/80 p-1 rounded-xl">
             <TabsTrigger value="kanban" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
               Admissions Pipeline
+            </TabsTrigger>
+            <TabsTrigger value="exams" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Entrance Examination Schedules</span>
             </TabsTrigger>
             <TabsTrigger value="register" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
               Admissions Register Table
@@ -1234,6 +1321,337 @@ export default function AdmissionsWorkspaceClient({
                 </div>
               );
             })}
+          </div>
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* TAB: ENTRANCE EXAMINATION SCHEDULES & SCORES                              */}
+        {/* ========================================================================= */}
+        <TabsContent value="exams" className="mt-4 space-y-4">
+          {/* Metrics summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  Total Exam Candidates
+                </span>
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <Calendar className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50 mt-2">
+                {applications.length}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                Applicants in active intake queue
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  Scores Recorded
+                </span>
+                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <FileCheck className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-zinc-50 mt-2">
+                {applications.filter((a) => {
+                  const s = (a.tierSpecificData as any)?.examScore ?? (a.tierSpecificData as any)?.entranceScore ?? (a.metadata as any)?.examScore;
+                  return s !== undefined && s !== null && s !== "";
+                }).length}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                Evaluated candidate dossiers
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  Passed (Qualified)
+                </span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">
+                {applications.filter((a) => {
+                  const s = (a.tierSpecificData as any)?.examScore ?? (a.tierSpecificData as any)?.entranceScore ?? (a.metadata as any)?.examScore;
+                  return s !== undefined && s !== null && s !== "" && Number(s) >= 50;
+                }).length}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                Score &ge; 50% benchmark
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  Pending Examination
+                </span>
+                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-2">
+                {applications.filter((a) => {
+                  const s = (a.tierSpecificData as any)?.examScore ?? (a.tierSpecificData as any)?.entranceScore ?? (a.metadata as any)?.examScore;
+                  return s === undefined || s === null || s === "";
+                }).length}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                Awaiting CBT / oral screening
+              </p>
+            </div>
+          </div>
+
+          {/* Filter Toolbar */}
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search exam candidates by name, application number, phone..."
+                  value={examSearch}
+                  onChange={(e) => setExamSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={examGradeFilter}
+                  onChange={(e) => setExamGradeFilter(e.target.value)}
+                  className="text-xs bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-700 dark:text-zinc-300 focus:outline-hidden"
+                >
+                  <option value="ALL">All Grades / Classes</option>
+                  {Array.from(new Set(applications.map((a) => a.programId).filter(Boolean))).map((prog) => (
+                    <option key={prog} value={prog}>
+                      {prog}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={examStatusFilter}
+                  onChange={(e) => setExamStatusFilter(e.target.value)}
+                  className="text-xs bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-700 dark:text-zinc-300 focus:outline-hidden"
+                >
+                  <option value="ALL">All Exam Statuses</option>
+                  <option value="PENDING">Pending Evaluation</option>
+                  <option value="PASSED">Passed (&ge; 50%)</option>
+                  <option value="FAILED">Failed (&lt; 50%)</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExamSearch("");
+                    setExamGradeFilter("ALL");
+                    setExamStatusFilter("ALL");
+                  }}
+                  className="text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Candidates Examination Table */}
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-500" />
+                  Entrance Examination & Screening Schedule
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Scheduled candidates, CBT scores, screening recommendations, and admit slips.
+                </p>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                {examCandidates.length} candidate{examCandidates.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 dark:bg-zinc-800/50 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Candidate & Application</th>
+                    <th className="py-3 px-4">Target Class</th>
+                    <th className="py-3 px-4">Examination Session & Venue</th>
+                    <th className="py-3 px-4">Entrance Score</th>
+                    <th className="py-3 px-4">Recommendation</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                  {examCandidates.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400 dark:text-zinc-500">
+                        <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                        <p className="font-medium">No entrance examination candidates found matching criteria.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    examCandidates.map((app) => {
+                      const tierData = (app.tierSpecificData as any) || {};
+                      const rawScore = tierData.examScore ?? tierData.entranceScore ?? (app.metadata as any)?.examScore;
+                      const hasScore = rawScore !== undefined && rawScore !== null && rawScore !== "";
+                      const numScore = hasScore ? Number(rawScore) : null;
+                      const isPassed = numScore !== null && numScore >= 50;
+                      const isEditingThis = editingExamScoreId === app.id;
+                      const isSavingThis = savingExamScoreId === app.id;
+
+                      const venue = tierData.examVenue || tierData.venue || "Campus CBT Center (Main Hall)";
+                      const scheduleDate = tierData.examDate || tierData.interviewDate || (app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "Scheduled on Notice");
+
+                      return (
+                        <tr key={app.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 dark:text-zinc-100 text-xs">
+                              {app.firstName} {app.middleName || ""} {app.lastName}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                {app.applicationNumber}
+                              </span>
+                              {app.phoneNumber && (
+                                <span className="text-[10px] text-slate-400">{app.phoneNumber}</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-1 rounded-md text-[11px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+                              {app.programId || tierData.targetGrade || "Standard"}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="text-slate-800 dark:text-zinc-200 font-medium text-xs flex items-center gap-1.5">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              <span>{venue}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                              Session: {app.academicSessionId || "2026/2027"} &bull; {scheduleDate}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {isEditingThis ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={examScoreInputs[app.id] ?? (hasScore ? String(rawScore) : "")}
+                                  onChange={(e) =>
+                                    setExamScoreInputs((prev) => ({ ...prev, [app.id]: e.target.value }))
+                                  }
+                                  placeholder="0-100"
+                                  className="w-16 px-2 py-1 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isSavingThis}
+                                  onClick={() => handleSaveExamScore(app, examScoreInputs[app.id] ?? String(rawScore ?? ""))}
+                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50"
+                                >
+                                  {isSavingThis ? "..." : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingExamScoreId(null)}
+                                  className="px-1.5 py-1 text-[11px] rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-zinc-700 transition"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                {hasScore ? (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                      isPassed
+                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                        : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                    }`}
+                                  >
+                                    {numScore}%
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                    Pending Exam
+                                  </span>
+                                )}
+                                {canMutate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingExamScoreId(app.id);
+                                      setExamScoreInputs((prev) => ({
+                                        ...prev,
+                                        [app.id]: hasScore ? String(rawScore) : "",
+                                      }));
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-indigo-600 transition"
+                                    title="Edit exam score"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {hasScore ? (
+                              isPassed ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                  Recommend for Admission
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 dark:text-rose-400">
+                                  <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                                  Below Cut-off (Review)
+                                </span>
+                              )
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-zinc-500">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                Awaiting CBT Results
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setDossierApp(app)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition border border-indigo-200 dark:border-indigo-800/60"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Inspect Dossier</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </TabsContent>
 

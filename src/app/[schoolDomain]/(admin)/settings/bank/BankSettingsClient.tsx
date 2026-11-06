@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
-import { updateSchoolBankDetails } from "./actions";
+import { updateSchoolBankDetails, resetSchoolBankDetails } from "./actions";
 import {
   Building2,
   CreditCard,
@@ -13,6 +13,7 @@ import {
   Copy,
   Info,
   Search,
+  RotateCcw,
 } from "lucide-react";
 
 interface BankSettingsClientProps {
@@ -123,6 +124,36 @@ export default function BankSettingsClient({
       setTimeout(() => setSuccessMsg(null), 5000);
     } else {
       setErrorMsg(res.error || "Failed to update bank details.");
+    }
+  };
+
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleReset = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to reset and clear the institution bank account details? Only the Tenant Administrator has permission to perform this reset."
+      )
+    ) {
+      return;
+    }
+    setIsResetting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const res = await resetSchoolBankDetails(schoolDomain);
+    setIsResetting(false);
+
+    if (res.success) {
+      setBankName("");
+      setBankCode("");
+      setAccountNumber("");
+      setAccountName("");
+      setPaymentInstruction("Use Student Admission No as transfer narration");
+      setSuccessMsg("Institution bank account details have been reset successfully.");
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } else {
+      setErrorMsg(res.error || "Failed to reset bank details.");
     }
   };
 
@@ -326,6 +357,20 @@ export default function BankSettingsClient({
                 <span>Save School Bank Account</span>
               )}
             </button>
+                      {/* Tenant Admin Reset Control */}
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400 font-medium">Tenant Admin Control</span>
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={isResetting || isSaving || (!bankName && !accountNumber)}
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 disabled:opacity-40 flex items-center gap-1.5 transition cursor-pointer"
+                title="Only Tenant Administrator can reset institution bank details"
+              >
+                {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>Reset Bank Details</span>
+              </button>
+            </div>
           </form>
         </div>
 
