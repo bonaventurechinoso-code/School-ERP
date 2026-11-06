@@ -25,6 +25,9 @@ export async function getVerificationQueue(
       return { success: false, error: "School not found", proofs: [], stats: null };
     }
 
+    const { reconcileAdmissionFeeReceipts } = await import("@/lib/payment-receipt-service");
+    await reconcileAdmissionFeeReceipts(school.id).catch(() => null);
+
     const whereClause: any = { schoolId: school.id };
 
     if (filterStatus && filterStatus !== "ALL") {
@@ -41,49 +44,132 @@ export async function getVerificationQueue(
       ];
     }
 
-    const proofs = await basePrisma.paymentProof.findMany({
-      where: whereClause,
-      orderBy: { submittedAt: "desc" },
-      take: 100,
-      include: {
-        invoice: {
-          select: {
-            id: true,
-            description: true,
-            amountDue: true,
-            amountPaid: true,
-            status: true,
+    const receiptWhere: any = {
+      OR: [{ tenantId: school.id }, { schoolId: school.id }],
+    };
+    if (filterStatus && filterStatus !== "ALL") {
+      const up = filterStatus.toUpperCase();
+      receiptWhere.status = up === "APPROVED" ? "VERIFIED" : up;
+    }
+
+    const [rawProofs, rawReceipts] = await Promise.all([
+      basePrisma.paymentProof.findMany({
+        where: whereClause,
+        orderBy: { submittedAt: "desc" },
+        take: 100,
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              description: true,
+              amountDue: true,
+              amountPaid: true,
+              status: true,
+            },
           },
         },
-      },
-    });
+      }),
+      basePrisma.paymentReceipt
+        .findMany({
+          where: receiptWhere,
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        })
+        .catch(() => []),
+    ]);
 
-    // Compute KPI Stats
+    const mappedReceipts = rawReceipts.map((rc) => ({
+      id: rc.id,
+      studentName: rc.payerName,
+      admissionNumber: rc.referenceNo,
+      amount: rc.amount,
+      paidAt: rc.paymentDate || rc.createdAt,
+      payerBankName:
+        rc.bankName ||
+        (rc.moduleType === "ADMISSION_FORM_FEE" ? "Application Fee" : rc.moduleType),
+      payerAccountName: rc.depositorName || rc.payerName,
+      sessionId: rc.transferReference || rc.txnRef || rc.referenceNo,
+      proofImageUrl: rc.fileUrl || rc.proofOfPaymentUrl || "",
+      status: rc.status === "VERIFIED" ? "APPROVED" : rc.status,
+      submittedAt: rc.createdAt,
+      verifiedAt: rc.verifiedAt,
+      verifiedByName: rc.verifiedBy,
+      rejectionReason: rc.rejectionReason,
+      invoice: {
+        id: rc.linkedInvoiceId || rc.id,
+        description:
+          rc.moduleType === "ADMISSION_FORM_FEE"
+            ? "Admission Application Fee"
+            : rc.moduleType.replace(/_/g, " "),
+        amountDue: rc.amount,
+        amountPaid: rc.status === "VERIFIED" ? rc.amount : 0,
+        status: rc.status === "VERIFIED" ? "PAID" : "PENDING",
+      },
+    }));
+
+    const proofs = [...rawProofs, ...(mappedReceipts as any)];
+
+    // Compute KPI Stats combining both PaymentProof and PaymentReceipt
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [pendingCount, approvedTodayCount, rejectedCount, totalApprovedAgg] =
-      await Promise.all([
-        basePrisma.paymentProof.count({
-          where: { schoolId: school.id, status: "PENDING" },
-        }),
-        basePrisma.paymentProof.count({
+    const receiptScope = { OR: [{ tenantId: school.id }, { schoolId: school.id }] };
+
+    const [
+      proofPendingCount,
+      proofApprovedTodayCount,
+      proofRejectedCount,
+      proofApprovedAgg,
+      rcPendingCount,
+      rcApprovedTodayCount,
+      rcRejectedCount,
+      rcApprovedAgg,
+    ] = await Promise.all([
+      basePrisma.paymentProof.count({
+        where: { schoolId: school.id, status: "PENDING" },
+      }),
+      basePrisma.paymentProof.count({
+        where: {
+          schoolId: school.id,
+          status: "APPROVED",
+          verifiedAt: { gte: today },
+        },
+      }),
+      basePrisma.paymentProof.count({
+        where: { schoolId: school.id, status: "REJECTED" },
+      }),
+      basePrisma.paymentProof.aggregate({
+        where: { schoolId: school.id, status: "APPROVED" },
+        _sum: { amount: true },
+      }),
+      basePrisma.paymentReceipt
+        .count({ where: { ...receiptScope, status: "PENDING" } })
+        .catch(() => 0),
+      basePrisma.paymentReceipt
+        .count({
           where: {
-            schoolId: school.id,
-            status: "APPROVED",
+            ...receiptScope,
+            status: "VERIFIED",
             verifiedAt: { gte: today },
           },
-        }),
-        basePrisma.paymentProof.count({
-          where: { schoolId: school.id, status: "REJECTED" },
-        }),
-        basePrisma.paymentProof.aggregate({
-          where: { schoolId: school.id, status: "APPROVED" },
+        })
+        .catch(() => 0),
+      basePrisma.paymentReceipt
+        .count({ where: { ...receiptScope, status: "REJECTED" } })
+        .catch(() => 0),
+      basePrisma.paymentReceipt
+        .aggregate({
+          where: { ...receiptScope, status: "VERIFIED" },
           _sum: { amount: true },
-        }),
-      ]);
+        })
+        .catch(() => ({ _sum: { amount: 0 } })),
+    ]);
 
-    const totalVerifiedRevenue = totalApprovedAgg._sum.amount || 0;
+    const pendingCount = proofPendingCount + rcPendingCount;
+    const approvedTodayCount = proofApprovedTodayCount + rcApprovedTodayCount;
+    const rejectedCount = proofRejectedCount + rcRejectedCount;
+    const totalVerifiedRevenue =
+      (proofApprovedAgg._sum.amount || 0) + (rcApprovedAgg._sum.amount || 0);
 
     return {
       success: true,
@@ -112,6 +198,30 @@ export async function approvePaymentProof(schoolDomain: string, proofId: string)
     const session = await getSession();
     const verifierName = session?.staffRole || session?.name || "School Bursar";
     const verifierId = session?.userId || "bursar";
+
+    // Check if proofId is a PaymentReceipt (such as an ADMISSION_FORM_FEE Application Fee Receipt)
+    const existingReceipt = await basePrisma.paymentReceipt
+      .findUnique({ where: { id: proofId } })
+      .catch(() => null);
+    if (existingReceipt) {
+      const { verifyPaymentReceipt } = await import("@/lib/payment-receipt-service");
+      const updatedRc = await verifyPaymentReceipt({
+        receiptId: existingReceipt.id,
+        action: "VERIFY",
+        verifiedBy: verifierName,
+        verifiedByUserId: verifierId,
+      });
+      const cleanDomain = schoolDomain.trim().toLowerCase();
+      try {
+        revalidatePath(`/${cleanDomain}/finance/verifications`);
+        revalidatePath(`/bursar/verifications`);
+        revalidatePath(`/bursar`);
+      } catch {}
+      return {
+        success: true,
+        message: `Payment of ₦${Number(updatedRc.amount).toLocaleString()} approved and ledger updated.`,
+      };
+    }
 
     const result = await basePrisma.$transaction(async (tx) => {
       const proof = await tx.paymentProof.findUnique({
@@ -258,6 +368,31 @@ export async function rejectPaymentProof(
     const session = await getSession();
     const verifierName = session?.staffRole || session?.name || "School Bursar";
     const verifierId = session?.userId || "bursar";
+
+    // Check if proofId is a PaymentReceipt (such as an ADMISSION_FORM_FEE Application Fee Receipt)
+    const existingReceipt = await basePrisma.paymentReceipt
+      .findUnique({ where: { id: proofId } })
+      .catch(() => null);
+    if (existingReceipt) {
+      const { verifyPaymentReceipt } = await import("@/lib/payment-receipt-service");
+      await verifyPaymentReceipt({
+        receiptId: existingReceipt.id,
+        action: "REJECT",
+        verifiedBy: verifierName,
+        verifiedByUserId: verifierId,
+        rejectionReason: reason.trim(),
+      });
+      const cleanDomain = schoolDomain.trim().toLowerCase();
+      try {
+        revalidatePath(`/${cleanDomain}/finance/verifications`);
+        revalidatePath(`/bursar/verifications`);
+        revalidatePath(`/bursar`);
+      } catch {}
+      return {
+        success: true,
+        message: "Payment rejected and reason logged for applicant/parent.",
+      };
+    }
 
     const result = await basePrisma.$transaction(async (tx) => {
       const proof = await tx.paymentProof.findUnique({

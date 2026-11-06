@@ -240,6 +240,33 @@ export async function submitPublicApplication(payload: {
           reconciliationNotes: feePayment.depositorName ? `Depositor: ${feePayment.depositorName}` : null,
         },
       });
+
+      if (receiptStorageKey) {
+        await basePrisma.paymentReceipt
+          .create({
+            data: {
+              tenantId: effectiveSchoolId,
+              schoolId: effectiveSchoolId,
+              moduleType: "ADMISSION_FORM_FEE",
+              payerType: "APPLICANT",
+              payerId: application.id,
+              payerName: targetFullName,
+              referenceNo: application.applicationNumber,
+              amount: feePayment.amount || 5000,
+              paymentMethod: "MANUAL_BANK_TRANSFER",
+              paymentMode: "MANUAL_TRANSFER",
+              fileUrl: receiptStorageKey,
+              proofOfPaymentUrl: receiptStorageKey,
+              fileName: feePayment.receiptFileName || "application_fee_receipt.jpg",
+              depositorName: feePayment.depositorName || targetFullName,
+              transferReference: paymentReference,
+              txnRef: paymentReference,
+              status: "PENDING",
+              state: "PENDING_VERIFICATION",
+            },
+          })
+          .catch(() => null);
+      }
     }
 
     // 4. Construct Magic Tracking Link and Dispatch Omnichannel Alerts

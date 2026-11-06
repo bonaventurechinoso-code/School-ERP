@@ -99,17 +99,22 @@ export const getBursarContext = cache(async (): Promise<BursarContext | null> =>
  */
 export async function getBursarDashboardStats(schoolId: string) {
   try {
+    const { reconcileAdmissionFeeReceipts } = await import("@/lib/payment-receipt-service");
+    await reconcileAdmissionFeeReceipts(schoolId).catch(() => null);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const [
       invoicedAgg,
       paidAgg,
-      pendingVerificationsCount,
+      pendingProofCount,
+      pendingReceiptCount,
       todayPaymentsAgg,
       totalStudentsCount,
       recentPayments,
-      pendingProofsList,
+      pendingProofsRaw,
+      pendingReceiptsRaw,
     ] = await Promise.all([
       basePrisma.invoice.aggregate({
         where: { schoolId },
@@ -124,6 +129,14 @@ export async function getBursarDashboardStats(schoolId: string) {
       basePrisma.paymentProof.count({
         where: { schoolId, status: "PENDING" },
       }),
+      basePrisma.paymentReceipt
+        .count({
+          where: {
+            OR: [{ tenantId: schoolId }, { schoolId }],
+            status: "PENDING",
+          },
+        })
+        .catch(() => 0),
       basePrisma.payment.aggregate({
         where: { schoolId, paymentDate: { gte: today } },
         _sum: { amountPaid: true },
@@ -160,7 +173,34 @@ export async function getBursarDashboardStats(schoolId: string) {
           proofImageUrl: true,
         },
       }),
+      basePrisma.paymentReceipt
+        .findMany({
+          where: {
+            OR: [{ tenantId: schoolId }, { schoolId }],
+            status: "PENDING",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        })
+        .catch(() => []),
     ]);
+
+    const pendingVerificationsCount = pendingProofCount + pendingReceiptCount;
+    const pendingProofsList = [
+      ...pendingProofsRaw,
+      ...pendingReceiptsRaw.map((rc) => ({
+        id: rc.id,
+        studentName: rc.payerName,
+        admissionNumber: rc.referenceNo,
+        amount: rc.amount,
+        paidAt: rc.paymentDate || rc.createdAt,
+        payerBankName:
+          rc.bankName ||
+          (rc.moduleType === "ADMISSION_FORM_FEE" ? "Application Fee" : rc.moduleType),
+        sessionId: rc.transferReference || rc.txnRef || rc.referenceNo,
+        proofImageUrl: rc.fileUrl || rc.proofOfPaymentUrl || "",
+      })),
+    ].slice(0, 5);
 
     const totalInvoiced = invoicedAgg._sum.amountDue || 0;
     const totalCollected = paidAgg._sum.amountPaid || 0;

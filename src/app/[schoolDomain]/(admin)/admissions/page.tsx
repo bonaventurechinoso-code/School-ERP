@@ -15,6 +15,64 @@ import AdmissionsWorkspaceClient, {
   AdmissionCycleItem,
 } from "./AdmissionsWorkspaceClient";
 
+function extractDocUrlStr(val: any): string | null {
+  if (!val) return null;
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    return trimmed && trimmed !== "undefined" && trimmed !== "null" ? trimmed : null;
+  }
+  if (typeof val === "object" && !Array.isArray(val)) {
+    const candidate = val.url || val.fileUrl || val.storageKey || val.path;
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      return trimmed && trimmed !== "undefined" && trimmed !== "null" ? trimmed : null;
+    }
+  }
+  return null;
+}
+
+function mergeDocMapsNonDestructively(...maps: any[]): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const map of maps) {
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    for (const [k, v] of Object.entries(map)) {
+      if (v === undefined || v === null) continue;
+      const existing = result[k];
+      if (!existing) {
+        result[k] = v;
+        continue;
+      }
+      const existingUrl = extractDocUrlStr(existing);
+      const incomingUrl = extractDocUrlStr(v);
+      if (typeof existing === "object" && !Array.isArray(existing) && typeof v === "object" && !Array.isArray(v)) {
+        const finalUrl = incomingUrl || existingUrl;
+        result[k] = {
+          ...existing,
+          ...v,
+          ...(finalUrl ? { url: finalUrl, fileUrl: (v as any).fileUrl || (existing as any).fileUrl || finalUrl } : {}),
+        };
+      } else if (typeof existing === "string" && typeof v === "object" && !Array.isArray(v)) {
+        const finalUrl = incomingUrl || existingUrl;
+        result[k] = {
+          ...v,
+          ...(finalUrl ? { url: finalUrl, fileUrl: (v as any).fileUrl || finalUrl } : {}),
+        };
+      } else if (typeof existing === "object" && !Array.isArray(existing) && typeof v === "string") {
+        const finalUrl = incomingUrl || existingUrl;
+        result[k] = {
+          ...existing,
+          ...(finalUrl ? { url: finalUrl, fileUrl: finalUrl } : {}),
+        };
+      } else {
+        if (incomingUrl || !existingUrl) {
+          result[k] = v;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 const TIER_CONFIG = {
   CRECHE: {
     showPostUTME: false,
@@ -192,7 +250,7 @@ export default async function AdmissionsPage({
             }
           }
         }
-        const mergedDocs = { ...existingMetaDocs, ...regDocs };
+        const mergedDocs = mergeDocMapsNonDestructively(existingMetaDocs, regDocs);
 
         const updateData: any = {
           metadata: {
@@ -272,7 +330,7 @@ export default async function AdmissionsPage({
         if (Object.keys(leadDocs).length > 0) {
           const appMeta = (matchApp.metadata as any) || {};
           const appTierData = (matchApp.tierSpecificData as any) || {};
-          const mergedDocs = { ...(appMeta.documents || {}), ...leadDocs };
+          const mergedDocs = mergeDocMapsNonDestructively(appMeta.documents || {}, appTierData.documents || {}, leadDocs);
           const hasFee = Boolean(mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl);
           const hasDocs = Object.keys(mergedDocs).length > 1;
           const nextStatus = (hasFee && hasDocs) ? "UNDER_REVIEW" : hasDocs ? "SUBMITTED" : matchApp.status;
@@ -541,10 +599,10 @@ export default async function AdmissionsPage({
         }
       }
 
-      const metaDocs: Record<string, any> = {
-        ...((app.metadata as any)?.documents || {}),
-        ...((app.tierSpecificData as any)?.documents || {}),
-      };
+      const metaDocs: Record<string, any> = mergeDocMapsNonDestructively(
+        (app.metadata as any)?.documents || {},
+        (app.tierSpecificData as any)?.documents || {}
+      );
 
       // Pull from AdmissionsDocument rows into metaDocs
       const revDocMapDefs: Record<string, string> = {
@@ -556,24 +614,46 @@ export default async function AdmissionsPage({
         ACADEMIC_TRANSCRIPT: "academicResults",
         ACADEMIC_RESULTS: "academicResults",
         O_LEVEL_RESULT: "academicResults",
+        LAST_SCHOOL_RESULT: "academicResults",
+        JAMB_RESULT_SLIP: "academicResults",
         MEDICAL_REPORT: "medicalRecords",
         MEDICAL_RECORDS: "medicalRecords",
+        IMMUNIZATION_RECORD: "medicalRecords",
         NIN_SLIP: "ninSlip",
         NIN: "ninSlip",
         APPLICATION_FEE_RECEIPT: "applicationFeeReceipt",
         FEE_RECEIPT: "applicationFeeReceipt",
       };
 
+      const ensureDocEntryUrl = (key: string, url: string, extra?: Record<string, any>) => {
+        if (!key || !url) return;
+        const current = metaDocs[key];
+        const currentUrl = extractDocUrlStr(current);
+        if (!current) {
+          metaDocs[key] = {
+            url,
+            fileUrl: url,
+            fileName: `${key}.pdf`,
+            verified: false,
+            ...(extra || {}),
+          };
+        } else if (!currentUrl && typeof current === "object") {
+          metaDocs[key] = {
+            ...current,
+            url,
+            fileUrl: url,
+            ...(extra || {}),
+          };
+        }
+      };
+
       for (const d of app.documents) {
         const fieldKey = revDocMapDefs[d.documentType?.toUpperCase()] || d.documentType;
-        if (d.storageKey && !metaDocs[fieldKey]) {
-          metaDocs[fieldKey] = {
-            url: d.storageKey,
-            fileUrl: d.storageKey,
-            fileName: `${fieldKey}.pdf`,
+        if (d.storageKey) {
+          ensureDocEntryUrl(fieldKey, d.storageKey, {
             verified: d.verificationStatus === "MANUALLY_VERIFIED" || d.verificationStatus === "AUTO_VERIFIED",
             status: d.verificationStatus,
-          };
+          });
         }
       }
 
@@ -581,10 +661,11 @@ export default async function AdmissionsPage({
       if (linkedLead && linkedLead.documents && typeof linkedLead.documents === "object") {
         const leadDocs = linkedLead.documents as Record<string, any>;
         for (const [k, v] of Object.entries(leadDocs)) {
-          if (v && typeof v === "object" && (v.url || v.fileUrl)) {
-            if (!metaDocs[k]) metaDocs[k] = v;
-          } if (typeof v === "string" && v) {
-            if (!metaDocs[k]) metaDocs[k] = { url: v, fileUrl: v, fileName: `${k}.pdf`, verified: false };
+          const vUrl = extractDocUrlStr(v);
+          if (vUrl) {
+            ensureDocEntryUrl(k, vUrl, typeof v === "object" ? v : undefined);
+          } else if (v && typeof v === "object" && !metaDocs[k]) {
+            metaDocs[k] = v;
           }
         }
       }
@@ -594,23 +675,26 @@ export default async function AdmissionsPage({
         const rawReg = linkedReg.credentialsJson;
         if (Array.isArray(rawReg)) {
           for (const item of (rawReg as any[])) {
-            if (item && ((item as any).key || (item as any).type) && ((item as any).url || (item as any).fileUrl)) {
+            if (item && ((item as any).key || (item as any).type)) {
               const k = (item as any).key || (item as any).type;
-              if (!metaDocs[k]) metaDocs[k] = item;
+              const iUrl = extractDocUrlStr(item);
+              if (iUrl) ensureDocEntryUrl(k, iUrl, item);
             }
           }
         } else if (typeof rawReg === "object") {
           if (Array.isArray((rawReg as any).documents)) {
             for (const item of (rawReg as any).documents) {
-              if (item && (item.key || item.type) && (item.url || item.fileUrl)) {
+              if (item && (item.key || item.type)) {
                 const k = item.key || item.type;
-                if (!metaDocs[k]) metaDocs[k] = item;
+                const iUrl = extractDocUrlStr(item);
+                if (iUrl) ensureDocEntryUrl(k, iUrl, item);
               }
             }
           } else {
             for (const [k, v] of Object.entries(rawReg)) {
-              if (v && typeof v === "object" && ((v as any).url || (v as any).fileUrl)) {
-                if (!metaDocs[k]) metaDocs[k] = v;
+              const vUrl = extractDocUrlStr(v);
+              if (vUrl) {
+                ensureDocEntryUrl(k, vUrl, typeof v === "object" ? (v as any) : undefined);
               }
             }
           }
@@ -654,14 +738,33 @@ export default async function AdmissionsPage({
         (linkedLead as any)?.applicationFeeReceiptUrl;
 
       if (feeReceiptUrl && (!app.feeTransactions || app.feeTransactions.length === 0)) {
+        const isAlreadyPaid =
+          Boolean(linkedReg?.formFeePaid) ||
+          Boolean((linkedLead?.documents as any)?.formFeePaid) ||
+          metaDocs.applicationFeeReceipt?.status === "VERIFIED";
+        const persistedTx = await basePrisma.admissionsFeeTransaction
+          .create({
+            data: {
+              tenantId: app.tenantId || school.id,
+              applicationId: app.id,
+              paymentMethod: "MANUAL_BANK_TRANSFER",
+              amount: 5000,
+              currency: "NGN",
+              paymentReference: `FEE-${app.applicationNumber}`,
+              paymentStatus: isAlreadyPaid ? "SETTLED" : "PENDING",
+              proofOfPaymentUrl: feeReceiptUrl,
+            },
+          })
+          .catch(() => null);
+
         app.feeTransactions = [
-          {
+          persistedTx || {
             id: `tx-lead-${app.id}`,
             paymentMethod: "MANUAL_BANK_TRANSFER",
             amount: 5000,
             currency: "NGN",
             paymentReference: `FEE-${app.applicationNumber}`,
-            paymentStatus: "PENDING",
+            paymentStatus: isAlreadyPaid ? "SETTLED" : "PENDING",
             proofOfPaymentUrl: feeReceiptUrl,
             createdAt: new Date(),
           },

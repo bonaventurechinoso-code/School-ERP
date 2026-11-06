@@ -31,12 +31,27 @@ export default async function BursarLayout({
 
   let pendingVerificationsCount = 0;
   try {
-    pendingVerificationsCount = await basePrisma.paymentProof.count({
-      where: {
-        schoolId: fallbackContext.schoolId,
-        status: "PENDING",
-      },
-    });
+    const { reconcileAdmissionFeeReceipts } = await import("@/lib/payment-receipt-service");
+    await reconcileAdmissionFeeReceipts(fallbackContext.schoolId).catch(() => null);
+    const [proofCount, receiptCount] = await Promise.all([
+      basePrisma.paymentProof
+        .count({
+          where: {
+            schoolId: fallbackContext.schoolId,
+            status: "PENDING",
+          },
+        })
+        .catch(() => 0),
+      basePrisma.paymentReceipt
+        .count({
+          where: {
+            OR: [{ tenantId: fallbackContext.schoolId }, { schoolId: fallbackContext.schoolId }],
+            status: "PENDING",
+          },
+        })
+        .catch(() => 0),
+    ]);
+    pendingVerificationsCount = proofCount + receiptCount;
   } catch {
     pendingVerificationsCount = 0;
   }

@@ -245,6 +245,22 @@ export async function fetchBursarPortalInitialData(
     }),
   ]);
 
+  // Also reconcile and load pending PaymentReceipts (including Application Fee Receipts) for Bursar visibility
+  const { reconcileAdmissionFeeReceipts, verifyPaymentReceipt } = await import(
+    "@/lib/payment-receipt-service"
+  );
+  await reconcileAdmissionFeeReceipts(schoolId).catch(() => null);
+  const pendingReceipts = await basePrisma.paymentReceipt
+    .findMany({
+      where: {
+        OR: [{ tenantId: schoolId }, { schoolId }],
+        status: "PENDING",
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    })
+    .catch(() => []);
+
   // Calculations for Metrics
   const totalFeesCollected = payments.reduce((acc, p) => acc + (p.amountPaid || 0), 0);
 
@@ -257,7 +273,7 @@ export async function fetchBursarPortalInitialData(
     .filter((t) => t.type === "EXPENSE")
     .reduce((acc, t) => acc + (t.amount || 0), 0);
 
-  const pendingInvoiceApprovals = paymentProofs.length;
+  const pendingInvoiceApprovals = paymentProofs.length + pendingReceipts.length;
 
   // Format Payments
   const recentPayments: FeeCollectionItem[] = payments.map((p) => ({
@@ -337,19 +353,33 @@ export async function fetchBursarPortalInitialData(
     receiptCode: pr.receiptCode,
   }));
 
-  // Format Proofs
-  const pendingProofs: PaymentProofAuditItem[] = paymentProofs.map((pf) => ({
-    id: pf.id,
-    studentName: pf.studentName,
-    admissionNumber: pf.admissionNumber,
-    amount: pf.amount,
-    paidAt: pf.paidAt.toISOString().split("T")[0],
-    payerBankName: pf.payerBankName,
-    payerAccountName: pf.payerAccountName,
-    sessionId: pf.sessionId,
-    proofImageUrl: pf.proofImageUrl,
-    status: pf.status,
-  }));
+  // Format Proofs (combining PaymentProof and PaymentReceipt so Application Fee Receipts reflect in Bursar Portal)
+  const pendingProofs: PaymentProofAuditItem[] = [
+    ...paymentProofs.map((pf) => ({
+      id: pf.id,
+      studentName: pf.studentName,
+      admissionNumber: pf.admissionNumber,
+      amount: pf.amount,
+      paidAt: pf.paidAt.toISOString().split("T")[0],
+      payerBankName: pf.payerBankName,
+      payerAccountName: pf.payerAccountName,
+      sessionId: pf.sessionId,
+      proofImageUrl: pf.proofImageUrl,
+      status: pf.status,
+    })),
+    ...pendingReceipts.map((rc) => ({
+      id: rc.id,
+      studentName: rc.payerName,
+      admissionNumber: rc.referenceNo,
+      amount: rc.amount,
+      paidAt: (rc.paymentDate || rc.createdAt).toISOString().split("T")[0],
+      payerBankName: rc.bankName || (rc.moduleType === "ADMISSION_FORM_FEE" ? "Application Fee" : rc.moduleType),
+      payerAccountName: rc.depositorName || rc.payerName,
+      sessionId: rc.transferReference || rc.txnRef || rc.referenceNo,
+      proofImageUrl: rc.fileUrl || rc.proofOfPaymentUrl || "",
+      status: rc.status,
+    })),
+  ];
 
   return {
     school,
@@ -381,7 +411,28 @@ export async function verifyPaymentProofAction(
       where: { id: proofId },
     });
 
-    if (!proof || proof.schoolId !== schoolId) {
+    if (!proof) {
+      // Check if it is a Universal PaymentReceipt (e.g. ADMISSION_FORM_FEE Application Fee Receipt)
+      const receipt = await basePrisma.paymentReceipt.findUnique({
+        where: { id: proofId },
+      });
+      if (receipt) {
+        const { verifyPaymentReceipt } = await import("@/lib/payment-receipt-service");
+        const updatedReceipt = await verifyPaymentReceipt({
+          receiptId: receipt.id,
+          action: newStatus === "APPROVED" ? "VERIFY" : "REJECT",
+          verifiedBy: "Bursar Office",
+          verifiedByUserId: "BURSAR_PORTAL",
+          rejectionReason:
+            newStatus === "REJECTED" ? rejectionReason || "Rejected by Bursar" : undefined,
+        });
+        safeRevalidate(`/${schoolId}/portal/bursar`);
+        return { success: true, updated: updatedReceipt };
+      }
+      throw new Error("Payment proof record not found or tenant mismatch.");
+    }
+
+    if (proof.schoolId !== schoolId) {
       throw new Error("Payment proof record not found or tenant mismatch.");
     }
 

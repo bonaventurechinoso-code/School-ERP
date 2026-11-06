@@ -413,6 +413,33 @@ export async function updateLeadDocumentsAction(payload: {
       payload.documentType === "formFeeReceipt" ||
       targetAliases.includes("APPLICATION_FEE_RECEIPT");
 
+    const extractExistingUrl = (entry: any): string | null => {
+      if (!entry) return null;
+      if (typeof entry === "string" && entry.trim()) return entry.trim();
+      if (typeof entry === "object" && !Array.isArray(entry)) {
+        const u = entry.url || entry.fileUrl || entry.storageKey || entry.path;
+        if (typeof u === "string" && u.trim()) return u.trim();
+      }
+      return null;
+    };
+
+    const findUrlInMap = (map: any): string | null => {
+      if (!map || typeof map !== "object" || Array.isArray(map)) return null;
+      const direct = extractExistingUrl(map[payload.documentType]) || extractExistingUrl(map[`${payload.documentType}Url`]);
+      if (direct) return direct;
+      for (const alias of targetAliases) {
+        const u = extractExistingUrl(map[alias]) || extractExistingUrl(map[`${alias}Url`]);
+        if (u) return u;
+      }
+      return null;
+    };
+
+    let preservedDocUrl: string | null =
+      findUrlInMap((appRecord?.metadata as any)?.documents) ||
+      findUrlInMap((appRecord?.tierSpecificData as any)?.documents) ||
+      findUrlInMap(lead?.documents) ||
+      findUrlInMap(registerRecord?.credentialsJson);
+
     // 2. Update AdmissionsDocument table and AdmissionsApplication metadata
     if (appRecord) {
       const allMatchingDocs = await basePrisma.admissionsDocument.findMany({
@@ -426,6 +453,10 @@ export async function updateLeadDocumentsAction(payload: {
           return dTypeNorm === aNorm || dTypeNorm.includes(aNorm) || aNorm.includes(dTypeNorm);
         });
       });
+
+      if (matchedDoc?.storageKey && !preservedDocUrl) {
+        preservedDocUrl = matchedDoc.storageKey;
+      }
 
       const verificationStatus =
         payload.status === "VERIFIED"
@@ -448,8 +479,15 @@ export async function updateLeadDocumentsAction(payload: {
 
       const appMetadata = (appRecord.metadata as any) || {};
       const currentMetaDocs = { ...(appMetadata.documents || {}) };
+      const existingMetaObj =
+        typeof currentMetaDocs[payload.documentType] === "object" && currentMetaDocs[payload.documentType]
+          ? currentMetaDocs[payload.documentType]
+          : {};
+      const metaUrl = extractExistingUrl(currentMetaDocs[payload.documentType]) || preservedDocUrl;
+
       currentMetaDocs[payload.documentType] = {
-        ...(typeof currentMetaDocs[payload.documentType] === "object" ? currentMetaDocs[payload.documentType] : { url: currentMetaDocs[payload.documentType] }),
+        ...existingMetaObj,
+        ...(metaUrl ? { url: metaUrl, fileUrl: metaUrl } : {}),
         status: payload.status,
         verificationStatus,
         verified: payload.status === "VERIFIED",
@@ -457,6 +495,9 @@ export async function updateLeadDocumentsAction(payload: {
         verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
         rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
       };
+      if (metaUrl) {
+        currentMetaDocs[`${payload.documentType}Url`] = metaUrl;
+      }
 
       if (isFeeReceipt && payload.status === "VERIFIED") {
         currentMetaDocs.formFeePaid = true;
@@ -465,13 +506,23 @@ export async function updateLeadDocumentsAction(payload: {
 
       const tierData = (appRecord.tierSpecificData as any) || {};
       const tierDocs = { ...(tierData.documents || {}) };
+      const existingTierObj =
+        typeof tierDocs[payload.documentType] === "object" && tierDocs[payload.documentType]
+          ? tierDocs[payload.documentType]
+          : {};
+      const tierUrl = extractExistingUrl(tierDocs[payload.documentType]) || metaUrl || preservedDocUrl;
+
       tierDocs[payload.documentType] = {
-        ...(typeof tierDocs[payload.documentType] === "object" ? tierDocs[payload.documentType] : { url: tierDocs[payload.documentType] }),
+        ...existingTierObj,
+        ...(tierUrl ? { url: tierUrl, fileUrl: tierUrl } : {}),
         status: payload.status,
         verificationStatus,
         verified: payload.status === "VERIFIED",
         rejected: payload.status === "REJECTED",
       };
+      if (tierUrl) {
+        tierDocs[`${payload.documentType}Url`] = tierUrl;
+      }
 
       await basePrisma.admissionsApplication.update({
         where: { id: appRecord.id },
@@ -493,8 +544,7 @@ export async function updateLeadDocumentsAction(payload: {
         await basePrisma.admissionsFeeTransaction.updateMany({
           where: { applicationId: appRecord.id },
           data: {
-            paymentStatus: "VERIFIED",
-            verifiedAt: new Date(),
+            paymentStatus: "SETTLED",
             verifiedByUserId: session?.userId || null,
           },
         });
@@ -505,14 +555,24 @@ export async function updateLeadDocumentsAction(payload: {
     let updated: any = null;
     if (lead) {
       const docs = (lead.documents as any) || {};
+      const existingLeadObj =
+        typeof docs[payload.documentType] === "object" && docs[payload.documentType]
+          ? docs[payload.documentType]
+          : {};
+      const leadDocUrl = extractExistingUrl(docs[payload.documentType]) || preservedDocUrl;
+
       docs[payload.documentType] = {
-        ...(typeof docs[payload.documentType] === "object" ? docs[payload.documentType] : { url: docs[payload.documentType] }),
+        ...existingLeadObj,
+        ...(leadDocUrl ? { url: leadDocUrl, fileUrl: leadDocUrl } : {}),
         status: payload.status,
         verified: payload.status === "VERIFIED",
         rejected: payload.status === "REJECTED",
         verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
         rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
       };
+      if (leadDocUrl) {
+        docs[`${payload.documentType}Url`] = leadDocUrl;
+      }
 
       if (isFeeReceipt && payload.status === "VERIFIED") {
         docs.formFeePaid = true;
@@ -554,8 +614,10 @@ export async function updateLeadDocumentsAction(payload: {
 
         if (matches) {
           found = true;
+          const cUrl = extractExistingUrl(c) || preservedDocUrl;
           return {
             ...c,
+            ...(cUrl ? { url: cUrl, fileUrl: cUrl } : {}),
             status: payload.status,
             verified: payload.status === "VERIFIED",
             rejected: payload.status === "REJECTED",
@@ -571,20 +633,31 @@ export async function updateLeadDocumentsAction(payload: {
           type: payload.documentType,
           name: payload.documentType,
           docType: payload.documentType,
+          ...(preservedDocUrl ? { url: preservedDocUrl, fileUrl: preservedDocUrl } : {}),
           status: "REJECTED",
           rejected: true,
           rejectedAt: new Date().toISOString(),
         });
       }
 
+      const existingCredObj =
+        typeof credsObj[payload.documentType] === "object" && credsObj[payload.documentType]
+          ? credsObj[payload.documentType]
+          : {};
+      const credUrl = extractExistingUrl(credsObj[payload.documentType]) || preservedDocUrl;
+
       credsObj[payload.documentType] = {
-        ...(typeof credsObj[payload.documentType] === "object" ? credsObj[payload.documentType] : {}),
+        ...existingCredObj,
+        ...(credUrl ? { url: credUrl, fileUrl: credUrl } : {}),
         status: payload.status,
         verified: payload.status === "VERIFIED",
         rejected: payload.status === "REJECTED",
         verifiedAt: payload.status === "VERIFIED" ? new Date().toISOString() : null,
         rejectedAt: payload.status === "REJECTED" ? new Date().toISOString() : null,
       };
+      if (credUrl) {
+        credsObj[`${payload.documentType}Url`] = credUrl;
+      }
 
       if (isFeeReceipt && payload.status === "VERIFIED") {
         credsObj.formFeePaid = true;
@@ -3913,10 +3986,43 @@ export async function reconcileFeeAction(payload: {
 }) {
   try {
     const targetSchoolId = await resolveSchoolId(payload.schoolId);
-    const txRecord = await basePrisma.admissionsFeeTransaction.findUnique({
+    let txRecord = await basePrisma.admissionsFeeTransaction.findUnique({
       where: { id: payload.transactionId },
       include: { application: true },
     });
+
+    if (!txRecord) {
+      // Fallback if transactionId was a synthetic tx-lead-<appId>, an applicationId, or a PaymentReceipt ID
+      const candidateAppId = payload.transactionId.replace(/^tx-lead-/i, "").trim();
+      const matchedApp = await basePrisma.admissionsApplication.findUnique({
+        where: { id: candidateAppId },
+        include: { feeTransactions: true },
+      });
+      if (matchedApp) {
+        if (matchedApp.feeTransactions.length > 0) {
+          txRecord = { ...matchedApp.feeTransactions[0], application: matchedApp };
+        } else {
+          const metaDocs: any = (matchedApp.metadata as any)?.documents || {};
+          const createdTx = await basePrisma.admissionsFeeTransaction.create({
+            data: {
+              tenantId: matchedApp.tenantId || matchedApp.schoolId,
+              applicationId: matchedApp.id,
+              paymentMethod: "MANUAL_BANK_TRANSFER",
+              amount: 5000,
+              currency: "NGN",
+              paymentReference: `FEE-${matchedApp.applicationNumber}`,
+              proofOfPaymentUrl:
+                metaDocs.applicationFeeReceiptUrl ||
+                metaDocs.applicationFeeReceipt?.url ||
+                null,
+              paymentStatus: "PENDING",
+            },
+            include: { application: true },
+          });
+          txRecord = createdTx;
+        }
+      }
+    }
 
     if (!txRecord) {
       return { success: false, error: "Payment transaction record not found." };
@@ -4008,8 +4114,14 @@ export async function reconcileFeeAction(payload: {
           // Also mirror into PaymentReceipt if present
           await prismaTx.paymentReceipt.updateMany({
             where: {
-              referenceNo: appNo,
-              status: "PENDING",
+              moduleType: "ADMISSION_FORM_FEE",
+              OR: [
+                { referenceNo: appNo },
+                { payerId: txRecord.applicationId },
+                ...(lead ? [{ payerId: lead.id }] : []),
+                ...(reg ? [{ payerId: reg.id }] : []),
+              ],
+              status: { in: ["PENDING", "REJECTED"] },
             },
             data: {
               status: "VERIFIED",
@@ -4076,7 +4188,7 @@ export async function reconcileFeeAction(payload: {
     } else {
       const updated = await basePrisma.$transaction(async (prismaTx) => {
         const rejectedTx = await prismaTx.admissionsFeeTransaction.update({
-          where: { id: payload.transactionId },
+          where: { id: txRecord.id },
           data: {
             paymentStatus: "REJECTED",
             reconciliationNotes: payload.reason || "Rejected by Bursar",
@@ -4084,6 +4196,26 @@ export async function reconcileFeeAction(payload: {
             verifiedAt: new Date(),
           },
         });
+
+        await prismaTx.paymentReceipt
+          .updateMany({
+            where: {
+              moduleType: "ADMISSION_FORM_FEE",
+              OR: [
+                { referenceNo: txRecord.application.applicationNumber },
+                { payerId: txRecord.applicationId },
+              ],
+              status: "PENDING",
+            },
+            data: {
+              status: "REJECTED",
+              state: "REJECTED",
+              rejectionReason: payload.reason || "Rejected by Bursar",
+              verifiedBy: payload.actorId || "Bursar Officer",
+              verifiedAt: new Date(),
+            },
+          })
+          .catch(() => null);
 
         return rejectedTx;
       });

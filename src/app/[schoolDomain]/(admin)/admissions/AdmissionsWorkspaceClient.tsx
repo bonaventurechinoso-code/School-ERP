@@ -2603,6 +2603,7 @@ export default function AdmissionsWorkspaceClient({
             tierSpecificData: dossierApp.tierSpecificData,
             documents: {
               ...(dossierApp.tierSpecificData || {}),
+              ...((dossierApp.tierSpecificData as any)?.documents || {}),
               ...((dossierApp.metadata as any)?.documents || {}),
               entranceScore: (dossierApp.tierSpecificData as any)?.entranceScore ?? (dossierApp.tierSpecificData as any)?.examScore ?? null,
               applicationFeeReceiptUrl:
@@ -2610,26 +2611,37 @@ export default function AdmissionsWorkspaceClient({
                 dossierApp.documents?.find((d) => ["APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "RECEIPT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
                 (dossierApp.metadata as any)?.documents?.applicationFeeReceiptUrl ||
                 (dossierApp.metadata as any)?.documents?.applicationFeeReceipt?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.applicationFeeReceipt?.url ||
                 null,
               passportPhotoUrl:
                 dossierApp.documents?.find((d) => ["PASSPORT_PHOTOGRAPH", "PASSPORT_PHOTO", "PASSPORT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.passportPhotoUrl ||
                 (dossierApp.metadata as any)?.documents?.passportPhoto?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.passportPhoto?.url ||
                 null,
               birthCertificateUrl:
                 dossierApp.documents?.find((d) => ["BIRTH_CERTIFICATE", "BIRTH_CERT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.birthCertificateUrl ||
                 (dossierApp.metadata as any)?.documents?.birthCertificate?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.birthCertificate?.url ||
                 null,
               academicResultsUrl:
-                dossierApp.documents?.find((d) => ["ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                dossierApp.documents?.find((d) => ["ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "LAST_SCHOOL_RESULT", "JAMB_RESULT_SLIP"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.academicResultsUrl ||
                 (dossierApp.metadata as any)?.documents?.academicResults?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.academicResults?.url ||
                 null,
               medicalRecordsUrl:
-                dossierApp.documents?.find((d) => ["MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                dossierApp.documents?.find((d) => ["MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "IMMUNIZATION_RECORD"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.medicalRecordsUrl ||
                 (dossierApp.metadata as any)?.documents?.medicalRecords?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.medicalRecords?.url ||
                 null,
               ninSlipUrl:
                 dossierApp.documents?.find((d) => ["NIN_SLIP", "NIN"].includes((d.documentType || "").toUpperCase()))?.storageKey ||
+                (dossierApp.metadata as any)?.documents?.ninSlipUrl ||
                 (dossierApp.metadata as any)?.documents?.ninSlip?.url ||
+                (dossierApp.tierSpecificData as any)?.documents?.ninSlip?.url ||
                 null,
             },
           }}
@@ -2647,6 +2659,9 @@ export default function AdmissionsWorkspaceClient({
               dossierApp.email,
             parentPhone: dossierApp.phoneNumber,
             status: dossierApp.status,
+            rawDocuments: dossierApp.documents,
+            metadata: dossierApp.metadata,
+            tierSpecificData: dossierApp.tierSpecificData,
           }}
           isOpen={Boolean(dossierApp)}
           onClose={() => {

@@ -571,17 +571,26 @@ export default function VerificationsTableClient({
               </div>
             </div>
 
-            {/* Image Viewer Container */}
+            {/* Image / PDF Viewer Container */}
             <div className="flex-1 min-h-[320px] max-h-[60vh] overflow-auto flex items-center justify-center bg-black/60 rounded-xl p-3 border border-slate-800">
-              <Image
-                src={activeProofForView.proofImageUrl}
-                alt="Payment Proof Receipt"
-                width={800}
-                height={800}
-                unoptimized
-                style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
-                className="max-h-full max-w-full w-auto h-auto object-contain rounded-lg transition-transform duration-150"
-              />
+              {typeof activeProofForView.proofImageUrl === "string" &&
+              activeProofForView.proofImageUrl.toLowerCase().endsWith(".pdf") ? (
+                <iframe
+                  src={activeProofForView.proofImageUrl}
+                  title="Payment Receipt PDF"
+                  className="w-full h-[55vh] rounded-lg border-0 bg-white"
+                />
+              ) : (
+                <Image
+                  src={activeProofForView.proofImageUrl}
+                  alt="Payment Proof Receipt"
+                  width={800}
+                  height={800}
+                  unoptimized
+                  style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
+                  className="max-h-full max-w-full w-auto h-auto object-contain rounded-lg transition-transform duration-150"
+                />
+              )}
             </div>
 
             {/* Footer Action when Pending */}

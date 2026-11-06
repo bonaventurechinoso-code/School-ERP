@@ -758,27 +758,35 @@ export async function POST(
         isAppOnly = true;
         const appMeta = (appRecord.metadata as any) || {};
         const tierData = (appRecord.tierSpecificData as any) || {};
-        const docsMap: Record<string, any> = { ...(appMeta.documents || {}) };
+        const docsMap: Record<string, any> = {
+          ...(tierData.documents || {}),
+          ...(appMeta.documents || {}),
+        };
 
         if (Array.isArray(appRecord.documents)) {
           for (const d of appRecord.documents) {
-            const key = d.documentType === "PASSPORT_PHOTOGRAPH"
-              ? "passportPhoto"
-              : d.documentType === "ACADEMIC_TRANSCRIPT"
-              ? "academicResults"
-              : d.documentType === "BIRTH_CERTIFICATE"
-              ? "birthCertificate"
-              : d.documentType === "MEDICAL_REPORT"
-              ? "medicalRecords"
-              : d.documentType === "NIN_SLIP"
-              ? "ninSlip"
-              : d.documentType.toLowerCase();
+            const docTypeUpper = (d.documentType || "").toUpperCase();
+            const key =
+              docTypeUpper === "PASSPORT_PHOTOGRAPH" || docTypeUpper === "PASSPORT_PHOTO" || docTypeUpper === "PASSPORT"
+                ? "passportPhoto"
+                : docTypeUpper === "ACADEMIC_TRANSCRIPT" || docTypeUpper === "ACADEMIC_RESULTS" || docTypeUpper === "O_LEVEL_RESULT" || docTypeUpper === "LAST_SCHOOL_RESULT" || docTypeUpper === "JAMB_RESULT_SLIP"
+                ? "academicResults"
+                : docTypeUpper === "BIRTH_CERTIFICATE" || docTypeUpper === "BIRTH_CERT"
+                ? "birthCertificate"
+                : docTypeUpper === "MEDICAL_REPORT" || docTypeUpper === "MEDICAL_RECORDS" || docTypeUpper === "IMMUNIZATION_RECORD"
+                ? "medicalRecords"
+                : docTypeUpper === "NIN_SLIP" || docTypeUpper === "NIN"
+                ? "ninSlip"
+                : docTypeUpper === "APPLICATION_FEE_RECEIPT" || docTypeUpper === "FEE_RECEIPT"
+                ? "applicationFeeReceipt"
+                : (d.documentType || "").toLowerCase();
 
             docsMap[key] = {
-              url: d.storageKey,
-              fileUrl: d.storageKey,
+              ...(typeof docsMap[key] === "object" ? docsMap[key] : {}),
+              url: d.storageKey || docsMap[key]?.url,
+              fileUrl: d.storageKey || docsMap[key]?.fileUrl,
               name: d.documentType,
-              status: d.verificationStatus,
+              status: d.verificationStatus || docsMap[key]?.status,
             };
           }
         }
@@ -1381,12 +1389,33 @@ export async function POST(
         }
       } else if (isAppOnly && appRecord) {
         const appMeta = (appRecord.metadata as any) || {};
+        const existingAppMetaDocs = (appMeta.documents as Record<string, any>) || {};
+        const existingTierDocs = ((appRecord.tierSpecificData as any)?.documents as Record<string, any>) || {};
+        const nonDestructiveDocs: Record<string, any> = {
+          ...existingTierDocs,
+          ...existingAppMetaDocs,
+        };
+        for (const [k, rawV] of Object.entries(mergedDocuments as Record<string, any>)) {
+          const v: any = rawV;
+          const prev = nonDestructiveDocs[k];
+          if (v && typeof v === "object" && !Array.isArray(v)) {
+            const prevUrl = typeof prev === "string" ? prev : prev?.url || prev?.fileUrl || prev?.storageKey;
+            const nextUrl = v.url || v.fileUrl || v.storageKey || prevUrl;
+            nonDestructiveDocs[k] = {
+              ...(typeof prev === "object" && prev ? prev : {}),
+              ...v,
+              ...(nextUrl ? { url: nextUrl, fileUrl: nextUrl } : {}),
+            };
+          } else if (v !== undefined && v !== null) {
+            nonDestructiveDocs[k] = v;
+          }
+        }
         updatedLead = await basePrisma.admissionsApplication.update({
           where: { id: appRecord.id },
           data: {
             metadata: {
               ...appMeta,
-              documents: currentDocs,
+              documents: nonDestructiveDocs,
               logs: existingLogs,
             },
           },
@@ -1520,27 +1549,70 @@ export async function POST(
           }
         }
 
-        // Register in PaymentReceipt for Bursary visibility
-        await basePrisma.paymentReceipt.create({
-          data: {
-            tenantId: schoolId,
-            schoolId,
+        // Register or update in PaymentReceipt for Bursary visibility (without creating duplicates on re-upload)
+        const existingReceipt = await basePrisma.paymentReceipt.findFirst({
+          where: {
             moduleType: "ADMISSION_FORM_FEE",
-            payerType: "APPLICANT",
-            payerId: lead.id,
-            payerName: lead.applicantName,
-            referenceNo: appNo,
-            amount: 5000,
-            paymentMethod: "MANUAL_BANK_TRANSFER",
-            fileUrl: currentDocs.applicationFeeReceiptUrl,
-            fileName: currentDocs.applicationFeeReceipt?.fileName || "application_fee_receipt.jpg",
-            status: "PENDING",
-            state: "PENDING_VERIFICATION",
-            proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
-            depositorName: currentDocs.depositorName || lead.applicantName,
-            transferReference: currentDocs.transferReference || appNo,
+            OR: [{ tenantId: schoolId }, { schoolId }],
+            AND: [
+              {
+                OR: [
+                  { payerId: lead.id },
+                  { referenceNo: appNo },
+                  ...(appRecord?.applicationNumber ? [{ referenceNo: appRecord.applicationNumber }] : []),
+                ],
+              },
+            ],
           },
+          orderBy: { createdAt: "desc" },
         });
+
+        const canonicalAppNo = appRecord?.applicationNumber || appNo;
+
+        if (existingReceipt && existingReceipt.status !== "VERIFIED") {
+          await basePrisma.paymentReceipt.update({
+            where: { id: existingReceipt.id },
+            data: {
+              tenantId: schoolId,
+              schoolId,
+              payerId: lead.id,
+              payerName: lead.applicantName,
+              referenceNo: canonicalAppNo,
+              fileUrl: currentDocs.applicationFeeReceiptUrl,
+              fileName: currentDocs.applicationFeeReceipt?.fileName || existingReceipt.fileName || "application_fee_receipt.jpg",
+              status: "PENDING",
+              state: "PENDING_VERIFICATION",
+              proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
+              depositorName: currentDocs.depositorName || lead.applicantName,
+              transferReference: currentDocs.transferReference || canonicalAppNo,
+              txnRef: currentDocs.transferReference || canonicalAppNo,
+              rejectionReason: null,
+              updatedAt: new Date(),
+            },
+          });
+        } else if (!existingReceipt) {
+          await basePrisma.paymentReceipt.create({
+            data: {
+              tenantId: schoolId,
+              schoolId,
+              moduleType: "ADMISSION_FORM_FEE",
+              payerType: "APPLICANT",
+              payerId: lead.id,
+              payerName: lead.applicantName,
+              referenceNo: canonicalAppNo,
+              amount: 5000,
+              paymentMethod: "MANUAL_BANK_TRANSFER",
+              fileUrl: currentDocs.applicationFeeReceiptUrl,
+              fileName: currentDocs.applicationFeeReceipt?.fileName || "application_fee_receipt.jpg",
+              status: "PENDING",
+              state: "PENDING_VERIFICATION",
+              proofOfPaymentUrl: currentDocs.applicationFeeReceiptUrl,
+              depositorName: currentDocs.depositorName || lead.applicantName,
+              transferReference: currentDocs.transferReference || canonicalAppNo,
+              txnRef: currentDocs.transferReference || canonicalAppNo,
+            },
+          });
+        }
       } catch (syncReceiptErr) {
         console.warn("[UPLOAD_ROUTE] Warning: Could not mirror receipt to PaymentReceipt:", syncReceiptErr);
       }
@@ -1727,19 +1799,51 @@ export async function POST(
         }
 
         // Persist documents JSON in metadata and tierSpecificData so UI and dossier render instantly
+        const existingAppMetaDocs = ((targetApp.metadata as any)?.documents && typeof (targetApp.metadata as any).documents === "object")
+          ? (targetApp.metadata as any).documents
+          : {};
+        const existingAppTierDocs = ((targetApp.tierSpecificData as any)?.documents && typeof (targetApp.tierSpecificData as any).documents === "object")
+          ? (targetApp.tierSpecificData as any).documents
+          : {};
+        const combinedAppDocs: Record<string, any> = {
+          ...existingAppTierDocs,
+          ...existingAppMetaDocs,
+        };
+        for (const [docKey, docVal] of Object.entries(mergedDocuments)) {
+          if (docVal === undefined || docVal === null) continue;
+          const prev = combinedAppDocs[docKey];
+          if (typeof docVal === "object" && !Array.isArray(docVal)) {
+            const incomingUrl = (docVal as any).url || (docVal as any).fileUrl || (docVal as any).storageKey;
+            const prevUrl = typeof prev === "object" && prev ? (prev.url || prev.fileUrl || prev.storageKey) : typeof prev === "string" ? prev : undefined;
+            combinedAppDocs[docKey] = {
+              ...(typeof prev === "object" && prev ? prev : {}),
+              ...docVal,
+              ...(incomingUrl ? { url: incomingUrl, fileUrl: (docVal as any).fileUrl || incomingUrl } : prevUrl ? { url: prevUrl, fileUrl: prevUrl } : {}),
+            };
+          } else {
+            combinedAppDocs[docKey] = docVal;
+          }
+        }
+
         await basePrisma.admissionsApplication.update({
           where: { id: targetApp.id },
           data: {
             status: nextStatus as any,
             metadata: {
               ...((targetApp.metadata as any) || {}),
-              documents: mergedDocuments,
-              applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || (targetApp.metadata as any)?.applicationFeeReceiptUrl,
+              documents: combinedAppDocs,
+              applicationFeeReceiptUrl:
+                currentDocs.applicationFeeReceiptUrl ||
+                combinedAppDocs.applicationFeeReceiptUrl ||
+                (targetApp.metadata as any)?.applicationFeeReceiptUrl,
             },
             tierSpecificData: {
               ...((targetApp.tierSpecificData as any) || {}),
-              documents: mergedDocuments,
-              applicationFeeReceiptUrl: currentDocs.applicationFeeReceiptUrl || (targetApp.tierSpecificData as any)?.applicationFeeReceiptUrl,
+              documents: combinedAppDocs,
+              applicationFeeReceiptUrl:
+                currentDocs.applicationFeeReceiptUrl ||
+                combinedAppDocs.applicationFeeReceiptUrl ||
+                (targetApp.tierSpecificData as any)?.applicationFeeReceiptUrl,
             },
           },
         });

@@ -108,6 +108,69 @@ function deriveTierFromClass(cls?: string, fallbackTier?: string): string {
   return fallbackTier || "Primary School";
 }
 
+export function extractValidDocUrl(val: any): string | null {
+  if (!val) return null;
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === "[object Object]" || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  }
+  if (typeof val === "object" && !Array.isArray(val)) {
+    const candidate = val.url || val.fileUrl || val.storageKey || val.path;
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed && trimmed !== "[object Object]" && trimmed !== "undefined" && trimmed !== "null") {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+export function mergeDocObjectsPreservingUrls(...maps: any[]): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const map of maps) {
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    for (const [k, rawV] of Object.entries(map)) {
+      const v: any = rawV;
+      if (v === undefined || v === null) continue;
+      const existing: any = result[k];
+      if (!existing) {
+        result[k] = v;
+        continue;
+      }
+      const existingUrl = extractValidDocUrl(existing);
+      const incomingUrl = extractValidDocUrl(v);
+      const bestUrl = incomingUrl || existingUrl;
+      if (typeof existing === "object" && !Array.isArray(existing) && typeof v === "object" && !Array.isArray(v)) {
+        result[k] = {
+          ...existing,
+          ...v,
+          ...(bestUrl ? { url: bestUrl, fileUrl: v.fileUrl || existing.fileUrl || bestUrl } : {}),
+        };
+      } else if (typeof v === "object" && !Array.isArray(v)) {
+        result[k] = {
+          ...v,
+          ...(bestUrl ? { url: bestUrl, fileUrl: v.fileUrl || bestUrl } : {}),
+        };
+      } else if (incomingUrl) {
+        if (typeof existing === "object" && !Array.isArray(existing)) {
+          result[k] = {
+            ...existing,
+            url: incomingUrl,
+            fileUrl: incomingUrl,
+          };
+        } else {
+          result[k] = incomingUrl;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 export function resolveDocUrl(candidate: any, key: string): string | null {
   if (!candidate) return null;
 
@@ -117,23 +180,9 @@ export function resolveDocUrl(candidate: any, key: string): string | null {
 
   // 1. Direct candidate URL property (e.g. candidate.passportPhotoUrl)
   const directProp = `${key}Url`;
-  if (typeof candidate[directProp] === "string" && candidate[directProp]) {
-    return candidate[directProp];
-  }
-
-  // 2. Direct lookup in docs, metaDocs, tierDocs object maps
-  for (const map of [docs, metaDocs, tierDocs]) {
-    if (map && typeof map === "object" && !Array.isArray(map)) {
-      if (typeof map[directProp] === "string" && map[directProp]) return map[directProp];
-      const item = map[key];
-      if (item) {
-        if (typeof item === "string" && item.trim()) return item.trim();
-        if (typeof item === "object") {
-          const u = item.url || item.fileUrl || item.storageKey || item.path;
-          if (typeof u === "string" && u.trim()) return u.trim();
-        }
-      }
-    }
+  const directVal = extractValidDocUrl(candidate[directProp]);
+  if (directVal) {
+    return directVal;
   }
 
   // Common aliases across diverse data sources
@@ -145,13 +194,13 @@ export function resolveDocUrl(candidate: any, key: string): string | null {
       "BIRTH_CERTIFICATE", "BIRTH_CERT", "birthCertificate", "birth_certificate", "birthCert", "ageDeclaration"
     ],
     academicResults: [
-      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult"
+      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "LAST_SCHOOL_RESULT", "JAMB_RESULT_SLIP", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult", "lastSchoolResult"
     ],
     medicalRecords: [
-      "MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "fitness"
+      "MEDICAL_REPORT", "MEDICAL_RECORDS", "IMMUNIZATION_RECORD", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "immunizationRecord", "medical", "fitness"
     ],
     ninSlip: [
-      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nationalId", "nimc"
+      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nin", "nationalId", "nimc"
     ],
     applicationFeeReceipt: [
       "APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "PAYMENT_RECEIPT", "RECEIPT", "applicationFeeReceipt", "formFeeReceipt", "receipt", "feeReceipt", "paymentReceipt"
@@ -160,37 +209,65 @@ export function resolveDocUrl(candidate: any, key: string): string | null {
 
   const aliases = aliasKeys[key] || [key];
 
+  // 2. Direct lookup in docs, metaDocs, tierDocs object maps (checking directProp, key, and all aliases)
+  for (const map of [docs, metaDocs, tierDocs]) {
+    if (map && typeof map === "object" && !Array.isArray(map)) {
+      const mapDirect = extractValidDocUrl(map[directProp]);
+      if (mapDirect) return mapDirect;
+      const mapKeyUrl = extractValidDocUrl(map[key]);
+      if (mapKeyUrl) return mapKeyUrl;
+      for (const alias of aliases) {
+        const aliasUrl = extractValidDocUrl(map[alias]) || extractValidDocUrl(map[`${alias}Url`]);
+        if (aliasUrl) return aliasUrl;
+      }
+    }
+  }
+
   // 3. Array of documents (e.g. from AdmissionsDocument[] or credentialsJson[] or docs.documents[])
   const docArrays: any[] = [];
   if (Array.isArray(candidate.documents)) docArrays.push(candidate.documents);
   if (Array.isArray(candidate.rawDocuments)) docArrays.push(candidate.rawDocuments);
   if (Array.isArray(docs.documents)) docArrays.push(docs.documents);
   if (Array.isArray(candidate.credentialsJson)) docArrays.push(candidate.credentialsJson);
+  if (candidate.credentialsJson && typeof candidate.credentialsJson === "object" && Array.isArray(candidate.credentialsJson.documents)) {
+    docArrays.push(candidate.credentialsJson.documents);
+  }
 
   for (const arr of docArrays) {
     for (const d of arr) {
       if (!d) continue;
-      const dType = (d.documentType || d.type || d.key || d.docType || "").toUpperCase().replace(/[\s-_]/g, "");
+      const dType = (d.documentType || d.type || d.key || d.docType || d.name || "").toUpperCase().replace(/[\s-_]/g, "");
+      if (!dType) continue;
       const matches = aliases.some((a) => {
         const aNorm = a.toUpperCase().replace(/[\s-_]/g, "");
         return dType === aNorm || dType.includes(aNorm) || aNorm.includes(dType);
       });
       if (matches) {
-        const u = d.storageKey || d.url || d.fileUrl || d.path;
-        if (typeof u === "string" && u.trim()) return u.trim();
+        const u = extractValidDocUrl(d);
+        if (u) return u;
       }
     }
   }
 
   // 4. Special cases
   if (key === "applicationFeeReceipt") {
-    if (typeof candidate.applicationFeeReceiptUrl === "string" && candidate.applicationFeeReceiptUrl) return candidate.applicationFeeReceiptUrl;
-    if (typeof candidate.formFeeReceiptUrl === "string" && candidate.formFeeReceiptUrl) return candidate.formFeeReceiptUrl;
-    if (typeof docs.applicationFeeReceiptUrl === "string" && docs.applicationFeeReceiptUrl) return docs.applicationFeeReceiptUrl;
-    if (typeof docs.formFeeReceiptUrl === "string" && docs.formFeeReceiptUrl) return docs.formFeeReceiptUrl;
+    const specialUrls = [
+      candidate.applicationFeeReceiptUrl,
+      candidate.formFeeReceiptUrl,
+      docs.applicationFeeReceiptUrl,
+      docs.formFeeReceiptUrl,
+      metaDocs.applicationFeeReceiptUrl,
+      metaDocs.formFeeReceiptUrl,
+      tierDocs.applicationFeeReceiptUrl,
+      tierDocs.formFeeReceiptUrl,
+    ];
+    for (const su of specialUrls) {
+      const validSu = extractValidDocUrl(su);
+      if (validSu) return validSu;
+    }
     if (candidate.feeTransactions && Array.isArray(candidate.feeTransactions)) {
-      const tx = candidate.feeTransactions.find((t: any) => t?.proofOfPaymentUrl);
-      if (tx?.proofOfPaymentUrl) return tx.proofOfPaymentUrl;
+      const tx = candidate.feeTransactions.find((t: any) => extractValidDocUrl(t?.proofOfPaymentUrl));
+      if (tx?.proofOfPaymentUrl) return extractValidDocUrl(tx.proofOfPaymentUrl);
     }
   }
 
@@ -204,13 +281,6 @@ export function resolveDocRecord(candidate: any, key: string): any {
   const metaDocs = (candidate.metadata as any)?.documents || {};
   const tierDocs = (candidate.tierSpecificData as any)?.documents || {};
 
-  // Check direct key in objects
-  for (const map of [docs, metaDocs, tierDocs]) {
-    if (map && typeof map === "object" && !Array.isArray(map)) {
-      if (map[key] && typeof map[key] === "object") return map[key];
-    }
-  }
-
   // Common aliases across diverse data sources
   const aliasKeys: Record<string, string[]> = {
     passportPhoto: [
@@ -220,13 +290,13 @@ export function resolveDocRecord(candidate: any, key: string): any {
       "BIRTH_CERTIFICATE", "BIRTH_CERT", "birthCertificate", "birth_certificate", "birthCert", "ageDeclaration"
     ],
     academicResults: [
-      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult"
+      "ACADEMIC_TRANSCRIPT", "ACADEMIC_RESULTS", "O_LEVEL_RESULT", "LAST_SCHOOL_RESULT", "JAMB_RESULT_SLIP", "TRANSCRIPT", "academicResults", "academic_results", "previousResults", "academicTranscript", "transcript", "results", "oLevelResult", "lastSchoolResult"
     ],
     medicalRecords: [
-      "MEDICAL_REPORT", "MEDICAL_RECORDS", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "fitness"
+      "MEDICAL_REPORT", "MEDICAL_RECORDS", "IMMUNIZATION_RECORD", "MEDICAL", "medicalRecords", "medical_records", "medicalReport", "immunizationRecord", "medical", "fitness"
     ],
     ninSlip: [
-      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nationalId", "nimc"
+      "NIN_SLIP", "NIN", "ninSlip", "nin_slip", "nin", "nationalId", "nimc"
     ],
     applicationFeeReceipt: [
       "APPLICATION_FEE_RECEIPT", "FEE_RECEIPT", "PAYMENT_RECEIPT", "RECEIPT", "applicationFeeReceipt", "formFeeReceipt", "receipt", "feeReceipt", "paymentReceipt"
@@ -235,10 +305,20 @@ export function resolveDocRecord(candidate: any, key: string): any {
 
   const aliases = aliasKeys[key] || [key];
 
-  for (const map of [docs, metaDocs, tierDocs]) {
+  let combined: Record<string, any> = {};
+  for (const map of [tierDocs, metaDocs, docs]) {
     if (map && typeof map === "object" && !Array.isArray(map)) {
-      for (const a of aliases) {
-        if (map[a] && typeof map[a] === "object") return map[a];
+      for (const a of [key, ...aliases]) {
+        const entry = map[a];
+        if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+          const existingUrl = extractValidDocUrl(combined);
+          const entryUrl = extractValidDocUrl(entry);
+          combined = {
+            ...combined,
+            ...entry,
+            ...(entryUrl || existingUrl ? { url: entryUrl || existingUrl, fileUrl: entryUrl || existingUrl } : {}),
+          };
+        }
       }
     }
   }
@@ -248,22 +328,32 @@ export function resolveDocRecord(candidate: any, key: string): any {
     ...(Array.isArray(candidate.rawDocuments) ? [candidate.rawDocuments] : []),
     ...(Array.isArray(candidate.documents) ? [candidate.documents] : []),
     ...(Array.isArray(candidate.credentialsJson) ? [candidate.credentialsJson] : []),
+    ...(candidate.credentialsJson && typeof candidate.credentialsJson === "object" && Array.isArray(candidate.credentialsJson.documents) ? [candidate.credentialsJson.documents] : []),
     ...(Array.isArray(docs.documents) ? [docs.documents] : []),
   ];
 
   for (const arr of arrays) {
     for (const d of arr) {
       if (!d || typeof d !== "object") continue;
-      const dType = (d.documentType || d.type || d.key || d.docType || "").toUpperCase().replace(/[\s-_]/g, "");
+      const dType = (d.documentType || d.type || d.key || d.docType || d.name || "").toUpperCase().replace(/[\s-_]/g, "");
+      if (!dType) continue;
       const matches = aliases.some((a) => {
         const aNorm = a.toUpperCase().replace(/[\s-_]/g, "");
         return dType === aNorm || dType.includes(aNorm) || aNorm.includes(dType);
       });
-      if (matches) return d;
+      if (matches) {
+        const existingUrl = extractValidDocUrl(combined);
+        const dUrl = extractValidDocUrl(d);
+        combined = {
+          ...d,
+          ...combined,
+          ...(existingUrl || dUrl ? { url: existingUrl || dUrl, fileUrl: existingUrl || dUrl } : {}),
+        };
+      }
     }
   }
 
-  return {};
+  return combined;
 }
 
 export default function ApplicantDossierDrawer({
@@ -300,14 +390,47 @@ export default function ApplicantDossierDrawer({
       ...(Array.isArray(creds) ? creds : []),
     ];
 
-    const mergedDocs = {
-      ...(typeof creds === "object" && !Array.isArray(creds) ? creds : {}),
-      ...(typeof rawLead.documents === "object" && !Array.isArray(rawLead.documents) ? rawLead.documents : {}),
-      ...(typeof (rawLead.metadata as any)?.documents === "object" ? (rawLead.metadata as any).documents : {}),
-      ...(typeof (rawApplicant.metadata as any)?.documents === "object" ? (rawApplicant.metadata as any).documents : {}),
-      ...(typeof (rawLead.tierSpecificData as any)?.documents === "object" ? (rawLead.tierSpecificData as any).documents : {}),
-      ...(typeof (rawApplicant.tierSpecificData as any)?.documents === "object" ? (rawApplicant.tierSpecificData as any).documents : {}),
-    };
+    const rawDocsKeyMap: Record<string, any> = {};
+    for (const d of rawDocs) {
+      if (!d || typeof d !== "object") continue;
+      const dTypeUpper = (d.documentType || d.type || d.key || d.docType || d.name || "")
+        .toUpperCase()
+        .replace(/[\s-_]/g, "");
+      if (!dTypeUpper) continue;
+      const canonicalKey =
+        dTypeUpper.includes("PASSPORT") || dTypeUpper === "PHOTO"
+          ? "passportPhoto"
+          : dTypeUpper.includes("BIRTH") || dTypeUpper.includes("AGEDECLARATION")
+          ? "birthCertificate"
+          : dTypeUpper.includes("ACADEMIC") || dTypeUpper.includes("TRANSCRIPT") || dTypeUpper.includes("RESULT") || dTypeUpper.includes("OLEVEL") || dTypeUpper.includes("JAMB")
+          ? "academicResults"
+          : dTypeUpper.includes("MEDICAL") || dTypeUpper.includes("IMMUNIZATION") || dTypeUpper.includes("FITNESS")
+          ? "medicalRecords"
+          : dTypeUpper.includes("NIN") || dTypeUpper.includes("NIMC") || dTypeUpper.includes("NATIONALID")
+          ? "ninSlip"
+          : dTypeUpper.includes("RECEIPT") || dTypeUpper.includes("FEE")
+          ? "applicationFeeReceipt"
+          : null;
+      const docUrl = extractValidDocUrl(d);
+      if (canonicalKey && docUrl) {
+        rawDocsKeyMap[canonicalKey] = {
+          ...(rawDocsKeyMap[canonicalKey] || {}),
+          ...d,
+          url: docUrl,
+          fileUrl: docUrl,
+        };
+      }
+    }
+
+    const mergedDocs = mergeDocObjectsPreservingUrls(
+      rawDocsKeyMap,
+      typeof creds === "object" && !Array.isArray(creds) ? creds : {},
+      typeof rawLead.documents === "object" && !Array.isArray(rawLead.documents) ? rawLead.documents : {},
+      typeof (rawLead.metadata as any)?.documents === "object" ? (rawLead.metadata as any).documents : {},
+      typeof (rawApplicant.metadata as any)?.documents === "object" ? (rawApplicant.metadata as any).documents : {},
+      typeof (rawLead.tierSpecificData as any)?.documents === "object" ? (rawLead.tierSpecificData as any).documents : {},
+      typeof (rawApplicant.tierSpecificData as any)?.documents === "object" ? (rawApplicant.tierSpecificData as any).documents : {}
+    );
 
     return {
       ...rawApplicant,
@@ -457,12 +580,11 @@ export default function ApplicantDossierDrawer({
   const cleanPhone = parentPhone.replace(/\D/g, "");
 
   const receiptUrl =
-    docs.applicationFeeReceiptUrl ||
-    docs.formFeeReceiptUrl ||
-    localCandidate?.applicationFeeReceiptUrl ||
-    activeCandidate?.applicationFeeReceiptUrl ||
-    (docs.applicationFeeReceipt && typeof docs.applicationFeeReceipt === "object" ? docs.applicationFeeReceipt.url : null) ||
-    (typeof docs.applicationFeeReceipt === "string" ? docs.applicationFeeReceipt : null);
+    extractValidDocUrl(docs.applicationFeeReceiptUrl) ||
+    extractValidDocUrl(docs.formFeeReceiptUrl) ||
+    extractValidDocUrl(localCandidate?.applicationFeeReceiptUrl) ||
+    extractValidDocUrl(activeCandidate?.applicationFeeReceiptUrl) ||
+    extractValidDocUrl(docs.applicationFeeReceipt);
 
   const isFeePaid = Boolean(
     docs.formFeePaid ||
@@ -496,13 +618,11 @@ export default function ApplicantDossierDrawer({
       url:
         resolveDocUrl(localCandidate || activeCandidate, "applicationFeeReceipt") ||
         receiptUrl ||
-        localCandidate?.applicationFeeReceiptUrl ||
-        activeCandidate?.applicationFeeReceiptUrl ||
-        docs?.applicationFeeReceiptUrl ||
-        docs?.formFeeReceiptUrl ||
-        (docs?.applicationFeeReceipt as any)?.url ||
-        (docs?.applicationFeeReceipt as any)?.fileUrl ||
-        (docs?.applicationFeeReceipt as any)?.storageKey,
+        extractValidDocUrl(localCandidate?.applicationFeeReceiptUrl) ||
+        extractValidDocUrl(activeCandidate?.applicationFeeReceiptUrl) ||
+        extractValidDocUrl(docs?.applicationFeeReceiptUrl) ||
+        extractValidDocUrl(docs?.formFeeReceiptUrl) ||
+        extractValidDocUrl(docs?.applicationFeeReceipt),
     },
     {
       key: "passportPhoto",
@@ -510,12 +630,11 @@ export default function ApplicantDossierDrawer({
       mandatory: true,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "passportPhoto") ||
-        localCandidate?.passportPhotoUrl ||
-        docs?.passportPhotoUrl ||
-        docs?.passportPhoto?.url ||
-        docs?.passportPhoto?.fileUrl ||
-        docs?.passportPhoto?.storageKey ||
-        docs?.passport,
+        extractValidDocUrl(localCandidate?.passportPhotoUrl) ||
+        extractValidDocUrl(activeCandidate?.passportPhotoUrl) ||
+        extractValidDocUrl(docs?.passportPhotoUrl) ||
+        extractValidDocUrl(docs?.passportPhoto) ||
+        extractValidDocUrl(docs?.passport),
     },
     {
       key: "birthCertificate",
@@ -523,12 +642,11 @@ export default function ApplicantDossierDrawer({
       mandatory: true,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "birthCertificate") ||
-        localCandidate?.birthCertificateUrl ||
-        docs?.birthCertificateUrl ||
-        docs?.birthCertificate?.url ||
-        docs?.birthCertificate?.fileUrl ||
-        docs?.birthCertificate?.storageKey ||
-        docs?.birthCert,
+        extractValidDocUrl(localCandidate?.birthCertificateUrl) ||
+        extractValidDocUrl(activeCandidate?.birthCertificateUrl) ||
+        extractValidDocUrl(docs?.birthCertificateUrl) ||
+        extractValidDocUrl(docs?.birthCertificate) ||
+        extractValidDocUrl(docs?.birthCert),
     },
     {
       key: "academicResults",
@@ -536,12 +654,12 @@ export default function ApplicantDossierDrawer({
       mandatory: true,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "academicResults") ||
-        localCandidate?.academicResultsUrl ||
-        docs?.academicResultsUrl ||
-        docs?.academicResults?.url ||
-        docs?.academicResults?.fileUrl ||
-        docs?.academicResults?.storageKey ||
-        docs?.previousResults,
+        extractValidDocUrl(localCandidate?.academicResultsUrl) ||
+        extractValidDocUrl(activeCandidate?.academicResultsUrl) ||
+        extractValidDocUrl(docs?.academicResultsUrl) ||
+        extractValidDocUrl(docs?.academicResults) ||
+        extractValidDocUrl(docs?.previousResults) ||
+        extractValidDocUrl(docs?.lastSchoolResult),
     },
     {
       key: "medicalRecords",
@@ -549,12 +667,12 @@ export default function ApplicantDossierDrawer({
       mandatory: true,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "medicalRecords") ||
-        localCandidate?.medicalRecordsUrl ||
-        docs?.medicalRecordsUrl ||
-        docs?.medicalRecords?.url ||
-        docs?.medicalRecords?.fileUrl ||
-        docs?.medicalRecords?.storageKey ||
-        docs?.medical,
+        extractValidDocUrl(localCandidate?.medicalRecordsUrl) ||
+        extractValidDocUrl(activeCandidate?.medicalRecordsUrl) ||
+        extractValidDocUrl(docs?.medicalRecordsUrl) ||
+        extractValidDocUrl(docs?.medicalRecords) ||
+        extractValidDocUrl(docs?.immunizationRecord) ||
+        extractValidDocUrl(docs?.medical),
     },
     {
       key: "ninSlip",
@@ -562,13 +680,11 @@ export default function ApplicantDossierDrawer({
       mandatory: false,
       url:
         resolveDocUrl(localCandidate || activeCandidate, "ninSlip") ||
-        localCandidate?.ninSlipUrl ||
-        docs?.ninSlipUrl ||
-        docs?.ninSlip?.url ||
-        docs?.ninSlip?.fileUrl ||
-        docs?.ninSlip?.storageKey ||
-        docs?.ninSlip ||
-        docs?.nin,
+        extractValidDocUrl(localCandidate?.ninSlipUrl) ||
+        extractValidDocUrl(activeCandidate?.ninSlipUrl) ||
+        extractValidDocUrl(docs?.ninSlipUrl) ||
+        extractValidDocUrl(docs?.ninSlip) ||
+        extractValidDocUrl(docs?.nin),
     },
   ];
 
@@ -1524,11 +1640,11 @@ export default function ApplicantDossierDrawer({
                           docRecord.verificationStatus === "AUTO_VERIFIED"
                         );
 
-                    const resolvedUrl =
-                      doc.url ||
-                      (typeof docRecord === "object" ? docRecord?.url || docRecord?.fileUrl || docRecord?.storageKey || docRecord?.path : null) ||
-                      (typeof docRecord === "string" ? docRecord : null) ||
-                      resolveDocUrl(localCandidate || activeCandidate, doc.key);
+                    const resolvedUrl: string =
+                      extractValidDocUrl(doc.url) ||
+                      extractValidDocUrl(docRecord) ||
+                      resolveDocUrl(localCandidate || activeCandidate, doc.key) ||
+                      "";
                     const hasFile = Boolean(resolvedUrl);
 
                     return (
@@ -1718,11 +1834,11 @@ export default function ApplicantDossierDrawer({
                           docRecord.verificationStatus === "REJECTED"
                         );
 
-                    const resolvedUrl =
-                      doc.url ||
-                      (typeof docRecord === "object" ? docRecord?.url || docRecord?.fileUrl || docRecord?.storageKey || docRecord?.path : null) ||
-                      (typeof docRecord === "string" ? docRecord : null) ||
-                      resolveDocUrl(localCandidate || activeCandidate, doc.key);
+                    const resolvedUrl: string =
+                      extractValidDocUrl(doc.url) ||
+                      extractValidDocUrl(docRecord) ||
+                      resolveDocUrl(localCandidate || activeCandidate, doc.key) ||
+                      "";
                     const hasFile = Boolean(resolvedUrl);
 
                     return (
@@ -2034,7 +2150,11 @@ export default function ApplicantDossierDrawer({
       </div>
 
       {/* DOCUMENT INSPECTION & REVIEW MODAL */}
-      {previewDoc && (
+      {previewDoc && (() => {
+        const previewUrlStr = extractValidDocUrl(previewDoc.url) || "";
+        const isDeskSighted = !previewUrlStr || previewUrlStr.startsWith("desk_sighted/");
+        const isPdf = previewUrlStr.toLowerCase().endsWith(".pdf") || previewUrlStr.toLowerCase().includes("pdf");
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-800">
@@ -2045,15 +2165,17 @@ export default function ApplicantDossierDrawer({
                 </h3>
               </div>
               <div className="flex items-center gap-2">
-                <a
-                  href={previewDoc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1.5 transition"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open in Tab</span>
-                </a>
+                {!isDeskSighted && (
+                  <a
+                    href={previewUrlStr}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1.5 transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open in Tab</span>
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreviewDoc(null)}
@@ -2065,15 +2187,27 @@ export default function ApplicantDossierDrawer({
             </div>
 
             <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-100 dark:bg-zinc-950/80 min-h-[350px]">
-              {previewDoc.url.toLowerCase().endsWith(".pdf") || previewDoc.url.includes("pdf") ? (
+              {isDeskSighted ? (
+                <div className="max-w-md w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 text-center space-y-3 shadow-xs">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+                    <FileCheck className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-slate-900 dark:text-zinc-100 text-sm">
+                    Physical Copy Sighted at Admissions Desk
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    This credential ({previewDoc.title}) was recorded via physical desk verification. You may verify or reject this credential below, or upload a scanned digital copy.
+                  </p>
+                </div>
+              ) : isPdf ? (
                 <iframe
-                  src={previewDoc.url}
+                  src={previewUrlStr}
                   className="w-full h-[60vh] rounded-lg border border-slate-200 dark:border-zinc-800 bg-white"
                   title={previewDoc.title}
                 />
               ) : (
                 <img
-                  src={previewDoc.url}
+                  src={previewUrlStr}
                   alt={previewDoc.title}
                   className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm"
                 />
@@ -2140,7 +2274,8 @@ export default function ApplicantDossierDrawer({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ===================== EMAIL GUARDIAN COMPOSER MODAL OVERLAY ===================== */}
       {isEmailModalOpen && (

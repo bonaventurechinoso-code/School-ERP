@@ -237,24 +237,40 @@ export async function executeLeadToRegisterTransition({
     let registerRecord: any = dupCheck.registerRecord;
 
     if (registerRecord) {
-      // Deduplication Guard: Merge incoming payload directly into active record
-      const existingCreds = Array.isArray(registerRecord.credentialsJson)
-        ? (registerRecord.credentialsJson as CredentialDoc[])
+      // Deduplication Guard: Merge incoming payload directly into active record without wiping object keys
+      const rawExistingCreds = registerRecord.credentialsJson;
+      const isObjCreds = rawExistingCreds && typeof rawExistingCreds === "object" && !Array.isArray(rawExistingCreds);
+      const existingCreds: CredentialDoc[] = Array.isArray(rawExistingCreds)
+        ? (rawExistingCreds as CredentialDoc[])
+        : isObjCreds && Array.isArray((rawExistingCreds as any).documents)
+        ? ((rawExistingCreds as any).documents as CredentialDoc[])
         : [];
       
       const mergedCreds = [...existingCreds];
       for (const cred of credentials) {
-        const alreadyExists = mergedCreds.some(
+        const existingIdx = mergedCreds.findIndex(
           (c) =>
-            (c.type && c.type === cred.type) ||
-            (c.path && c.path === cred.path) ||
-            (c.url && c.url === cred.url) ||
-            (c.originalName && c.originalName === cred.originalName)
+            (c.type && cred.type && c.type.toLowerCase() === cred.type.toLowerCase()) ||
+            (c.path && cred.path && c.path === cred.path) ||
+            (c.url && cred.url && c.url === cred.url)
         );
-        if (!alreadyExists) {
+        if (existingIdx >= 0) {
+          mergedCreds[existingIdx] = {
+            ...mergedCreds[existingIdx],
+            ...cred,
+            url: cred.url || cred.path || mergedCreds[existingIdx].url || mergedCreds[existingIdx].path,
+            path: cred.path || cred.url || mergedCreds[existingIdx].path || mergedCreds[existingIdx].url,
+          };
+        } else {
           mergedCreds.push(cred);
         }
       }
+
+      const nextCredentialsJson = isObjCreds
+        ? { ...(rawExistingCreds as Record<string, any>), documents: mergedCreds }
+        : mergedCreds.length > 0
+        ? (mergedCreds as any)
+        : registerRecord.credentialsJson;
 
       registerRecord = await tx.admissionRegister.update({
         where: { id: registerRecord.id },
@@ -262,7 +278,7 @@ export async function executeLeadToRegisterTransition({
           classApplied: bioData.classApplied || registerRecord.classApplied,
           parentPhone: bioData.parentPhone || registerRecord.parentPhone,
           email: bioData.email || registerRecord.email,
-          credentialsJson: mergedCreds.length > 0 ? (mergedCreds as any) : registerRecord.credentialsJson,
+          credentialsJson: nextCredentialsJson,
           status: registerRecord.status === "new" ? status : registerRecord.status,
           updatedAt: new Date(),
         },

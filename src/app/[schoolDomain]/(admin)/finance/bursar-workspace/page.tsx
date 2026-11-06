@@ -1,7 +1,8 @@
 import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { basePrisma } from "@/lib/tenant-prisma";
+import { reconcileAdmissionFeeReceipts } from "@/lib/payment-receipt-service";
 import {
   Coins,
   CreditCard,
@@ -37,12 +38,24 @@ export default async function BursarWorkspacePage({
     return notFound();
   }
 
+  // Ensure all uploaded application fee receipts are synced into PaymentReceipt
+  await reconcileAdmissionFeeReceipts(school.id).catch(() => null);
+
   // Quick summary counts
-  const [invoicesCount, pendingProofsCount, staffCount] = await Promise.all([
+  const [invoicesCount, pendingProofsRawCount, pendingReceiptsCount, staffCount] = await Promise.all([
     basePrisma.invoice.count({ where: { schoolId: school.id } }).catch(() => 0),
     basePrisma.paymentProof.count({ where: { schoolId: school.id, status: "PENDING" } }).catch(() => 0),
+    basePrisma.paymentReceipt
+      .count({
+        where: {
+          OR: [{ tenantId: school.id }, { schoolId: school.id }],
+          status: "PENDING",
+        },
+      })
+      .catch(() => 0),
     basePrisma.staff.count({ where: { schoolId: school.id, status: "ACTIVE" } }).catch(() => 0),
   ]);
+  const pendingProofsCount = pendingProofsRawCount + pendingReceiptsCount;
 
   const cards = [
     {

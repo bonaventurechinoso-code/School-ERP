@@ -572,15 +572,24 @@ export default function BursarReceiptsHub({
                           </a>
                         )}
                         {r.isPotentialDuplicate ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDeduplicate(r)}
-                            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-black text-[11px] shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer ring-2 ring-amber-400/30"
-                            title="Multiple identical receipts detected. Click to merge and verify master record."
-                          >
-                            <Layers className="w-3.5 h-3.5" />
-                            <span>Deduplicate</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setActiveReceipt(r)}
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition cursor-pointer"
+                            >
+                              Verify Hub
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeduplicate(r)}
+                              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-black text-[11px] shadow-xs hover:shadow transition flex items-center gap-1 cursor-pointer ring-2 ring-amber-400/30"
+                              title="Multiple identical receipts detected. Click to merge and verify master record."
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Deduplicate</span>
+                            </button>
+                          </div>
                         ) : r.status === "DUPLICATE" ? (
                           <button
                             type="button"
