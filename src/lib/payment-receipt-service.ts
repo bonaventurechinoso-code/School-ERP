@@ -799,6 +799,7 @@ async function markAdmissionFormFeePaid(
       creds.formFeePaid = true;
       creds.formFeeStatus = "PAID";
       creds.feePaid = true;
+      creds.paymentState = "SETTLED";
       creds.formFeeVerifiedAt = new Date().toISOString();
       creds.formFeeVerifiedBy = verifiedBy;
       if (creds.applicationFeeReceipt && typeof creds.applicationFeeReceipt === "object") {
@@ -859,6 +860,7 @@ async function markAdmissionFormFeePaid(
       leadDocs.formFeePaid = true;
       leadDocs.formFeeStatus = "PAID";
       leadDocs.feePaid = true;
+      leadDocs.paymentState = "SETTLED";
       leadDocs.formFeeVerifiedAt = new Date().toISOString();
       leadDocs.formFeeVerifiedBy = verifiedBy;
       if (leadDocs.applicationFeeReceipt && typeof leadDocs.applicationFeeReceipt === "object") {
@@ -965,6 +967,8 @@ async function markAdmissionFormFeePaid(
       }
       appMetaDocs.formFeePaid = true;
       appMetaDocs.formFeeStatus = "PAID";
+      appMetaDocs.feePaid = true;
+      appMetaDocs.paymentState = "SETTLED";
 
       const appTierData: any = (targetApp.tierSpecificData as any) || {};
       const appTierDocs: any = { ...(appTierData.documents || {}) };
@@ -977,6 +981,14 @@ async function markAdmissionFormFeePaid(
           verifiedBy,
         };
       }
+      appTierDocs.formFeePaid = true;
+      appTierDocs.formFeeStatus = "PAID";
+      appTierDocs.feePaid = true;
+      appTierDocs.paymentState = "SETTLED";
+      appTierData.formFeePaid = true;
+      appTierData.formFeeStatus = "PAID";
+      appTierData.feePaid = true;
+      appTierData.paymentState = "SETTLED";
 
       const nextAppStatus =
         targetApp.status === "PAYMENT_PENDING" || targetApp.status === "DRAFT"

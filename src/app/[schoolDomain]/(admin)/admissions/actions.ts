@@ -107,7 +107,7 @@ export async function createAdmissionLeadAction(payload: {
   source?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
 
     // SYSTEM ANTI-DUPLICATE GUARD (DEDUPLICATION):
     // Compound validation key: [schoolId + Candidate Name + Class/Grade + Parent Phone]
@@ -257,13 +257,16 @@ export async function createAdmissionLeadAction(payload: {
  */
 export async function updateLeadDocumentsAction(payload: {
   leadId: string;
-  schoolId: string;
+  schoolId?: string;
   schoolDomain?: string;
   documentType: string;
   status: "VERIFIED" | "PENDING" | "REJECTED";
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = payload.schoolId ? await resolveSchoolId(payload.schoolId) : "";
+    if (!schoolId && payload.schoolDomain) {
+      schoolId = await resolveSchoolId(payload.schoolDomain);
+    }
 
     // RBAC Permissions Check: Restrict structural state mutations strictly to authorized roles
     const session = await getSession(undefined, payload.schoolDomain);
@@ -282,6 +285,9 @@ export async function updateLeadDocumentsAction(payload: {
       where: { id: targetRef },
       include: { tier: true },
     });
+    if (!schoolId && lead?.schoolId) {
+      schoolId = lead.schoolId;
+    }
 
     let appRecord: any = null;
     let registerRecord: any = null;
@@ -367,13 +373,31 @@ export async function updateLeadDocumentsAction(payload: {
       }
 
       if (!appRecord) {
+        const shortLeadRef = lead.id.replace(/-/g, "").slice(0, 6);
+        const nameParts = (lead.applicantName || "").trim().split(" ");
+        const firstName = nameParts[0] || "";
+        const lastName = nameParts.slice(1).join(" ") || "";
+
         appRecord = await basePrisma.admissionsApplication.findFirst({
           where: {
-            schoolId,
-            OR: [
-              { id: lead.id },
-              ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
-              ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+            OR: [{ schoolId }, { tenantId: schoolId }],
+            AND: [
+              {
+                OR: [
+                  { id: lead.id },
+                  ...(cleanRef ? [{ applicationNumber: { contains: cleanRef, mode: "insensitive" as const } }] : []),
+                  ...(shortLeadRef ? [{ applicationNumber: { contains: shortLeadRef, mode: "insensitive" as const } }] : []),
+                  ...(lead.studentEmail ? [{ email: lead.studentEmail }] : []),
+                  ...(firstName && lastName
+                    ? [
+                        {
+                          firstName: { equals: firstName, mode: "insensitive" as const },
+                          lastName: { equals: lastName, mode: "insensitive" as const },
+                        },
+                      ]
+                    : []),
+                ],
+              },
             ],
           },
           include: { documents: true, feeTransactions: true },
@@ -501,7 +525,9 @@ export async function updateLeadDocumentsAction(payload: {
 
       if (isFeeReceipt && payload.status === "VERIFIED") {
         currentMetaDocs.formFeePaid = true;
+        currentMetaDocs.feePaid = true;
         currentMetaDocs.formFeeStatus = "PAID";
+        currentMetaDocs.paymentState = "SETTLED";
       }
 
       const tierData = (appRecord.tierSpecificData as any) || {};
@@ -534,20 +560,54 @@ export async function updateLeadDocumentsAction(payload: {
           tierSpecificData: {
             ...tierData,
             documents: tierDocs,
-            ...(isFeeReceipt && payload.status === "VERIFIED" ? { formFeePaid: true, formFeeStatus: "PAID" } : {}),
+            ...(isFeeReceipt && payload.status === "VERIFIED" ? { formFeePaid: true, feePaid: true, formFeeStatus: "PAID", paymentState: "SETTLED" } : {}),
           },
           updatedAt: new Date(),
         },
       });
 
       if (isFeeReceipt && payload.status === "VERIFIED") {
-        await basePrisma.admissionsFeeTransaction.updateMany({
+        const txUpdate = await basePrisma.admissionsFeeTransaction.updateMany({
           where: { applicationId: appRecord.id },
           data: {
             paymentStatus: "SETTLED",
             verifiedByUserId: session?.userId || null,
           },
         });
+        if (txUpdate.count === 0) {
+          await basePrisma.admissionsFeeTransaction.create({
+            data: {
+              tenantId: appRecord.tenantId || schoolId,
+              applicationId: appRecord.id,
+              paymentMethod: "MANUAL_BANK_TRANSFER",
+              amount: 5000,
+              currency: "NGN",
+              paymentReference: `FEE-${appRecord.applicationNumber}`,
+              paymentStatus: "SETTLED",
+              proofOfPaymentUrl: metaUrl || undefined,
+              verifiedByUserId: session?.userId || null,
+            },
+          }).catch(() => null);
+        }
+
+        // Settle linked PaymentReceipt records if any exist
+        const appRef = appRecord.applicationNumber;
+        await basePrisma.paymentReceipt.updateMany({
+          where: {
+            tenantId: appRecord.tenantId || schoolId,
+            moduleType: "ADMISSION_FORM_FEE",
+            OR: [
+              ...(appRef ? [{ referenceNo: appRef }] : []),
+              { payerId: appRecord.id },
+            ],
+          },
+          data: {
+            status: "VERIFIED",
+            state: "SETTLED",
+            verifiedByUserId: session?.userId || null,
+            verifiedAt: new Date(),
+          },
+        }).catch(() => null);
       }
     }
 
@@ -578,6 +638,7 @@ export async function updateLeadDocumentsAction(payload: {
         docs.formFeePaid = true;
         docs.formFeeStatus = "PAID";
         docs.feePaid = true;
+        docs.paymentState = "SETTLED";
       }
 
       updated = await basePrisma.admissionLead.update({
@@ -758,7 +819,7 @@ export async function updateLeadScreeningAction(payload: {
   notes?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const targetRef = (payload.leadId || "").trim();
     const cleanRef = targetRef.replace(/^ADM-|^APP-/i, "").trim().toLowerCase();
 
@@ -766,6 +827,9 @@ export async function updateLeadScreeningAction(payload: {
       where: { id: targetRef },
       include: { tier: true },
     });
+    if (!schoolId && lead?.schoolId) {
+      schoolId = lead.schoolId;
+    }
 
     let appRecord: any = null;
     let registerRecord: any = null;
@@ -927,7 +991,7 @@ export async function scheduleAndDispatchExamAdmitSlipAction(payload: {
   recipientEmail?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     let lead = await basePrisma.admissionLead.findUnique({
       where: { id: payload.leadId },
       include: { tier: true, school: true },
@@ -1973,7 +2037,7 @@ export async function convertLeadToRegisterAction(payload: {
 }) {
   const { leadId, schoolDomain, reason, formFeePaid } = payload;
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, schoolDomain);
 
     const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
@@ -2005,7 +2069,7 @@ export async function checkDuplicateAction(payload: {
   excludeRegisterId?: string;
 }): Promise<DuplicateCheckMatch> {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     return await checkDuplicate(
       schoolId,
       payload.name,
@@ -2041,7 +2105,7 @@ export async function mergeDuplicateAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
 
     const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
@@ -2233,7 +2297,7 @@ export async function deleteAdmissionRegisterAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
 
     const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
@@ -2533,14 +2597,30 @@ export async function markFormFeePaidAction(payload: {
       });
       if (!updated) updated = updatedApp;
 
-      await basePrisma.admissionsFeeTransaction.updateMany({
+      const txUpdate = await basePrisma.admissionsFeeTransaction.updateMany({
         where: { applicationId: appRecord.id },
         data: {
-          paymentStatus: "VERIFIED",
+          paymentStatus: "SETTLED",
           verifiedAt: new Date(),
           verifiedByUserId: verifiedBy,
         },
       });
+      if (txUpdate.count === 0) {
+        await basePrisma.admissionsFeeTransaction.create({
+          data: {
+            tenantId: appRecord.tenantId || appRecord.schoolId || "default",
+            applicationId: appRecord.id,
+            paymentMethod: "MANUAL_BANK_TRANSFER",
+            amount: 5000,
+            currency: "NGN",
+            paymentReference: `FEE-${appRecord.applicationNumber}`,
+            paymentStatus: "SETTLED",
+            proofOfPaymentUrl: currentMetaDocs.applicationFeeReceiptUrl || currentMetaDocs.applicationFeeReceipt?.url || undefined,
+            verifiedByUserId: verifiedBy,
+            verifiedAt: new Date(),
+          },
+        }).catch(() => null);
+      }
     }
 
     if (registerRecord) {
@@ -2603,20 +2683,22 @@ export async function markFormFeePaidAction(payload: {
 
     // Update corresponding PaymentReceipt records if any
     try {
-      const appRef = registerRecord?.applicationNo || (lead as any)?.applicationNo;
-      if (appRef || lead?.id) {
+      const appRef = registerRecord?.applicationNo || (lead as any)?.applicationNo || appRecord?.applicationNumber;
+      if (appRef || lead?.id || appRecord?.id) {
         await basePrisma.paymentReceipt.updateMany({
           where: {
             OR: [
               ...(appRef ? [{ referenceNo: appRef }] : []),
               ...(lead?.id ? [{ payerId: lead.id }] : []),
+              ...(appRecord?.id ? [{ payerId: appRecord.id }] : []),
             ],
             moduleType: "ADMISSION_FORM_FEE",
           },
           data: {
             status: "VERIFIED",
             state: "SETTLED",
-            verifiedBy,
+            verifiedBy: typeof verifiedBy === "string" ? verifiedBy : null,
+            verifiedByUserId: typeof verifiedBy === "string" ? verifiedBy : null,
             verifiedAt: new Date(),
           },
         });
@@ -2652,7 +2734,7 @@ export async function getTenantAdmissionTracksAction(payload: {
   schoolDomain?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const tracks = await ensureTenantAdmissionTracks(schoolId);
     return { success: true, tracks };
   } catch (err: any) {
@@ -2672,7 +2754,7 @@ export async function createAdmissionTrackAction(payload: {
   description?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
@@ -2740,7 +2822,7 @@ export async function configureAdmissionStageAction(payload: {
   color?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
@@ -2823,7 +2905,7 @@ export async function transitionCandidateStageAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
 
     const auth = await verifyAdmissionsMutatorRole(session, schoolId);
@@ -2906,7 +2988,7 @@ export async function saveManualEntranceScoreAction(payload: {
   notes?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
@@ -3110,7 +3192,7 @@ export async function bulkSaveManualEntranceScoresAction(payload: {
   schoolDomain?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
@@ -3157,7 +3239,7 @@ export async function deleteApplicantAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
@@ -3282,7 +3364,7 @@ export async function deduplicateAdmissionsAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
@@ -4311,7 +4393,7 @@ export async function updateAdmissionsApplicationBioAction(payload: {
   notes?: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyAdmissionsMutatorRole(session, schoolId);
     if (!auth.authorized) {
@@ -4432,7 +4514,7 @@ export async function deleteAdmissionsApplicationAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {
@@ -4520,7 +4602,7 @@ export async function deduplicateAllAdmissionsAction(payload: {
   schoolDomain: string;
 }) {
   try {
-    const schoolId = await resolveSchoolId(payload.schoolId);
+    let schoolId = await resolveSchoolId(payload.schoolId);
     const session = await getSession(undefined, payload.schoolDomain);
     const auth = await verifyTenantAdminRole(session, schoolId);
     if (!auth.authorized) {

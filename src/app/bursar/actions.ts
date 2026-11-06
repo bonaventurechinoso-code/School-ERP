@@ -591,7 +591,7 @@ export async function getBursarReceipts(
       ];
     }
 
-    const [payments, totalCount] = await Promise.all([
+    const [payments, paymentsCount, rawPaymentReceipts, receiptsCount] = await Promise.all([
       basePrisma.payment.findMany({
         where: whereClause,
         orderBy: { paymentDate: "desc" },
@@ -607,9 +607,36 @@ export async function getBursarReceipts(
         },
       }),
       basePrisma.payment.count({ where: whereClause }),
+      basePrisma.paymentReceipt
+        .findMany({
+          where: {
+            OR: [{ schoolId }, { tenantId: schoolId }],
+            status: { in: ["VERIFIED", "APPROVED"] },
+            ...(search && search.trim()
+              ? {
+                  OR: [
+                    { payerName: { contains: search.trim(), mode: "insensitive" as const } },
+                    { referenceNo: { contains: search.trim(), mode: "insensitive" as const } },
+                    { txnRef: { contains: search.trim(), mode: "insensitive" as const } },
+                  ],
+                }
+              : {}),
+          },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+        })
+        .catch(() => []),
+      basePrisma.paymentReceipt
+        .count({
+          where: {
+            OR: [{ schoolId }, { tenantId: schoolId }],
+            status: { in: ["VERIFIED", "APPROVED"] },
+          },
+        })
+        .catch(() => 0),
     ]);
 
-    const formattedReceipts = payments.map((p) => ({
+    const formattedPayments = payments.map((p) => ({
       id: p.id,
       receiptNumber: `REC-${p.paymentDate.getFullYear()}-${p.id.slice(0, 8).toUpperCase()}`,
       studentId: p.studentId,
@@ -624,7 +651,30 @@ export async function getBursarReceipts(
       totalInvoicePaid: p.invoice?.amountPaid || p.amountPaid,
     }));
 
-    return { success: true, receipts: formattedReceipts, totalCount };
+    const formattedAdmissionReceipts = rawPaymentReceipts.map((rc) => ({
+      id: rc.id,
+      receiptNumber: `REC-${new Date(rc.paymentDate || rc.createdAt).getFullYear()}-${rc.id.slice(0, 8).toUpperCase()}`,
+      studentId: rc.payerId || rc.referenceNo,
+      studentName: rc.payerName || "Applicant",
+      admissionNumber: rc.referenceNo || "N/A",
+      currentClass: (rc as any).academicTier || rc.term || "Admissions",
+      amountPaid: Number(rc.amount) || 5000,
+      method: rc.paymentMethod || "BANK_TRANSFER",
+      paymentDate: rc.paymentDate || rc.createdAt,
+      invoiceDescription: rc.moduleType === "ADMISSION_FORM_FEE" ? "Admissions Application Fee" : (rc.moduleType || "Fee Receipt").replace(/_/g, " "),
+      totalInvoiceDue: Number(rc.amount) || 5000,
+      totalInvoicePaid: Number(rc.amount) || 5000,
+    }));
+
+    const combinedReceipts = [...formattedPayments, ...formattedAdmissionReceipts].sort(
+      (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+    );
+
+    return {
+      success: true,
+      receipts: combinedReceipts.slice(0, limit),
+      totalCount: paymentsCount + receiptsCount,
+    };
   } catch (err: any) {
     console.error("[GET_BURSAR_RECEIPTS_ERROR]:", err);
     return { success: false, receipts: [], totalCount: 0 };

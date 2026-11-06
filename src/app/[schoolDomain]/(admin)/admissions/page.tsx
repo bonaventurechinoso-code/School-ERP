@@ -737,11 +737,30 @@ export default async function AdmissionsPage({
         linkedReg?.applicationFeeReceiptUrl ||
         (linkedLead as any)?.applicationFeeReceiptUrl;
 
+      const isAlreadyPaid =
+        Boolean(linkedReg?.formFeePaid) ||
+        Boolean((linkedLead?.documents as any)?.formFeePaid) ||
+        Boolean((linkedLead?.documents as any)?.feePaid) ||
+        (linkedLead?.documents as any)?.formFeeStatus === "PAID" ||
+        (linkedLead?.documents as any)?.formFeeStatus === "SETTLED" ||
+        (linkedLead?.documents as any)?.paymentState === "SETTLED" ||
+        metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+        metaDocs.applicationFeeReceipt?.verified === true ||
+        metaDocs.paymentReceipt?.status === "VERIFIED" ||
+        metaDocs.formFeePaid === true ||
+        metaDocs.feePaid === true ||
+        metaDocs.formFeeStatus === "PAID" ||
+        metaDocs.formFeeStatus === "SETTLED" ||
+        metaDocs.paymentState === "SETTLED";
+
+      if (isAlreadyPaid) {
+        metaDocs.formFeePaid = true;
+        metaDocs.feePaid = true;
+        metaDocs.formFeeStatus = "PAID";
+        metaDocs.paymentState = "SETTLED";
+      }
+
       if (feeReceiptUrl && (!app.feeTransactions || app.feeTransactions.length === 0)) {
-        const isAlreadyPaid =
-          Boolean(linkedReg?.formFeePaid) ||
-          Boolean((linkedLead?.documents as any)?.formFeePaid) ||
-          metaDocs.applicationFeeReceipt?.status === "VERIFIED";
         const persistedTx = await basePrisma.admissionsFeeTransaction
           .create({
             data: {
@@ -769,6 +788,11 @@ export default async function AdmissionsPage({
             createdAt: new Date(),
           },
         ];
+      } else if (isAlreadyPaid && app.feeTransactions && app.feeTransactions.length > 0) {
+        app.feeTransactions = app.feeTransactions.map((tx: any) => ({
+          ...tx,
+          paymentStatus: "SETTLED",
+        }));
       }
 
       app.metadata = { ...((app.metadata as any) || {}), documents: metaDocs };

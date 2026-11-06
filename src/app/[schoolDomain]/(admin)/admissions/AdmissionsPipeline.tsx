@@ -463,6 +463,11 @@ export default function AdmissionsPipeline({
       leadDocs.formFeePaid ||
       leadDocs.feePaid ||
       leadDocs.formFeeStatus === "PAID" ||
+      leadDocs.formFeeStatus === "SETTLED" ||
+      leadDocs.paymentState === "SETTLED" ||
+      leadDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+      leadDocs.applicationFeeReceipt?.verified === true ||
+      leadDocs.paymentReceipt?.status === "VERIFIED" ||
       lead.status === "APPROVED" ||
       lead.status === "ENROLLED"
     );

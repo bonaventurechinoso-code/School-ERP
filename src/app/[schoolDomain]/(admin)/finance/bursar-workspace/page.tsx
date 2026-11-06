@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { reconcileAdmissionFeeReceipts } from "@/lib/payment-receipt-service";
+import BursarReceiptsHub from "@/components/payments/BursarReceiptsHub";
 import {
   Coins,
   CreditCard,
@@ -149,6 +150,27 @@ export default async function BursarWorkspacePage({
             </Link>
           );
         })}
+      </div>
+
+      {/* Universal Payment & Application Fee Receipts Hub */}
+      <div className="pt-2 space-y-3">
+        <div className="flex items-center justify-between pb-1">
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+              <FileCheck2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <span>Universal Receipts &amp; Application Fee Clearance Desk</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-zinc-400">
+              Direct verification desk for admissions application fees, manual bank lodgements, and tuition transfer receipts.
+            </p>
+          </div>
+        </div>
+
+        <BursarReceiptsHub
+          tenantId={school.id}
+          schoolName={school.name}
+          isSuperAdmin={false}
+        />
       </div>
 
       {/* Audit & Compliance Footer Notice */}

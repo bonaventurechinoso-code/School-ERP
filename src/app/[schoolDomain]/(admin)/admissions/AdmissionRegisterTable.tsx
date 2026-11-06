@@ -185,6 +185,11 @@ export default function AdmissionRegisterTable({
             lDocs.formFeePaid ||
             lDocs.feePaid ||
             lDocs.formFeeStatus === "PAID" ||
+            lDocs.formFeeStatus === "SETTLED" ||
+            lDocs.paymentState === "SETTLED" ||
+            lDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+            lDocs.applicationFeeReceipt?.verified === true ||
+            lDocs.paymentReceipt?.status === "VERIFIED" ||
             lead.status === "APPROVED" ||
             lead.status === "ENROLLED"
           );
@@ -209,6 +214,11 @@ export default function AdmissionRegisterTable({
           lead.documents?.formFeePaid ||
             lead.documents?.feePaid ||
             lead.documents?.formFeeStatus === "PAID" ||
+            lead.documents?.formFeeStatus === "SETTLED" ||
+            lead.documents?.paymentState === "SETTLED" ||
+            lead.documents?.applicationFeeReceipt?.status === "VERIFIED" ||
+            lead.documents?.applicationFeeReceipt?.verified === true ||
+            lead.documents?.paymentReceipt?.status === "VERIFIED" ||
             lead.status === "APPROVED" ||
             lead.status === "ENROLLED"
         ),
@@ -235,7 +245,13 @@ export default function AdmissionRegisterTable({
       const regFeePaid = Boolean(
         reg.formFeePaid ||
         creds.formFeePaid ||
+        creds.feePaid ||
         creds.formFeeStatus === "PAID" ||
+        creds.formFeeStatus === "SETTLED" ||
+        creds.paymentState === "SETTLED" ||
+        creds.applicationFeeReceipt?.status === "VERIFIED" ||
+        creds.applicationFeeReceipt?.verified === true ||
+        creds.paymentReceipt?.status === "VERIFIED" ||
         reg.status?.toUpperCase() === "APPROVED" ||
         reg.status?.toUpperCase() === "ENROLLED"
       );

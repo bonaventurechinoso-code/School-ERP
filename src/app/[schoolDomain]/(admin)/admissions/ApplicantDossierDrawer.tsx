@@ -432,6 +432,30 @@ export default function ApplicantDossierDrawer({
       typeof (rawApplicant.tierSpecificData as any)?.documents === "object" ? (rawApplicant.tierSpecificData as any).documents : {}
     );
 
+    const feeTxList: any[] = [
+      ...(Array.isArray(rawApplicant.feeTransactions) ? rawApplicant.feeTransactions : []),
+      ...(Array.isArray(rawLead.feeTransactions) ? rawLead.feeTransactions : []),
+    ];
+    const isFeeSettledCandidate = Boolean(
+      rawApplicant.formFeePaid ||
+      rawLead.formFeePaid ||
+      rawApplicant.feePaid ||
+      rawLead.feePaid ||
+      creds.formFeePaid ||
+      creds.feePaid ||
+      mergedDocs.formFeePaid ||
+      mergedDocs.feePaid ||
+      mergedDocs.formFeeStatus === "PAID" ||
+      mergedDocs.formFeeStatus === "SETTLED" ||
+      mergedDocs.paymentState === "SETTLED" ||
+      mergedDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+      mergedDocs.applicationFeeReceipt?.verified === true ||
+      mergedDocs.applicationFeeReceipt?.verificationStatus === "MANUALLY_VERIFIED" ||
+      feeTxList.some((t: any) => t.paymentStatus === "SETTLED" || t.paymentStatus === "VERIFIED" || t.paymentStatus === "PAID") ||
+      rawApplicant.status === "APPROVED" || rawApplicant.status === "ENROLLED" || rawApplicant.status === "ADMITTED" ||
+      rawLead.status === "APPROVED" || rawLead.status === "ENROLLED" || rawLead.status === "ADMITTED"
+    );
+
     return {
       ...rawApplicant,
       ...rawLead,
@@ -455,7 +479,15 @@ export default function ApplicantDossierDrawer({
         "Candidate",
       targetGrade: rawLead.targetGrade || rawApplicant.assignedClass || rawApplicant.classApplied || rawLead.targetClass || "Primary 1",
       targetClass: rawLead.targetClass || rawApplicant.assignedClass || rawApplicant.classApplied || rawLead.targetGrade || "Primary 1",
-      documents: mergedDocs,
+      formFeePaid: isFeeSettledCandidate,
+      feePaid: isFeeSettledCandidate,
+      formFeeStatus: isFeeSettledCandidate ? "PAID" : (mergedDocs.formFeeStatus || "UNPAID"),
+      paymentState: isFeeSettledCandidate ? "SETTLED" : mergedDocs.paymentState,
+      feeTransactions: feeTxList,
+      documents: {
+        ...mergedDocs,
+        ...(isFeeSettledCandidate ? { formFeePaid: true, formFeeStatus: "PAID", paymentState: "SETTLED" } : {}),
+      },
       rawDocuments: rawDocs,
       logs: rawLead.logs || creds.statusLogs || rawApplicant.logs || [],
     };
@@ -590,12 +622,35 @@ export default function ApplicantDossierDrawer({
     docs.formFeePaid ||
       docs.feePaid ||
       localCandidate?.formFeePaid ||
-      activeCandidate.formFeePaid ||
+      localCandidate?.feePaid ||
+      activeCandidate?.formFeePaid ||
+      activeCandidate?.feePaid ||
       docs.formFeeStatus === "PAID" ||
+      docs.formFeeStatus === "SETTLED" ||
       localCandidate?.formFeeStatus === "PAID" ||
+      localCandidate?.formFeeStatus === "SETTLED" ||
       activeCandidate?.formFeeStatus === "PAID" ||
+      activeCandidate?.formFeeStatus === "SETTLED" ||
+      docs.paymentState === "SETTLED" ||
+      localCandidate?.paymentState === "SETTLED" ||
+      activeCandidate?.paymentState === "SETTLED" ||
+      docs.applicationFeeReceipt?.status === "VERIFIED" ||
+      docs.applicationFeeReceipt?.verified === true ||
+      docs.applicationFeeReceipt?.verificationStatus === "MANUALLY_VERIFIED" ||
+      docs.applicationFeeReceipt?.verificationStatus === "AUTO_VERIFIED" ||
+      localCandidate?.applicationFeeReceipt?.status === "VERIFIED" ||
+      localCandidate?.applicationFeeReceipt?.verified === true ||
+      activeCandidate?.applicationFeeReceipt?.status === "VERIFIED" ||
+      activeCandidate?.applicationFeeReceipt?.verified === true ||
+      resolveDocRecord(localCandidate || activeCandidate, "applicationFeeReceipt")?.status === "VERIFIED" ||
+      resolveDocRecord(localCandidate || activeCandidate, "applicationFeeReceipt")?.verified === true ||
+      resolveDocRecord(localCandidate || activeCandidate, "applicationFeeReceipt")?.verificationStatus === "MANUALLY_VERIFIED" ||
+      resolveDocRecord(localCandidate || activeCandidate, "applicationFeeReceipt")?.verificationStatus === "AUTO_VERIFIED" ||
+      localCandidate?.feeTransactions?.some((t: any) => t.paymentStatus === "SETTLED" || t.paymentStatus === "VERIFIED" || t.paymentStatus === "PAID") ||
+      activeCandidate?.feeTransactions?.some((t: any) => t.paymentStatus === "SETTLED" || t.paymentStatus === "VERIFIED" || t.paymentStatus === "PAID") ||
       currentStatus === "APPROVED" ||
-      currentStatus === "ENROLLED"
+      currentStatus === "ENROLLED" ||
+      currentStatus === "ADMITTED"
   );
 
   const isFeePending = Boolean(
@@ -968,13 +1023,15 @@ export default function ApplicantDossierDrawer({
             }
             if (docType === "applicationFeeReceipt" && status === "VERIFIED") {
               currentDocs.formFeePaid = true;
+              currentDocs.feePaid = true;
               currentDocs.formFeeStatus = "PAID";
+              currentDocs.paymentState = "SETTLED";
             }
             return {
               ...prev,
               documents: currentDocs,
               ...(existingUrl ? { [propUrlKey]: existingUrl } : {}),
-              ...(docType === "applicationFeeReceipt" && status === "VERIFIED" ? { formFeePaid: true, formFeeStatus: "PAID" } : {}),
+              ...(docType === "applicationFeeReceipt" && status === "VERIFIED" ? { formFeePaid: true, feePaid: true, formFeeStatus: "PAID", paymentState: "SETTLED" } : {}),
             };
           });
           if (onLeadUpdated) onLeadUpdated();
@@ -1035,11 +1092,21 @@ export default function ApplicantDossierDrawer({
         setLocalCandidate((prev: any) => ({
           ...prev,
           formFeePaid: true,
+          feePaid: true,
           formFeeStatus: "PAID",
+          paymentState: "SETTLED",
           documents: {
             ...(prev?.documents || {}),
             formFeePaid: true,
+            feePaid: true,
             formFeeStatus: "PAID",
+            paymentState: "SETTLED",
+            applicationFeeReceipt: {
+              ...(typeof prev?.documents?.applicationFeeReceipt === "object" ? prev.documents.applicationFeeReceipt : {}),
+              status: "VERIFIED",
+              verified: true,
+              verificationStatus: "MANUALLY_VERIFIED",
+            },
           },
         }));
         if (onLeadUpdated) onLeadUpdated();

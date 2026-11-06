@@ -278,6 +278,16 @@ export default function AdmissionsWorkspaceClient({
   // Dossier Drawer state
   const [dossierApp, setDossierApp] = useState<SerializedApplication | null>(null);
 
+  // Keep active dossierApp synchronized with latest updated applications
+  useEffect(() => {
+    if (dossierApp) {
+      const fresh = (applications || initialApplications || []).find((a) => a.id === dossierApp.id);
+      if (fresh) {
+        setDossierApp(fresh);
+      }
+    }
+  }, [applications, initialApplications]);
+
   // Edit Applicant Modal state
   const [editingApp, setEditingApp] = useState<SerializedApplication | null>(null);
   const [editForm, setEditForm] = useState({
@@ -414,11 +424,58 @@ export default function AdmissionsWorkspaceClient({
 
   // Helper to determine fee status
   const getFeeStatus = (app: SerializedApplication): "UNPAID" | "PENDING" | "SETTLED" => {
-    if (!app.feeTransactions || app.feeTransactions.length === 0) return "UNPAID";
-    const hasSettled = app.feeTransactions.some((t) => t.paymentStatus === "SETTLED");
-    if (hasSettled) return "SETTLED";
-    const hasPending = app.feeTransactions.some((t) => t.paymentStatus === "PENDING");
-    if (hasPending) return "PENDING";
+    const metaDocs = (app.metadata as any)?.documents || {};
+    const tierDocs = (app.tierSpecificData as any)?.documents || {};
+    const hasSettledTx = app.feeTransactions?.some(
+      (t) => t.paymentStatus === "SETTLED" || t.paymentStatus === "VERIFIED" || t.paymentStatus === "PAID"
+    );
+    const isDocPaid = Boolean(
+      (app as any).formFeePaid ||
+      (app as any).feePaid ||
+      metaDocs.formFeePaid ||
+      metaDocs.feePaid ||
+      metaDocs.formFeeStatus === "PAID" ||
+      metaDocs.formFeeStatus === "SETTLED" ||
+      metaDocs.paymentState === "SETTLED" ||
+      metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+      metaDocs.applicationFeeReceipt?.verified === true ||
+      metaDocs.applicationFeeReceipt?.verificationStatus === "MANUALLY_VERIFIED" ||
+      tierDocs.formFeePaid ||
+      tierDocs.feePaid ||
+      tierDocs.formFeeStatus === "PAID" ||
+      tierDocs.formFeeStatus === "SETTLED" ||
+      tierDocs.paymentState === "SETTLED" ||
+      tierDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+      tierDocs.applicationFeeReceipt?.verified === true ||
+      tierDocs.applicationFeeReceipt?.verificationStatus === "MANUALLY_VERIFIED" ||
+      (app.tierSpecificData as any)?.formFeePaid ||
+      (app.tierSpecificData as any)?.formFeeStatus === "PAID" ||
+      (app.tierSpecificData as any)?.formFeeStatus === "SETTLED" ||
+      (app.tierSpecificData as any)?.paymentState === "SETTLED" ||
+      hasSettledTx ||
+      app.status === "APPROVED" ||
+      app.status === "ENROLLED" ||
+      app.status === "ADMITTED"
+    );
+    if (isDocPaid) return "SETTLED";
+
+    const hasPendingTx = app.feeTransactions?.some(
+      (t) => t.paymentStatus === "PENDING" || t.paymentStatus === "PENDING_VERIFICATION"
+    );
+    const hasPendingDoc = Boolean(
+      metaDocs.formFeeStatus === "PENDING" ||
+      metaDocs.formFeeStatus === "PENDING_VERIFICATION" ||
+      metaDocs.paymentState === "PAYMENT_PENDING_REVIEW" ||
+      metaDocs.applicationFeeReceiptUrl ||
+      metaDocs.formFeeReceiptUrl ||
+      metaDocs.applicationFeeReceipt?.url ||
+      tierDocs.formFeeStatus === "PENDING" ||
+      tierDocs.formFeeStatus === "PENDING_VERIFICATION" ||
+      tierDocs.applicationFeeReceiptUrl ||
+      hasPendingTx
+    );
+    if (hasPendingDoc) return "PENDING";
+
     return "UNPAID";
   };
 
@@ -2576,7 +2633,10 @@ export default function AdmissionsWorkspaceClient({
       {/* ========================================================================= */}
       {/* DOSSIER DRAWER COMPONENT (VERIFY DOCUMENTS & DISPATCH ADMIT SLIP)         */}
       {/* ========================================================================= */}
-      {dossierApp && (
+      {dossierApp && (() => {
+        const dossierFeeStatus = getFeeStatus(dossierApp);
+        const isDossierFeeSettled = dossierFeeStatus === "SETTLED";
+        return (
         <ApplicantDossierDrawer
           lead={{
             id: dossierApp.id,
@@ -2597,6 +2657,10 @@ export default function AdmissionsWorkspaceClient({
               (dossierApp.tierSpecificData as any)?.parent?.phone ||
               dossierApp.phoneNumber,
             status: dossierApp.status,
+            feePaid: isDossierFeeSettled,
+            formFeePaid: isDossierFeeSettled,
+            formFeeStatus: isDossierFeeSettled ? "PAID" : dossierFeeStatus === "PENDING" ? "PENDING" : "UNPAID",
+            paymentState: isDossierFeeSettled ? "SETTLED" : "UNPAID",
             rawDocuments: dossierApp.documents,
             feeTransactions: dossierApp.feeTransactions,
             metadata: dossierApp.metadata,
@@ -2605,6 +2669,7 @@ export default function AdmissionsWorkspaceClient({
               ...(dossierApp.tierSpecificData || {}),
               ...((dossierApp.tierSpecificData as any)?.documents || {}),
               ...((dossierApp.metadata as any)?.documents || {}),
+              ...(isDossierFeeSettled ? { formFeePaid: true, feePaid: true, formFeeStatus: "PAID", paymentState: "SETTLED" } : {}),
               entranceScore: (dossierApp.tierSpecificData as any)?.entranceScore ?? (dossierApp.tierSpecificData as any)?.examScore ?? null,
               applicationFeeReceiptUrl:
                 dossierApp.feeTransactions?.find((t) => t.proofOfPaymentUrl)?.proofOfPaymentUrl ||
@@ -2659,6 +2724,11 @@ export default function AdmissionsWorkspaceClient({
               dossierApp.email,
             parentPhone: dossierApp.phoneNumber,
             status: dossierApp.status,
+            feePaid: isDossierFeeSettled,
+            formFeePaid: isDossierFeeSettled,
+            formFeeStatus: isDossierFeeSettled ? "PAID" : dossierFeeStatus === "PENDING" ? "PENDING" : "UNPAID",
+            paymentState: isDossierFeeSettled ? "SETTLED" : "UNPAID",
+            feeTransactions: dossierApp.feeTransactions,
             rawDocuments: dossierApp.documents,
             metadata: dossierApp.metadata,
             tierSpecificData: dossierApp.tierSpecificData,
@@ -2686,7 +2756,8 @@ export default function AdmissionsWorkspaceClient({
             });
           }}
         />
-      )}
+        );
+      })()}
     </div>
   );
 }
