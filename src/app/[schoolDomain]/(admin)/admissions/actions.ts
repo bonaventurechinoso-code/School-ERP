@@ -590,9 +590,9 @@ export async function updateLeadDocumentsAction(payload: {
           }).catch(() => null);
         }
 
-        // Settle linked PaymentReceipt records if any exist
+        // Settle linked PaymentReceipt records if any exist; backfill if none exists
         const appRef = appRecord.applicationNumber;
-        await basePrisma.paymentReceipt.updateMany({
+        const prUpdate = await basePrisma.paymentReceipt.updateMany({
           where: {
             tenantId: appRecord.tenantId || schoolId,
             moduleType: "ADMISSION_FORM_FEE",
@@ -608,6 +608,40 @@ export async function updateLeadDocumentsAction(payload: {
             verifiedAt: new Date(),
           },
         }).catch(() => null);
+
+        if (!prUpdate || prUpdate.count === 0) {
+          const payerName =
+            `${appRecord.firstName || ""} ${appRecord.lastName || ""}`.trim() || "Applicant";
+          const refNo = appRef || `APP-${appRecord.id.slice(0, 6).toUpperCase()}`;
+          const proofUrl = metaUrl || "DESK_SETTLED_RECEIPT";
+          await basePrisma.paymentReceipt
+            .create({
+              data: {
+                tenantId: appRecord.tenantId || schoolId,
+                schoolId: appRecord.schoolId || schoolId,
+                moduleType: "ADMISSION_FORM_FEE",
+                payerType: "APPLICANT",
+                payerId: appRecord.id,
+                payerName,
+                referenceNo: refNo,
+                amount: 5000,
+                paymentMethod: "BANK_TRANSFER",
+                paymentMode: "MANUAL_TRANSFER",
+                fileUrl: proofUrl,
+                proofOfPaymentUrl: proofUrl,
+                fileName: "application_fee_receipt.jpg",
+                depositorName: payerName,
+                transferReference: refNo,
+                txnRef: refNo,
+                status: "VERIFIED",
+                state: "SETTLED",
+                verifiedBy: session?.user?.name || "Admissions Officer",
+                verifiedByUserId: session?.userId || null,
+                verifiedAt: new Date(),
+              },
+            })
+            .catch(() => null);
+        }
       }
     }
 
@@ -2681,11 +2715,11 @@ export async function markFormFeePaidAction(payload: {
       if (!updated) updated = updatedLead;
     }
 
-    // Update corresponding PaymentReceipt records if any
+    // Update corresponding PaymentReceipt records if any, or create if none exists
     try {
       const appRef = registerRecord?.applicationNo || (lead as any)?.applicationNo || appRecord?.applicationNumber;
       if (appRef || lead?.id || appRecord?.id) {
-        await basePrisma.paymentReceipt.updateMany({
+        const prUpdate = await basePrisma.paymentReceipt.updateMany({
           where: {
             OR: [
               ...(appRef ? [{ referenceNo: appRef }] : []),
@@ -2702,6 +2736,56 @@ export async function markFormFeePaidAction(payload: {
             verifiedAt: new Date(),
           },
         });
+
+        if (!prUpdate || prUpdate.count === 0) {
+          const payerName =
+            (lead as any)?.applicantName ||
+            (registerRecord ? `${registerRecord.firstName || ""} ${registerRecord.lastName || ""}`.trim() : null) ||
+            (appRecord ? `${appRecord.firstName || ""} ${appRecord.lastName || ""}`.trim() : null) ||
+            "Applicant";
+          const tenantId =
+            appRecord?.schoolId ||
+            appRecord?.tenantId ||
+            registerRecord?.tenantId ||
+            (lead as any)?.schoolId;
+          const refNo =
+            appRef ||
+            `APP-${(lead?.id || registerRecord?.id || appRecord?.id || Date.now().toString()).slice(0, 6).toUpperCase()}`;
+          const proofUrl =
+            appRecord?.feeTransactions?.[0]?.proofOfPaymentUrl ||
+            (lead as any)?.documents?.applicationFeeReceipt ||
+            "DESK_SETTLED_RECEIPT";
+
+          if (tenantId) {
+            await basePrisma.paymentReceipt
+              .create({
+                data: {
+                  tenantId,
+                  schoolId: tenantId,
+                  moduleType: "ADMISSION_FORM_FEE",
+                  payerType: "APPLICANT",
+                  payerId: lead?.id || registerRecord?.id || appRecord?.id,
+                  payerName,
+                  referenceNo: refNo,
+                  amount: 5000,
+                  paymentMethod: "BANK_TRANSFER",
+                  paymentMode: "MANUAL_TRANSFER",
+                  fileUrl: proofUrl,
+                  proofOfPaymentUrl: proofUrl,
+                  fileName: "application_fee_receipt.jpg",
+                  depositorName: payerName,
+                  transferReference: refNo,
+                  txnRef: refNo,
+                  status: "VERIFIED",
+                  state: "SETTLED",
+                  verifiedBy: typeof verifiedBy === "string" ? verifiedBy : "Admissions Desk",
+                  verifiedByUserId: typeof verifiedBy === "string" ? verifiedBy : null,
+                  verifiedAt: new Date(),
+                },
+              })
+              .catch(() => null);
+          }
+        }
       }
     } catch (prErr) {
       console.warn("[markFormFeePaidAction] PaymentReceipt sync note:", prErr);

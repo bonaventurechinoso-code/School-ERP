@@ -210,6 +210,7 @@ export async function recordWalkInApplication(payload: {
       }
 
       // 3. Record settled POS/Cash transaction
+      const receiptFileUrl = payment.method === "CASH" ? "CASH_COUNTER_RECEIPT" : "POS_RECEIPT";
       const feeTx = await tx.admissionsFeeTransaction.create({
         data: {
           tenantId: school.id,
@@ -218,11 +219,42 @@ export async function recordWalkInApplication(payload: {
           amount: payment.amount || 5000,
           currency: "NGN",
           paymentReference,
+          proofOfPaymentUrl: receiptFileUrl,
           paymentStatus: "SETTLED",
           reconciliationNotes: `Desk intake by ${registrarName} (${payment.method})`,
           verifiedByUserId: registrarName,
           verifiedAt: new Date(),
         },
+      });
+
+      // Settle and record into Universal PaymentReceipt table for Bursar verification hub
+      const applicantFullName = `${firstName} ${lastName}`.trim();
+      await tx.paymentReceipt.create({
+        data: {
+          tenantId: school.id,
+          schoolId: school.id,
+          moduleType: "ADMISSION_FORM_FEE",
+          payerType: "APPLICANT",
+          payerId: application.id,
+          payerName: applicantFullName,
+          referenceNo: finalizedAppNo,
+          amount: payment.amount || 5000,
+          paymentMethod: payment.method === "CASH" ? "CASH" : "POS_COUNTER",
+          paymentMode: payment.method === "CASH" ? "CASH_COUNTER" : "POS_TERMINAL",
+          fileUrl: receiptFileUrl,
+          proofOfPaymentUrl: receiptFileUrl,
+          fileName: `${payment.method.toLowerCase()}_receipt.pdf`,
+          depositorName: applicantFullName,
+          transferReference: paymentReference,
+          txnRef: paymentReference,
+          status: "VERIFIED",
+          state: "SETTLED",
+          verifiedBy: registrarName,
+          verifiedByUserId: registrarName,
+          verifiedAt: new Date(),
+        },
+      }).catch((prErr: any) => {
+        console.warn("[recordWalkInApplication] PaymentReceipt creation note:", prErr);
       });
 
       // 4. Sync corresponding AdmissionRegister if one exists

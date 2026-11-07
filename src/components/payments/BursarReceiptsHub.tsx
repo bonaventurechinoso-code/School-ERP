@@ -560,7 +560,7 @@ export default function BursarReceiptsHub({
                     <td className="p-3.5">{statusBadge(r.status)}</td>
                     <td className="p-3.5 pr-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {r.fileUrl && (
+                        {r.fileUrl && (r.fileUrl.startsWith("http") || r.fileUrl.startsWith("/")) ? (
                           <a
                             href={r.fileUrl}
                             target="_blank"
@@ -570,7 +570,18 @@ export default function BursarReceiptsHub({
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </a>
-                        )}
+                        ) : r.fileUrl ? (
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700"
+                            title={r.fileUrl}
+                          >
+                            {r.fileUrl === "POS_RECEIPT"
+                              ? "POS Slip"
+                              : r.fileUrl === "CASH_COUNTER_RECEIPT"
+                              ? "Cash Slip"
+                              : "Desk Settled"}
+                          </span>
+                        ) : null}
                         {r.isPotentialDuplicate ? (
                           <div className="flex items-center gap-1.5">
                             <button
@@ -792,31 +803,49 @@ export default function BursarReceiptsHub({
                           {/* Proof Image Preview */}
                           {item.fileUrl && (
                             <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 relative group aspect-video flex items-center justify-center">
-                              {item.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? (
-                                <Image
-                                  src={item.fileUrl}
-                                  alt="Payment Proof"
-                                  width={400}
-                                  height={225}
-                                  unoptimized
-                                  className="w-full h-full object-cover"
-                                />
+                              {item.fileUrl.startsWith("http") || item.fileUrl.startsWith("/") ? (
+                                item.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? (
+                                  <Image
+                                    src={item.fileUrl}
+                                    alt="Payment Proof"
+                                    width={400}
+                                    height={225}
+                                    unoptimized
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="text-slate-400 text-xs flex flex-col items-center gap-1">
+                                    <FileCheck className="w-6 h-6 text-slate-400" />
+                                    <span>Document Receipt</span>
+                                  </div>
+                                )
                               ) : (
-                                <div className="text-slate-400 text-xs flex flex-col items-center gap-1">
-                                  <FileCheck className="w-6 h-6 text-slate-400" />
-                                  <span>Document Receipt</span>
+                                <div className="text-slate-500 text-xs flex flex-col items-center gap-1.5 p-3 text-center">
+                                  <FileCheck className="w-7 h-7 text-emerald-600" />
+                                  <span className="font-bold text-slate-700 dark:text-zinc-200">
+                                    {item.fileUrl === "POS_RECEIPT"
+                                      ? "Verified POS Terminal Receipt"
+                                      : item.fileUrl === "CASH_COUNTER_RECEIPT"
+                                      ? "Cash Counter Lodgement Slip"
+                                      : "Admissions Desk Settled Receipt"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    Settled at Admissions Front Desk
+                                  </span>
                                 </div>
                               )}
-                              <a
-                                href={item.fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                                <span>Inspect Full Slip</span>
-                              </a>
+                              {(item.fileUrl.startsWith("http") || item.fileUrl.startsWith("/")) && (
+                                <a
+                                  href={item.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1.5"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  <span>Inspect Full Slip</span>
+                                </a>
+                              )}
                             </div>
                           )}
 

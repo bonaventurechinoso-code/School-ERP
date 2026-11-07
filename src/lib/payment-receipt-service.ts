@@ -1176,44 +1176,76 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
     const isSpecificTenant =
       Boolean(tenantFilter) && tenantFilter !== "ALL" && tenantFilter !== "super-admin";
 
+    let resolvedTenantIds: string[] = [];
+    if (isSpecificTenant && tenantFilter) {
+      const school = await basePrisma.school
+        .findFirst({
+          where: {
+            OR: [{ id: tenantFilter }, { subdomain: tenantFilter }, { slug: tenantFilter }],
+          },
+          select: { id: true, subdomain: true, slug: true },
+        })
+        .catch(() => null);
+
+      if (school) {
+        resolvedTenantIds = Array.from(
+          new Set([school.id, school.subdomain, school.slug, tenantFilter].filter(Boolean) as string[])
+        );
+      } else {
+        resolvedTenantIds = [tenantFilter];
+      }
+    }
+
     const [apps, registers, leads, existingReceipts] = await Promise.all([
       basePrisma.admissionsApplication
         .findMany({
-          where: isSpecificTenant
-            ? { OR: [{ schoolId: tenantFilter }, { tenantId: tenantFilter }] }
-            : {},
+          where:
+            resolvedTenantIds.length > 0
+              ? { OR: [{ schoolId: { in: resolvedTenantIds } }, { tenantId: { in: resolvedTenantIds } }] }
+              : {},
           include: {
             feeTransactions: true,
             documents: true,
           },
           orderBy: { createdAt: "desc" },
-          take: 150,
+          take: 200,
         })
         .catch(() => []),
       basePrisma.admissionRegister
         .findMany({
-          where: isSpecificTenant ? { tenantId: tenantFilter } : {},
+          where:
+            resolvedTenantIds.length > 0
+              ? { tenantId: { in: resolvedTenantIds } }
+              : {},
           orderBy: { createdAt: "desc" },
-          take: 150,
+          take: 200,
         })
         .catch(() => []),
       basePrisma.admissionLead
         .findMany({
-          where: isSpecificTenant ? { schoolId: tenantFilter } : {},
+          where:
+            resolvedTenantIds.length > 0
+              ? { schoolId: { in: resolvedTenantIds } }
+              : {},
           orderBy: { createdAt: "desc" },
-          take: 150,
+          take: 200,
         })
         .catch(() => []),
       basePrisma.paymentReceipt
         .findMany({
           where: {
             moduleType: "ADMISSION_FORM_FEE",
-            ...(isSpecificTenant
-              ? { OR: [{ tenantId: tenantFilter }, { schoolId: tenantFilter }] }
+            ...(resolvedTenantIds.length > 0
+              ? {
+                  OR: [
+                    { tenantId: { in: resolvedTenantIds } },
+                    { schoolId: { in: resolvedTenantIds } },
+                  ],
+                }
               : {}),
           },
           orderBy: { createdAt: "desc" },
-          take: 300,
+          take: 400,
         })
         .catch(() => []),
     ]);
@@ -1228,7 +1260,7 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
       return null;
     };
 
-    // Build unified candidate map keyed by canonical application or lead identity
+    // Build unified candidate map keyed by canonical application, transaction, or lead identity
     type CandidateReceiptInfo = {
       tenantId: string;
       schoolId: string;
@@ -1245,6 +1277,8 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
       transferReference?: string;
       amount: number;
       isVerified: boolean;
+      paymentMethod?: string;
+      paymentMode?: string;
     };
 
     const candidates: CandidateReceiptInfo[] = [];
@@ -1283,8 +1317,7 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
         )
       );
 
-      const fileUrl =
-        extractUrl(app.feeTransactions?.[0]?.proofOfPaymentUrl) ||
+      const resolvedDocUrl =
         extractUrl(appFeeDoc?.storageKey) ||
         extractUrl(metaDocs.applicationFeeReceipt) ||
         extractUrl(metaDocs.applicationFeeReceiptUrl) ||
@@ -1299,20 +1332,10 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
         extractUrl(leadDocs.applicationFeeReceiptUrl) ||
         extractUrl(leadDocs.formFeeReceiptUrl);
 
-      if (!fileUrl) continue;
-
-      const hasPendingTx = app.feeTransactions?.some((t: any) => t.paymentStatus === "PENDING");
-      const isVerified =
-        !hasPendingTx &&
-        (app.feeTransactions?.some((t: any) => t.paymentStatus === "SETTLED") ||
-          appFeeDoc?.verificationStatus === "MANUALLY_VERIFIED" ||
-          Boolean(linkedReg?.formFeePaid) ||
-          Boolean(regCreds.formFeePaid) ||
-          Boolean(leadDocs.formFeePaid) ||
-          metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
-          tierDocs.applicationFeeReceipt?.status === "VERIFIED");
-
-      const payerName = `${app.firstName || ""} ${app.lastName || ""}`.trim() || linkedLead?.applicantName || "Applicant";
+      const payerName =
+        `${app.firstName || ""} ${app.lastName || ""}`.trim() ||
+        linkedLead?.applicantName ||
+        "Applicant";
       const canonicalRef =
         app.applicationNumber ||
         linkedReg?.applicationNo ||
@@ -1325,52 +1348,124 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
       if (linkedLead) seenIds.add(linkedLead.id);
       if (linkedReg) seenIds.add(linkedReg.id);
 
-      candidates.push({
-        tenantId: app.tenantId || app.schoolId,
-        schoolId: app.schoolId || app.tenantId,
-        payerId: linkedLead?.id || app.id,
-        leadId: linkedLead?.id,
-        appId: app.id,
-        regId: linkedReg?.id,
-        payerName,
-        referenceNo: canonicalRef,
-        legacyAppRef,
-        fileUrl,
-        fileName:
-          metaDocs.applicationFeeReceipt?.fileName ||
-          leadDocs.applicationFeeReceipt?.fileName ||
-          "application_fee_receipt.jpg",
-        depositorName:
-          metaDocs.depositorName ||
-          leadDocs.depositorName ||
-          regCreds.depositorName ||
-          payerName,
-        transferReference:
-          app.feeTransactions?.[0]?.paymentReference ||
+      const transactions =
+        app.feeTransactions && app.feeTransactions.length > 0 ? app.feeTransactions : [null];
+
+      for (const tx of transactions) {
+        const txMethod = tx?.paymentMethod || "MANUAL_BANK_TRANSFER";
+        const txStatus = tx?.paymentStatus;
+        const txProofUrl = extractUrl(tx?.proofOfPaymentUrl);
+
+        let fileUrl = txProofUrl || resolvedDocUrl;
+        if (!fileUrl) {
+          if (txMethod === "POS_COUNTER") fileUrl = "POS_RECEIPT";
+          else if (txMethod === "CASH") fileUrl = "CASH_COUNTER_RECEIPT";
+          else if (txStatus === "SETTLED") fileUrl = "DESK_SETTLED_RECEIPT";
+        }
+
+        const hasPaymentEvidence =
+          Boolean(fileUrl) ||
+          Boolean(tx) ||
+          Boolean(linkedReg?.formFeePaid) ||
+          Boolean(regCreds.formFeePaid) ||
+          Boolean(leadDocs.formFeePaid) ||
+          metaDocs.formFeePaid === true ||
+          tierDocs.formFeePaid === true;
+
+        if (!hasPaymentEvidence) continue;
+
+        if (!fileUrl) {
+          fileUrl = "DESK_SETTLED_RECEIPT";
+        }
+
+        const isVerified =
+          txStatus === "SETTLED" ||
+          (!tx &&
+            (appFeeDoc?.verificationStatus === "MANUALLY_VERIFIED" ||
+              Boolean(linkedReg?.formFeePaid) ||
+              Boolean(regCreds.formFeePaid) ||
+              Boolean(leadDocs.formFeePaid) ||
+              metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+              tierDocs.applicationFeeReceipt?.status === "VERIFIED"));
+
+        const paymentMethod =
+          txMethod === "CASH" ? "CASH" : txMethod === "POS_COUNTER" ? "POS_COUNTER" : "BANK_TRANSFER";
+        const paymentMode =
+          txMethod === "CASH"
+            ? "CASH_COUNTER"
+            : txMethod === "POS_COUNTER"
+            ? "POS_TERMINAL"
+            : "MANUAL_TRANSFER";
+
+        const transferReference =
+          tx?.paymentReference ||
           metaDocs.transferReference ||
           leadDocs.transferReference ||
-          canonicalRef,
-        amount: Number(app.feeTransactions?.[0]?.amount) || 5000,
-        isVerified,
-      });
+          canonicalRef;
+
+        candidates.push({
+          tenantId: app.tenantId || app.schoolId,
+          schoolId: app.schoolId || app.tenantId,
+          payerId: linkedLead?.id || app.id,
+          leadId: linkedLead?.id,
+          appId: app.id,
+          regId: linkedReg?.id,
+          payerName,
+          referenceNo: canonicalRef,
+          legacyAppRef,
+          fileUrl,
+          fileName:
+            metaDocs.applicationFeeReceipt?.fileName ||
+            leadDocs.applicationFeeReceipt?.fileName ||
+            `${paymentMethod.toLowerCase()}_receipt.jpg`,
+          depositorName:
+            metaDocs.depositorName ||
+            leadDocs.depositorName ||
+            regCreds.depositorName ||
+            payerName,
+          transferReference,
+          amount: Number(tx?.amount) || 5000,
+          isVerified,
+          paymentMethod,
+          paymentMode,
+        });
+
+        // If tx exists but lacked proofOfPaymentUrl and we have a resolved fileUrl, wire it up
+        if (tx && !tx.proofOfPaymentUrl && fileUrl) {
+          await basePrisma.admissionsFeeTransaction
+            .update({
+              where: { id: tx.id },
+              data: { proofOfPaymentUrl: fileUrl },
+            })
+            .catch(() => null);
+        }
+      }
 
       // Ensure AdmissionsFeeTransaction exists in DB for this application
       if (!app.feeTransactions || app.feeTransactions.length === 0) {
-        await basePrisma.admissionsFeeTransaction
-          .create({
-            data: {
-              tenantId: app.tenantId || app.schoolId,
-              applicationId: app.id,
-              paymentMethod: "MANUAL_BANK_TRANSFER",
-              amount: 5000,
-              currency: "NGN",
-              paymentReference: `FEE-${canonicalRef}`,
-              proofOfPaymentUrl: fileUrl,
-              paymentStatus: isVerified ? "SETTLED" : "PENDING",
-              verifiedAt: isVerified ? new Date() : null,
-            },
-          })
-          .catch(() => null);
+        const appCand = candidates.find((c) => c.appId === app.id);
+        if (appCand) {
+          await basePrisma.admissionsFeeTransaction
+            .create({
+              data: {
+                tenantId: app.tenantId || app.schoolId,
+                applicationId: app.id,
+                paymentMethod:
+                  appCand.paymentMethod === "CASH"
+                    ? "CASH"
+                    : appCand.paymentMethod === "POS_COUNTER"
+                    ? "POS_COUNTER"
+                    : "MANUAL_BANK_TRANSFER",
+                amount: appCand.amount || 5000,
+                currency: "NGN",
+                paymentReference: `FEE-${canonicalRef}`,
+                proofOfPaymentUrl: appCand.fileUrl,
+                paymentStatus: appCand.isVerified ? "SETTLED" : "PENDING",
+                verifiedAt: appCand.isVerified ? new Date() : null,
+              },
+            })
+            .catch(() => null);
+        }
       }
     }
 
@@ -1386,23 +1481,26 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
         extractUrl(reg.formFeeReceiptUrl) ||
         extractUrl(regCreds.applicationFeeReceipt) ||
         extractUrl(regCreds.applicationFeeReceiptUrl);
-      if (!fileUrl) continue;
+      if (!fileUrl && !reg.formFeePaid && !regCreds.formFeePaid) continue;
 
       seenIds.add(reg.id);
       const payerName = `${reg.firstName || ""} ${reg.lastName || ""}`.trim() || "Applicant";
+      const appNo = reg.applicationNo || `APP-${reg.id.slice(0, 6).toUpperCase()}`;
       candidates.push({
         tenantId: reg.tenantId,
         schoolId: reg.tenantId,
         payerId: reg.id,
         regId: reg.id,
         payerName,
-        referenceNo: reg.applicationNo || `APP-${reg.id.slice(0, 6).toUpperCase()}`,
+        referenceNo: appNo,
         legacyAppRef: `APP-${reg.id.slice(0, 6).toUpperCase()}`,
-        fileUrl,
+        fileUrl: fileUrl || "DESK_SETTLED_RECEIPT",
         depositorName: regCreds.depositorName || payerName,
-        transferReference: regCreds.transferReference || reg.applicationNo,
+        transferReference: regCreds.transferReference || appNo,
         amount: 5000,
         isVerified: Boolean(reg.formFeePaid || regCreds.formFeePaid),
+        paymentMethod: "BANK_TRANSFER",
+        paymentMode: "MANUAL_TRANSFER",
       });
     }
 
@@ -1414,7 +1512,7 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
         extractUrl(leadDocs.applicationFeeReceipt) ||
         extractUrl(leadDocs.applicationFeeReceiptUrl) ||
         extractUrl(leadDocs.formFeeReceiptUrl);
-      if (!fileUrl) continue;
+      if (!fileUrl && !leadDocs.formFeePaid) continue;
 
       seenIds.add(lead.id);
       const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
@@ -1426,33 +1524,42 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
         payerName: lead.applicantName || "Applicant",
         referenceNo: appNo,
         legacyAppRef: appNo,
-        fileUrl,
+        fileUrl: fileUrl || "DESK_SETTLED_RECEIPT",
         depositorName: leadDocs.depositorName || lead.applicantName,
         transferReference: leadDocs.transferReference || appNo,
         amount: 5000,
         isVerified: Boolean(leadDocs.formFeePaid),
+        paymentMethod: "BANK_TRANSFER",
+        paymentMode: "MANUAL_TRANSFER",
       });
     }
 
     // Reconcile each candidate with PaymentReceipt table
     for (const cand of candidates) {
       const matchingReceipts = existingReceipts.filter((r) => {
-        const sameTenant = r.tenantId === cand.tenantId || r.schoolId === cand.schoolId;
+        const sameTenant =
+          resolvedTenantIds.length === 0 ||
+          resolvedTenantIds.includes(r.tenantId) ||
+          Boolean(r.schoolId && resolvedTenantIds.includes(r.schoolId));
         if (!sameTenant) return false;
+
+        const matchTxnRef =
+          cand.transferReference &&
+          cand.transferReference.length >= 4 &&
+          (r.transferReference === cand.transferReference || r.txnRef === cand.transferReference);
+
         const matchPayerId =
           r.payerId &&
           (r.payerId === cand.payerId ||
             r.payerId === cand.appId ||
             r.payerId === cand.leadId ||
             r.payerId === cand.regId);
+
         const matchRef =
           r.referenceNo === cand.referenceNo ||
           (cand.legacyAppRef && r.referenceNo === cand.legacyAppRef);
-        const matchName =
-          r.payerName &&
-          cand.payerName &&
-          r.payerName.trim().toLowerCase() === cand.payerName.trim().toLowerCase();
-        return Boolean(matchPayerId || matchRef || matchName);
+
+        return Boolean(matchTxnRef || matchPayerId || matchRef);
       });
 
       if (matchingReceipts.length === 0) {
@@ -1468,8 +1575,8 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
               payerName: cand.payerName,
               referenceNo: cand.referenceNo,
               amount: cand.amount,
-              paymentMethod: "BANK_TRANSFER",
-              paymentMode: "MANUAL_TRANSFER",
+              paymentMethod: (cand.paymentMethod as any) || "BANK_TRANSFER",
+              paymentMode: (cand.paymentMode as any) || "MANUAL_TRANSFER",
               fileUrl: cand.fileUrl,
               proofOfPaymentUrl: cand.fileUrl,
               fileName: cand.fileName || "application_fee_receipt.jpg",
@@ -1485,34 +1592,49 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
           .catch(() => null);
         if (created) (existingReceipts as any[]).unshift(created);
       } else {
-        // Pick primary receipt (prefer PENDING if awaiting verification, else VERIFIED, else newest)
         const primary =
-          matchingReceipts.find((r) => r.status === "PENDING") ||
           matchingReceipts.find((r) => r.status === "VERIFIED") ||
+          matchingReceipts.find((r) => r.status === "PENDING") ||
           matchingReceipts[0];
 
-        // Never overwrite an active PENDING receipt to VERIFIED automatically — let the Bursar verify it
-        const needsUpdate =
-          primary.referenceNo !== cand.referenceNo ||
-          (!primary.fileUrl && cand.fileUrl);
+        const shouldVerify = cand.isVerified && primary.status !== "VERIFIED";
+        const needsFileUrl = !primary.fileUrl && cand.fileUrl;
+        const needsProofUrl = !primary.proofOfPaymentUrl && cand.fileUrl;
+        const needsRefUpdate =
+          primary.referenceNo !== cand.referenceNo && !primary.referenceNo.startsWith("RCP-");
 
-        if (needsUpdate) {
+        if (shouldVerify || needsFileUrl || needsProofUrl || needsRefUpdate) {
           await basePrisma.paymentReceipt
             .update({
               where: { id: primary.id },
               data: {
-                referenceNo: cand.referenceNo,
-                fileUrl: cand.fileUrl || primary.fileUrl,
-                proofOfPaymentUrl: cand.fileUrl || primary.proofOfPaymentUrl,
+                ...(needsRefUpdate ? { referenceNo: cand.referenceNo } : {}),
+                ...(cand.fileUrl && !primary.fileUrl ? { fileUrl: cand.fileUrl } : {}),
+                ...(cand.fileUrl && !primary.proofOfPaymentUrl
+                  ? { proofOfPaymentUrl: cand.fileUrl }
+                  : {}),
+                ...(shouldVerify
+                  ? {
+                      status: "VERIFIED",
+                      state: "SETTLED",
+                      verifiedBy: primary.verifiedBy || "Admissions / Bursar Sync",
+                      verifiedAt: primary.verifiedAt || new Date(),
+                    }
+                  : {}),
               },
             })
             .catch(() => null);
         }
 
         // Clean up redundant PENDING clones created by repeated uploads for the same applicant
+        // ONLY if they have the exact same referenceNo AND the exact same payerId
         if (matchingReceipts.length > 1) {
           const redundantClones = matchingReceipts.filter(
-            (r) => r.id !== primary.id && r.status === "PENDING"
+            (r) =>
+              r.id !== primary.id &&
+              r.status === "PENDING" &&
+              r.referenceNo === cand.referenceNo &&
+              r.payerId === cand.payerId
           );
           if (redundantClones.length > 0) {
             await basePrisma.paymentReceipt
@@ -1552,16 +1674,34 @@ export async function getPaymentReceipts(params: {
   const limit = Math.min(100, Math.max(1, params.limit || 20));
   const skip = (page - 1) * limit;
 
+  // Resolve tenant ID / subdomain / slug into a unified list of IDs
+  let tenantIds: string[] = [];
+  const rawTenant = params.tenantId || params.schoolId;
+  if (rawTenant && rawTenant !== "ALL" && rawTenant !== "super-admin") {
+    const school = await basePrisma.school
+      .findFirst({
+        where: {
+          OR: [{ id: rawTenant }, { subdomain: rawTenant }, { slug: rawTenant }],
+        },
+        select: { id: true, subdomain: true, slug: true },
+      })
+      .catch(() => null);
+
+    if (school) {
+      tenantIds = Array.from(
+        new Set([school.id, school.subdomain, school.slug, rawTenant].filter(Boolean) as string[])
+      );
+    } else {
+      tenantIds = [rawTenant];
+    }
+  }
+
   const where: any = {};
   const andConditions: any[] = [];
 
-  if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
+  if (tenantIds.length > 0) {
     andConditions.push({
-      OR: [{ tenantId: params.tenantId }, { schoolId: params.tenantId }],
-    });
-  } else if (params.schoolId) {
-    andConditions.push({
-      OR: [{ schoolId: params.schoolId }, { tenantId: params.schoolId }],
+      OR: [{ tenantId: { in: tenantIds } }, { schoolId: { in: tenantIds } }],
     });
   }
   if (params.moduleType && params.moduleType !== "ALL") {
@@ -1619,8 +1759,11 @@ export async function getPaymentReceipts(params: {
         { txnRef: { in: candidateRefs } },
       ],
     };
-    if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
-      dupWhere.tenantId = params.tenantId;
+    if (tenantIds.length > 0) {
+      dupWhere.OR = [
+        { tenantId: { in: tenantIds } },
+        { schoolId: { in: tenantIds } },
+      ];
     }
 
     const matchingRefReceipts = await basePrisma.paymentReceipt.findMany({
@@ -1671,8 +1814,12 @@ export async function getPaymentReceipts(params: {
         referenceNo: { equals: p.referenceNo, mode: "insensitive" },
       })),
     };
-    if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
-      compWhere.tenantId = params.tenantId;
+    if (tenantIds.length > 0) {
+      compWhere.AND = [
+        {
+          OR: [{ tenantId: { in: tenantIds } }, { schoolId: { in: tenantIds } }],
+        },
+      ];
     }
 
     const matchingCompositeReceipts = await basePrisma.paymentReceipt.findMany({
@@ -1740,8 +1887,11 @@ export async function getPaymentReceipts(params: {
 
   // Aggregate stats
   const statsWhere: any = {};
-  if (params.tenantId && params.tenantId !== "ALL" && params.tenantId !== "super-admin") {
-    statsWhere.tenantId = params.tenantId;
+  if (tenantIds.length > 0) {
+    statsWhere.OR = [
+      { tenantId: { in: tenantIds } },
+      { schoolId: { in: tenantIds } },
+    ];
   }
 
   const todayStart = new Date();

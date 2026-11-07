@@ -108,7 +108,7 @@ export default function PaymentReceiptVerify({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-            {localReceipt.fileUrl && (
+            {localReceipt.fileUrl && (localReceipt.fileUrl.startsWith("http") || localReceipt.fileUrl.startsWith("/")) ? (
               <a
                 href={localReceipt.fileUrl}
                 target="_blank"
@@ -118,7 +118,15 @@ export default function PaymentReceiptVerify({
                 <span>Preview Slip</span>
                 <ExternalLink className="w-3 h-3 text-slate-400" />
               </a>
-            )}
+            ) : localReceipt.fileUrl ? (
+              <span className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-[10px] font-bold text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800">
+                {localReceipt.fileUrl === "POS_RECEIPT"
+                  ? "POS Slip"
+                  : localReceipt.fileUrl === "CASH_COUNTER_RECEIPT"
+                  ? "Cash Slip"
+                  : "Desk Settled"}
+              </span>
+            ) : null}
 
             {canVerify && localReceipt.status !== "VERIFIED" && (
               <button
@@ -236,7 +244,7 @@ export default function PaymentReceiptVerify({
         </div>
         <div>
           <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Proof File:</span>
-          {localReceipt.fileUrl ? (
+          {localReceipt.fileUrl && (localReceipt.fileUrl.startsWith("http") || localReceipt.fileUrl.startsWith("/")) ? (
             <a
               href={localReceipt.fileUrl}
               target="_blank"
@@ -246,6 +254,14 @@ export default function PaymentReceiptVerify({
               <span className="truncate">{localReceipt.fileName || "View Document"}</span>
               <ExternalLink className="w-3 h-3 shrink-0" />
             </a>
+          ) : localReceipt.fileUrl ? (
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs mt-0.5 block">
+              {localReceipt.fileUrl === "POS_RECEIPT"
+                ? "Desk POS Receipt"
+                : localReceipt.fileUrl === "CASH_COUNTER_RECEIPT"
+                ? "Desk Cash Lodgement"
+                : "Admissions Desk Settled"}
+            </span>
           ) : (
             <span className="text-slate-400">No file</span>
           )}
@@ -347,7 +363,7 @@ export default function PaymentReceiptVerify({
       {/* Action Buttons */}
       {canVerify && (
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-slate-100 dark:border-zinc-800">
-          {localReceipt.fileUrl && (
+          {localReceipt.fileUrl && (localReceipt.fileUrl.startsWith("http") || localReceipt.fileUrl.startsWith("/")) && (
             <a
               href={localReceipt.fileUrl}
               target="_blank"
