@@ -49,6 +49,26 @@ if (!(globalThis as any).__admissionsPrismaMiddlewareAttached && typeof (basePri
 const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTierConnectionPool || new Map();
 (globalThis as any).__prismaTierConnectionPool = connectionPool;
 
+let cachedDemoSchoolId: string | null = null;
+
+/**
+ * Checks if a given schoolId corresponds to the isolated Demo Playground environment.
+ */
+export function isDemoSchool(schoolId?: string | null): boolean {
+  if (!schoolId) return false;
+  const s = String(schoolId).trim().toLowerCase();
+  if (s === "demo") return true;
+  if (cachedDemoSchoolId && schoolId === cachedDemoSchoolId) return true;
+  return false;
+}
+
+/**
+ * Caches the resolved Demo School UUID from DEMO_DATABASE_URL.
+ */
+export function setDemoSchoolId(id: string): void {
+  cachedDemoSchoolId = id;
+}
+
 /**
  * Resolves the isolated PrismaClient for the Demo Playground environment.
  * Strictly uses process.env.DEMO_DATABASE_URL.
@@ -349,6 +369,10 @@ export class TenantConnectionManager {
    * and the specific tier being accessed.
    */
   static async getClient(schoolId: string, tierContext?: string | TierContextInput) {
+    if (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolId)) {
+      return applyTenantIsolation(getDemoPrismaClient(), schoolId);
+    }
+
     const tierDbUrl = await this.resolveTierDbUrl(schoolId, tierContext);
 
     if (tierDbUrl) {
@@ -376,8 +400,9 @@ export class TenantConnectionManager {
  * @param tierContext Optional tier context (e.g. "PRIMARY", "SECONDARY", "NURSERY", or { tierName, tierId })
  */
 export function getTenantClient(schoolId: string, tierContext?: string | TierContextInput) {
-  // If tierContext is provided synchronously, return client isolated on basePrisma or async resolver
-  // To preserve backwards compatibility with synchronous calls:
+  if (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolId)) {
+    return applyTenantIsolation(getDemoPrismaClient(), schoolId);
+  }
   return applyTenantIsolation(basePrisma, schoolId);
 }
 
@@ -389,6 +414,9 @@ export function getScopedPrisma(options?: { schoolId?: string; isSuperAdmin?: bo
     return basePrisma;
   }
   if (options?.schoolId) {
+    if (process.env.DEMO_DATABASE_URL && isDemoSchool(options.schoolId)) {
+      return applyTenantIsolation(getDemoPrismaClient(), options.schoolId, false);
+    }
     return applyTenantIsolation(basePrisma, options.schoolId, false);
   }
   return basePrisma;
@@ -422,8 +450,13 @@ export async function getTierClient(options: { schoolId: string; tierName: strin
  */
 export async function getPrismaClientForTier(tenantId: string, tier: string) {
   try {
-    if (!tenantId || !tier) {
+    if (!tenantId) {
       return applyTenantIsolation(basePrisma, tenantId || "");
+    }
+
+    // Dynamic routing to isolated DEMO database if tenant is Demo
+    if (process.env.DEMO_DATABASE_URL && isDemoSchool(tenantId)) {
+      return applyTenantIsolation(getDemoPrismaClient(), tenantId);
     }
 
     // 1. Check School model for explicit or JSON tier database configuration

@@ -136,9 +136,42 @@ export async function getCachedSchool(subdomain: string) {
 
   return cacheAside({
     key: cacheKey,
-    ttlSeconds: 3600, // 1 hour sliding TTL
+    ttlSeconds: normalizedDomain === "demo" ? 300 : 3600, // 5 min for demo, 1 hour for standard
     fetchFn: async () => {
       try {
+        if (normalizedDomain === "demo" && process.env.DEMO_DATABASE_URL) {
+          const { ensureDemoDatabaseInitialized } = await import("./demo-db-initializer");
+          await ensureDemoDatabaseInitialized().catch(() => {});
+          const { getDemoPrismaClient, setDemoSchoolId } = await import("./tenant-prisma");
+          const demoPrisma = getDemoPrismaClient();
+
+          const demoRecord = await demoPrisma.school.findFirst({
+            where: {
+              OR: [
+                { subdomain: { equals: "demo", mode: "insensitive" } },
+                { slug: { equals: "demo", mode: "insensitive" } },
+              ],
+            },
+            include: {
+              academicTiers: {
+                orderBy: { level: "asc" },
+              },
+            },
+          });
+
+          if (demoRecord) {
+            setDemoSchoolId(demoRecord.id);
+            return {
+              ...demoRecord,
+              isActive: true,
+              isSuspended: false,
+              status: "ACTIVE",
+              subscriptionStatus: "ACTIVE",
+              academicTiers: demoRecord.academicTiers || [],
+            };
+          }
+        }
+
         const { basePrisma } = await import("./tenant-prisma");
         const schoolRecord = await basePrisma.school.findFirst({
           where: {

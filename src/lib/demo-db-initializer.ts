@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { spawnSync } from "child_process";
 import path from "path";
 import bcrypt from "bcryptjs";
+import { setDemoSchoolId } from "./tenant-prisma";
 
 const DEMO_SUBDOMAIN = "demo";
 const DEMO_SCHOOL_NAME = "Apex International Academy";
@@ -87,6 +88,7 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
   }
 
   const schoolId = school.id;
+  setDemoSchoolId(schoolId);
   const tiers = school.academicTiers.length > 0
     ? school.academicTiers
     : await demoPrisma.academicTier.findMany({ where: { schoolId }, orderBy: { level: "asc" } });
@@ -132,14 +134,20 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
     adminDept = await demoPrisma.department.create({ data: { schoolId, name: "Academic Administration" } });
   }
 
-  // 5. Ensure Staff & Admin Users exist
+  // 5. Ensure Staff & Admin Users exist (6+ Teachers, Principal, Bursar, Admin)
   const staffConfigs = [
     { firstName: "Demo", lastName: "Administrator", email: DEMO_ADMIN_EMAIL, role: "SCHOOL_ADMIN", title: "Administrator", salary: 350000 },
     { firstName: "Folake", lastName: "Adeyemi", email: "principal@demo.schoolerp.local", role: "PRINCIPAL", title: "Principal", salary: 450000 },
     { firstName: "Emeka", lastName: "Okafor", email: "bursar@demo.schoolerp.local", role: "BURSAR", title: "Bursar", salary: 380000 },
-    { firstName: "Ayodeji", lastName: "Balogun", email: "teacher1@demo.schoolerp.local", role: "TEACHER", title: "Senior Teacher", salary: 250000 },
+    { firstName: "Ayodeji", lastName: "Balogun", email: "teacher1@demo.schoolerp.local", role: "TEACHER", title: "Senior Mathematics Teacher", salary: 250000 },
+    { firstName: "Zainab", lastName: "Mohammed", email: "teacher2@demo.schoolerp.local", role: "TEACHER", title: "English Language & Literature Teacher", salary: 240000 },
+    { firstName: "Chinedu", lastName: "Eze", email: "teacher3@demo.schoolerp.local", role: "TEACHER", title: "Physics & Science Teacher", salary: 260000 },
+    { firstName: "Ngozi", lastName: "Okoro", email: "teacher4@demo.schoolerp.local", role: "TEACHER", title: "Biology & Agricultural Science Teacher", salary: 230000 },
+    { firstName: "Tunde", lastName: "Adebayo", email: "teacher5@demo.schoolerp.local", role: "TEACHER", title: "Chemistry & Computing Teacher", salary: 250000 },
+    { firstName: "Funke", lastName: "Ogunleye", email: "teacher6@demo.schoolerp.local", role: "TEACHER", title: "Social Studies & Civic Education Teacher", salary: 220000 },
   ];
 
+  const staffMembers: any[] = [];
   for (const cfg of staffConfigs) {
     const user = await demoPrisma.user.upsert({
       where: { schoolId_email: { schoolId, email: cfg.email } },
@@ -156,7 +164,7 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
       },
     });
 
-    await demoPrisma.staff.upsert({
+    const staff = await demoPrisma.staff.upsert({
       where: { schoolId_email: { schoolId, email: cfg.email } },
       update: { userId: user.id, status: "ACTIVE" },
       create: {
@@ -170,6 +178,7 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
         departmentId: adminDept.id,
       },
     });
+    staffMembers.push(staff);
   }
 
   // 6. Ensure Fee Templates exist
@@ -197,26 +206,38 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
     });
   }
 
-  // 7. Ensure Course & Exam exist
+  // 7. Ensure Courses & Exams exist
   const secTier = tiers.find((t) => t.name.includes("Secondary")) || tiers[0];
-  let course = await demoPrisma.course.findFirst({ where: { schoolId, code: "MTH101" } });
-  if (!course) {
-    course = await demoPrisma.course.create({
-      data: {
-        schoolId,
-        tierId: secTier.id,
-        name: "Mathematics",
-        code: "MTH101",
-      },
-    });
+  const coursesData = [
+    { code: "MTH101", name: "Mathematics" },
+    { code: "ENG101", name: "English Language" },
+    { code: "PHY101", name: "Physics" },
+    { code: "BIO101", name: "Biology" },
+    { code: "ICT101", name: "Computer Studies & ICT" },
+  ];
+
+  const seededCourses: any[] = [];
+  for (const c of coursesData) {
+    let course = await demoPrisma.course.findFirst({ where: { schoolId, code: c.code } });
+    if (!course) {
+      course = await demoPrisma.course.create({
+        data: {
+          schoolId,
+          tierId: secTier.id,
+          name: c.name,
+          code: c.code,
+        },
+      });
+    }
+    seededCourses.push(course);
   }
 
-  let exam = await demoPrisma.exam.findFirst({ where: { schoolId, courseId: course.id } });
+  let exam = await demoPrisma.exam.findFirst({ where: { schoolId, courseId: seededCourses[0].id } });
   if (!exam) {
     exam = await demoPrisma.exam.create({
       data: {
         schoolId,
-        courseId: course.id,
+        courseId: seededCourses[0].id,
         name: "First Term Continuous Assessment",
         semester: "First Term",
         date: new Date(),
@@ -227,6 +248,7 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
 
   // 8. Seed Dummy Students if count < 20
   const currentStudentCount = await demoPrisma.student.count({ where: { schoolId } });
+  const allStudents: any[] = [];
   if (currentStudentCount < 20) {
     console.info(`[DEMO_DB_INIT] Seeding 50 realistic dummy students for analytics...`);
     const firstNames = ["Amina", "Chinedu", "Fatima", "Ayodeji", "Ngozi", "Tunde", "Zainab", "Kelechi", "Adeola", "Musa", "Blessing", "Chukwudi", "Ifeoma", "Abubakar", "Funke", "Nnamdi", "Binta", "Damilola", "Somto", "Usman"];
@@ -261,6 +283,7 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
           parentOccupation: "Business Executive",
         },
       });
+      allStudents.push(student);
 
       const isPaid = i % 3 === 0;
       const isPartial = i % 3 === 1;
@@ -313,9 +336,152 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
       }
     }
     console.info(`[DEMO_DB_INIT] Successfully seeded 50 dummy students with invoices and grades.`);
+  } else {
+    const existing = await demoPrisma.student.findMany({ where: { schoolId }, take: 50 });
+    allStudents.push(...existing);
   }
 
-  // 9. Sync Tenant record
+  // 9. Seed Student Attendance & Staff Attendance for realistic dashboard activity
+  const studentAttendanceCount = await demoPrisma.studentAttendance.count({ where: { schoolId } });
+  if (studentAttendanceCount === 0 && allStudents.length > 0) {
+    console.info(`[DEMO_DB_INIT] Seeding student and staff attendance records...`);
+    const today = new Date();
+    for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+      const attDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOffset);
+      for (const st of allStudents.slice(0, 30)) {
+        const isLate = (st.admissionNumber.charCodeAt(st.admissionNumber.length - 1) + dayOffset) % 5 === 0;
+        await demoPrisma.studentAttendance.create({
+          data: {
+            schoolId,
+            studentId: st.id,
+            date: attDate,
+            status: isLate ? "LATE" : "PRESENT",
+          },
+        }).catch(() => {});
+      }
+      for (const stf of staffMembers) {
+        await demoPrisma.staffAttendance.create({
+          data: {
+            schoolId,
+            staffId: stf.id,
+            date: attDate,
+            status: "PRESENT",
+          },
+        }).catch(() => {});
+      }
+    }
+  }
+
+  // 10. Seed Timetable Events for Classrooms
+  const timetableCount = await demoPrisma.timetable.count({ where: { schoolId } });
+  if (timetableCount === 0 && classrooms.length > 0 && seededCourses.length > 0) {
+    console.info(`[DEMO_DB_INIT] Seeding timetable events...`);
+    const mathTeacher = staffMembers.find((s) => s.email === "teacher1@demo.schoolerp.local") || staffMembers[0];
+    const engTeacher = staffMembers.find((s) => s.email === "teacher2@demo.schoolerp.local") || staffMembers[0];
+    const mthCourse = seededCourses.find((c) => c.code === "MTH101") || seededCourses[0];
+    const engCourse = seededCourses.find((c) => c.code === "ENG101") || seededCourses[0];
+
+    const days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
+    for (const d of days) {
+      await demoPrisma.timetable.create({
+        data: {
+          schoolId,
+          classroomId: classrooms[0].id,
+          courseId: mthCourse.id,
+          staffId: mathTeacher.id,
+          dayOfWeek: d,
+          startTime: "08:30",
+          endTime: "10:00",
+        },
+      }).catch(() => {});
+
+      await demoPrisma.timetable.create({
+        data: {
+          schoolId,
+          classroomId: classrooms[0].id,
+          courseId: engCourse.id,
+          staffId: engTeacher.id,
+          dayOfWeek: d,
+          startTime: "10:30",
+          endTime: "12:00",
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // 11. Seed Notices / Events
+  const noticesCount = await demoPrisma.notice.count({ where: { schoolId } });
+  if (noticesCount === 0) {
+    console.info(`[DEMO_DB_INIT] Seeding institutional notices...`);
+    const demoNotices = [
+      {
+        title: "Inter-House Sports Festival 2026",
+        content: "The annual Apex Inter-House Sports competition is scheduled for next Friday. All houses are to conclude preliminary heats by Wednesday.",
+        targetAudience: "ALL",
+        priority: "HIGH",
+      },
+      {
+        title: "Continuous Assessment Examination Schedule Released",
+        content: "First term continuous assessments will commence across all primary and secondary classrooms starting next Monday.",
+        targetAudience: "STUDENTS",
+        priority: "NORMAL",
+      },
+      {
+        title: "Parent-Teacher Association (PTA) General Assembly",
+        content: "The executive committee invites all parents and guardians to the termly general assembly meeting this Saturday at the Main Hall.",
+        targetAudience: "ALL",
+        priority: "HIGH",
+      },
+      {
+        title: "Staff Academic Curriculum Planning Workshop",
+        content: "All teaching staff are required to attend the midterm curriculum harmonization workshop on Thursday at 3:00 PM.",
+        targetAudience: "STAFF",
+        priority: "NORMAL",
+      },
+    ];
+
+    for (const n of demoNotices) {
+      await demoPrisma.notice.create({
+        data: {
+          schoolId,
+          title: n.title,
+          content: n.content,
+          targetAudience: n.targetAudience,
+          priority: n.priority,
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // 12. Seed Admission Leads for Pipeline Card
+  const leadsCount = await demoPrisma.admissionLead.count({ where: { schoolId } });
+  if (leadsCount === 0) {
+    console.info(`[DEMO_DB_INIT] Seeding pending admission inquiries and applications...`);
+    const demoLeads = [
+      { applicantName: "Chidinma Adeleke", targetGrade: "JSS 1", status: "INQUIRY", parentContact: "+2348031112233", parentName: "Chief Adeleke" },
+      { applicantName: "Babajide Sanwo", targetGrade: "Primary 1", status: "SCREENING", parentContact: "+2348032223344", parentName: "Engr. Sanwo" },
+      { applicantName: "Oluwaseun Bakare", targetGrade: "SSS 1", status: "ASSESSMENT", parentContact: "+2348033334455", parentName: "Dr. Bakare" },
+      { applicantName: "Fatima Aliyu", targetGrade: "Nursery 1", status: "OFFER_EXTENDED", parentContact: "+2348034445566", parentName: "Hajiya Aliyu" },
+      { applicantName: "Kelechi Amadi", targetGrade: "JSS 2", status: "INQUIRY", parentContact: "+2348035556677", parentName: "Barr. Amadi" },
+      { applicantName: "Ibrahim Musa", targetGrade: "Primary 3", status: "INQUIRY", parentContact: "+2348036667788", parentName: "Alhaji Musa" },
+    ];
+
+    for (const l of demoLeads) {
+      await demoPrisma.admissionLead.create({
+        data: {
+          schoolId,
+          applicantName: l.applicantName,
+          targetGrade: l.targetGrade,
+          status: l.status,
+          parentContact: l.parentContact,
+          parentName: l.parentName,
+          tierId: tiers[0]?.id || school.academicTiers[0]?.id,
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // 13. Sync Tenant record
   try {
     const existingTenant = await demoPrisma.tenant.findFirst({
       where: {

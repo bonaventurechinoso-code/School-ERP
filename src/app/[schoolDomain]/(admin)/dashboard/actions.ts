@@ -1,6 +1,6 @@
 "use server";
 
-import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier, isDemoSchool, getDemoPrismaClient } from "@/lib/tenant-prisma";
 import { cookies } from "next/headers";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
@@ -94,10 +94,14 @@ export async function getPendingApplicationsCount(
     key: cacheKey,
     ttlSeconds: 300, // 5 minutes sliding TTL
     fetchFn: async () => {
+      const centralDb: any = (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolId))
+        ? getDemoPrismaClient()
+        : basePrisma;
+
       let activeTierId = explicitTierId;
       if (!activeTierId && activeTier) {
         try {
-          const tier = await basePrisma.academicTier.findFirst({
+          const tier = await centralDb.academicTier.findFirst({
             where: {
               schoolId,
               name: { equals: activeTier, mode: "insensitive" },
@@ -108,7 +112,7 @@ export async function getPendingApplicationsCount(
         } catch {}
       }
 
-      return await basePrisma.admissionLead.count({
+      return await centralDb.admissionLead.count({
         where: {
           schoolId,
           ...(activeTierId ? { tierId: activeTierId } : {}),
@@ -211,9 +215,12 @@ export async function getClassroomsForTenant(schoolId: string, tierContext?: str
     ttlSeconds: 600, // 10 minutes sliding TTL
     fetchFn: async () => {
       const tenantDb = await getPrismaClientForTier(schoolId, activeTier || "");
+      const centralDb: any = (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolId))
+        ? getDemoPrismaClient()
+        : basePrisma;
       let tierFilter = {};
       if (activeTier && activeTier !== "all") {
-        const tierRecord = await basePrisma.academicTier.findFirst({
+        const tierRecord = await centralDb.academicTier.findFirst({
           where: {
             schoolId,
             OR: [
@@ -242,6 +249,10 @@ export async function getClassroomsForTenant(schoolId: string, tierContext?: str
  * Legacy Consolidated Metrics Fetcher (Parallelized with Promise.all)
  */
 export async function getDashboardMetrics(schoolId: string, tierContext?: string) {
+  const centralDb: any = (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolId))
+    ? getDemoPrismaClient()
+    : basePrisma;
+
   const [
     enrolledStudents,
     activeStaff,
@@ -254,7 +265,7 @@ export async function getDashboardMetrics(schoolId: string, tierContext?: string
     getActiveStaffCount(schoolId, tierContext),
     getPendingApplicationsCount(schoolId, tierContext),
     getTermlyRevenue(schoolId, tierContext),
-    basePrisma.academicTier.findMany({
+    centralDb.academicTier.findMany({
       where: { schoolId },
       orderBy: { level: "asc" },
     }).catch(() => []),

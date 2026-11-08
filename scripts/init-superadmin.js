@@ -128,72 +128,76 @@ async function initSuperAdmin() {
       console.warn('[INIT_SUPERADMIN] Egede sync notice:', egedeErr.message);
     }
 
-    // Ensure Demo School and Headmaster are seeded/healed with Password123
-    try {
-      let demoSchool = await prisma.school.findFirst({
-        where: {
-          OR: [
-            { subdomain: { equals: 'demo', mode: 'insensitive' } },
-            { slug: { equals: 'demo', mode: 'insensitive' } },
-          ],
-        },
-      });
-
-      if (!demoSchool) {
-        demoSchool = await prisma.school.create({
-          data: {
-            name: 'Demo School',
-            subdomain: 'demo',
-            slug: 'demo',
-            tier: 'TERTIARY',
-            status: 'ACTIVE',
-            isActive: true,
+    // Ensure Demo School and Headmaster are seeded/healed with Password123 ONLY in standalone dev when DEMO_DATABASE_URL is not configured
+    if (!process.env.DEMO_DATABASE_URL) {
+      try {
+        let demoSchool = await prisma.school.findFirst({
+          where: {
+            OR: [
+              { subdomain: { equals: 'demo', mode: 'insensitive' } },
+              { slug: { equals: 'demo', mode: 'insensitive' } },
+            ],
           },
         });
-        console.log('[INIT_SUPERADMIN] Created Demo School:', demoSchool.id);
-      } else {
-        await prisma.school.update({
-          where: { id: demoSchool.id },
-          data: { status: 'ACTIVE', isActive: true, deletedAt: null },
+
+        if (!demoSchool) {
+          demoSchool = await prisma.school.create({
+            data: {
+              name: 'Demo School',
+              subdomain: 'demo',
+              slug: 'demo',
+              tier: 'TERTIARY',
+              status: 'ACTIVE',
+              isActive: true,
+            },
+          });
+          console.log('[INIT_SUPERADMIN] Created Demo School:', demoSchool.id);
+        } else {
+          await prisma.school.update({
+            where: { id: demoSchool.id },
+            data: { status: 'ACTIVE', isActive: true, deletedAt: null },
+          });
+        }
+
+        const demoHash = await bcrypt.hash('Password123', 10);
+        const existingDemoUser = await prisma.user.findFirst({
+          where: {
+            email: { equals: 'headmaster@demo.edu.ng', mode: 'insensitive' },
+          },
         });
+
+        if (existingDemoUser) {
+          await prisma.user.update({
+            where: { id: existingDemoUser.id },
+            data: {
+              schoolId: demoSchool.id,
+              passwordHash: demoHash,
+              status: 'ACTIVE',
+              role: 'PRINCIPAL',
+              mustChangePassword: false,
+            },
+          });
+          console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) synchronized.');
+        } else {
+          await prisma.user.create({
+            data: {
+              email: 'headmaster@demo.edu.ng',
+              firstName: 'Demo',
+              lastName: 'Headmaster',
+              passwordHash: demoHash,
+              role: 'PRINCIPAL',
+              schoolId: demoSchool.id,
+              status: 'ACTIVE',
+              mustChangePassword: false,
+            },
+          });
+          console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) created.');
+        }
+      } catch (demoErr) {
+        console.warn('[INIT_SUPERADMIN] Demo sync notice:', demoErr.message);
       }
-
-      const demoHash = await bcrypt.hash('Password123', 10);
-      const existingDemoUser = await prisma.user.findFirst({
-        where: {
-          email: { equals: 'headmaster@demo.edu.ng', mode: 'insensitive' },
-        },
-      });
-
-      if (existingDemoUser) {
-        await prisma.user.update({
-          where: { id: existingDemoUser.id },
-          data: {
-            schoolId: demoSchool.id,
-            passwordHash: demoHash,
-            status: 'ACTIVE',
-            role: 'PRINCIPAL',
-            mustChangePassword: false,
-          },
-        });
-        console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) synchronized.');
-      } else {
-        await prisma.user.create({
-          data: {
-            email: 'headmaster@demo.edu.ng',
-            firstName: 'Demo',
-            lastName: 'Headmaster',
-            passwordHash: demoHash,
-            role: 'PRINCIPAL',
-            schoolId: demoSchool.id,
-            status: 'ACTIVE',
-            mustChangePassword: false,
-          },
-        });
-        console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) created.');
-      }
-    } catch (demoErr) {
-      console.warn('[INIT_SUPERADMIN] Demo sync notice:', demoErr.message);
+    } else {
+      console.log('[INIT_SUPERADMIN] DEMO_DATABASE_URL detected. Skipping demo seeding in primary database (Demo is isolated).');
     }
 
     // Ensure Sandbox / Trial-Sandbox School and Principal are seeded/healed with Password123
