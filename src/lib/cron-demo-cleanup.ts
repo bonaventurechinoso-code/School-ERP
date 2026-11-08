@@ -58,8 +58,7 @@ const getInt = (min: number, max: number): number => Math.floor(Math.random() * 
  * master platform records or other functional school tenants.
  */
 async function resolveDemoDatabaseConnection(): Promise<{ demoDbUrl: string; demoSchool: any }> {
-  const isProduction = process.env.NODE_ENV === "production";
-  const demoDbUrl = process.env.DEMO_DATABASE_URL || (!isProduction ? process.env.DATABASE_URL : "");
+  const demoDbUrl = process.env.DEMO_DATABASE_URL;
 
   if (!demoDbUrl) {
     throw new Error(

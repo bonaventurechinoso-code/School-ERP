@@ -58,13 +58,9 @@ const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTi
 export function getDemoPrismaClient(): PrismaClient {
   const demoUrl = process.env.DEMO_DATABASE_URL;
   if (!demoUrl) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "[DEMO_DATABASE_ERROR] DEMO_DATABASE_URL environment variable is required in production. Demo playground cannot use Production database."
-      );
-    }
-    // Local development sandbox fallback only when not in production
-    return basePrisma;
+    throw new Error(
+      "[DEMO_DATABASE_ERROR] DEMO_DATABASE_URL environment variable is required. Demo playground cannot use primary database."
+    );
   }
   return TenantConnectionManager.getClientForUrl(demoUrl);
 }

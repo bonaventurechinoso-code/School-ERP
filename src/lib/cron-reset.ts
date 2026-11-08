@@ -23,8 +23,7 @@ export interface DemoResetResult {
  * and immediately re-executes prisma/seed.ts targeted at the Demo database connection string.
  */
 export async function resetDemoDatabase(): Promise<DemoResetResult> {
-  const isProduction = process.env.NODE_ENV === "production";
-  const demoDbUrl = process.env.DEMO_DATABASE_URL || (!isProduction ? process.env.DATABASE_URL : "");
+  const demoDbUrl = process.env.DEMO_DATABASE_URL;
   if (!demoDbUrl) {
     throw new Error(
       "[DEMO_CRON_RESET] DEMO_DATABASE_URL is not configured. Aborting reset to ensure Production database is never touched."
