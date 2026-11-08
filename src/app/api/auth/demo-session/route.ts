@@ -4,9 +4,10 @@ import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { createDatabaseSession } from "@/lib/session-manager";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
+import { ensureDemoDatabaseInitialized } from "@/lib/demo-db-initializer";
 
 const DEMO_SUBDOMAIN = "demo";
-const DEMO_SCHOOL_NAME = "Demo School";
+const DEMO_SCHOOL_NAME = "Apex International Academy";
 const DEMO_ADMIN_EMAIL = "demo.admin@schoolerp.local";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
  * Guaranteed to NEVER create multiple tenants on click.
  */
 async function getOrProvisionDemoTenant() {
+  await ensureDemoDatabaseInitialized();
   const demoPrisma = getDemoPrismaClient();
 
   let demoSchool = await demoPrisma.school.findFirst({

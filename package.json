@@ -11,7 +11,8 @@
     "build": "rm -rf .next && npx prisma generate && (npx prisma migrate deploy || npx prisma db push --accept-data-loss --skip-generate || true) && next build",
     "build:local": "prisma generate && next build",
     "build:render": "rm -rf .next && npx prisma generate && (npx prisma migrate deploy || npx prisma db push --accept-data-loss --skip-generate || true) && next build",
-    "start": "node scripts/fix-all-tiers.js && node scripts/init-superadmin.js && next start",
+    "demo:setup": "node scripts/init-demo-db.js",
+    "start": "node scripts/fix-all-tiers.js && node scripts/init-superadmin.js && node scripts/init-demo-db.js && next start",
     "lint": "next lint",
     "db:push": "prisma db push"
   },
