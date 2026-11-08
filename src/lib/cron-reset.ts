@@ -23,9 +23,12 @@ export interface DemoResetResult {
  * and immediately re-executes prisma/seed.ts targeted at the Demo database connection string.
  */
 export async function resetDemoDatabase(): Promise<DemoResetResult> {
-  const demoDbUrl = process.env.DEMO_DATABASE_URL || process.env.DATABASE_URL || "";
+  const isProduction = process.env.NODE_ENV === "production";
+  const demoDbUrl = process.env.DEMO_DATABASE_URL || (!isProduction ? process.env.DATABASE_URL : "");
   if (!demoDbUrl) {
-    throw new Error("No database connection string configured for Demo reset.");
+    throw new Error(
+      "[DEMO_CRON_RESET] DEMO_DATABASE_URL is not configured. Aborting reset to ensure Production database is never touched."
+    );
   }
 
   const maskedUrl = demoDbUrl.replace(/:[^:@]+@/, ":****@");

@@ -6,7 +6,7 @@ import { TenantProvider } from "@/lib/tenant-context";
 import { SessionProvider } from "@/lib/session-context";
 import { getSession } from "@/lib/auth";
 import { getCachedSchool, getCachedPlatformBank } from "@/lib/cache";
-import { isTenantSuspended } from "@/lib/tenantStatus";
+import { isTenantSuspended, isTrialExpired } from "@/lib/tenantStatus";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -102,6 +102,33 @@ export default async function TenantLayout({
 
       if (!isPublicTenantAction) {
         redirect(`/${schoolDomain}/login?error=suspended&code=${encodeURIComponent(schoolDomain)}`);
+      }
+    }
+  }
+
+  // TRIAL EXPIRY LOCK: Lock access and redirect to upgrade page when 14-day free trial has lapsed
+  const isTrialOver = isTrialExpired(school);
+  if (isTrialOver) {
+    const isSuperAdmin =
+      session &&
+      ((session.role || "").toUpperCase() === "SUPER_ADMIN" ||
+        Boolean(session.isSuperAdmin) ||
+        session.email === "bonaventure.chinoso@gmail.com" ||
+        session.email === "admin@bonaveeict.com.ng");
+
+    if (!isSuperAdmin) {
+      const headerList = await headers();
+      const rawPath = (headerList.get("x-pathname") || "").toLowerCase();
+      const pathSegments = rawPath.replace(/^\/+/, "").split("/").filter(Boolean);
+      const secondSegment = pathSegments[1]?.toLowerCase() || "";
+
+      const isPublicTenantAction =
+        secondSegment === "login" ||
+        secondSegment === "forgot-password" ||
+        secondSegment === "reset-password";
+
+      if (!isPublicTenantAction) {
+        redirect("/trial-expired");
       }
     }
   }

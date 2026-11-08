@@ -237,7 +237,10 @@ export async function provisionTierDatabases(
   }
 ): Promise<ProvisionResult[]> {
   const { schoolId, schoolName, subdomain, tiers, adminEmail } = options;
-  const baseDbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/school_erp?schema=public";
+  const baseDbUrl = process.env.DATABASE_URL;
+  if (!baseDbUrl) {
+    throw new Error("[TIER_DB_PROVISIONER] DATABASE_URL environment variable is required.");
+  }
   const results: ProvisionResult[] = [];
 
   console.info(`[TIER_DB_PROVISIONER] Starting multi-database provisioning for tenant "${subdomain}" (${tiers.length} tiers)...`);

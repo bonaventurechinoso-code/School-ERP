@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { basePrisma } from "@/lib/tenant-prisma";
+import { getDemoPrismaClient } from "@/lib/tenant-prisma";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { createDatabaseSession } from "@/lib/session-manager";
 import { logAuditEvent } from "@/lib/audit-logger";
@@ -13,10 +13,13 @@ export const dynamic = "force-dynamic";
 
 /**
  * Idempotently retrieves or seeds the single fixed demo tenant.
+ * Uses getDemoPrismaClient() to strictly isolate Demo data to DEMO_DATABASE_URL.
  * Guaranteed to NEVER create multiple tenants on click.
  */
 async function getOrProvisionDemoTenant() {
-  let demoSchool = await basePrisma.school.findFirst({
+  const demoPrisma = getDemoPrismaClient();
+
+  let demoSchool = await demoPrisma.school.findFirst({
     where: {
       OR: [
         { subdomain: DEMO_SUBDOMAIN },
@@ -30,7 +33,7 @@ async function getOrProvisionDemoTenant() {
   });
 
   if (!demoSchool) {
-    demoSchool = await basePrisma.school.create({
+    demoSchool = await demoPrisma.school.create({
       data: {
         name: DEMO_SCHOOL_NAME,
         subdomain: DEMO_SUBDOMAIN,
@@ -64,7 +67,7 @@ async function getOrProvisionDemoTenant() {
 
   // Idempotently verify / seed single fixed Demo Tenant in Tenant table
   try {
-    const existingDemoTenant = await basePrisma.tenant.findFirst({
+    const existingDemoTenant = await demoPrisma.tenant.findFirst({
       where: {
         OR: [
           { isDemo: true },
@@ -74,7 +77,7 @@ async function getOrProvisionDemoTenant() {
     });
 
     if (!existingDemoTenant) {
-      await basePrisma.tenant.create({
+      await demoPrisma.tenant.create({
         data: {
           schoolName: DEMO_SCHOOL_NAME,
           subdomain: DEMO_SUBDOMAIN,
@@ -89,7 +92,7 @@ async function getOrProvisionDemoTenant() {
         },
       });
     } else if (!existingDemoTenant.isDemo || existingDemoTenant.isTrial) {
-      await basePrisma.tenant.update({
+      await demoPrisma.tenant.update({
         where: { id: existingDemoTenant.id },
         data: {
           isDemo: true,
@@ -106,14 +109,14 @@ async function getOrProvisionDemoTenant() {
   // Ensure tiers
   let tiers = demoSchool.academicTiers;
   if (!tiers || tiers.length === 0) {
-    await basePrisma.academicTier.createMany({
+    await demoPrisma.academicTier.createMany({
       data: [
         { schoolId: demoSchool.id, name: "Creche / Nursery", level: 1 },
         { schoolId: demoSchool.id, name: "Primary School", level: 2 },
         { schoolId: demoSchool.id, name: "Secondary School", level: 3 },
       ],
     });
-    tiers = await basePrisma.academicTier.findMany({
+    tiers = await demoPrisma.academicTier.findMany({
       where: { schoolId: demoSchool.id },
       orderBy: { level: "asc" },
     });
@@ -127,7 +130,7 @@ async function getOrProvisionDemoTenant() {
   ) || demoSchool.staff?.[0];
 
   if (!adminStaff) {
-    const adminUser = await basePrisma.user.upsert({
+    const adminUser = await demoPrisma.user.upsert({
       where: {
         schoolId_email: {
           schoolId: demoSchool.id,
@@ -145,11 +148,11 @@ async function getOrProvisionDemoTenant() {
       },
     });
 
-    const dept = await basePrisma.department.findFirst({
+    const dept = await demoPrisma.department.findFirst({
       where: { schoolId: demoSchool.id },
     });
 
-    adminStaff = await basePrisma.staff.upsert({
+    adminStaff = await demoPrisma.staff.upsert({
       where: {
         schoolId_email: {
           schoolId: demoSchool.id,
@@ -253,8 +256,8 @@ export async function GET(req: Request) {
       tierNames
     );
 
-    // Redirect to /demo
-    const redirectUrl = new URL(`/demo`, req.url);
+    // Redirect to /demo/dashboard
+    const redirectUrl = new URL(`/demo/dashboard`, req.url);
     const response = NextResponse.redirect(redirectUrl);
 
     response.headers.set("X-Demo-Mode", "DEMO MODE");
@@ -322,7 +325,7 @@ export async function POST(req: Request) {
         isDemo: true,
       },
       role: "TENANT_ADMIN",
-      redirectUrl: "/demo",
+      redirectUrl: "/demo/dashboard",
     });
 
     response.headers.set("X-Demo-Mode", "DEMO MODE");

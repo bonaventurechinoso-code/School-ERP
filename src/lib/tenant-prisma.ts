@@ -50,6 +50,26 @@ const connectionPool: Map<string, PrismaClient> = (globalThis as any).__prismaTi
 (globalThis as any).__prismaTierConnectionPool = connectionPool;
 
 /**
+ * Resolves the isolated PrismaClient for the Demo Playground environment.
+ * Strictly uses process.env.DEMO_DATABASE_URL.
+ * In production (NODE_ENV === "production"), if DEMO_DATABASE_URL is not configured,
+ * it throws an explicit error to prevent Demo from ever using the Production database.
+ */
+export function getDemoPrismaClient(): PrismaClient {
+  const demoUrl = process.env.DEMO_DATABASE_URL;
+  if (!demoUrl) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[DEMO_DATABASE_ERROR] DEMO_DATABASE_URL environment variable is required in production. Demo playground cannot use Production database."
+      );
+    }
+    // Local development sandbox fallback only when not in production
+    return basePrisma;
+  }
+  return TenantConnectionManager.getClientForUrl(demoUrl);
+}
+
+/**
  * Standard models requiring schoolId isolation
  */
 const TENANT_MODELS = [
@@ -243,6 +263,16 @@ export class TenantConnectionManager {
       connectionPool.set(connectionUrl, newClient);
     }
     return connectionPool.get(connectionUrl)!;
+  }
+
+  /**
+   * Resolves the dedicated PrismaClient for the Demo Playground environment.
+   * Strictly uses process.env.DEMO_DATABASE_URL.
+   * In production (NODE_ENV === "production"), if DEMO_DATABASE_URL is not set,
+   * this throws an explicit error to prevent Demo from ever touching the Production database.
+   */
+  static getDemoClient(): PrismaClient {
+    return getDemoPrismaClient();
   }
 
   /**

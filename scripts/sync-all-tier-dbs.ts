@@ -6,7 +6,7 @@ const execAsync = promisify(exec);
 async function syncAllDatabases() {
   console.log("=== Synchronizing Prisma Schema Across All Tenant Databases ===");
 
-  const baseDbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/school_erp?schema=public";
+  const baseDbUrl = process.env.DATABASE_URL || "postgresql://USER:PASSWORD@localhost:5432/school_erp_sandbox?schema=public";
 
   const targets = [
     { name: "Main Database", url: baseDbUrl },

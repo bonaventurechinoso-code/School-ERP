@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCachedSchool } from "@/lib/cache";
 import { getSession } from "@/lib/auth";
-import { isTenantSuspended } from "@/lib/tenantStatus";
+import { isTenantSuspended, isTrialExpired } from "@/lib/tenantStatus";
 import ClientLayout from "../ClientLayout";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +53,12 @@ export default async function AdminLayout({
 
   if (isSuspended && !isSuperAdmin) {
     redirect(`/${params.schoolDomain}/login?error=suspended&code=${encodeURIComponent(params.schoolDomain)}`);
+  }
+
+  // TRIAL EXPIRY LOCK: Lock access and redirect to upgrade page when 14-day free trial has lapsed
+  const isTrialOver = isTrialExpired(school);
+  if (isTrialOver && !isSuperAdmin) {
+    redirect("/trial-expired");
   }
 
   // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES

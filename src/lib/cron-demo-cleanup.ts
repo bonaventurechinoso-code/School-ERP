@@ -58,7 +58,19 @@ const getInt = (min: number, max: number): number => Math.floor(Math.random() * 
  * master platform records or other functional school tenants.
  */
 async function resolveDemoDatabaseConnection(): Promise<{ demoDbUrl: string; demoSchool: any }> {
-  const demoSchool = await basePrisma.school.findFirst({
+  const isProduction = process.env.NODE_ENV === "production";
+  const demoDbUrl = process.env.DEMO_DATABASE_URL || (!isProduction ? process.env.DATABASE_URL : "");
+
+  if (!demoDbUrl) {
+    throw new Error(
+      "[DEMO_CLEANUP] DEMO_DATABASE_URL is not configured. Aborting cleanup to ensure Production database is never touched."
+    );
+  }
+
+  const { getDemoPrismaClient } = await import("./tenant-prisma");
+  const demoPrisma = getDemoPrismaClient();
+
+  const demoSchool = await demoPrisma.school.findFirst({
     where: { subdomain: "demo" },
     include: {
       academicTiers: { orderBy: { level: "asc" } },
@@ -68,14 +80,7 @@ async function resolveDemoDatabaseConnection(): Promise<{ demoDbUrl: string; dem
   });
 
   if (!demoSchool) {
-    throw new Error("Demo School instance (subdomain: 'demo') was not found in central registry.");
-  }
-
-  // Priority: 1. Dedicated databaseUrl on School -> 2. Environment DEMO_DATABASE_URL -> 3. Fallback DATABASE_URL
-  const demoDbUrl = demoSchool.databaseUrl || process.env.DEMO_DATABASE_URL || demoSchool.primaryDbUrl || process.env.DATABASE_URL || "";
-
-  if (!demoDbUrl) {
-    throw new Error("No database connection string resolved for the Demo environment.");
+    throw new Error("Demo School instance (subdomain: 'demo') was not found in demo registry.");
   }
 
   return { demoDbUrl, demoSchool };

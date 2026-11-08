@@ -3,7 +3,7 @@ import { clearL1TenantCache } from "@/lib/cache";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { getSchoolsStore } from "@/app/dashboard/super-admin/mock-data";
 
-export { isTenantSuspended, getTenantExpiry } from "./tenantStatus";
+export { isTenantSuspended, isTrialExpired, getTenantExpiry } from "./tenantStatus";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 

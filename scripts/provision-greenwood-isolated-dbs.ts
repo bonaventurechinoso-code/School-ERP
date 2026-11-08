@@ -16,7 +16,7 @@ async function provision() {
   console.log("=== Provisioning Physical Isolated Databases for Greenwood Academy ===");
 
   const basePrisma = new PrismaClient();
-  const baseDbUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/school_erp?schema=public";
+  const baseDbUrl = process.env.DATABASE_URL || "postgresql://USER:PASSWORD@localhost:5432/school_erp_sandbox?schema=public";
 
   // 1. Locate Greenwood Academy in main database
   const school = await basePrisma.school.findUnique({
