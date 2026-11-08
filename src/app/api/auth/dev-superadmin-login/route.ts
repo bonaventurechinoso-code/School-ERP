@@ -40,6 +40,7 @@ export async function GET(req: Request) {
     const targetPath = reqUrl.searchParams.get("redirect") || "/admin/saas";
     const redirectUrl = new URL(targetPath, req.url);
     const response = NextResponse.redirect(redirectUrl);
+    response.headers.set("Location", targetPath);
 
     response.cookies.set("session", sessionToken, {
       path: "/",

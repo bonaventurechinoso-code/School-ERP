@@ -230,8 +230,51 @@ async function generateDemoSessionToken(
 }
 
 /**
+ * Derives a canonical absolute URL for redirects that never defaults to internal
+ * container hosts (like localhost:10000 on Render). Respects reverse proxy headers,
+ * configured application environment variables, and defaults to https://bonaveeict.com.ng.
+ */
+function resolveDemoRedirectUrl(req: Request): URL {
+  // 1. Check forwarded reverse proxy headers (Render, Cloudflare, Nginx)
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+  if (forwardedHost) {
+    const primaryHost = forwardedHost.split(",")[0].trim();
+    if (primaryHost && !primaryHost.includes("localhost:10000")) {
+      return new URL("/demo/dashboard", `${forwardedProto}://${primaryHost}`);
+    }
+  }
+
+  // 2. Check Host header if it's not container-internal port 10000
+  const host = req.headers.get("host");
+  if (
+    host &&
+    !host.includes("localhost:10000") &&
+    !host.includes("127.0.0.1:10000") &&
+    !host.includes("0.0.0.0:10000")
+  ) {
+    const proto = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    return new URL("/demo/dashboard", `${proto}://${host}`);
+  }
+
+  // 3. Fallback to configured environment variables
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.APP_URL;
+  if (configuredAppUrl && !configuredAppUrl.includes("localhost:10000")) {
+    return new URL("/demo/dashboard", configuredAppUrl);
+  }
+
+  // 4. Default production live domain fallback
+  if (process.env.NODE_ENV === "production") {
+    return new URL("/demo/dashboard", "https://bonaveeict.com.ng");
+  }
+
+  // 5. Default local dev fallback
+  return new URL("/demo/dashboard", "http://localhost:3000");
+}
+
+/**
  * GET handler: Public users clicking "Explore Demo Environment".
- * Routes to /demo/admin with X-Demo-Mode: DEMO MODE header.
+ * Routes to /demo/dashboard with X-Demo-Mode: DEMO MODE header.
  */
 export async function GET(req: Request) {
   try {
@@ -258,10 +301,12 @@ export async function GET(req: Request) {
       tierNames
     );
 
-    // Redirect to /demo/dashboard
-    const redirectUrl = new URL(`/demo/dashboard`, req.url);
+    // Redirect safely using canonical host resolution (never internal container host:port)
+    const redirectUrl = resolveDemoRedirectUrl(req);
     const response = NextResponse.redirect(redirectUrl);
 
+    // Enforce relative Location header so user's browser stays on whatever domain they accessed the app from
+    response.headers.set("Location", "/demo/dashboard");
     response.headers.set("X-Demo-Mode", "DEMO MODE");
 
     response.cookies.set("session", sessionToken, {

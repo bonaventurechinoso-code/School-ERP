@@ -297,13 +297,51 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
   return null;
 }
 
+/**
+ * Derives a canonical, safe redirect URL that never falls back to internal container ports
+ * (such as localhost:10000 on Render). Respects reverse proxy headers, configured environment variables,
+ * and canonical platform domain.
+ */
+function getSafeRedirectUrl(targetPath: string, req: NextRequest): URL {
+  const normalizedPath = targetPath.startsWith("/") ? targetPath : `/${targetPath}`;
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+
+  if (forwardedHost) {
+    const primaryHost = forwardedHost.split(",")[0].trim();
+    if (primaryHost && !primaryHost.includes("localhost:10000")) {
+      return new URL(normalizedPath, `${forwardedProto}://${primaryHost}`);
+    }
+  }
+
+  if (
+    req.nextUrl &&
+    req.nextUrl.host &&
+    !req.nextUrl.host.includes("localhost:10000") &&
+    !req.nextUrl.host.includes("127.0.0.1:10000")
+  ) {
+    return new URL(normalizedPath, req.nextUrl);
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL;
+  if (appUrl && !appUrl.includes("localhost:10000")) {
+    return new URL(normalizedPath, appUrl);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return new URL(normalizedPath, "https://bonaveeict.com.ng");
+  }
+
+  return new URL(normalizedPath, req.nextUrl);
+}
+
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const lowerPath = pathname.toLowerCase();
 
   // Super-admin login route: rewrite cleanly to /login?type=super-admin
   if (lowerPath === "/super-admin/login" || lowerPath === "/admin/login") {
-    const loginUrl = new URL("/login?type=super-admin", req.url);
+    const loginUrl = getSafeRedirectUrl("/login?type=super-admin", req);
     loginUrl.search = req.nextUrl.search;
     loginUrl.searchParams.set("type", "super-admin");
     return NextResponse.rewrite(loginUrl);
@@ -334,9 +372,10 @@ export async function middleware(req: NextRequest) {
     }
 
     // Page endpoints redirect to /[tenant]/login or /login with strict no-cache headers
-    const loginUrl = requestedTenant
-      ? new URL(`/${requestedTenant}/login`, req.url)
-      : new URL("/login", req.url);
+    const targetLoginPath = requestedTenant
+      ? `/${requestedTenant}/login`
+      : "/login";
+    const loginUrl = getSafeRedirectUrl(targetLoginPath, req);
     const normalizedCallback = isSuperAdminPath(lowerPath)
       ? lowerPath
           .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
@@ -345,6 +384,7 @@ export async function middleware(req: NextRequest) {
     loginUrl.searchParams.set("callbackUrl", normalizedCallback);
 
     const redirectResponse = NextResponse.redirect(loginUrl);
+    redirectResponse.headers.set("Location", loginUrl.pathname + loginUrl.search);
     for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
       redirectResponse.headers.set(k, v);
     }
@@ -365,8 +405,9 @@ export async function middleware(req: NextRequest) {
           { status: 403, headers: NO_CACHE_HEADERS }
         );
       }
-      const deniedUrl = new URL("/access-denied", req.url);
+      const deniedUrl = getSafeRedirectUrl("/access-denied", req);
       const redirectResponse = NextResponse.redirect(deniedUrl);
+      redirectResponse.headers.set("Location", "/access-denied");
       for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
         redirectResponse.headers.set(k, v);
       }
@@ -379,9 +420,11 @@ export async function middleware(req: NextRequest) {
         .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
         .replace(/\/tenats(?=\/|$)/, "/tenants");
       if (pathname !== canonicalPath) {
-        const targetUrl = new URL(canonicalPath, req.url);
+        const targetUrl = getSafeRedirectUrl(canonicalPath, req);
         targetUrl.search = req.nextUrl.search;
-        return NextResponse.redirect(targetUrl, 307);
+        const redirectResponse = NextResponse.redirect(targetUrl, 307);
+        redirectResponse.headers.set("Location", targetUrl.pathname + targetUrl.search);
+        return redirectResponse;
       }
     }
   }
@@ -396,8 +439,9 @@ export async function middleware(req: NextRequest) {
           { status: 403, headers: NO_CACHE_HEADERS }
         );
       }
-      const loginUrl = new URL(`/${requestedTenant}/login?error=suspended&code=${requestedTenant}`, req.url);
+      const loginUrl = getSafeRedirectUrl(`/${requestedTenant}/login?error=suspended&code=${requestedTenant}`, req);
       const redirectResponse = NextResponse.redirect(loginUrl);
+      redirectResponse.headers.set("Location", loginUrl.pathname + loginUrl.search);
       for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
         redirectResponse.headers.set(k, v);
       }
@@ -413,8 +457,9 @@ export async function middleware(req: NextRequest) {
           { status: 403, headers: NO_CACHE_HEADERS }
         );
       }
-      const deniedUrl = new URL("/access-denied", req.url);
+      const deniedUrl = getSafeRedirectUrl("/access-denied", req);
       const redirectResponse = NextResponse.redirect(deniedUrl);
+      redirectResponse.headers.set("Location", "/access-denied");
       for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
         redirectResponse.headers.set(k, v);
       }

@@ -17,3 +17,5 @@ services:
         sync: false
       - key: NEXTAUTH_URL
         value: https://bonaveeict.com.ng
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://bonaveeict.com.ng

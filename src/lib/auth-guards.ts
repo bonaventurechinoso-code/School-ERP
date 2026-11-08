@@ -317,6 +317,9 @@ export function createCleanUnauthorizedRedirect(redirectTo = "/login"): NextResp
   url.search = ""; // Guarantee zero raw backend error strings in the address bar
 
   const response = NextResponse.redirect(url);
+  if (redirectTo.startsWith("/")) {
+    response.headers.set("Location", redirectTo);
+  }
   purgeAuthCookies(response);
   return response;
 }

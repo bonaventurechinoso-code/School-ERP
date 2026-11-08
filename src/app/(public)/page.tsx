@@ -426,9 +426,13 @@ export default function LandingPage() {
             <Link
               href="/api/auth/demo-session"
               id="explore-demo-btn"
-              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2"
+              onClick={(e) => {
+                e.preventDefault();
+                handleGatewayNavigation("demo", "/api/auth/demo-session");
+              }}
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Explore Demo Environment</span>
+              <span>{loadingGateway === "demo" ? "Entering Demo..." : "Explore Demo Environment"}</span>
             </Link>
           </div>
         </div>
@@ -623,7 +627,18 @@ export default function LandingPage() {
             <div className="space-y-3">
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Platform Gateways</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link href="/api/auth/demo-session" className="hover:text-blue-400 transition-colors">Demo School Environment</Link></li>
+                <li>
+                  <Link
+                    href="/api/auth/demo-session"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleGatewayNavigation("demo", "/api/auth/demo-session");
+                    }}
+                    className="hover:text-blue-400 transition-colors"
+                  >
+                    Demo School Environment
+                  </Link>
+                </li>
                 <li><Link href="/portal/student" className="hover:text-blue-400 transition-colors">Student Learning Portal</Link></li>
                 <li><Link href="/portal/staff" className="hover:text-blue-400 transition-colors">Staff & Faculty Portal</Link></li>
                 <li><Link href="/admin" className="hover:text-blue-400 transition-colors">Super-Admin Console</Link></li>
