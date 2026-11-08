@@ -82,3 +82,4 @@ export async function ensureDemoDatabaseInitialized(): Promise<void> {
     await demoPrisma.$disconnect().catch(() => {});
   }
 }
+
