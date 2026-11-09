@@ -15,25 +15,19 @@ import {
   AlertTriangle,
   Receipt,
   Download,
-  Printer,
   Loader2,
-  Filter,
   Search,
-  Plus,
   Send,
   Building,
   CreditCard,
   Copy,
   Check,
   ChevronRight,
-  ExternalLink,
   ChevronLeft,
   FileText,
   Eye,
-  RefreshCw,
   UserPlus,
   X,
-  Layers,
   Sparkles,
   Edit,
   Trash2,
@@ -42,22 +36,12 @@ import {
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import {
   updateApplicationStageAction,
   enrollAdmissionsApplicationAction,
   batchSendOffersAction,
   offerAdmissionAction,
   batchOfferAdmissionAction,
   exportJambCapsCsvAction,
-  reconcileFeeAction,
-  verifyDocumentAction,
   approveAdmissionsFeeTransaction,
   rejectAdmissionsFeeTransaction,
   updateAdmissionsApplicationBioAction,
@@ -305,14 +289,15 @@ export default function AdmissionsWorkspaceClient({
   const [dossierApp, setDossierApp] = useState<SerializedApplication | null>(null);
 
   // Keep active dossierApp synchronized with latest updated applications
+  const dossierAppId = dossierApp?.id;
   useEffect(() => {
-    if (dossierApp) {
-      const fresh = (applications || initialApplications || []).find((a) => a.id === dossierApp.id);
+    if (dossierAppId) {
+      const fresh = (applications || initialApplications || []).find((a) => a.id === dossierAppId);
       if (fresh) {
         setDossierApp(fresh);
       }
     }
-  }, [applications, initialApplications]);
+  }, [applications, initialApplications, dossierAppId]);
 
   const searchParams = useSearchParams();
   useEffect(() => {

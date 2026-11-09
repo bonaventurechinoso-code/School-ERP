@@ -539,7 +539,7 @@ export default function ApplicantDossierDrawer({
     if (isOpen) {
       setLocalCandidate(activeCandidate);
     }
-  }, [activeCandidate?.id, isOpen]);
+  }, [activeCandidate, isOpen]);
 
   useEffect(() => {
     if (activeCandidate && isOpen) {
@@ -2376,6 +2376,7 @@ export default function ApplicantDossierDrawer({
                     title={previewDoc.title}
                   />
                 ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={previewUrlStr}
                     alt={previewDoc.title}

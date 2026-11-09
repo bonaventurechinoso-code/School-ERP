@@ -626,6 +626,7 @@ export default function PublicApplyClient({
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800 text-slate-400 overflow-hidden">
                   {personal.photoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img src={personal.photoUrl} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
                     <User className="w-6 h-6" />

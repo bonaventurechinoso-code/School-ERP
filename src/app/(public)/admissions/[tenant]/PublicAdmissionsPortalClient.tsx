@@ -292,6 +292,7 @@ export default function PublicAdmissionsPortalClient({
         <div className="text-center space-y-3">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 text-white font-black text-xl shadow-lg mb-2">
             {school.logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img src={school.logoUrl} alt={school.name} className="w-10 h-10 object-contain" />
             ) : (
               <Building2 className="w-7 h-7" />

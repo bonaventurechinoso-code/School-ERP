@@ -7,7 +7,6 @@ import {
   normalizeCandidateGrade,
   isInstitutionalApplicationNo,
   buildDeterministicAdmissionKey,
-  mergeDuplicateAdmissionsApplications,
 } from "@/lib/admissions-deduplication.service";
 import AdmissionsWorkspaceClient, {
   SerializedApplication,

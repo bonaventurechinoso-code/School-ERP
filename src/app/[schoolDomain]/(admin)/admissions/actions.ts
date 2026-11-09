@@ -11,7 +11,6 @@ import {
 import {
   buildDeduplicationCompoundKey,
   deduplicateTenantAdmissions,
-  findExistingAdmissionsApplication,
   buildDeterministicAdmissionKey,
   isInstitutionalApplicationNo,
 } from "@/lib/admissions-deduplication.service";
@@ -38,7 +37,6 @@ import {
   checkRouteAuthorization,
   convertLeadToRegister,
   checkDuplicate,
-  getTenantFromSession,
 } from "@/lib/admissions.service";
 import { DuplicateCheckMatch } from "@/lib/admissions.types";
 import {
@@ -5618,7 +5616,7 @@ export async function sendMissingDocsReminderAction(payload: {
 
     return {
       success: true,
-      emailSent: true,
+      emailSent,
       message: `Verification reminder successfully dispatched to ${targetEmail} for ${missingDocuments.length} missing document(s).`,
       missingDocuments,
       uploadUrl,
