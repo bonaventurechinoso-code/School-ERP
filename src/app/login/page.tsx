@@ -77,6 +77,14 @@ function LoginPageContent() {
     }
   }, [resolvedSubdomain]);
 
+  // Auto-fill username/email from query params if supplied (e.g. from notification link)
+  useEffect(() => {
+    const queryEmail = searchParams.get("email") || searchParams.get("username") || searchParams.get("login");
+    if (queryEmail) {
+      setEmail((prev) => (prev ? prev : queryEmail.trim()));
+    }
+  }, [searchParams]);
+
   // Floating Toast Notification state (completely decoupled from form container layout)
   const [toastNotification, setToastNotification] = useState<{
     id: number;

@@ -1687,17 +1687,24 @@ export async function enrollApplicantFromRegisterAction(payload: {
     const student = handshakeResult.student;
     const register = handshakeResult.register;
     const applicantName = `${student?.firstName || register?.firstName || ""} ${student?.lastName || register?.lastName || ""}`.trim() || "Applicant";
-    const recipientEmail = student?.email || register?.email || student?.parentEmail || "";
+    const recipientEmail = handshakeResult.userEmail || student?.email || register?.email || student?.parentEmail || "";
     const recipientPhone = student?.parentPhone || register?.parentPhone || "";
     const applicantNumber = register?.applicationNo || handshakeResult.matricNo || "ADM-OFFER";
-    const offerLetterUrl = `${host}/${school?.subdomain || schoolDomain || "portal"}/admissions/offer/${register?.id || register?.applicationNo || student?.id}`;
+    const targetSubdomain = school?.subdomain || schoolDomain || "portal";
+    const offerLetterUrl = `${host}/${targetSubdomain}/admissions/offer/${register?.id || register?.applicationNo || student?.id}`;
+    const studentUser = handshakeResult.userEmail || recipientEmail || handshakeResult.matricNo;
+    const studentTempPass = handshakeResult.tempPassword || "Welcome@123";
+    const studentLoginUrl = `${host}/${targetSubdomain}/login?code=${encodeURIComponent(targetSubdomain)}&email=${encodeURIComponent(studentUser)}`;
 
     // 1. Dispatch Automated Admission Offer Notification to applicant
     try {
       await dispatchAdmissionsNotification({
         tenantId: schoolId,
         schoolName: school?.name || "School ERP",
+        schoolSubdomain: targetSubdomain,
         applicantNumber,
+        tier: register?.tier || undefined,
+        targetGrade: register?.classApplied || undefined,
         recipient: {
           name: applicantName,
           email: recipientEmail,
@@ -1718,7 +1725,10 @@ export async function enrollApplicantFromRegisterAction(payload: {
       await dispatchAdmissionsNotification({
         tenantId: schoolId,
         schoolName: school?.name || "School ERP",
+        schoolSubdomain: targetSubdomain,
         applicantNumber,
+        tier: register?.tier || undefined,
+        targetGrade: register?.classApplied || undefined,
         recipient: {
           name: applicantName,
           email: recipientEmail,
@@ -1727,9 +1737,9 @@ export async function enrollApplicantFromRegisterAction(payload: {
         },
         event: "ENROLLED",
         matriculationNumber: handshakeResult.matricNo || student?.admissionNumber || applicantNumber,
-        studentPortalUrl: `${host}/${school?.subdomain || schoolDomain || "portal"}/portal/student`,
-        portalUsername: recipientEmail || handshakeResult.matricNo,
-        portalTempPassword: "Welcome123",
+        studentPortalUrl: studentLoginUrl,
+        portalUsername: studentUser,
+        portalTempPassword: studentTempPass,
       });
     } catch (notifErr) {
       console.warn("[enrollApplicantFromRegisterAction] Warning dispatching ENROLLED notification:", notifErr);
@@ -4039,11 +4049,17 @@ export async function enrollAdmissionsApplicationAction(payload: {
 
     // 6. Dispatch Automated Admission Offer Notification to applicant
     const host = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng";
-    const offerLetterUrl = `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/admissions/offer/${application.id}`;
+    const targetSubdomain = school?.subdomain || payload.schoolDomain || "portal";
+    const studentLoginUrl = `${host}/${targetSubdomain}/login?code=${encodeURIComponent(targetSubdomain)}&email=${encodeURIComponent(userEmail)}`;
+    const offerLetterUrl = `${host}/${targetSubdomain}/admissions/offer/${application.id}`;
+    
     await dispatchAdmissionsNotification({
       tenantId: targetSchoolId,
       schoolName: school.name,
+      schoolSubdomain: targetSubdomain,
       applicantNumber: application.applicationNumber,
+      tier: (application as any).tier || undefined,
+      targetGrade: application.programId || application.classArm || undefined,
       recipient: {
         name: `${application.firstName} ${application.lastName}`,
         email: userEmail,
@@ -4060,7 +4076,10 @@ export async function enrollAdmissionsApplicationAction(payload: {
     await dispatchAdmissionsNotification({
       tenantId: targetSchoolId,
       schoolName: school.name,
+      schoolSubdomain: targetSubdomain,
       applicantNumber: application.applicationNumber,
+      tier: (application as any).tier || undefined,
+      targetGrade: application.programId || application.classArm || undefined,
       recipient: {
         name: `${application.firstName} ${application.lastName}`,
         email: userEmail,
@@ -4069,7 +4088,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
       },
       event: "ENROLLED",
       matriculationNumber,
-      studentPortalUrl: `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/portal/student`,
+      studentPortalUrl: studentLoginUrl,
       portalUsername: userEmail,
       portalTempPassword: rawTempPassword,
     }).catch((err) => console.warn("[dispatchAdmissionsNotification:ENROLLED]", err));
@@ -4168,7 +4187,10 @@ export async function batchSendOffersAction(payload: {
       await dispatchAdmissionsNotification({
         tenantId: targetSchoolId,
         schoolName: school?.name || "School ERP",
+        schoolSubdomain: school?.subdomain || payload.schoolDomain,
         applicantNumber: app.applicationNumber,
+        tier: (app as any).tier || undefined,
+        targetGrade: (app as any).programId || (app as any).classArm || undefined,
         recipient: {
           name: `${app.firstName} ${app.lastName}`,
           email: app.email,
@@ -4176,7 +4198,7 @@ export async function batchSendOffersAction(payload: {
           whatsappNumber: app.whatsappNumber || app.phoneNumber,
         },
         event: "PROVISIONAL_OFFER",
-        offerLetterUrl: `${host}/${school?.subdomain || "portal"}/admissions/offer/${app.id}`,
+        offerLetterUrl: `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/admissions/offer/${app.id}`,
       }).catch((e) => console.warn("[batchSendOffersAction notification]", e));
 
       successCount++;
@@ -4349,7 +4371,10 @@ export async function offerAdmissionAction(payload: {
       notifResult = await dispatchAdmissionsNotification({
         tenantId: targetSchoolId,
         schoolName: school?.name || "School ERP",
+        schoolSubdomain: school?.subdomain || payload.schoolDomain,
         applicantNumber: app.applicationNumber,
+        tier: (app as any).tier || undefined,
+        targetGrade: (app as any).programId || (app as any).classArm || undefined,
         recipient: {
           name: `${app.firstName} ${app.lastName}`,
           email: app.email,
@@ -4512,7 +4537,10 @@ export async function batchOfferAdmissionAction(payload: {
       dispatchAdmissionsNotification({
         tenantId: targetSchoolId,
         schoolName: school?.name || "School ERP",
+        schoolSubdomain: school?.subdomain || payload.schoolDomain,
         applicantNumber: app.applicationNumber,
+        tier: (app as any).tier || undefined,
+        targetGrade: (app as any).programId || (app as any).classArm || undefined,
         recipient: {
           name: `${app.firstName} ${app.lastName}`,
           email: app.email,

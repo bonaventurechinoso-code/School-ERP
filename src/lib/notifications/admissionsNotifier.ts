@@ -23,6 +23,10 @@ export interface AdmissionsNotificationPayload {
   applicantNumber: string;
   recipient: AdmissionsRecipient;
   event: AdmissionsLifecycleEvent;
+  // Tier & Institutional Classification
+  tier?: string;
+  targetGrade?: string;
+  targetClass?: string;
   // Dynamic contextual details
   magicTrackingLink?: string;
   admissionsHotline?: string;
@@ -120,6 +124,162 @@ async function sendWhatsAppMessage(
   } catch (err: any) {
     console.error("[WHATSAPP_DISPATCH_EXCEPTION]:", err);
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Institutional Tier Classification & Terminology Matrix
+ * Ensures appropriate language and feature framing for each school category
+ */
+export type InstitutionalTierType = "CRECHE" | "PRIMARY" | "SECONDARY" | "TERTIARY";
+
+export interface TierTerminology {
+  tier: InstitutionalTierType;
+  isBasicEducation: boolean;
+  candidateRole: string; // "Pupil" vs "Student"
+  candidateRolePlural: string; // "Pupils" vs "Students"
+  authorityBody: string; // "School Management and Head of School" vs "Principal and Academic Board" vs "Governing Council and Senate"
+  idLabel: string; // "Pupil Admission Number" vs "Student Admission Number" vs "Matriculation Number"
+  offerHeading: string; // "Provisional Admission Offer"
+  enrollmentHeading: string; // "Pupil Enrollment & Admission Identity" vs "Student Enrollment & Identity" vs "Matriculation & Student Identity"
+  academicScheduleText: string;
+  portalDescription: string;
+  enrollmentActionVerb: string; // "enrolled" vs "matriculated"
+}
+
+export function resolveInstitutionalTier(payload: AdmissionsNotificationPayload): InstitutionalTierType {
+  const combined = [
+    payload.tier,
+    payload.targetGrade,
+    payload.targetClass,
+    payload.schoolName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  // 1. Creche / Nursery / Early Years
+  if (
+    combined.includes("creche") ||
+    combined.includes("nursery") ||
+    combined.includes("toddler") ||
+    combined.includes("early year") ||
+    combined.includes("kindergarten") ||
+    combined.includes("kg") ||
+    combined.includes("daycare") ||
+    combined.includes("reception")
+  ) {
+    return "CRECHE";
+  }
+
+  // 2. Tertiary / Higher Ed keywords
+  if (
+    combined.includes("university") ||
+    combined.includes("polytechnic") ||
+    combined.includes("monotechnic") ||
+    combined.includes("college of education") ||
+    combined.includes("faculty") ||
+    combined.includes("undergraduate") ||
+    combined.includes("postgraduate") ||
+    combined.includes("degree") ||
+    combined.includes("hnd") ||
+    combined.includes("ond") ||
+    combined.includes("senate")
+  ) {
+    return "TERTIARY";
+  }
+
+  // 3. Secondary / High School keywords
+  if (
+    combined.includes("secondary") ||
+    combined.includes("high school") ||
+    combined.includes("jss") ||
+    combined.includes("sss") ||
+    combined.includes("college") ||
+    combined.includes("form 1") ||
+    combined.includes("form 2") ||
+    combined.includes("form 3") ||
+    combined.includes("grade 7") ||
+    combined.includes("grade 8") ||
+    combined.includes("grade 9") ||
+    combined.includes("grade 10") ||
+    combined.includes("grade 11") ||
+    combined.includes("grade 12") ||
+    combined.includes("year 7") ||
+    combined.includes("year 8") ||
+    combined.includes("year 9") ||
+    combined.includes("year 10") ||
+    combined.includes("year 11") ||
+    combined.includes("year 12")
+  ) {
+    return "SECONDARY";
+  }
+
+  // 4. Primary / Basic keywords (or default to Basic Education)
+  return "PRIMARY";
+}
+
+export function getTierTerminology(tier: InstitutionalTierType): TierTerminology {
+  switch (tier) {
+    case "CRECHE":
+      return {
+        tier: "CRECHE",
+        isBasicEducation: true,
+        candidateRole: "Pupil",
+        candidateRolePlural: "Pupils",
+        authorityBody: "the School Management and Head of Early Years",
+        idLabel: "Pupil Admission Number",
+        offerHeading: "Provisional Admission Offer",
+        enrollmentHeading: "Pupil Enrollment & Admission Identity",
+        academicScheduleText: "view your allocated class, term learning schedule, and academic calendar",
+        portalDescription: "personal pupil dashboard",
+        enrollmentActionVerb: "enrolled",
+      };
+
+    case "PRIMARY":
+      return {
+        tier: "PRIMARY",
+        isBasicEducation: true,
+        candidateRole: "Pupil",
+        candidateRolePlural: "Pupils",
+        authorityBody: "the School Management and Head of School",
+        idLabel: "Pupil Admission Number",
+        offerHeading: "Provisional Admission Offer",
+        enrollmentHeading: "Pupil Enrollment & Admission Identity",
+        academicScheduleText: "view your allocated class, subjects curriculum, term academic calendar, and class timetable",
+        portalDescription: "personal pupil dashboard",
+        enrollmentActionVerb: "enrolled",
+      };
+
+    case "SECONDARY":
+      return {
+        tier: "SECONDARY",
+        isBasicEducation: false,
+        candidateRole: "Student",
+        candidateRolePlural: "Students",
+        authorityBody: "the Principal and School Academic Board",
+        idLabel: "Student Admission Number",
+        offerHeading: "Provisional Admission Offer",
+        enrollmentHeading: "Student Enrollment & Identity",
+        academicScheduleText: "view your assigned class arm, enrolled subjects, academic calendar, and class timetable",
+        portalDescription: "personal student dashboard",
+        enrollmentActionVerb: "enrolled",
+      };
+
+    case "TERTIARY":
+      return {
+        tier: "TERTIARY",
+        isBasicEducation: false,
+        candidateRole: "Student",
+        candidateRolePlural: "Students",
+        authorityBody: "the Governing Council and Senate / Academic Board",
+        idLabel: "Matriculation Number",
+        offerHeading: "Provisional Admission Offer",
+        enrollmentHeading: "Matriculation & Student Identity",
+        academicScheduleText: "complete semester course registration, download matriculation clearance, and access your lecture timetable",
+        portalDescription: "personal student portal",
+        enrollmentActionVerb: "matriculated",
+      };
   }
 }
 
@@ -249,51 +409,108 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
     }
 
     case "PROVISIONAL_OFFER": {
+      const terms = getTierTerminology(resolveInstitutionalTier(payload));
       const deadline = payload.acceptanceDeadline || "within 14 days";
-      const fee = payload.acceptanceFeeAmount ? `NGN ${payload.acceptanceFeeAmount}` : "TBA";
+      const fee = payload.acceptanceFeeAmount
+        ? `NGN ${typeof payload.acceptanceFeeAmount === "number" ? payload.acceptanceFeeAmount.toLocaleString() : payload.acceptanceFeeAmount}`
+        : "TBA";
       const offerLink = payload.offerLetterUrl || payload.magicTrackingLink || "#";
       return {
-        subject: `CONGRATULATIONS: Provisional Admission Offer - ${applicantNumber} (${schoolName})`,
+        subject: `CONGRATULATIONS: Provisional ${terms.candidateRole} Admission Offer - ${applicantNumber} (${schoolName})`,
         smsText: `Congratulations ${name}! You have been offered provisional admission to ${schoolName}. Acceptance deadline: ${deadline}. View offer: ${offerLink}`,
-        whatsAppText: `*${schoolName} - Provisional Offer of Admission 🎉*\n\nDear *${name}*,\n\nCongratulations! You have been granted provisional admission (Ref: *${applicantNumber}*).\n\n📄 *Download Formal Offer Letter:* ${offerLink}\n⏳ *Acceptance Fee & Clearance Deadline:* ${deadline} (${fee})\n\nPlease accept your offer before the deadline to lock your slot.`,
+        whatsAppText: `*${schoolName} - ${terms.offerHeading} 🎉*\n\nDear *${name}*,\n\nCongratulations! ${terms.authorityBody} of *${schoolName}* is pleased to grant you provisional admission for your ${terms.candidateRole.toLowerCase()} application (Ref: *${applicantNumber}*).\n\n📄 *Download Formal Offer Letter:* ${offerLink}\n⏳ *Acceptance Deposit & Clearance Deadline:* ${deadline} (${fee})\n\nPlease accept your offer before the deadline to lock your slot.`,
         emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #047857; margin-top: 0;">🎉 Provisional Offer of Admission</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>On behalf of the Governing Council and Academic Board of <strong>${schoolName}</strong>, we are thrilled to offer you provisional admission under application <strong>${applicantNumber}</strong>.</p>
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 18px; margin: 20px 0; border-radius: 8px;">
-              <p style="margin: 0 0 8px 0;"><strong>Acceptance Deadline:</strong> ${deadline}</p>
-              <p style="margin: 0;"><strong>Acceptance Deposit:</strong> ${fee}</p>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; max-width: 620px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <span style="display: inline-block; padding: 6px 14px; background: #ecfdf5; color: #047857; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Admissions Notice</span>
+              <h1 style="color: #047857; margin: 12px 0 6px 0; font-size: 24px;">🎉 ${terms.offerHeading}</h1>
+              <p style="color: #64748b; font-size: 14px; margin: 0;">Application Ref: <strong>${applicantNumber}</strong></p>
             </div>
-            <p style="text-align: center; margin: 28px 0;">
-              <a href="${offerLink}" style="background-color: #047857; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Download Official Offer Letter (PDF)</a>
-            </p>
+
+            <p style="font-size: 15px; line-height: 1.6;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6;">On behalf of <strong>${terms.authorityBody}</strong> of <strong>${schoolName}</strong>, we are delighted to offer you provisional admission into our academic community under application reference <strong>${applicantNumber}</strong>.</p>
+            
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 24px 0; border-radius: 8px;">
+              <p style="margin: 0 0 10px 0; font-size: 14px; color: #166534;"><strong>Candidate Role:</strong> ${terms.candidateRole}</p>
+              <p style="margin: 0 0 10px 0; font-size: 14px; color: #166534;"><strong>Acceptance Deadline:</strong> ${deadline}</p>
+              <p style="margin: 0; font-size: 14px; color: #166534;"><strong>Acceptance Deposit / Fee:</strong> ${fee}</p>
+            </div>
+
+            <p style="font-size: 15px; line-height: 1.6;">Please download and review your official provisional offer letter below. Accept your offer and complete clearance before the stated deadline to confirm your placement.</p>
+
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${offerLink}" style="background-color: #047857; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(4, 120, 87, 0.2);">Download Official Offer Letter (PDF)</a>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
+            <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">This is an automated institutional notification from ${schoolName}. All rights reserved.</p>
           </div>
         `,
       };
     }
 
     case "ENROLLED": {
+      const terms = getTierTerminology(resolveInstitutionalTier(payload));
       const matric = payload.matriculationNumber || applicantNumber;
-      const portalUrl = payload.studentPortalUrl || "#";
       const user = payload.portalUsername || payload.recipient.email || matric;
       const tempPass = payload.portalTempPassword || "Welcome@123";
+      const portalUrl = payload.studentPortalUrl || "#";
+      const directSchoolDomain = payload.schoolSubdomain || "";
+
       return {
-        subject: `Welcome to ${schoolName}! Your Matriculation No: ${matric}`,
-        smsText: `Welcome to ${schoolName}! Your Matric/Admission No is ${matric}. Portal: ${portalUrl} (User: ${user})`,
-        whatsAppText: `*${schoolName} - Matriculation & Enrolled! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour clearance is complete and you are formally enrolled:\n\n🆔 *Matriculation / Admission No:* ${matric}\n🌐 *Student Portal:* ${portalUrl}\n👤 *Username:* ${user}\n🔑 *Temporary Password:* ${tempPass}\n\nPlease log in and update your password immediately.`,
+        subject: `Welcome to ${schoolName}! Your ${terms.idLabel}: ${matric}`,
+        smsText: `Welcome to ${schoolName}! Your ${terms.idLabel} is ${matric}. Portal Login: ${portalUrl} | User: ${user} | Temp Password: ${tempPass}`,
+        whatsAppText: `*${schoolName} - ${terms.enrollmentHeading}! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb}:\n\n🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Temporary Password:* ${tempPass}\n\n👉 *Next Step:* Log in to your ${terms.portalDescription} to ${terms.academicScheduleText}.`,
         emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #1e3a8a; margin-top: 0;">🎓 Formal Enrollment & Student Identity</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>Congratulations! Your admission clearance is finalized and you have been formally matriculated into <strong>${schoolName}</strong>.</p>
-            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 18px; margin: 20px 0; border-radius: 8px;">
-              <p style="margin: 0 0 6px 0;"><strong>Matriculation / Admission Number:</strong> <span style="font-size: 16px; font-weight: bold; color: #1e3a8a;">${matric}</span></p>
-              <p style="margin: 0 0 6px 0;"><strong>Portal Login URL:</strong> <a href="${portalUrl}">${portalUrl}</a></p>
-              <p style="margin: 0 0 6px 0;"><strong>Username:</strong> ${user}</p>
-              <p style="margin: 0;"><strong>Temporary Password:</strong> <code>${tempPass}</code></p>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; max-width: 620px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <span style="display: inline-block; padding: 6px 14px; background: #eff6ff; color: #1d4ed8; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Official Admission Clearance</span>
+              <h1 style="color: #1e3a8a; margin: 12px 0 6px 0; font-size: 24px;">🎓 ${terms.enrollmentHeading}</h1>
+              <p style="color: #64748b; font-size: 14px; margin: 0;">Application Ref: <strong>${applicantNumber}</strong></p>
             </div>
-            <p>Please log in immediately to complete course registration and access your lecture timetable.</p>
+
+            <p style="font-size: 15px; line-height: 1.6;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6;">Congratulations! Your admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb} into <strong>${schoolName}</strong>.</p>
+            
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 22px; margin: 24px 0; border-radius: 10px;">
+              <h3 style="color: #1e3a8a; margin-top: 0; margin-bottom: 14px; font-size: 16px; border-bottom: 1px solid #dbeafe; padding-bottom: 8px;">🔑 Your Personal Access Credentials</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.8;">
+                <tr>
+                  <td style="color: #475569; width: 42%; padding: 4px 0;"><strong>${terms.idLabel}:</strong></td>
+                  <td style="font-size: 15px; font-weight: bold; color: #1e3a8a; padding: 4px 0;">${matric}</td>
+                </tr>
+                <tr>
+                  <td style="color: #475569; padding: 4px 0;"><strong>Username / Login ID:</strong></td>
+                  <td style="font-weight: 600; color: #0f172a; padding: 4px 0;"><code>${user}</code></td>
+                </tr>
+                <tr>
+                  <td style="color: #475569; padding: 4px 0;"><strong>Temporary Password:</strong></td>
+                  <td style="font-weight: 600; color: #b91c1c; padding: 4px 0;"><code style="background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-size: 14px;">${tempPass}</code></td>
+                </tr>
+                ${directSchoolDomain ? `
+                <tr>
+                  <td style="color: #475569; padding: 4px 0;"><strong>School Code:</strong></td>
+                  <td style="font-weight: 600; color: #0f172a; padding: 4px 0;"><code>${directSchoolDomain}</code></td>
+                </tr>
+                ` : ""}
+                <tr>
+                  <td style="color: #475569; padding: 4px 0;"><strong>Candidate Role:</strong></td>
+                  <td style="color: #0f172a; padding: 4px 0;">${terms.candidateRole} (RBAC: STUDENT)</td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${portalUrl}" style="background-color: #1e40af; color: #ffffff; padding: 14px 34px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(30, 64, 175, 0.25);">Login to ${terms.portalDescription}</a>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 14px; color: #334155; line-height: 1.6;">
+              <strong style="color: #0f172a;">Next Steps for ${terms.candidateRole}:</strong>
+              <p style="margin: 6px 0 0 0;">Please log in immediately to your ${terms.portalDescription} to <strong>${terms.academicScheduleText}</strong>. Upon initial sign-in, you will be prompted to replace the temporary password with your own secure password.</p>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
+            <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">This is an automated institutional credential dispatch for ${name} at ${schoolName}.</p>
           </div>
         `,
       };

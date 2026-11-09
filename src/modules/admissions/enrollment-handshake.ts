@@ -8,6 +8,7 @@ export interface EnrollmentHandshakeInput {
   actorId?: string;
   tuitionFeeAmount?: number;
   feeDescription?: string;
+  tempPassword?: string;
   ipAddress?: string;
 }
 
@@ -15,6 +16,9 @@ export interface EnrollmentHandshakeResult {
   success: boolean;
   matricNo?: string;
   student?: any;
+  user?: any;
+  userEmail?: string;
+  tempPassword?: string;
   invoice?: any;
   parent?: any;
   register?: any;
@@ -65,10 +69,13 @@ export async function executeEnrollmentHandshake(
           where: { schoolId: tenantId, admissionNumber: existingMatricNo },
         });
         if (existingStudent) {
+          const resolvedEmail = existingStudent.email || register.email || null;
           return {
             success: true,
             matricNo: existingMatricNo,
             student: existingStudent,
+            userEmail: resolvedEmail,
+            tempPassword: input.tempPassword || "Welcome@123",
             register,
           };
         }
@@ -122,17 +129,56 @@ export async function executeEnrollmentHandshake(
         });
       }
 
-      // 5. ATOMIC STUDENT CREATION IN SIS
+      // 5. ATOMIC USER & SIS STUDENT PROVISIONING (RBAC: STUDENT)
       const assignedClass = creds.assignedClass || register.classApplied || "Unassigned";
       const guardianName = personal.guardianName || creds.guardianName || `Guardian of ${register.firstName}`;
-      const defaultPasswordHash = await bcrypt.hash("Welcome123", 10);
+      const tempPassword = input.tempPassword || "Welcome@123";
+      const defaultPasswordHash = await bcrypt.hash(tempPassword, 10);
+
+      const userEmail = register.email?.trim().toLowerCase() || `${matricNo.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${tenantCode.toLowerCase()}.portal`;
+
+      let user = await tx.user.findFirst({
+        where: {
+          schoolId: tenantId,
+          email: { equals: userEmail, mode: "insensitive" },
+        },
+      });
+
+      if (user) {
+        user = await tx.user.update({
+          where: { id: user.id },
+          data: {
+            role: "STUDENT",
+            firstName: register.firstName.trim(),
+            lastName: register.lastName.trim(),
+            passwordHash: defaultPasswordHash,
+            status: "ACTIVE",
+            mustChangePassword: true,
+          },
+        });
+      } else {
+        user = await tx.user.create({
+          data: {
+            schoolId: tenantId,
+            email: userEmail,
+            passwordHash: defaultPasswordHash,
+            role: "STUDENT",
+            firstName: register.firstName.trim(),
+            lastName: register.lastName.trim(),
+            status: "ACTIVE",
+            mustChangePassword: true,
+          },
+        });
+      }
+
       const student = await tx.student.create({
         data: {
           schoolId: tenantId,
+          userId: user.id,
           tierId: academicTier.id,
           firstName: register.firstName.trim(),
           lastName: register.lastName.trim(),
-          email: register.email?.trim().toLowerCase() || null,
+          email: userEmail,
           admissionNumber: matricNo,
           currentClass: assignedClass,
           parentName: guardianName,
@@ -313,6 +359,9 @@ export async function executeEnrollmentHandshake(
         success: true,
         matricNo,
         student,
+        user,
+        userEmail,
+        tempPassword,
         invoice,
         parent,
         register: updatedRegister,
