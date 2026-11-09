@@ -306,12 +306,16 @@ export async function POST(request: NextRequest) {
               parentPhone: parentContact || studentPhone || (existingApp.tierSpecificData as any)?.parentPhone || "N/A",
               leadId: newLead.id,
               dateOfBirth: data.dateOfBirth || (existingApp.tierSpecificData as any)?.dateOfBirth || null,
+              passwordHash: hashedPassword,
+              isSelfService: !isTemporary,
             },
             metadata: {
               ...((existingApp.metadata as any) || {}),
               leadId: newLead.id,
               registerId: transitionResult.registerRecord?.id,
               uploadToken,
+              passwordHash: hashedPassword,
+              isSelfService: !isTemporary,
             },
           },
         });
@@ -341,11 +345,15 @@ export async function POST(request: NextRequest) {
               parentPhone: parentContact || studentPhone || "N/A",
               leadId: newLead.id,
               dateOfBirth: data.dateOfBirth || null,
+              passwordHash: hashedPassword,
+              isSelfService: !isTemporary,
             },
             metadata: {
               leadId: newLead.id,
               registerId: transitionResult.registerRecord?.id,
               uploadToken,
+              passwordHash: hashedPassword,
+              isSelfService: !isTemporary,
             },
           },
         });
@@ -358,6 +366,49 @@ export async function POST(request: NextRequest) {
     // Provision or sync Student portal user record
     if (accountEmail) {
       try {
+        const nameParts = (applicantName || data.fullName || "Student").trim().split(" ");
+        const firstName = nameParts[0] || "Student";
+        const lastName = nameParts.slice(1).join(" ") || "Applicant";
+
+        // Authoritative User account: preserve user's chosen password and clear mustChangePassword
+        let userRecord = await basePrisma.user.findFirst({
+          where: {
+            schoolId: school.id,
+            email: { equals: accountEmail, mode: "insensitive" },
+          },
+        });
+
+        if (userRecord) {
+          userRecord = await basePrisma.user.update({
+            where: { id: userRecord.id },
+            data: {
+              passwordHash: hashedPassword,
+              firstName,
+              lastName,
+              role: "STUDENT",
+              status: "ACTIVE",
+              mustChangePassword: isTemporary,
+            },
+          });
+        } else {
+          userRecord = await basePrisma.user.create({
+            data: {
+              schoolId: school.id,
+              email: accountEmail,
+              passwordHash: hashedPassword,
+              firstName,
+              lastName,
+              role: "STUDENT",
+              status: "ACTIVE",
+              mustChangePassword: isTemporary,
+            },
+          });
+        }
+
+        if (userRecord) {
+          await setUserMustChangePassword(userRecord.id, school.id, isTemporary);
+        }
+
         let existingStudent = await tenantDb.student.findFirst({
           where: {
             schoolId: school.id,
@@ -370,8 +421,10 @@ export async function POST(request: NextRequest) {
           await tenantDb.student.update({
             where: { id: existingStudent.id },
             data: {
+              userId: userRecord?.id || existingStudent.userId,
               tierId: effectiveTierId!,
               currentClass: effectiveTargetGrade,
+              mustChangePassword: isTemporary,
               dynamicFields: {
                 ...currentFields,
                 password: hashedPassword,
@@ -384,13 +437,10 @@ export async function POST(request: NextRequest) {
           });
           await setUserMustChangePassword(existingStudent.id, school.id, isTemporary);
         } else {
-          const nameParts = (applicantName || data.fullName || "Student").trim().split(" ");
-          const firstName = nameParts[0] || "Student";
-          const lastName = nameParts.slice(1).join(" ") || "Applicant";
-
           const createdStudent = await tenantDb.student.create({
             data: {
               schoolId: school.id,
+              userId: userRecord?.id || null,
               tierId: effectiveTierId!,
               firstName,
               lastName,
@@ -401,6 +451,7 @@ export async function POST(request: NextRequest) {
               parentPhone: parentContact || null,
               parentEmail: parentEmail || null,
               applicantAt: new Date(),
+              mustChangePassword: isTemporary,
               dynamicFields: {
                 password: hashedPassword,
                 isTemporaryPassword: isTemporary,

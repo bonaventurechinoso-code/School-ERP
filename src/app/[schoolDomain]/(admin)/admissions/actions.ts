@@ -3881,18 +3881,36 @@ export async function enrollAdmissionsApplicationAction(payload: {
 
     // 5. Execute Atomic Enrollment Transaction
     const result = await db.$transaction(async (tx: any) => {
-      // Step A: Check if User already exists
+      // Step A: Locate existing User and Student accounts
       const existingUser = await tx.user.findFirst({
-        where: { schoolId_email: { schoolId: targetSchoolId, email: userEmail } },
+        where: {
+          schoolId: targetSchoolId,
+          email: { equals: userEmail, mode: "insensitive" },
+        },
       });
 
-      if (existingUser && existingUser.passwordHash) {
+      const existingStudent = await tx.student.findFirst({
+        where: {
+          schoolId: targetSchoolId,
+          email: { equals: userEmail, mode: "insensitive" },
+        },
+      });
+
+      // Extract any pre-existing chosen password hash
+      const preExistingPasswordHash =
+        existingUser?.passwordHash ||
+        (existingStudent?.dynamicFields as any)?.password ||
+        (application.tierSpecificData as any)?.passwordHash ||
+        (application.metadata as any)?.passwordHash;
+
+      // Determine if applicant registered via self-service portal
+      if (isPublicSelfService || (preExistingPasswordHash && application.intakeChannel !== "WALK_IN")) {
         isApplicantSelfService = true;
       }
 
       let user: any;
       if (existingUser) {
-        // PRESERVE user's existing chosen password; promote role to STUDENT
+        // PRESERVE user's existing chosen password for self-service candidates; promote role to STUDENT
         user = await tx.user.update({
           where: { id: existingUser.id },
           data: {
@@ -3901,17 +3919,25 @@ export async function enrollAdmissionsApplicationAction(payload: {
             lastName: application.lastName,
             status: "ACTIVE",
             ...(isApplicantSelfService
-              ? { mustChangePassword: false }
-              : { passwordHash: hashedTempPassword, mustChangePassword: true }),
+              ? {
+                  mustChangePassword: false,
+                  ...(preExistingPasswordHash ? { passwordHash: preExistingPasswordHash } : {}),
+                }
+              : {
+                  passwordHash: preExistingPasswordHash || hashedTempPassword,
+                  mustChangePassword: true,
+                }),
           },
         });
       } else {
-        // Walk-in applicant without pre-existing user: generate credentials
+        // Create student user record
         user = await tx.user.create({
           data: {
             schoolId: targetSchoolId,
             email: userEmail,
-            passwordHash: hashedTempPassword,
+            passwordHash: isApplicantSelfService
+              ? (preExistingPasswordHash || hashedTempPassword)
+              : (preExistingPasswordHash || hashedTempPassword),
             role: "STUDENT",
             firstName: application.firstName,
             lastName: application.lastName,
@@ -3922,13 +3948,6 @@ export async function enrollAdmissionsApplicationAction(payload: {
       }
 
       // Step B: Create or Update Student in target database
-      const existingStudent = await tx.student.findFirst({
-        where: {
-          schoolId: targetSchoolId,
-          email: { equals: userEmail, mode: "insensitive" },
-        },
-      });
-
       let student: any;
       if (existingStudent) {
         student = await tx.student.update({
@@ -3948,12 +3967,15 @@ export async function enrollAdmissionsApplicationAction(payload: {
             parentWhatsApp: application.whatsappNumber || parentPhone,
             feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
             enrolledAt: new Date(),
+            mustChangePassword: !isApplicantSelfService,
             dynamicFields: {
               ...((existingStudent.dynamicFields as any) || {}),
               applicationId: application.id,
               intakeChannel: application.intakeChannel,
               tierSpecificData: application.tierSpecificData,
               verifiedDocumentsCount: application.documents.length,
+              isTemporaryPassword: !isApplicantSelfService,
+              password: user.passwordHash,
             },
           },
         });
@@ -3976,11 +3998,14 @@ export async function enrollAdmissionsApplicationAction(payload: {
             parentWhatsApp: application.whatsappNumber || parentPhone,
             feeStatus: payload.termFeeAmount ? "UNPAID" : "PAID",
             enrolledAt: new Date(),
+            mustChangePassword: !isApplicantSelfService,
             dynamicFields: {
               applicationId: application.id,
               intakeChannel: application.intakeChannel,
               tierSpecificData: application.tierSpecificData,
               verifiedDocumentsCount: application.documents.length,
+              isTemporaryPassword: !isApplicantSelfService,
+              password: user.passwordHash,
             },
           },
         });
@@ -4085,6 +4110,15 @@ export async function enrollAdmissionsApplicationAction(payload: {
       });
     } catch (auditErr) {
       console.warn("[enrollAdmissionsApplicationAction] Warning recording audit trail:", auditErr);
+    }
+
+    // Synchronize security policy: self-service candidates who chose their password are never forced to change it.
+    // Candidates registered by admin / front-desk officer are required to change temporary password.
+    try {
+      await setUserMustChangePassword(result.user.id, targetSchoolId, !isApplicantSelfService);
+      await setUserMustChangePassword(result.student.id, targetSchoolId, !isApplicantSelfService);
+    } catch (secErr) {
+      console.warn("[enrollAdmissionsApplicationAction] Warning setting user security flags:", secErr);
     }
 
     // 6. Dispatch Automated Admission Offer Notification to applicant

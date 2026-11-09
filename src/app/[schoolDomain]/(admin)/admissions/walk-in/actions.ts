@@ -2,6 +2,8 @@
 
 import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcryptjs";
+import { setUserMustChangePassword } from "@/lib/security-service";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
 import {
   findExistingAdmissionsApplication,
@@ -23,6 +25,7 @@ export async function recordWalkInApplication(payload: {
   gender: string;
   parentName?: string;
   parentPhone?: string;
+  password?: string;
   physicalDocsSighted: {
     birthCertificate: boolean;
     passportPhotograph: boolean;
@@ -73,6 +76,10 @@ export async function recordWalkInApplication(payload: {
     const paymentReference = payment.posTerminalReference || `POS-${branchPrefix}-${Date.now().toString().slice(-6)}`;
     const effectiveSession = academicSessionId || `${year}/${year + 1}`;
     const targetFullName = `${firstName} ${middleName ? middleName + " " : ""}${lastName}`.trim();
+
+    // Prepare credentials for walk-in candidate (forced password change on first login)
+    const rawInitialPassword = payload.password?.trim() || `Welcome@${Math.floor(1000 + Math.random() * 9000)}`;
+    const hashedPassword = await bcrypt.hash(rawInitialPassword, 10);
 
     // 1. UPSTREAM VALIDATION RULE & DETERMINISTIC MATCHING KEY PRE-SUBMISSION CHECK:
     // [PUPIL FULL NAME] + [CLASS] + [AGE/DOB] + [CURRENT_SESSION]
@@ -126,12 +133,16 @@ export async function recordWalkInApplication(payload: {
               },
               deskOfficer: registrarName,
               physicalInspectionCompleted: true,
+              passwordHash: hashedPassword,
+              isSelfService: false,
             },
             metadata: {
               ...((existingApp.metadata as any) || {}),
               intakeDesk: "Admissions Front Desk",
               registrarName,
               walkInMergedAt: new Date().toISOString(),
+              passwordHash: hashedPassword,
+              isSelfService: false,
             },
           },
         });
@@ -161,13 +172,56 @@ export async function recordWalkInApplication(payload: {
               },
               deskOfficer: registrarName,
               physicalInspectionCompleted: true,
+              passwordHash: hashedPassword,
+              isSelfService: false,
             },
             metadata: {
               intakeDesk: "Admissions Front Desk",
               registrarName,
+              passwordHash: hashedPassword,
+              isSelfService: false,
             },
           },
         });
+      }
+
+      // Provision/sync User record for the candidate with mustChangePassword=true
+      let userRecord: any = null;
+      if (email && email.includes("@")) {
+        const cleanEmail = email.toLowerCase().trim();
+        userRecord = await tx.user.findFirst({
+          where: {
+            schoolId: school.id,
+            email: { equals: cleanEmail, mode: "insensitive" },
+          },
+        });
+
+        if (userRecord) {
+          userRecord = await tx.user.update({
+            where: { id: userRecord.id },
+            data: {
+              passwordHash: hashedPassword,
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              role: "STUDENT",
+              status: "ACTIVE",
+              mustChangePassword: true,
+            },
+          });
+        } else {
+          userRecord = await tx.user.create({
+            data: {
+              schoolId: school.id,
+              email: cleanEmail,
+              passwordHash: hashedPassword,
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              role: "STUDENT",
+              status: "ACTIVE",
+              mustChangePassword: true,
+            },
+          });
+        }
       }
 
       // 2. Register sighted physical credentials
@@ -273,8 +327,17 @@ export async function recordWalkInApplication(payload: {
         },
       });
 
-      return { application, feeTx, docEntriesCount: docEntries.length, isUpsert };
+      return { application, feeTx, docEntriesCount: docEntries.length, isUpsert, userRecord };
     });
+
+    // Enforce password change requirement for walk-in applicants registered by desk officer
+    if (result.userRecord) {
+      try {
+        await setUserMustChangePassword(result.userRecord.id, school.id, true);
+      } catch (secErr) {
+        console.warn("[recordWalkInApplication] Warning setting mustChangePassword:", secErr);
+      }
+    }
 
     // 4. Record Audit Trail safely after transaction commits
     try {
@@ -333,6 +396,7 @@ export async function recordWalkInApplication(payload: {
       success: true,
       applicationNumber: result.application.applicationNumber,
       paymentReference,
+      initialPassword: rawInitialPassword,
       receiptPayload: {
         schoolName: school.name,
         subdomain: school.subdomain,
@@ -343,6 +407,7 @@ export async function recordWalkInApplication(payload: {
         paymentReference,
         amount: payment.amount,
         registrarName,
+        initialPassword: rawInitialPassword,
         issuedAt: new Date().toISOString(),
         trackingUrl: magicTrackingLink,
       },

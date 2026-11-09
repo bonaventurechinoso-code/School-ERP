@@ -16,6 +16,9 @@ import {
   Calendar,
   Building2,
   RefreshCw,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from "lucide-react";
 import { recordWalkInApplication } from "./actions";
 
@@ -39,6 +42,7 @@ export default function WalkInIntakeClient({
     email: "",
     phoneNumber: "",
     whatsappNumber: "",
+    password: "",
     dateOfBirth: "",
     gender: "MALE",
     parentName: "",
@@ -49,6 +53,12 @@ export default function WalkInIntakeClient({
     paymentAmount: 5000,
     posRef: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const generatePassword = () => {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    setFormData((prev) => ({ ...prev, password: `Welcome@${randomSuffix}` }));
+  };
 
   const [physicalDocs, setPhysicalDocs] = useState({
     birthCertificate: true,
@@ -76,6 +86,7 @@ export default function WalkInIntakeClient({
         email: formData.email,
         phoneNumber: formData.phoneNumber,
         whatsappNumber: formData.whatsappNumber,
+        password: formData.password.trim() || undefined,
         dateOfBirth: formData.dateOfBirth,
         gender: formData.gender,
         parentName: formData.parentName,
@@ -109,6 +120,7 @@ export default function WalkInIntakeClient({
       email: "",
       phoneNumber: "",
       whatsappNumber: "",
+      password: "",
       dateOfBirth: "",
       gender: "MALE",
       parentName: "",
@@ -218,6 +230,14 @@ export default function WalkInIntakeClient({
                 {receiptData.registrarName}
               </span>
             </div>
+            {receiptData.initialPassword && (
+              <div className="flex justify-between border-t border-dashed border-slate-300 dark:border-zinc-700 pt-2">
+                <span className="text-slate-400">PORTAL PASSWORD:</span>
+                <span className="font-mono font-black text-amber-600 dark:text-amber-400">
+                  {receiptData.initialPassword}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="text-[10px] text-slate-400 italic">
@@ -356,6 +376,46 @@ export default function WalkInIntakeClient({
                   className="w-full text-xs p-3 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
                 />
               </div>
+            </div>
+
+            {/* Initial Portal Password Creation */}
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                  Initial Portal Password (Desk Intake)
+                </label>
+                <button
+                  type="button"
+                  onClick={generatePassword}
+                  className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Auto-Generate</span>
+                </button>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="e.g. Welcome@2026 (or click Auto-Generate)"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full text-xs pl-9 pr-10 py-3 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors"
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Initial login password printed on candidate thermal receipt. Candidate will be forced to change this password on first login. Leave empty to auto-generate.
+              </p>
             </div>
           </div>
 

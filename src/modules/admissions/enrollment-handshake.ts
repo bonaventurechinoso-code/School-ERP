@@ -1,5 +1,6 @@
 import { basePrisma, isDemoSchool, getDemoPrismaClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
+import { setUserMustChangePassword } from "@/lib/security-service";
 
 export interface EnrollmentHandshakeInput {
   registerId: string;
@@ -47,7 +48,7 @@ export async function executeEnrollmentHandshake(
       ? getDemoPrismaClient()
       : basePrisma;
 
-    return await db.$transaction(async (tx: any) => {
+    const result = await db.$transaction(async (tx: any) => {
       // 1. TENANT ISOLATION GUARD: Query strictly scoped to tenantId
       const register = await tx.admissionRegister.findFirst({
         where: {
@@ -152,7 +153,14 @@ export async function executeEnrollmentHandshake(
         regAny.intakeChannel === "WALK_IN" ||
         personal.intakeChannel === "WALK_IN";
 
-      const isSelfService = !isWalkIn && Boolean(user && user.passwordHash);
+      const isSelfService =
+        !isWalkIn &&
+        (Boolean(user && user.passwordHash) ||
+          creds.isSelfService === true ||
+          regAny.intakeChannel === "ONLINE_PORTAL" ||
+          personal.intakeChannel === "ONLINE_PORTAL" ||
+          Boolean(personal.passwordHash) ||
+          Boolean(creds.passwordHash));
 
       if (user) {
         // PRESERVE applicant's existing chosen password for self-service registrations!
@@ -199,12 +207,13 @@ export async function executeEnrollmentHandshake(
           parentEmail: personal.guardianEmail || register.email || null,
           status: "ENROLLED",
           enrolledAt: new Date(),
+          mustChangePassword: !isSelfService,
           dynamicFields: {
             matricNo,
             applicationNo: register.applicationNo,
             enrolledVia: "Admissions Enterprise Handshake",
-            password: defaultPasswordHash,
-            isTemporaryPassword: true,
+            password: isSelfService && user.passwordHash ? user.passwordHash : defaultPasswordHash,
+            isTemporaryPassword: !isSelfService,
           },
         },
       });
@@ -388,6 +397,17 @@ export async function executeEnrollmentHandshake(
         auditTrailId: auditTrail.id,
       };
     });
+
+    if (result.success && result.user && result.student) {
+      try {
+        await setUserMustChangePassword(result.user.id, tenantId, !result.isSelfService);
+        await setUserMustChangePassword(result.student.id, tenantId, !result.isSelfService);
+      } catch (secErr) {
+        console.warn("[executeEnrollmentHandshake] Warning synchronizing password security flag:", secErr);
+      }
+    }
+
+    return result;
   } catch (error: any) {
     console.error("[executeEnrollmentHandshake] Transaction Failed:", error);
     return {

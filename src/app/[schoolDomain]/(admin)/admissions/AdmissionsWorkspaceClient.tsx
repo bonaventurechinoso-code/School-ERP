@@ -26,6 +26,9 @@ import {
   ChevronLeft,
   FileText,
   Eye,
+  EyeOff,
+  KeyRound,
+  RefreshCw,
   UserPlus,
   X,
   Sparkles,
@@ -368,6 +371,7 @@ export default function AdmissionsWorkspaceClient({
     email: "",
     phoneNumber: "",
     whatsappNumber: "",
+    password: "",
     dateOfBirth: "2010-01-01",
     gender: "MALE",
     parentName: "",
@@ -384,6 +388,12 @@ export default function AdmissionsWorkspaceClient({
     paymentAmount: 5000,
     posTerminalReference: "",
   });
+  const [showWalkInPassword, setShowWalkInPassword] = useState(false);
+
+  const generateWalkInPassword = () => {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    setWalkInForm((prev) => ({ ...prev, password: `Welcome@${randomSuffix}` }));
+  };
 
   // Reconciliation reject modal
   const [rejectTxId, setRejectTxId] = useState<string | null>(null);
@@ -858,6 +868,7 @@ export default function AdmissionsWorkspaceClient({
         gender: walkInForm.gender,
         parentName: walkInForm.parentName,
         parentPhone: walkInForm.parentPhone,
+        password: walkInForm.password.trim() || undefined,
         physicalDocsSighted: {
           birthCertificate: walkInForm.docBirthCert,
           passportPhotograph: walkInForm.docPassport,
@@ -909,9 +920,10 @@ export default function AdmissionsWorkspaceClient({
         };
         setApplications((prev) => [newApp, ...prev]);
         setActiveTab("kanban");
+        const passNote = res.initialPassword ? ` (Initial Password: ${res.initialPassword})` : "";
         setFeedback({
           type: "success",
-          message: `Walk-in ${tierConfig.applicantLabel.toLowerCase()} registered: ${res.applicationNumber} (Payment Settled).`,
+          message: `Walk-in ${tierConfig.applicantLabel.toLowerCase()} registered: ${res.applicationNumber} (Payment Settled)${passNote}.`,
         });
         setWalkInForm({
           firstName: "",
@@ -920,6 +932,7 @@ export default function AdmissionsWorkspaceClient({
           email: "",
           phoneNumber: "",
           whatsappNumber: "",
+          password: "",
           dateOfBirth: "2010-01-01",
           gender: "MALE",
           parentName: "",
@@ -2534,6 +2547,46 @@ export default function AdmissionsWorkspaceClient({
                       className="w-full text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100"
                     />
                   </div>
+                </div>
+
+                {/* Password Creation for Front Desk Walk-In Applicant */}
+                <div className="pt-3 border-t border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Initial Portal Password (Desk Generated)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={generateWalkInPassword}
+                      className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Auto-Generate</span>
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <KeyRound className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showWalkInPassword ? "text" : "password"}
+                      placeholder="e.g. Welcome@2026 (or click Auto-Generate)"
+                      value={walkInForm.password}
+                      onChange={(e) => setWalkInForm({ ...walkInForm, password: e.target.value })}
+                      className="w-full text-xs pl-9 pr-10 py-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowWalkInPassword(!showWalkInPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors"
+                      title={showWalkInPassword ? "Hide password" : "Show password"}
+                    >
+                      {showWalkInPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-1">
+                    Candidate will use this password to access their student portal. Because this candidate is registered at the front desk, they will be required to change it on their first login.
+                  </p>
                 </div>
               </div>
 
