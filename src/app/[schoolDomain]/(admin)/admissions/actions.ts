@@ -4000,6 +4000,351 @@ export async function batchSendOffersAction(payload: {
 }
 
 /**
+ * Enterprise Admissions: Extend Admission Offer to a candidate,
+ * verifying admission requirements and dispatching instant omnichannel notifications.
+ */
+export async function offerAdmissionAction(payload: {
+  applicationId: string;
+  schoolId: string;
+  schoolDomain?: string;
+  grantWaiver?: boolean;
+  actorId?: string;
+  acceptanceDeadlineDays?: number;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return { success: false, error: auth.reason || "Unauthorized to offer admission." };
+    }
+
+    const app = await basePrisma.admissionsApplication.findFirst({
+      where: { id: payload.applicationId, schoolId: targetSchoolId },
+      include: { feeTransactions: true },
+    });
+
+    if (!app) {
+      return { success: false, error: "Application not found or unauthorized." };
+    }
+
+    // Evaluate Admission Requirements
+    const tierData = (app.tierSpecificData as any) || {};
+    const metadata = (app.metadata as any) || {};
+    const rawScore =
+      tierData.entranceScore ??
+      tierData.examScore ??
+      tierData.utmeScore ??
+      tierData.postUtmeScore ??
+      metadata.entranceScore ??
+      metadata.examScore ??
+      null;
+
+    const numScore = rawScore !== null && rawScore !== undefined ? Number(rawScore) : null;
+    const hasPassingScore = numScore !== null ? numScore >= 50 : true;
+
+    const oLevelCredits = Number(tierData.oLevelCredits || tierData.creditCount || 0);
+    const hasOLevel = tierData.oLevelCredits !== undefined ? oLevelCredits >= 5 : true;
+
+    const meetsRequirements = hasPassingScore && hasOLevel;
+
+    if (!meetsRequirements && !payload.grantWaiver) {
+      const reasons: string[] = [];
+      if (!hasPassingScore) reasons.push(`Entrance exam score (${numScore ?? 'N/A'}) is below the passing requirement (50%).`);
+      if (!hasOLevel) reasons.push(`O'Level credits (${oLevelCredits}) are below the minimum 5 credits requirement.`);
+      return {
+        success: false,
+        requiresWaiver: true,
+        missingRequirements: reasons,
+        error: `Candidate does not meet admission requirement: ${reasons.join(" ")}`,
+      };
+    }
+
+    const previousStatus = app.status;
+    const deadlineDays = payload.acceptanceDeadlineDays || 14;
+    const deadlineDate = new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000);
+    const deadlineStr = deadlineDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+    // Update admissionsApplication
+    await basePrisma.admissionsApplication.update({
+      where: { id: app.id },
+      data: {
+        status: ApplicationStatus.OFFER_EXTENDED,
+        metadata: {
+          ...metadata,
+          offerExtendedAt: new Date().toISOString(),
+          offerAcceptanceDeadline: deadlineDate.toISOString(),
+          extendedBy: payload.actorId || session?.email || "ADMIN",
+          waiverGranted: !meetsRequirements && payload.grantWaiver === true,
+        },
+      },
+    });
+
+    // Sync corresponding AdmissionLead if exists
+    try {
+      const matchingLead = await basePrisma.admissionLead.findFirst({
+        where: {
+          schoolId: targetSchoolId,
+          OR: [
+            { studentEmail: app.email },
+            { parentEmail: app.email },
+            { parentPhone: app.phoneNumber },
+            { applicantName: { equals: `${app.firstName} ${app.lastName}`, mode: "insensitive" } },
+          ],
+        },
+      });
+      if (matchingLead) {
+        const leadToken = matchingLead.offerToken || `OFFER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const updatedLead = await basePrisma.admissionLead.update({
+          where: { id: matchingLead.id },
+          data: {
+            status: "APPROVED",
+            offerToken: leadToken,
+            offerExpiresAt: deadlineDate,
+          },
+        });
+        const leadSchool = await basePrisma.school.findUnique({ where: { id: targetSchoolId } });
+        if (leadSchool) {
+          sendAdmissionOfferEmail(updatedLead, leadSchool, leadToken).catch((err) =>
+            console.warn("[offerAdmissionAction] Direct email dispatch warning:", err)
+          );
+        }
+      }
+    } catch (leadSyncErr) {
+      console.warn("[offerAdmissionAction] Lead sync warning:", leadSyncErr);
+    }
+
+    // Record immutable audit trail
+    try {
+      await basePrisma.admissionAuditTrail.create({
+        data: {
+          tenantId: targetSchoolId,
+          schoolId: targetSchoolId,
+          applicationId: app.id,
+          registerId: app.id,
+          actorId: payload.actorId || session?.email || "ADMIN",
+          action: "PROVISIONAL_OFFER_EXTENDED",
+          fromStage: previousStatus,
+          toStage: "OFFER_EXTENDED",
+          metadata: {
+            deadline: deadlineDate.toISOString(),
+            waiverGranted: !meetsRequirements && payload.grantWaiver === true,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[offerAdmissionAction] Audit trail warning:", auditErr);
+    }
+
+    // Instant Omnichannel Notification Dispatch
+    const school = await basePrisma.school.findFirst({
+      where: { id: targetSchoolId },
+      select: { name: true, subdomain: true },
+    });
+    const host = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const offerLetterUrl = `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/admissions/offer/${app.id}`;
+
+    let notifResult: any = null;
+    try {
+      notifResult = await dispatchAdmissionsNotification({
+        tenantId: targetSchoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: app.applicationNumber,
+        recipient: {
+          name: `${app.firstName} ${app.lastName}`,
+          email: app.email,
+          phone: app.phoneNumber,
+          whatsappNumber: app.whatsappNumber || app.phoneNumber,
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl,
+        acceptanceDeadline: deadlineStr,
+      });
+    } catch (notifErr) {
+      console.warn("[offerAdmissionAction] Notification dispatch warning:", notifErr);
+    }
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return {
+      success: true,
+      newStage: "OFFER_EXTENDED",
+      message: `Admission offer successfully extended to ${app.firstName} ${app.lastName}! Notification dispatched instantly via Email, WhatsApp & SMS.`,
+      notification: notifResult,
+    };
+  } catch (err: any) {
+    console.error("[offerAdmissionAction] Error:", err);
+    return { success: false, error: err.message || "Failed to offer admission." };
+  }
+}
+
+/**
+ * Batch Offer Admission: Instantly offers admission and dispatches notifications
+ * to all candidates that pass the admission requirement (or selected candidate IDs).
+ */
+export async function batchOfferAdmissionAction(payload: {
+  schoolId: string;
+  schoolDomain?: string;
+  applicationIds?: string[];
+  qualifiedOnly?: boolean;
+  minPassingScore?: number;
+  actorId?: string;
+}) {
+  try {
+    const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    const session = await getSession(undefined, payload.schoolDomain);
+    const auth = checkRouteAuthorization(session, { resource: "admissions", action: "mutate" });
+    if (session && !auth.canMutate) {
+      return { success: false, error: auth.reason || "Unauthorized to batch offer admission." };
+    }
+
+    const school = await basePrisma.school.findFirst({
+      where: { id: targetSchoolId },
+      select: { name: true, subdomain: true },
+    });
+    const host = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
+    const minScore = payload.minPassingScore ?? 50;
+
+    // Fetch candidate pool
+    const candidates = await basePrisma.admissionsApplication.findMany({
+      where: {
+        schoolId: targetSchoolId,
+        ...(payload.applicationIds && payload.applicationIds.length > 0
+          ? { id: { in: payload.applicationIds } }
+          : {
+              status: {
+                notIn: [
+                  ApplicationStatus.OFFER_EXTENDED,
+                  ApplicationStatus.OFFER_ACCEPTED,
+                  ApplicationStatus.ENROLLED,
+                  ApplicationStatus.REJECTED,
+                ],
+              },
+            }),
+      },
+      include: { feeTransactions: true },
+    });
+
+    const qualifyingCandidates: typeof candidates = [];
+
+    for (const app of candidates) {
+      if (payload.qualifiedOnly !== false) {
+        const tierData = (app.tierSpecificData as any) || {};
+        const metadata = (app.metadata as any) || {};
+        const rawScore =
+          tierData.entranceScore ??
+          tierData.examScore ??
+          tierData.utmeScore ??
+          tierData.postUtmeScore ??
+          metadata.entranceScore ??
+          metadata.examScore ??
+          null;
+
+        const numScore = rawScore !== null && rawScore !== undefined ? Number(rawScore) : null;
+        const hasPassingScore = numScore !== null ? numScore >= minScore : true;
+        const oLevelCredits = Number(tierData.oLevelCredits || tierData.creditCount || 0);
+        const hasOLevel = tierData.oLevelCredits !== undefined ? oLevelCredits >= 5 : true;
+
+        if (hasPassingScore && hasOLevel) {
+          qualifyingCandidates.push(app);
+        }
+      } else {
+        qualifyingCandidates.push(app);
+      }
+    }
+
+    if (qualifyingCandidates.length === 0) {
+      return {
+        success: true,
+        processedCount: 0,
+        message: "No candidates currently meet the admission requirements for automated offer dispatch.",
+      };
+    }
+
+    let successCount = 0;
+    const deadlineDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const deadlineStr = deadlineDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+    // Process updates and dispatches
+    for (const app of qualifyingCandidates) {
+      const prevStatus = app.status;
+
+      await basePrisma.admissionsApplication.update({
+        where: { id: app.id },
+        data: {
+          status: ApplicationStatus.OFFER_EXTENDED,
+          metadata: {
+            ...((app.metadata as any) || {}),
+            offerExtendedAt: new Date().toISOString(),
+            offerAcceptanceDeadline: deadlineDate.toISOString(),
+            extendedBy: payload.actorId || session?.email || "ADMIN",
+            batchOffer: true,
+          },
+        },
+      });
+
+      // Audit trail
+      try {
+        await basePrisma.admissionAuditTrail.create({
+          data: {
+            tenantId: targetSchoolId,
+            schoolId: targetSchoolId,
+            applicationId: app.id,
+            registerId: app.id,
+            actorId: payload.actorId || session?.email || "ADMIN",
+            action: "PROVISIONAL_OFFER_EXTENDED",
+            fromStage: prevStatus,
+            toStage: "OFFER_EXTENDED",
+            metadata: {
+              batch: true,
+              deadline: deadlineDate.toISOString(),
+              timestamp: new Date().toISOString(),
+            },
+          },
+        });
+      } catch (auditErr) {
+        console.warn("[batchOfferAdmissionAction] Audit trail warning:", auditErr);
+      }
+
+      // Instant Omnichannel Notification
+      dispatchAdmissionsNotification({
+        tenantId: targetSchoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: app.applicationNumber,
+        recipient: {
+          name: `${app.firstName} ${app.lastName}`,
+          email: app.email,
+          phone: app.phoneNumber,
+          whatsappNumber: app.whatsappNumber || app.phoneNumber,
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl: `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/admissions/offer/${app.id}`,
+        acceptanceDeadline: deadlineStr,
+      }).catch((e) => console.warn("[batchOfferAdmissionAction notification]", e));
+
+      successCount++;
+    }
+
+    if (payload.schoolDomain) {
+      safeRevalidate(`/${payload.schoolDomain}/admissions`);
+    }
+
+    return {
+      success: true,
+      processedCount: successCount,
+      processedIds: qualifyingCandidates.map((c) => c.id),
+      message: `Provisional admission offers successfully extended and notifications instantly dispatched to ${successCount} qualifying candidate(s).`,
+    };
+  } catch (err: any) {
+    console.error("[batchOfferAdmissionAction] Error:", err);
+    return { success: false, error: err.message || "Failed to batch offer admission." };
+  }
+}
+
+/**
  * Enterprise Admissions: Export JAMB CAPS Candidate CSV
  */
 export async function exportJambCapsCsvAction(payload: {

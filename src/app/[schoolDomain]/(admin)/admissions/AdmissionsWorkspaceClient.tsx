@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useMemo, useEffect } from "react";
+import React, { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Receipt,
   Download,
+  Printer,
+  Loader2,
   Filter,
   Search,
   Plus,
@@ -51,6 +53,8 @@ import {
   updateApplicationStageAction,
   enrollAdmissionsApplicationAction,
   batchSendOffersAction,
+  offerAdmissionAction,
+  batchOfferAdmissionAction,
   exportJambCapsCsvAction,
   reconcileFeeAction,
   verifyDocumentAction,
@@ -345,6 +349,12 @@ export default function AdmissionsWorkspaceClient({
   const [selectedAppIds, setSelectedAppIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
+  // View filter: ALL, QUALIFIED, or ADMISSION_LIST
+  const [registerViewFilter, setRegisterViewFilter] = useState<"ALL" | "QUALIFIED" | "ADMISSION_LIST">("ALL");
+  const [offeringAdmissionId, setOfferingAdmissionId] = useState<string | null>(null);
+  const [isOfferingBatch, setIsOfferingBatch] = useState(false);
+  const [requirementsWaiverApp, setRequirementsWaiverApp] = useState<{ app: SerializedApplication; missing: string[] } | null>(null);
+  const [confirmBatchOfferOpen, setConfirmBatchOfferOpen] = useState(false);
 
   // Walk-In Drawer state
   const [walkInDrawerOpen, setWalkInDrawerOpen] = useState(false);
@@ -440,7 +450,7 @@ export default function AdmissionsWorkspaceClient({
   };
 
   // Helper to determine fee status
-  const getFeeStatus = (app: SerializedApplication): "UNPAID" | "PENDING" | "SETTLED" => {
+  const getFeeStatus = useCallback((app: SerializedApplication): "UNPAID" | "PENDING" | "SETTLED" => {
     const metaDocs = (app.metadata as any)?.documents || {};
     const tierDocs = (app.tierSpecificData as any)?.documents || {};
     const hasSettledTx = app.feeTransactions?.some(
@@ -494,7 +504,7 @@ export default function AdmissionsWorkspaceClient({
     if (hasPendingDoc) return "PENDING";
 
     return "UNPAID";
-  };
+  }, []);
 
   // Helper for document status
   const getDocStatus = (app: SerializedApplication): "PENDING" | "MANUALLY_VERIFIED" | "REJECTED" => {
@@ -638,6 +648,135 @@ export default function AdmissionsWorkspaceClient({
         setFeedback({ type: "success", message: res.message || "Batch offers sent." });
       } else {
         setFeedback({ type: "error", message: res.error || "Failed to send batch offers." });
+      }
+    });
+  };
+
+  // Action: Offer Admission to single candidate
+  const handleOfferAdmission = async (app: SerializedApplication, grantWaiver: boolean = false) => {
+    const reqCheck = checkCandidateRequirements(app);
+    if (!reqCheck.isQualified && !grantWaiver) {
+      setRequirementsWaiverApp({ app, missing: reqCheck.missing });
+      return;
+    }
+
+    setOfferingAdmissionId(app.id);
+    setRequirementsWaiverApp(null);
+
+    // Optimistic UI transition
+    setApplications((prev) =>
+      prev.map((a) => (a.id === app.id ? { ...a, status: "OFFER_EXTENDED" } : a))
+    );
+
+    try {
+      const res = await offerAdmissionAction({
+        applicationId: app.id,
+        schoolId,
+        schoolDomain,
+        grantWaiver,
+      });
+
+      if (res.success) {
+        setFeedback({
+          type: "success",
+          message: res.message || `Provisional admission offer successfully dispatched to ${app.firstName} ${app.lastName}! Omnichannel notification sent.`,
+        });
+      } else {
+        // Revert optimistic update on failure
+        setApplications((prev) =>
+          prev.map((a) => (a.id === app.id ? { ...a, status: app.status } : a))
+        );
+        setFeedback({ type: "error", message: res.error || "Failed to offer admission." });
+      }
+    } catch (err: any) {
+      setApplications((prev) =>
+        prev.map((a) => (a.id === app.id ? { ...a, status: app.status } : a))
+      );
+      setFeedback({ type: "error", message: err.message || "Failed to offer admission." });
+    } finally {
+      setOfferingAdmissionId(null);
+    }
+  };
+
+  // Action: Offer Admission to all candidates that pass requirements
+  const handleOfferAdmissionToAllQualified = async () => {
+    if (qualifiedCandidates.length === 0) {
+      setFeedback({
+        type: "error",
+        message: "There are currently no candidates meeting passing requirements awaiting an offer.",
+      });
+      return;
+    }
+
+    setIsOfferingBatch(true);
+    setConfirmBatchOfferOpen(false);
+
+    try {
+      const res = await batchOfferAdmissionAction({
+        schoolId,
+        schoolDomain,
+        qualifiedOnly: true,
+      });
+
+      if (res.success && (res.processedCount ?? 0) > 0) {
+        const processedSet = new Set(res.processedIds || []);
+        setApplications((prev) =>
+          prev.map((a) => (processedSet.has(a.id) ? { ...a, status: "OFFER_EXTENDED" } : a))
+        );
+        setRegisterViewFilter("ADMISSION_LIST"); // Automatically display the official Admission List!
+        setFeedback({
+          type: "success",
+          message: res.message || `🎉 Successfully offered admission and dispatched notifications to ${res.processedCount} qualified candidate(s)!`,
+        });
+      } else {
+        setFeedback({
+          type: res.success ? "success" : "error",
+          message: res.message || res.error || "No candidates were processed.",
+        });
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err.message || "Failed to batch offer admission." });
+    } finally {
+      setIsOfferingBatch(false);
+    }
+  };
+
+  // Action: Print Official Published Admission List
+  const handlePrintAdmissionList = () => {
+    window.print();
+  };
+
+  // Batch action: Offer Admission to selected candidates
+  const handleBatchOfferAdmissionSelected = () => {
+    if (selectedAppIds.length === 0) return;
+    setIsOfferingBatch(true);
+    startTransition(async () => {
+      try {
+        const res = await batchOfferAdmissionAction({
+          applicationIds: selectedAppIds,
+          schoolId,
+          schoolDomain,
+          qualifiedOnly: false,
+        });
+
+        if (res.success) {
+          setApplications((prev) =>
+            prev.map((a) =>
+              selectedAppIds.includes(a.id) ? { ...a, status: "OFFER_EXTENDED" } : a
+            )
+          );
+          setSelectedAppIds([]);
+          setFeedback({
+            type: "success",
+            message: res.message || `Admission offers extended and notifications dispatched to ${res.processedCount ?? selectedAppIds.length} selected candidate(s).`,
+          });
+        } else {
+          setFeedback({ type: "error", message: res.error || "Failed to batch offer admission." });
+        }
+      } catch (err: any) {
+        setFeedback({ type: "error", message: err.message || "Failed to batch offer admission." });
+      } finally {
+        setIsOfferingBatch(false);
       }
     });
   };
@@ -932,9 +1071,86 @@ export default function AdmissionsWorkspaceClient({
     });
   };
 
+  // Evaluate whether candidate satisfies admission requirements
+  const checkCandidateRequirements = useCallback((app: SerializedApplication) => {
+    const tierData = (app.tierSpecificData as any) || {};
+    const metadata = (app.metadata as any) || {};
+    const rawScore =
+      tierData.entranceScore ??
+      tierData.examScore ??
+      tierData.utmeScore ??
+      tierData.postUtmeScore ??
+      metadata.entranceScore ??
+      metadata.examScore ??
+      null;
+
+    const numScore = rawScore !== null && rawScore !== undefined ? Number(rawScore) : null;
+    const minCutoff = tierConfig.showPostUTME ? 160 : 50;
+    const hasPassingScore = numScore !== null ? numScore >= minCutoff : true;
+
+    const oLevelCredits = Number(tierData.oLevelCredits || tierData.creditCount || 0);
+    const hasOLevel = tierConfig.showOLevel ? oLevelCredits >= 5 : true;
+
+    const feeStatus = getFeeStatus(app);
+    const feePaid =
+      feeStatus === "SETTLED" ||
+      Boolean(app.feeTransactions?.some((t) => t.paymentStatus === "SUCCESS" || t.paymentStatus === "PAID")) ||
+      metadata.formFeeStatus === "PAID" ||
+      metadata.formFeeStatus === "SETTLED";
+
+    const missing: string[] = [];
+    if (numScore !== null && !hasPassingScore) {
+      missing.push(`Entrance score (${numScore}) is below passing threshold (${minCutoff}).`);
+    }
+    if (tierConfig.showOLevel && !hasOLevel) {
+      missing.push(`O'Level credits (${oLevelCredits}) is below minimum 5 credits.`);
+    }
+
+    const isQualified = hasPassingScore && hasOLevel && app.status !== "REJECTED";
+
+    return {
+      isQualified,
+      numScore,
+      hasPassingScore,
+      oLevelCredits,
+      hasOLevel,
+      feePaid,
+      missing,
+    };
+  }, [tierConfig, getFeeStatus]);
+
+  // Pre-filtered admission list & qualified pool
+  const admissionListApps = useMemo(() => {
+    return applications.filter((a) =>
+      ["OFFER_EXTENDED", "OFFER_ACCEPTED", "APPROVED", "ADMITTED", "ENROLLED"].includes((a.status || "").toUpperCase())
+    );
+  }, [applications]);
+
+  const qualifiedCandidates = useMemo(() => {
+    return applications.filter(
+      (a) =>
+        !["OFFER_EXTENDED", "OFFER_ACCEPTED", "APPROVED", "ADMITTED", "ENROLLED", "REJECTED"].includes(
+          (a.status || "").toUpperCase()
+        ) && checkCandidateRequirements(a).isQualified
+    );
+  }, [applications, checkCandidateRequirements]);
+
   // Filtered applications for Register Data Table
   const filteredRegister = useMemo(() => {
     return applications.filter((app) => {
+      // 1. Admission List / Qualified view filter
+      if (registerViewFilter === "ADMISSION_LIST") {
+        const isOfferedOrAdmitted = ["OFFER_EXTENDED", "OFFER_ACCEPTED", "APPROVED", "ADMITTED", "ENROLLED"].includes(
+          (app.status || "").toUpperCase()
+        );
+        if (!isOfferedOrAdmitted) return false;
+      } else if (registerViewFilter === "QUALIFIED") {
+        const isAlreadyOffered = ["OFFER_EXTENDED", "OFFER_ACCEPTED", "APPROVED", "ADMITTED", "ENROLLED", "REJECTED"].includes(
+          (app.status || "").toUpperCase()
+        );
+        if (isAlreadyOffered || !checkCandidateRequirements(app).isQualified) return false;
+      }
+
       // Session filter
       if (selectedSession !== "ALL" && app.academicSessionId !== selectedSession) {
         return false;
@@ -966,7 +1182,7 @@ export default function AdmissionsWorkspaceClient({
       }
       return true;
     });
-  }, [applications, selectedSession, selectedProgram, filterOLevel5, minUtmeScore, searchQuery]);
+  }, [applications, registerViewFilter, selectedSession, selectedProgram, filterOLevel5, minUtmeScore, searchQuery, checkCandidateRequirements]);
 
   const totalPages = Math.ceil(filteredRegister.length / pageSize) || 1;
   const paginatedRegister = useMemo(() => {
@@ -1156,6 +1372,21 @@ export default function AdmissionsWorkspaceClient({
             <TabsTrigger value="register" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
               Admissions Register Table
             </TabsTrigger>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("register");
+                setRegisterViewFilter("ADMISSION_LIST");
+              }}
+              className={`text-xs font-semibold px-4 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition ${
+                activeTab === "register" && registerViewFilter === "ADMISSION_LIST"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Admission List ({admissionListApps.length})</span>
+            </button>
             <TabsTrigger value="walkin" className="text-xs font-semibold px-4 py-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900 shadow-xs">
               Walk-In Intake Drawer
             </TabsTrigger>
@@ -1777,12 +2008,13 @@ export default function AdmissionsWorkspaceClient({
                     </button>
                   )}
                   <button
-                    onClick={handleBatchSendOffers}
-                    disabled={isPending}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                    onClick={handleBatchOfferAdmissionSelected}
+                    disabled={isPending || isOfferingBatch}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition disabled:opacity-50"
+                    title="Offer admission to selected candidates"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Batch Send Offers</span>
+                    {isOfferingBatch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />}
+                    <span>Offer Admission ({selectedAppIds.length})</span>
                   </button>
                   <button
                     onClick={() => setSelectedAppIds([])}
@@ -2022,14 +2254,41 @@ export default function AdmissionsWorkspaceClient({
                                   Matriculate
                                 </button>
                               )}
-                              {/* Stage update */}
-                              <button
-                                onClick={() => handleStageChange(app.id, "OFFER_EXTENDED")}
-                                disabled={isPending || app.status === "OFFER_EXTENDED" || app.status === "ENROLLED"}
-                                className="px-2 py-1 rounded-md text-[10px] font-bold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
-                              >
-                                Extend Offer
-                              </button>
+                              {/* Offer Admission Action Button */}
+                              {app.status === "OFFER_EXTENDED" || app.status === "OFFER_ACCEPTED" || app.status === "APPROVED" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" title="Provisional admission offer active and notification dispatched">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Admitted</span>
+                                </span>
+                              ) : app.status !== "ENROLLED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOfferAdmission(app)}
+                                  disabled={isPending || offeringAdmissionId === app.id || isOfferingBatch}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition shadow-2xs cursor-pointer ${
+                                    checkCandidateRequirements(app).isQualified
+                                      ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                      : "bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                  } disabled:opacity-50`}
+                                  title={
+                                    checkCandidateRequirements(app).isQualified
+                                      ? "Passes entrance requirements: Click to offer admission and dispatch instant notification"
+                                      : "Admission requirements pending: Click to review or grant administrative waiver"
+                                  }
+                                >
+                                  {offeringAdmissionId === app.id ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      <span>Offering...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Award className="w-3 h-3" />
+                                      <span>Offer Admission</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
 
                               {/* Delete Applicant Record */}
                               {canMutate && (
@@ -3176,6 +3435,98 @@ export default function AdmissionsWorkspaceClient({
         />
         );
       })()}
+      {/* Requirements Warning / Waiver Modal */}
+      {requirementsWaiverApp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-amber-200 dark:border-amber-800/80 max-w-md w-full p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Admission Requirement Notice
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                  <strong>{requirementsWaiverApp.app.firstName} {requirementsWaiverApp.app.lastName}</strong> ({requirementsWaiverApp.app.applicationNumber}) has pending prerequisite criteria:
+                </p>
+                <ul className="mt-2 text-xs text-amber-800 dark:text-amber-300 list-disc list-inside space-y-1 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/60">
+                  {requirementsWaiverApp.missing.map((m, idx) => (
+                    <li key={idx}>{m}</li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-2">
+                  As an admissions administrator, you may grant an official administrative waiver to extend the admission offer.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setRequirementsWaiverApp(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOfferAdmission(requirementsWaiverApp.app, true)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+              >
+                Grant Waiver & Offer Admission
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Offer Admission to All Qualified Confirmation Modal */}
+      {confirmBatchOfferOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-indigo-200 dark:border-indigo-800 max-w-md w-full p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                <Award className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                  Offer Admission to Qualified Candidates
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-zinc-300 mt-1">
+                  You are about to offer provisional admission to <strong>{qualifiedCandidates.length}</strong> candidate{qualifiedCandidates.length === 1 ? "" : "s"} who passed institutional entrance requirements.
+                </p>
+                <div className="mt-3 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Instant Omnichannel Delivery</span>
+                  </div>
+                  <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                    Formal admission offer letters and acceptance guidelines will be dispatched instantly via Email, WhatsApp & SMS.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setConfirmBatchOfferOpen(false)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleOfferAdmissionToAllQualified}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Confirm & Dispatch Offers</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   X,
   Trash2,
   Sparkles,
+  Award,
 } from "lucide-react";
 import ApplicantDossierDrawer from "./ApplicantDossierDrawer";
 import {
@@ -33,6 +34,7 @@ import {
   saveManualEntranceScoreAction,
   bulkSaveManualEntranceScoresAction,
   transitionCandidateStageAction,
+  offerAdmissionAction,
   deleteApplicantAction,
   deduplicateAdmissionsAction,
 } from "./actions";
@@ -308,9 +310,19 @@ export default function AdmissionRegisterTable({
         r.classApplied.toLowerCase().includes(q);
 
       const s = r.status;
+      const isAdmissionListRow =
+        s === "APPROVED" ||
+        s === "OFFERED" ||
+        s === "PROVISIONAL" ||
+        s === "OFFER_EXTENDED" ||
+        s === "ENROLLED" ||
+        s === "CONVERTED" ||
+        s === "ADMITTED";
+
       const matchesStatus =
         statusFilter === "ALL" ||
         s === statusFilter ||
+        (statusFilter === "ADMISSION_LIST" && isAdmissionListRow) ||
         (statusFilter === "DOCS_PENDING" && (s === "APPLIED" || s === "DOCS_PENDING" || s === "NEW")) ||
         (statusFilter === "INTERVIEW" && (s === "INTERVIEW" || s === "VERIFIED" || s === "SCREENED")) ||
         (statusFilter === "CONVERTED" && (s === "ENROLLED" || s === "CONVERTED" || s === "ADMITTED"));
@@ -498,6 +510,60 @@ export default function AdmissionRegisterTable({
     } catch (err: any) {
       console.error("Stage transition error:", err);
       setActionMessage({ type: "error", text: err.message || "Stage transition failed." });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Offer Admission to single candidate
+  const handleOfferAdmissionRow = async (row: UnifiedApplicantRow) => {
+    if (!canMutate) {
+      setActionMessage({ type: "error", text: "Access Denied: Only authorized staff can extend offers." });
+      return;
+    }
+
+    setActionLoadingId(row.id);
+    setActionMessage(null);
+
+    try {
+      if (row.registerId) {
+        const res = await offerAdmissionAction({
+          applicationId: row.registerId,
+          schoolId,
+          schoolDomain,
+          grantWaiver: true,
+        });
+        if (res.success) {
+          setActionMessage({
+            type: "success",
+            text: res.message || `Admission offer successfully extended to ${row.fullName}! Notification dispatched.`,
+          });
+          await fetchRecords();
+        } else {
+          setActionMessage({ type: "error", text: res.error || "Failed to extend offer." });
+        }
+      } else if (row.leadId) {
+        const res = await transitionCandidateStageAction({
+          leadId: row.leadId,
+          schoolId,
+          targetStatus: "APPROVED",
+          schoolDomain,
+        });
+        if (res.success) {
+          setActionMessage({
+            type: "success",
+            text: `Admission offer successfully extended to ${row.fullName}! Notification dispatched.`,
+          });
+          if (row.rawLead && onLeadUpdated) {
+            onLeadUpdated({ ...row.rawLead, status: "APPROVED" });
+          }
+          await fetchRecords();
+        } else {
+          setActionMessage({ type: "error", text: res.error || "Failed to extend offer." });
+        }
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message || "Failed to extend offer." });
     } finally {
       setActionLoadingId(null);
     }
@@ -742,6 +808,7 @@ export default function AdmissionRegisterTable({
             className="px-3 py-2 text-xs sm:text-sm font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-zinc-200 shadow-2xs shrink-0"
           >
             <option value="ALL">All Stages ({unifiedRows.length})</option>
+            <option value="ADMISSION_LIST">🎓 Admission List (Offered / Admitted)</option>
             <option value="INQUIRY">Inquiry</option>
             <option value="DOCS_PENDING">Docs Pending</option>
             <option value="INTERVIEW">Exam / Screening</option>
@@ -1071,6 +1138,19 @@ export default function AdmissionRegisterTable({
                             </button>
                           )}
 
+                          {canMutate && !["APPROVED", "OFFERED", "OFFER_EXTENDED", "ENROLLED", "CONVERTED", "ADMITTED"].includes(r.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleOfferAdmissionRow(r)}
+                              disabled={isActionLoading}
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition shadow-xs cursor-pointer flex items-center gap-1"
+                              title="Offer Admission and dispatch instant notification"
+                            >
+                              <Award className="w-3.5 h-3.5" />
+                              <span>{isActionLoading && actionLoadingId === r.id ? "..." : "Offer Admission"}</span>
+                            </button>
+                          )}
+
                           {canMutate && r.status !== "ENROLLED" && (
                             <button
                               type="button"
@@ -1078,7 +1158,7 @@ export default function AdmissionRegisterTable({
                               disabled={isActionLoading}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
                             >
-                              {isActionLoading ? "..." : "Admit"}
+                              {isActionLoading && actionLoadingId === r.id ? "..." : "Admit"}
                             </button>
                           )}
 
