@@ -1587,6 +1587,29 @@ export async function enrollApplicantAction(
       console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error in enrollLead:", emailErr);
     }
 
+    // Automated Admission Offer Notification Dispatch
+    try {
+      const host = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng";
+      const offerLetterUrl = `${host}/${domain || "portal"}/admissions/offer/${lead.id}`;
+      await dispatchAdmissionsNotification({
+        tenantId: schoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber: admissionNumber,
+        recipient: {
+          name: `${firstName} ${lastName}`.trim(),
+          email: lead.studentEmail || lead.parentEmail || "",
+          phone: lead.parentPhone || lead.parentContact || "",
+          whatsappNumber: lead.parentPhone || lead.parentContact || "",
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl,
+        acceptanceFeeAmount: 50000,
+        acceptanceDeadline: "Within 14 days",
+      });
+    } catch (offerErr) {
+      console.warn("[enrollApplicantAction] Warning dispatching PROVISIONAL_OFFER notification:", offerErr);
+    }
+
     return {
       success: true,
       student: newStudent,
@@ -1651,6 +1674,65 @@ export async function enrollApplicantFromRegisterAction(payload: {
 
     if (!handshakeResult.success) {
       return { success: false, error: handshakeResult.error };
+    }
+
+    // Automated Notification Dispatch: Instantly notify applicant of Admission Offer & Matriculation Clearance
+    const db = getCentralDb(schoolId);
+    const school = await db.school.findFirst({
+      where: { id: schoolId },
+      select: { name: true, subdomain: true },
+    });
+
+    const host = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng";
+    const student = handshakeResult.student;
+    const register = handshakeResult.register;
+    const applicantName = `${student?.firstName || register?.firstName || ""} ${student?.lastName || register?.lastName || ""}`.trim() || "Applicant";
+    const recipientEmail = student?.email || register?.email || student?.parentEmail || "";
+    const recipientPhone = student?.parentPhone || register?.parentPhone || "";
+    const applicantNumber = register?.applicationNo || handshakeResult.matricNo || "ADM-OFFER";
+    const offerLetterUrl = `${host}/${school?.subdomain || schoolDomain || "portal"}/admissions/offer/${register?.id || register?.applicationNo || student?.id}`;
+
+    // 1. Dispatch Automated Admission Offer Notification to applicant
+    try {
+      await dispatchAdmissionsNotification({
+        tenantId: schoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber,
+        recipient: {
+          name: applicantName,
+          email: recipientEmail,
+          phone: recipientPhone,
+          whatsappNumber: recipientPhone,
+        },
+        event: "PROVISIONAL_OFFER",
+        offerLetterUrl,
+        acceptanceFeeAmount: payload.tuitionFeeAmount || 50000,
+        acceptanceDeadline: "Within 14 days",
+      });
+    } catch (notifErr) {
+      console.warn("[enrollApplicantFromRegisterAction] Warning dispatching PROVISIONAL_OFFER notification:", notifErr);
+    }
+
+    // 2. Dispatch Formal Matriculation & Clearance Notification to applicant
+    try {
+      await dispatchAdmissionsNotification({
+        tenantId: schoolId,
+        schoolName: school?.name || "School ERP",
+        applicantNumber,
+        recipient: {
+          name: applicantName,
+          email: recipientEmail,
+          phone: recipientPhone,
+          whatsappNumber: recipientPhone,
+        },
+        event: "ENROLLED",
+        matriculationNumber: handshakeResult.matricNo || student?.admissionNumber || applicantNumber,
+        studentPortalUrl: `${host}/${school?.subdomain || schoolDomain || "portal"}/portal/student`,
+        portalUsername: recipientEmail || handshakeResult.matricNo,
+        portalTempPassword: "Welcome123",
+      });
+    } catch (notifErr) {
+      console.warn("[enrollApplicantFromRegisterAction] Warning dispatching ENROLLED notification:", notifErr);
     }
 
     await invalidateAdmissionsNamespace(schoolId);
@@ -3685,9 +3767,12 @@ export async function enrollAdmissionsApplicationAction(payload: {
 }) {
   try {
     const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    let db: any = (process.env.DEMO_DATABASE_URL && (isDemoSchool(targetSchoolId) || isDemoSchool(payload.schoolDomain) || isDemoSchool(payload.schoolId)))
+      ? getDemoPrismaClient()
+      : basePrisma;
 
     // 1. Retrieve the AdmissionsApplication with tenant scoping
-    const application = await basePrisma.admissionsApplication.findFirst({
+    let application = await db.admissionsApplication.findFirst({
       where: {
         id: payload.applicationId,
         schoolId: targetSchoolId,
@@ -3698,11 +3783,41 @@ export async function enrollAdmissionsApplicationAction(payload: {
     });
 
     if (!application) {
+      application = await db.admissionsApplication.findFirst({
+        where: {
+          id: payload.applicationId,
+          OR: [
+            { schoolId: targetSchoolId },
+            { tenantId: targetSchoolId },
+          ],
+        },
+        include: {
+          documents: true,
+        },
+      });
+    }
+
+    if (!application && process.env.DEMO_DATABASE_URL && db === basePrisma) {
+      try {
+        const demoClient = getDemoPrismaClient();
+        const demoApp = await demoClient.admissionsApplication.findFirst({
+          where: { id: payload.applicationId },
+          include: { documents: true },
+        });
+        if (demoApp) {
+          application = demoApp;
+          db = demoClient;
+          if (demoApp.schoolId) setDemoSchoolId(demoApp.schoolId);
+        }
+      } catch {}
+    }
+
+    if (!application) {
       return { success: false, error: "Admissions application record not found for this tenant." };
     }
 
     // 2. Resolve School and Academic Tier
-    const school = await basePrisma.school.findUnique({
+    const school = await db.school.findUnique({
       where: { id: targetSchoolId },
       include: {
         academicTiers: { orderBy: { level: "asc" } },
@@ -3718,7 +3833,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
       return { success: false, error: "Academic tier is required for student enrollment." };
     }
 
-    const targetTier = school.academicTiers.find((t) => t.id === targetTierId) || school.academicTiers[0];
+    const targetTier = (school.academicTiers || []).find((t: any) => t.id === targetTierId) || school.academicTiers[0];
     const tenantDb = await getPrismaClientForTier(targetSchoolId, targetTier.name);
 
     // 3. Compute Admission/Matriculation Number via Tenant Formula
@@ -3745,7 +3860,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
     const parentPhone = parentData.phone || application.phoneNumber;
 
     // 5. Execute Atomic Enrollment Transaction
-    const result = await basePrisma.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx: any) => {
       // Step A: Create or Link User
       const user = await tx.user.upsert({
         where: { schoolId_email: { schoolId: targetSchoolId, email: userEmail } },
@@ -3900,7 +4015,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
 
     // Record immutable AdmissionAuditTrail (defensive fallback outside transaction)
     try {
-      await basePrisma.admissionAuditTrail.create({
+      await db.admissionAuditTrail.create({
         data: {
           tenantId: targetSchoolId,
           schoolId: targetSchoolId,
@@ -3922,7 +4037,26 @@ export async function enrollAdmissionsApplicationAction(payload: {
       console.warn("[enrollAdmissionsApplicationAction] Warning recording audit trail:", auditErr);
     }
 
-    // 6. Dispatch Omnichannel Welcome & Matriculation Clearance
+    // 6. Dispatch Automated Admission Offer Notification to applicant
+    const host = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng";
+    const offerLetterUrl = `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/admissions/offer/${application.id}`;
+    await dispatchAdmissionsNotification({
+      tenantId: targetSchoolId,
+      schoolName: school.name,
+      applicantNumber: application.applicationNumber,
+      recipient: {
+        name: `${application.firstName} ${application.lastName}`,
+        email: userEmail,
+        phone: application.phoneNumber,
+        whatsappNumber: application.whatsappNumber || application.phoneNumber,
+      },
+      event: "PROVISIONAL_OFFER",
+      offerLetterUrl,
+      acceptanceFeeAmount: payload.termFeeAmount || 50000,
+      acceptanceDeadline: "Within 14 days",
+    }).catch((err) => console.warn("[dispatchAdmissionsNotification:PROVISIONAL_OFFER]", err));
+
+    // 7. Dispatch Omnichannel Welcome & Matriculation Clearance
     await dispatchAdmissionsNotification({
       tenantId: targetSchoolId,
       schoolName: school.name,
@@ -3935,6 +4069,9 @@ export async function enrollAdmissionsApplicationAction(payload: {
       },
       event: "ENROLLED",
       matriculationNumber,
+      studentPortalUrl: `${host}/${school?.subdomain || payload.schoolDomain || "portal"}/portal/student`,
+      portalUsername: userEmail,
+      portalTempPassword: rawTempPassword,
     }).catch((err) => console.warn("[dispatchAdmissionsNotification:ENROLLED]", err));
 
     await invalidateStudentNamespace(targetSchoolId);

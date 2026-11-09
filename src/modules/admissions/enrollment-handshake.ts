@@ -1,4 +1,4 @@
-import { basePrisma } from "@/lib/tenant-prisma";
+import { basePrisma, isDemoSchool, getDemoPrismaClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 
 export interface EnrollmentHandshakeInput {
@@ -38,7 +38,11 @@ export async function executeEnrollmentHandshake(
   }
 
   try {
-    return await basePrisma.$transaction(async (tx) => {
+    const db: any = (process.env.DEMO_DATABASE_URL && (isDemoSchool(tenantId) || isDemoSchool(schoolDomain)))
+      ? getDemoPrismaClient()
+      : basePrisma;
+
+    return await db.$transaction(async (tx: any) => {
       // 1. TENANT ISOLATION GUARD: Query strictly scoped to tenantId
       const register = await tx.admissionRegister.findFirst({
         where: {
@@ -280,6 +284,29 @@ export async function executeEnrollmentHandshake(
         });
       } catch (leadSyncErr) {
         console.warn("[executeEnrollmentHandshake] Warning syncing lead status:", leadSyncErr);
+      }
+
+      // 11. SYNC TO ADMISSIONS APPLICATION IF LINKED
+      try {
+        await tx.admissionsApplication.updateMany({
+          where: {
+            schoolId: tenantId,
+            OR: [
+              { applicationNumber: register.applicationNo },
+              ...(register.email ? [{ email: register.email }] : []),
+            ],
+          },
+          data: {
+            status: "ENROLLED",
+            metadata: {
+              matriculationNumber: matricNo,
+              enrolledAt: new Date().toISOString(),
+              enrolledBy: actorId,
+            },
+          },
+        });
+      } catch (appSyncErr) {
+        console.warn("[executeEnrollmentHandshake] Warning syncing admissionsApplication:", appSyncErr);
       }
 
       return {

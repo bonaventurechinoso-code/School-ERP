@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useTransition, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -268,20 +268,31 @@ export default function AdmissionsWorkspaceClient({
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
   const [activeTab, setActiveTab] = useState("kanban");
   const [isPending, startTransition] = useTransition();
-  const [transitioningAppId, setTransitioningAppId] = useState<string | null>(null);
+  const [transitioningAppIds, setTransitioningAppIds] = useState<Set<string>>(new Set());
+  const recentTransitionsRef = useRef<Map<string, { status: string; timestamp: number }>>(new Map());
 
+  // Seamless server props synchronization: guards against stale revalidation overrides and bounce-backs
   useEffect(() => {
     setApplications((prev) => {
-      if (!transitioningAppId) return initialApplications;
-      return initialApplications.map((app) => {
-        if (app.id === transitioningAppId) {
-          const currentInFlight = prev.find((p) => p.id === transitioningAppId);
-          return currentInFlight ? { ...app, status: currentInFlight.status } : app;
+      const now = Date.now();
+      const recent = recentTransitionsRef.current;
+
+      return initialApplications.map((incomingApp) => {
+        const transition = recent.get(incomingApp.id);
+        if (transition && now - transition.timestamp < 15000) {
+          if (incomingApp.status === transition.status) {
+            recent.delete(incomingApp.id);
+            return incomingApp;
+          }
+          return {
+            ...incomingApp,
+            status: transition.status,
+          };
         }
-        return app;
+        return incomingApp;
       });
     });
-  }, [initialApplications, transitioningAppId]);
+  }, [initialApplications]);
 
   // Feedback banner state
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -586,11 +597,17 @@ export default function AdmissionsWorkspaceClient({
       optimisticStatus = "ENROLLED";
     }
 
-    // 1. Optimistic transition: move card immediately in local state
+    // 1. Record transition in ref so background server revalidations will never regress it
+    recentTransitionsRef.current.set(appId, {
+      status: optimisticStatus,
+      timestamp: Date.now(),
+    });
+
+    // 2. Optimistic transition: move card immediately in local state
     setApplications((prev) =>
       prev.map((a) => (a.id === appId ? { ...a, status: optimisticStatus } : a))
     );
-    setTransitioningAppId(appId);
+    setTransitioningAppIds((prev) => new Set(prev).add(appId));
 
     try {
       const res = await updateApplicationStageAction({
@@ -601,12 +618,17 @@ export default function AdmissionsWorkspaceClient({
       });
 
       if (res.success && res.newStage) {
+        recentTransitionsRef.current.set(appId, {
+          status: res.newStage,
+          timestamp: Date.now(),
+        });
         setApplications((prev) =>
           prev.map((a) => (a.id === appId ? { ...a, status: res.newStage } : a))
         );
         setFeedback({ type: "success", message: res.message || `Candidate stage moved to ${targetStage}.` });
       } else {
         // Revert on failure
+        recentTransitionsRef.current.delete(appId);
         setApplications((prev) =>
           prev.map((a) => (a.id === appId ? { ...a, status: previousStatus } : a))
         );
@@ -614,12 +636,17 @@ export default function AdmissionsWorkspaceClient({
       }
     } catch (err: any) {
       // Revert on network/server exception
+      recentTransitionsRef.current.delete(appId);
       setApplications((prev) =>
         prev.map((a) => (a.id === appId ? { ...a, status: previousStatus } : a))
       );
       setFeedback({ type: "error", message: err?.message || "Failed to update stage." });
     } finally {
-      setTransitioningAppId(null);
+      setTransitioningAppIds((prev) => {
+        const next = new Set(prev);
+        next.delete(appId);
+        return next;
+      });
     }
   };
 
@@ -1573,9 +1600,9 @@ export default function AdmissionsWorkspaceClient({
                                   <select
                                     value={col.key}
                                     onChange={(e) => handleStageChange(app.id, e.target.value)}
-                                    disabled={transitioningAppId === app.id}
+                                    disabled={transitioningAppIds.has(app.id)}
                                     className={`text-[11px] font-medium bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-slate-700 dark:text-zinc-200 focus:outline-hidden w-full cursor-pointer transition ${
-                                      transitioningAppId === app.id ? "opacity-60 cursor-wait" : ""
+                                      transitioningAppIds.has(app.id) ? "opacity-60 cursor-wait" : ""
                                     }`}
                                   >
                                     {KANBAN_STAGES.map((s) => (
@@ -1584,7 +1611,7 @@ export default function AdmissionsWorkspaceClient({
                                       </option>
                                     ))}
                                   </select>
-                                  {transitioningAppId === app.id && (
+                                  {transitioningAppIds.has(app.id) && (
                                     <span className="absolute right-2 top-2 flex h-2 w-2 pointer-events-none">
                                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                                       <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>

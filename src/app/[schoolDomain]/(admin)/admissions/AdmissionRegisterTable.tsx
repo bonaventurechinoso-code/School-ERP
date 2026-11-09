@@ -589,7 +589,7 @@ export default function AdmissionRegisterTable({
         if (res.success) {
           setActionMessage({
             type: "success",
-            text: `Applicant enrolled successfully. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
+            text: `Applicant matriculated successfully! Admission offer and clearance notification dispatched. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
           });
           await fetchRecords();
         } else {
@@ -604,7 +604,7 @@ export default function AdmissionRegisterTable({
         if (res.success) {
           setActionMessage({
             type: "success",
-            text: `Applicant enrolled successfully. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
+            text: `Applicant matriculated successfully! Admission offer and clearance notification dispatched. Matriculation No: ${(res.student as any)?.admissionNumber || "Generated"}`,
           });
           if (row.rawLead && onLeadUpdated) {
             onLeadUpdated({ ...row.rawLead, status: "ENROLLED" });
@@ -1156,9 +1156,10 @@ export default function AdmissionRegisterTable({
                               type="button"
                               onClick={() => handleAdmit(r)}
                               disabled={isActionLoading}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer flex items-center gap-1"
+                              title="Matriculate student and dispatch admission offer notification"
                             >
-                              {isActionLoading && actionLoadingId === r.id ? "..." : "Admit"}
+                              {isActionLoading && actionLoadingId === r.id ? "Matriculating..." : "Matriculate"}
                             </button>
                           )}
 
