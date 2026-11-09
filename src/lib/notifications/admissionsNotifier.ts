@@ -284,6 +284,65 @@ export function getTierTerminology(tier: InstitutionalTierType): TierTerminology
 }
 
 /**
+ * Responsive Mobile-First Email Wrapper
+ * Ensures strict container constraints, word wrapping, and no horizontal overflow on mobile devices
+ */
+function renderResponsiveEmailCard({
+  schoolName,
+  contentHtml,
+}: {
+  schoolName: string;
+  contentHtml: string;
+}): string {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; max-width: 100%; }
+        @media only screen and (max-width: 620px) {
+          .email-card-container { width: 100% !important; padding: 18px 14px !important; }
+          .email-outer-td { padding: 12px 6px !important; }
+          .responsive-btn { width: 100% !important; display: block !important; box-sizing: border-box !important; text-align: center !important; }
+        }
+      </style>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="width: 100%; background-color: #f1f5f9; margin: 0; padding: 0;">
+        <tr>
+          <td align="center" class="email-outer-td" style="padding: 24px 12px;">
+            <!--[if (gte mso 9)|(IE)]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+            <tr>
+            <td align="center" valign="top" width="600">
+            <![endif]-->
+            <div class="email-card-container" style="max-width: 600px; width: 100%; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px 22px; box-sizing: border-box; word-break: break-word; overflow-wrap: break-word; text-align: left; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+              ${contentHtml}
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0 16px 0;" />
+              <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0; word-break: break-word;">
+                This is an official communication from <strong>${schoolName}</strong>. All rights reserved.
+              </p>
+            </div>
+            <!--[if (gte mso 9)|(IE)]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
+/**
  * Template Builder for Lifecycle Events
  */
 function buildMessageContents(payload: AdmissionsNotificationPayload): {
@@ -303,20 +362,24 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         subject: `Application Initiated: ${applicantNumber} - ${schoolName}`,
         smsText: `${schoolName}: Dear ${name}, your application ${applicantNumber} is started. Track status at: ${tracking}`,
         whatsAppText: `*${schoolName} - Admissions Portal*\n\nDear *${name}*,\n\nYour admissions application has been initiated with Application ID: *${applicantNumber}*.\n\nYou can track your progress, submit documents, or check status here:\n👉 ${tracking}\n\nFor support, reach out to ${hotline}.`,
-        emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #1e3a8a; margin-top: 0;">Application Initiated</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>Welcome to <strong>${schoolName}</strong>. Your formal admissions application has been recorded under reference: <strong style="color: #2563eb;">${applicantNumber}</strong>.</p>
-            <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 16px; margin: 20px 0; border-radius: 4px;">
-              <p style="margin: 0; font-size: 14px;">Use your one-click magic link below to monitor verification, complete fee payment, and view admission offers at any time:</p>
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #1e3a8a; margin: 0 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">Application Initiated</h2>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Reference: <strong style="color: #2563eb;">${applicantNumber}</strong></p>
             </div>
-            <p style="text-align: center; margin: 28px 0;">
-              <a href="${tracking}" style="background-color: #1e3a8a; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Access Applicant Portal</a>
-            </p>
-            <p style="font-size: 13px; color: #64748b;">Questions? Contact admissions support at: ${hotline}</p>
-          </div>
-        `,
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; word-break: break-word;">Welcome to <strong>${schoolName}</strong>. Your formal admissions application has been recorded under reference: <strong style="color: #2563eb;">${applicantNumber}</strong>.</p>
+            <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 14px; margin: 18px 0; border-radius: 4px; box-sizing: border-box; word-break: break-word;">
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #334155; word-break: break-word;">Use your one-click magic link below to monitor verification, complete fee payment, and view admission offers at any time:</p>
+            </div>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${tracking}" class="responsive-btn" style="background-color: #1e3a8a; color: #ffffff; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block; max-width: 100%; box-sizing: border-box; word-break: break-word; text-align: center;">Access Applicant Portal</a>
+            </div>
+            <p style="font-size: 13px; color: #64748b; text-align: center; margin: 0; word-break: break-word;">Questions? Contact admissions support at: ${hotline}</p>
+          `,
+        }),
       };
     }
 
@@ -326,14 +389,18 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         subject: `Payment Receipt Received - ${applicantNumber} (${schoolName})`,
         smsText: `${schoolName}: Payment proof for application ${applicantNumber} received. Bursary review in progress (${hours} hrs).`,
         whatsAppText: `*${schoolName}*\n\nPayment receipt for application *${applicantNumber}* has been submitted. Our Bursary Desk is reviewing it within ${hours} hours. You will receive an alert once verified.`,
-        emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #0f766e; margin-top: 0;">Payment Proof Submitted</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>Your payment receipt for application <strong>${applicantNumber}</strong> has been successfully uploaded to the institutional review queue.</p>
-            <p>Our Bursary and Admissions Reconciliation officers will reconcile this with our ledger within <strong>${hours} business hours</strong>. Upon clearance, your application will advance to full academic credential verification.</p>
-          </div>
-        `,
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #0f766e; margin: 0 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">Payment Proof Submitted</h2>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
+            </div>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Your payment receipt for application <strong>${applicantNumber}</strong> has been successfully uploaded to the institutional review queue.</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Our Bursary and Admissions Reconciliation officers will reconcile this with our ledger within <strong>${hours} business hours</strong>. Upon clearance, your application will advance to full academic credential verification.</p>
+          `,
+        }),
       };
     }
 
@@ -343,17 +410,21 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         subject: `Official Payment Receipt: ${applicantNumber} Confirmed - ${schoolName}`,
         smsText: `${schoolName}: Payment confirmed for ${applicantNumber}! Official receipt: ${receiptUrl}. Document review unlocked.`,
         whatsAppText: `*${schoolName} - Payment Verified ✅*\n\nDear *${name}*,\n\nYour application fee payment has been verified by the Bursar.\n\n📄 Download Official Receipt: ${receiptUrl}\n\nYour academic document review queue is now officially unlocked!`,
-        emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #15803d; margin-top: 0;">Payment Verified & Confirmed</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>Your application fee payment for <strong>${applicantNumber}</strong> has been verified by the Bursar. Your application status has transitioned to <strong>SUBMITTED & UNDER REVIEW</strong>.</p>
-            <p style="text-align: center; margin: 24px 0;">
-              <a href="${receiptUrl}" style="background-color: #15803d; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Download Official Receipt (PDF)</a>
-            </p>
-            <p>Our admissions faculty will now review your uploaded credentials.</p>
-          </div>
-        `,
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #15803d; margin: 0 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">Payment Verified &amp; Confirmed</h2>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
+            </div>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; word-break: break-word;">Your application fee payment for <strong>${applicantNumber}</strong> has been verified by the Bursar. Your application status has transitioned to <strong>SUBMITTED &amp; UNDER REVIEW</strong>.</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${receiptUrl}" class="responsive-btn" style="background-color: #15803d; color: #ffffff; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block; max-width: 100%; box-sizing: border-box; word-break: break-word; text-align: center;">Download Official Receipt (PDF)</a>
+            </div>
+            <p style="font-size: 14px; color: #475569; text-align: center; margin: 0; word-break: break-word;">Our admissions faculty will now review your uploaded credentials.</p>
+          `,
+        }),
       };
     }
 
@@ -365,20 +436,24 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         subject: `ACTION REQUIRED: ${doc} Verification Query - ${applicantNumber}`,
         smsText: `${schoolName}: Attention! Your ${doc} was queried: "${reason}". Please re-upload within 72 hrs at: ${link}`,
         whatsAppText: `*${schoolName} - Action Required ⚠️*\n\nDear *${name}*,\n\nYour uploaded *${doc}* for application *${applicantNumber}* could not be approved.\n\n*Reason:* ${reason}\n\nPlease click below to re-upload a clear copy within *72 hours*:\n👉 ${link}`,
-        emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #b91c1c; margin-top: 0;">Action Required: Document Query</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>During credential verification for application <strong>${applicantNumber}</strong>, the Admissions Desk raised a query on your <strong>${doc}</strong>:</p>
-            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 14px; margin: 18px 0; border-radius: 4px; color: #991b1b;">
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #b91c1c; margin: 0 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">Action Required: Document Query</h2>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
+            </div>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">During credential verification for application <strong>${applicantNumber}</strong>, the Admissions Desk raised a query on your <strong>${doc}</strong>:</p>
+            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 14px; margin: 18px 0; border-radius: 4px; color: #991b1b; box-sizing: border-box; word-break: break-word;">
               <strong>Query Reason:</strong> ${reason}
             </div>
-            <p>To avoid delaying your admission consideration, please re-upload a clear replacement within <strong>72 hours</strong>:</p>
-            <p style="text-align: center; margin: 24px 0;">
-              <a href="${link}" style="background-color: #b91c1c; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Re-Upload Corrected Document</a>
-            </p>
-          </div>
-        `,
+            <p style="font-size: 14px; line-height: 1.6; margin: 0 0 20px 0; word-break: break-word;">To avoid delaying your admission consideration, please re-upload a clear replacement within <strong>72 hours</strong>:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${link}" class="responsive-btn" style="background-color: #b91c1c; color: #ffffff; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block; max-width: 100%; box-sizing: border-box; word-break: break-word; text-align: center;">Re-Upload Corrected Document</a>
+            </div>
+          `,
+        }),
       };
     }
 
@@ -392,19 +467,23 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         subject: `Entrance Assessment / Screening Schedule - ${applicantNumber} (${schoolName})`,
         smsText: `${schoolName}: Assessment scheduled for ${applicantNumber} on ${date} at ${venue}. Check email/portal for gate pass.`,
         whatsAppText: `*${schoolName} - Assessment Schedule 🗓️*\n\nDear *${name}*,\n\nYour entrance assessment for application *${applicantNumber}* is scheduled:\n\n📅 *Date/Time:* ${date}\n📍 *Venue:* ${venue}\n${creds ? `🔑 *CBT Login:* ${creds}\n` : ""}Please arrive with your gate pass QR code.`,
-        emailHtml: `
-          <div style="font-family: sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <h2 style="color: #4338ca; margin-top: 0;">Entrance Assessment Scheduled</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            <p>You have been scheduled for the entrance screening assessment for application <strong>${applicantNumber}</strong>:</p>
-            <ul style="line-height: 1.8;">
-              <li><strong>Date & Time:</strong> ${date}</li>
-              <li><strong>Venue:</strong> ${venue}</li>
-              ${creds ? `<li><strong>CBT Credentials:</strong> ${creds}</li>` : ""}
-            </ul>
-            <p>Please present your printed gate pass QR code at the campus security checkpoint.</p>
-          </div>
-        `,
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #4338ca; margin: 0 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">Entrance Assessment Scheduled</h2>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
+            </div>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">You have been scheduled for the entrance screening assessment for application <strong>${applicantNumber}</strong>:</p>
+            <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 16px; margin: 18px 0; border-radius: 8px; box-sizing: border-box; word-break: break-word;">
+              <p style="margin: 0 0 8px 0; font-size: 14px; color: #4338ca; line-height: 1.5; word-break: break-word;"><strong>Date &amp; Time:</strong> ${date}</p>
+              <p style="margin: 0 0 ${creds ? "8px" : "0"}; font-size: 14px; color: #4338ca; line-height: 1.5; word-break: break-word;"><strong>Venue:</strong> ${venue}</p>
+              ${creds ? `<p style="margin: 0; font-size: 14px; color: #4338ca; line-height: 1.5; word-break: break-word;"><strong>CBT Credentials:</strong> ${creds}</p>` : ""}
+            </div>
+            <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0; word-break: break-word;">Please present your printed gate pass QR code at the campus security checkpoint.</p>
+          `,
+        }),
       };
     }
 
@@ -416,36 +495,33 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
         : "TBA";
       const offerLink = payload.offerLetterUrl || payload.magicTrackingLink || "#";
       return {
-        subject: `CONGRATULATIONS: Provisional ${terms.candidateRole} Admission Offer - ${applicantNumber} (${schoolName})`,
+        subject: `CONGRATULATIONS: Provisional Admission Offer - ${applicantNumber} (${schoolName})`,
         smsText: `Congratulations ${name}! You have been offered provisional admission to ${schoolName}. Acceptance deadline: ${deadline}. View offer: ${offerLink}`,
-        whatsAppText: `*${schoolName} - ${terms.offerHeading} 🎉*\n\nDear *${name}*,\n\nCongratulations! ${terms.authorityBody} of *${schoolName}* is pleased to grant you provisional admission for your ${terms.candidateRole.toLowerCase()} application (Ref: *${applicantNumber}*).\n\n📄 *Download Formal Offer Letter:* ${offerLink}\n⏳ *Acceptance Deposit & Clearance Deadline:* ${deadline} (${fee})\n\nPlease accept your offer before the deadline to lock your slot.`,
-        emailHtml: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; max-width: 620px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-            <div style="text-align: center; margin-bottom: 24px;">
-              <span style="display: inline-block; padding: 6px 14px; background: #ecfdf5; color: #047857; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Admissions Notice</span>
-              <h1 style="color: #047857; margin: 12px 0 6px 0; font-size: 24px;">🎉 ${terms.offerHeading}</h1>
-              <p style="color: #64748b; font-size: 14px; margin: 0;">Application Ref: <strong>${applicantNumber}</strong></p>
+        whatsAppText: `*${schoolName} - Provisional Offer of Admission 🎉*\n\nDear *${name}*,\n\nCongratulations! ${terms.authorityBody} of *${schoolName}* is pleased to offer you provisional admission (Ref: *${applicantNumber}*).\n\n📄 *Download Formal Offer Letter:* ${offerLink}\n⏳ *Acceptance Deposit & Clearance Deadline:* ${deadline} (${fee})\n\nPlease accept your offer before the deadline to lock your slot.`,
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <span style="display: inline-block; padding: 5px 12px; background: #ecfdf5; color: #047857; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Admissions Notice</span>
+              <h1 style="color: #047857; margin: 10px 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">🎉 Provisional Offer of Admission</h1>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
             </div>
 
-            <p style="font-size: 15px; line-height: 1.6;">Dear <strong>${name}</strong>,</p>
-            <p style="font-size: 15px; line-height: 1.6;">On behalf of <strong>${terms.authorityBody}</strong> of <strong>${schoolName}</strong>, we are delighted to offer you provisional admission into our academic community under application reference <strong>${applicantNumber}</strong>.</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; word-break: break-word;">On behalf of <strong>${terms.authorityBody}</strong> of <strong>${schoolName}</strong>, we are delighted to offer you provisional admission into our academic community under application reference <strong>${applicantNumber}</strong>.</p>
             
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 24px 0; border-radius: 8px;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #166534;"><strong>Candidate Role:</strong> ${terms.candidateRole}</p>
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #166534;"><strong>Acceptance Deadline:</strong> ${deadline}</p>
-              <p style="margin: 0; font-size: 14px; color: #166534;"><strong>Acceptance Deposit / Fee:</strong> ${fee}</p>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; margin: 18px 0; border-radius: 8px; box-sizing: border-box; word-break: break-word;">
+              <p style="margin: 0 0 8px 0; font-size: 14px; color: #166534; line-height: 1.5; word-break: break-word;"><strong>Acceptance Deadline:</strong> ${deadline}</p>
+              <p style="margin: 0; font-size: 14px; color: #166534; line-height: 1.5; word-break: break-word;"><strong>Acceptance Deposit / Fee:</strong> ${fee}</p>
             </div>
 
-            <p style="font-size: 15px; line-height: 1.6;">Please download and review your official provisional offer letter below. Accept your offer and complete clearance before the stated deadline to confirm your placement.</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0; word-break: break-word;">Please download and review your official provisional offer letter below. Accept your offer and complete clearance before the stated deadline to confirm your placement.</p>
 
-            <div style="text-align: center; margin: 28px 0;">
-              <a href="${offerLink}" style="background-color: #047857; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(4, 120, 87, 0.2);">Download Official Offer Letter (PDF)</a>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${offerLink}" class="responsive-btn" style="background-color: #047857; color: #ffffff; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; max-width: 100%; box-sizing: border-box; word-break: break-word; text-align: center;">Download Official Offer Letter (PDF)</a>
             </div>
-
-            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
-            <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">This is an automated institutional notification from ${schoolName}. All rights reserved.</p>
-          </div>
-        `,
+          `,
+        }),
       };
     }
 
@@ -460,59 +536,57 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
       return {
         subject: `Welcome to ${schoolName}! Your ${terms.idLabel}: ${matric}`,
         smsText: `Welcome to ${schoolName}! Your ${terms.idLabel} is ${matric}. Portal Login: ${portalUrl} | User: ${user} | Temp Password: ${tempPass}`,
-        whatsAppText: `*${schoolName} - ${terms.enrollmentHeading}! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb}:\n\n🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Temporary Password:* ${tempPass}\n\n👉 *Next Step:* Log in to your ${terms.portalDescription} to ${terms.academicScheduleText}.`,
-        emailHtml: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; max-width: 620px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-            <div style="text-align: center; margin-bottom: 24px;">
-              <span style="display: inline-block; padding: 6px 14px; background: #eff6ff; color: #1d4ed8; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Official Admission Clearance</span>
-              <h1 style="color: #1e3a8a; margin: 12px 0 6px 0; font-size: 24px;">🎓 ${terms.enrollmentHeading}</h1>
-              <p style="color: #64748b; font-size: 14px; margin: 0;">Application Ref: <strong>${applicantNumber}</strong></p>
+        whatsAppText: `*${schoolName} - Official Enrollment Clearance! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb}:\n\n🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Temporary Password:* ${tempPass}\n\n👉 *Next Step:* Log in to your ${terms.portalDescription} to ${terms.academicScheduleText}.`,
+        emailHtml: renderResponsiveEmailCard({
+          schoolName,
+          contentHtml: `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <span style="display: inline-block; padding: 5px 12px; background: #eff6ff; color: #1d4ed8; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Official Admission Clearance</span>
+              <h1 style="color: #1e3a8a; margin: 10px 0 6px 0; font-size: 22px; font-weight: 700; word-break: break-word;">🎓 Official Enrollment &amp; Clearance</h1>
+              <p style="color: #64748b; font-size: 13px; margin: 0; word-break: break-word;">Application Ref: <strong style="color: #0f172a;">${applicantNumber}</strong></p>
             </div>
 
-            <p style="font-size: 15px; line-height: 1.6;">Dear <strong>${name}</strong>,</p>
-            <p style="font-size: 15px; line-height: 1.6;">Congratulations! Your admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb} into <strong>${schoolName}</strong>.</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 14px 0; word-break: break-word;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; word-break: break-word;">Congratulations! Your admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb} into <strong>${schoolName}</strong>.</p>
             
-            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 22px; margin: 24px 0; border-radius: 10px;">
-              <h3 style="color: #1e3a8a; margin-top: 0; margin-bottom: 14px; font-size: 16px; border-bottom: 1px solid #dbeafe; padding-bottom: 8px;">🔑 Your Personal Access Credentials</h3>
-              <table style="width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.8;">
-                <tr>
-                  <td style="color: #475569; width: 42%; padding: 4px 0;"><strong>${terms.idLabel}:</strong></td>
-                  <td style="font-size: 15px; font-weight: bold; color: #1e3a8a; padding: 4px 0;">${matric}</td>
-                </tr>
-                <tr>
-                  <td style="color: #475569; padding: 4px 0;"><strong>Username / Login ID:</strong></td>
-                  <td style="font-weight: 600; color: #0f172a; padding: 4px 0;"><code>${user}</code></td>
-                </tr>
-                <tr>
-                  <td style="color: #475569; padding: 4px 0;"><strong>Temporary Password:</strong></td>
-                  <td style="font-weight: 600; color: #b91c1c; padding: 4px 0;"><code style="background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-size: 14px;">${tempPass}</code></td>
-                </tr>
-                ${directSchoolDomain ? `
-                <tr>
-                  <td style="color: #475569; padding: 4px 0;"><strong>School Code:</strong></td>
-                  <td style="font-weight: 600; color: #0f172a; padding: 4px 0;"><code>${directSchoolDomain}</code></td>
-                </tr>
-                ` : ""}
-                <tr>
-                  <td style="color: #475569; padding: 4px 0;"><strong>Candidate Role:</strong></td>
-                  <td style="color: #0f172a; padding: 4px 0;">${terms.candidateRole} (RBAC: STUDENT)</td>
-                </tr>
-              </table>
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 18px 16px; margin: 18px 0; border-radius: 10px; box-sizing: border-box; word-break: break-word;">
+              <h3 style="color: #1e3a8a; margin-top: 0; margin-bottom: 12px; font-size: 15px; border-bottom: 1px solid #dbeafe; padding-bottom: 6px; font-weight: 700;">🔑 Your Personal Access Credentials</h3>
+              
+              <div style="margin-bottom: 10px;">
+                <div style="font-size: 12px; color: #475569; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">${terms.idLabel}</div>
+                <div style="font-size: 15px; font-weight: 700; color: #1e3a8a; word-break: break-all;">${matric}</div>
+              </div>
+
+              <div style="margin-bottom: 10px;">
+                <div style="font-size: 12px; color: #475569; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Username / Login ID</div>
+                <div style="font-size: 14px; font-weight: 600; color: #0f172a; word-break: break-all;">${user}</div>
+              </div>
+
+              <div style="margin-bottom: ${directSchoolDomain ? "10px" : "2px"};">
+                <div style="font-size: 12px; color: #475569; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Temporary Password</div>
+                <div style="word-break: break-all;">
+                  <code style="display: inline-block; font-size: 14px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 3px 8px; border-radius: 4px; font-family: monospace;">${tempPass}</code>
+                </div>
+              </div>
+
+              ${directSchoolDomain ? `
+              <div style="margin-bottom: 2px;">
+                <div style="font-size: 12px; color: #475569; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">School Code</div>
+                <div style="font-size: 14px; font-weight: 600; color: #0f172a; word-break: break-all;">${directSchoolDomain}</div>
+              </div>
+              ` : ""}
             </div>
 
-            <div style="text-align: center; margin: 28px 0;">
-              <a href="${portalUrl}" style="background-color: #1e40af; color: #ffffff; padding: 14px 34px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(30, 64, 175, 0.25);">Login to ${terms.portalDescription}</a>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${portalUrl}" class="responsive-btn" style="background-color: #1e40af; color: #ffffff; padding: 13px 26px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; max-width: 100%; box-sizing: border-box; word-break: break-word; text-align: center;">Login to ${terms.portalDescription}</a>
             </div>
 
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 14px; color: #334155; line-height: 1.6;">
-              <strong style="color: #0f172a;">Next Steps for ${terms.candidateRole}:</strong>
-              <p style="margin: 6px 0 0 0;">Please log in immediately to your ${terms.portalDescription} to <strong>${terms.academicScheduleText}</strong>. Upon initial sign-in, you will be prompted to replace the temporary password with your own secure password.</p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; margin: 18px 0; font-size: 13px; color: #334155; line-height: 1.6; box-sizing: border-box; word-break: break-word;">
+              <strong style="color: #0f172a;">What to do next:</strong>
+              <p style="margin: 6px 0 0 0; word-break: break-word;">Please log in immediately to your ${terms.portalDescription} to <strong>${terms.academicScheduleText}</strong>. Upon initial sign-in, you will be prompted to replace the temporary password with your own secure password.</p>
             </div>
-
-            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
-            <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">This is an automated institutional credential dispatch for ${name} at ${schoolName}.</p>
-          </div>
-        `,
+          `,
+        }),
       };
     }
   }

@@ -377,8 +377,7 @@ export default function AdmissionsWorkspaceClient({
   const [requirementsWaiverApp, setRequirementsWaiverApp] = useState<{ app: SerializedApplication; missing: string[] } | null>(null);
   const [confirmBatchOfferOpen, setConfirmBatchOfferOpen] = useState(false);
 
-  // Walk-In Drawer state
-  const [walkInDrawerOpen, setWalkInDrawerOpen] = useState(false);
+  // Walk-In form state
   const [walkInForm, setWalkInForm] = useState({
     firstName: "",
     middleName: "",
@@ -927,7 +926,7 @@ export default function AdmissionsWorkspaceClient({
           createdAt: new Date().toISOString(),
         };
         setApplications((prev) => [newApp, ...prev]);
-        setWalkInDrawerOpen(false);
+        setActiveTab("kanban");
         setFeedback({
           type: "success",
           message: `Walk-in ${tierConfig.applicantLabel.toLowerCase()} registered: ${res.applicationNumber} (Payment Settled).`,
@@ -1471,16 +1470,6 @@ export default function AdmissionsWorkspaceClient({
               Fee Reconciliation ({transactions.filter((t) => t.paymentStatus === "PENDING").length})
             </TabsTrigger>
           </TabsList>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setWalkInDrawerOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Quick Walk-In Intake</span>
-            </button>
-          </div>
         </div>
 
         {/* ========================================================================= */}
@@ -3080,118 +3069,7 @@ export default function AdmissionsWorkspaceClient({
         </div>
       )}
 
-      {/* QUICK LAUNCHER SHEET FOR WALK-IN INTAKE */}
-      <Sheet open={walkInDrawerOpen} onOpenChange={setWalkInDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-6">
-          <SheetHeader className="mb-4">
-            <SheetTitle className="text-base font-bold flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-blue-600" />
-              <span>Walk-In Intake Drawer</span>
-            </SheetTitle>
-            <SheetDescription className="text-xs">
-              Quickly create and clear walk-in candidates with immediate POS/Cash receipting.
-            </SheetDescription>
-          </SheetHeader>
-
-          <form onSubmit={handleWalkInSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">First Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={walkInForm.firstName}
-                  onChange={(e) => setWalkInForm({ ...walkInForm, firstName: e.target.value })}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Last Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={walkInForm.lastName}
-                  onChange={(e) => setWalkInForm({ ...walkInForm, lastName: e.target.value })}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={walkInForm.email}
-                  onChange={(e) => setWalkInForm({ ...walkInForm, email: e.target.value })}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  value={walkInForm.phoneNumber}
-                  onChange={(e) => setWalkInForm({ ...walkInForm, phoneNumber: e.target.value })}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1">Program / Grade *</label>
-              <input
-                type="text"
-                required
-                value={walkInForm.programId}
-                onChange={(e) => setWalkInForm({ ...walkInForm, programId: e.target.value })}
-                className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1">Parent / Guardian Name *</label>
-              <input
-                type="text"
-                required
-                value={walkInForm.parentName}
-                onChange={(e) => setWalkInForm({ ...walkInForm, parentName: e.target.value })}
-                className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1">Parent Phone *</label>
-              <input
-                type="tel"
-                required
-                value={walkInForm.parentPhone}
-                onChange={(e) => setWalkInForm({ ...walkInForm, parentPhone: e.target.value })}
-                className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800"
-              />
-            </div>
-
-            <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setWalkInDrawerOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Save &amp; Settle Intake
-              </button>
-            </div>
-          </form>
-        </SheetContent>
-      </Sheet>
+      
 
       {/* ========================================================================= */}
       {/* MODAL 4: EDIT APPLICANT BIO-DATA MODAL                                    */}
