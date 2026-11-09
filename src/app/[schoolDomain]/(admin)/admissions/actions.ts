@@ -3985,8 +3985,17 @@ export async function enrollAdmissionsApplicationAction(payload: {
         });
       }
 
-      // Step D: Seed Initial Billing Ledger / Term Invoice if specified
-      if (payload.termFeeAmount && Number(payload.termFeeAmount) > 0) {
+      // Step D: Link to Bursary Fee Template / Ledger configured by Bursar or School Admin
+      const feeTemplate = await tx.feeTemplate.findFirst({
+        where: { schoolId: targetSchoolId },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const effectiveFeeAmount = payload.termFeeAmount && Number(payload.termFeeAmount) > 0
+        ? Number(payload.termFeeAmount)
+        : (feeTemplate?.defaultAmount || 0);
+
+      if (effectiveFeeAmount > 0 || feeTemplate) {
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 30);
 
@@ -3994,11 +4003,14 @@ export async function enrollAdmissionsApplicationAction(payload: {
           data: {
             schoolId: targetSchoolId,
             studentId: student.id,
-            amountDue: Number(payload.termFeeAmount),
+            feeTemplateId: feeTemplate?.id || null,
+            amountDue: effectiveFeeAmount,
             amountPaid: 0,
-            status: "UNPAID",
+            status: "PENDING",
             dueDate,
-            description: `1st Term Academic Tuition & Registration Ledger - ${matriculationNumber}`,
+            description: feeTemplate?.name
+              ? `${feeTemplate.name} - ${matriculationNumber}`
+              : `Bursary Linked Tuition & Enrollment Fee - ${matriculationNumber}`,
           },
         });
       }

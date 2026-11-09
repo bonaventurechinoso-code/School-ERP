@@ -240,9 +240,14 @@ export async function executeEnrollmentHandshake(
       });
 
       // 7. BURSARY SUB-LEDGER INITIAL TUITION BILLING (INVOICE)
-      const tuitionFee = input.tuitionFeeAmount && input.tuitionFeeAmount > 0
+      const feeTemplate = await tx.feeTemplate.findFirst({
+        where: { schoolId: tenantId },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const tuitionFee = input.tuitionFeeAmount !== undefined && input.tuitionFeeAmount > 0
         ? input.tuitionFeeAmount
-        : 50000;
+        : (feeTemplate?.defaultAmount || 0);
       
       const invoiceDueDate = new Date();
       invoiceDueDate.setDate(invoiceDueDate.getDate() + 30); // 30 days due
@@ -251,11 +256,12 @@ export async function executeEnrollmentHandshake(
         data: {
           schoolId: tenantId,
           studentId: student.id,
+          feeTemplateId: feeTemplate?.id || null,
           amountDue: tuitionFee,
           amountPaid: 0,
           dueDate: invoiceDueDate,
           status: "PENDING",
-          description: input.feeDescription || `Tuition & Enrollment Acceptance Fee - ${matricNo}`,
+          description: input.feeDescription || (feeTemplate?.name ? `${feeTemplate.name} - ${matricNo}` : `Bursary Linked Tuition & Enrollment Fee - ${matricNo}`),
         },
       });
 

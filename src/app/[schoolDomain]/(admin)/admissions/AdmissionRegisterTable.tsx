@@ -15,6 +15,7 @@ import {
   UserCheck,
   Users,
   FileText,
+  Receipt,
   ArrowRight,
   Edit3,
   Save,
@@ -93,6 +94,7 @@ export default function AdmissionRegisterTable({
 
   // Deletion & Deduplication state
   const [rowToDelete, setRowToDelete] = useState<UnifiedApplicantRow | null>(null);
+  const [matriculatingRow, setMatriculatingRow] = useState<UnifiedApplicantRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeduplicating, setIsDeduplicating] = useState(false);
 
@@ -1152,7 +1154,7 @@ export default function AdmissionRegisterTable({
                           {canMutate && r.status !== "ENROLLED" && (
                             <button
                               type="button"
-                              onClick={() => handleAdmit(r)}
+                              onClick={() => setMatriculatingRow(r)}
                               disabled={isActionLoading}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer flex items-center gap-1"
                               title="Matriculate student and dispatch admission offer notification"
@@ -1238,6 +1240,100 @@ export default function AdmissionRegisterTable({
                     <span>Delete Applicant</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM MATRICULATION MODAL */}
+      {matriculatingRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-50 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-emerald-600" />
+                <span>Confirm Matriculation</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setMatriculatingRow(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Candidate Summary */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-zinc-400">Candidate Name:</span>
+                <span className="font-bold text-slate-900 dark:text-zinc-100">
+                  {matriculatingRow.fullName || `${matriculatingRow.firstName} ${matriculatingRow.lastName}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-zinc-400">Application Number:</span>
+                <span className="font-mono font-semibold text-slate-700 dark:text-zinc-300">
+                  {matriculatingRow.applicationNo}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-zinc-400">Assigned Grade / Class:</span>
+                <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                  {matriculatingRow.classApplied || "Designated Grade"}
+                </span>
+              </div>
+            </div>
+
+            {/* Explanatory notes */}
+            <div className="text-xs text-slate-600 dark:text-zinc-400 space-y-1.5">
+              <p>
+                Are you sure you want to matriculate this candidate into the active Student Information System (SIS)?
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                This will generate an official institutional Matriculation Number, activate student portal access, and dispatch an automated admission clearance notification.
+              </p>
+            </div>
+
+            {/* Bursary & Fee Linkage Banner */}
+            <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
+              <Receipt className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <div className="space-y-0.5 text-xs text-emerald-950 dark:text-emerald-200">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>Bursary &amp; Fee Schedules Linked</span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-md bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                    Bursar Managed
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  Tuition and term billing are centrally configured by the Bursar and School Admin. This student will be automatically linked to institutional fee schedules upon matriculation.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setMatriculatingRow(null)}
+                disabled={Boolean(actionLoadingId)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = matriculatingRow;
+                  setMatriculatingRow(null);
+                  handleAdmit(target);
+                }}
+                disabled={Boolean(actionLoadingId)}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Confirm Matriculation</span>
               </button>
             </div>
           </div>
