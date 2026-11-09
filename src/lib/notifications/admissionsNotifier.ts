@@ -47,6 +47,7 @@ export interface AdmissionsNotificationPayload {
   studentPortalUrl?: string;
   portalUsername?: string;
   portalTempPassword?: string;
+  isSelfServiceApplicant?: boolean;
 }
 
 /**
@@ -529,14 +530,23 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
       const terms = getTierTerminology(resolveInstitutionalTier(payload));
       const matric = payload.matriculationNumber || applicantNumber;
       const user = payload.portalUsername || payload.recipient.email || matric;
+      const isSelfService = Boolean(payload.isSelfServiceApplicant || !payload.portalTempPassword);
       const tempPass = payload.portalTempPassword || "Welcome@123";
       const portalUrl = payload.studentPortalUrl || "#";
       const directSchoolDomain = payload.schoolSubdomain || "";
 
+      const credentialsSmsText = isSelfService
+        ? `Portal Login: ${portalUrl} | User: ${user} | Please log in with the password you created when applying online.`
+        : `Portal Login: ${portalUrl} | User: ${user} | Temp Password: ${tempPass}`;
+
+      const credentialsWhatsAppText = isSelfService
+        ? `🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Password:* Use the password you created when applying online.`
+        : `🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Temporary Password:* ${tempPass}`;
+
       return {
         subject: `Welcome to ${schoolName}! Your ${terms.idLabel}: ${matric}`,
-        smsText: `Welcome to ${schoolName}! Your ${terms.idLabel} is ${matric}. Portal Login: ${portalUrl} | User: ${user} | Temp Password: ${tempPass}`,
-        whatsAppText: `*${schoolName} - Official Enrollment Clearance! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb}:\n\n🆔 *${terms.idLabel}:* ${matric}\n🌐 *Login URL:* ${portalUrl}\n👤 *Username / Login ID:* ${user}\n🔑 *Temporary Password:* ${tempPass}\n\n👉 *Next Step:* Log in to your ${terms.portalDescription} to ${terms.academicScheduleText}.`,
+        smsText: `Welcome to ${schoolName}! Your ${terms.idLabel} is ${matric}. ${credentialsSmsText}`,
+        whatsAppText: `*${schoolName} - Official Enrollment Clearance! 🎓*\n\nWelcome to ${schoolName}, *${name}*!\n\nYour admission clearance is finalized and you have been formally ${terms.enrollmentActionVerb}:\n\n${credentialsWhatsAppText}\n\n👉 *Next Step:* Log in to your ${terms.portalDescription} to ${terms.academicScheduleText}.`,
         emailHtml: renderResponsiveEmailCard({
           schoolName,
           contentHtml: `
@@ -562,12 +572,21 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
                 <div style="font-size: 14px; font-weight: 600; color: #0f172a; word-break: break-all;">${user}</div>
               </div>
 
+              ${isSelfService ? `
+              <div style="margin-bottom: ${directSchoolDomain ? "10px" : "2px"}; padding: 10px 12px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <div style="font-size: 12px; color: #1e40af; font-weight: 700; margin-bottom: 3px;">Password Notice</div>
+                <div style="font-size: 13px; color: #334155; line-height: 1.5;">
+                  Please use the secure password you created when you submitted your online application to log into your student dashboard.
+                </div>
+              </div>
+              ` : `
               <div style="margin-bottom: ${directSchoolDomain ? "10px" : "2px"};">
                 <div style="font-size: 12px; color: #475569; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Temporary Password</div>
                 <div style="word-break: break-all;">
                   <code style="display: inline-block; font-size: 14px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 3px 8px; border-radius: 4px; font-family: monospace;">${tempPass}</code>
                 </div>
               </div>
+              `}
 
               ${directSchoolDomain ? `
               <div style="margin-bottom: 2px;">
@@ -583,7 +602,9 @@ function buildMessageContents(payload: AdmissionsNotificationPayload): {
 
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; margin: 18px 0; font-size: 13px; color: #334155; line-height: 1.6; box-sizing: border-box; word-break: break-word;">
               <strong style="color: #0f172a;">What to do next:</strong>
-              <p style="margin: 6px 0 0 0; word-break: break-word;">Please log in immediately to your ${terms.portalDescription} to <strong>${terms.academicScheduleText}</strong>. Upon initial sign-in, you will be prompted to replace the temporary password with your own secure password.</p>
+              <p style="margin: 6px 0 0 0; word-break: break-word;">
+                ${isSelfService ? `Please log in to your ${terms.portalDescription} using your online application credentials to <strong>${terms.academicScheduleText}</strong>.` : `Please log in to your ${terms.portalDescription} to <strong>${terms.academicScheduleText}</strong>. Upon initial sign-in, you will be prompted to replace the temporary password with your own secure password.`}
+              </p>
             </div>
           `,
         }),

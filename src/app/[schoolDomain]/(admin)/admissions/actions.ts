@@ -1737,7 +1737,8 @@ export async function enrollApplicantFromRegisterAction(payload: {
         matriculationNumber: handshakeResult.matricNo || student?.admissionNumber || applicantNumber,
         studentPortalUrl: studentLoginUrl,
         portalUsername: studentUser,
-        portalTempPassword: studentTempPass,
+        portalTempPassword: handshakeResult.isSelfService ? undefined : studentTempPass,
+        isSelfServiceApplicant: handshakeResult.isSelfService,
       });
     } catch (notifErr) {
       console.warn("[enrollApplicantFromRegisterAction] Warning dispatching ENROLLED notification:", notifErr);
@@ -3855,9 +3856,14 @@ export async function enrollAdmissionsApplicationAction(payload: {
     const seqPadded = String(studentSequenceCount + 1).padStart(4, "0");
     const matriculationNumber = `${branchPrefix}/${year}/${programCode}/${seqPadded}`;
 
-    // 4. Generate Initial User Portal Credentials
-    const rawTempPassword = `Welcome@${Math.floor(1000 + Math.random() * 9000)}`;
-    const hashedPassword = await bcrypt.hash(rawTempPassword, 12);
+    // 4. Resolve Identity & Portal Credentials
+    const isPublicSelfService =
+      application.intakeChannel === "ONLINE_PORTAL" ||
+      application.intakeChannel === "PORTAL" ||
+      application.intakeChannel === "SELF_SERVICE" ||
+      application.intakeChannel === "ONLINE" ||
+      (application.metadata as any)?.submittedFromIp === "client-portal";
+
     const userEmail =
       application.email.toLowerCase().trim() ||
       `${matriculationNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain || "portal"}`;
@@ -3867,29 +3873,53 @@ export async function enrollAdmissionsApplicationAction(payload: {
     const parentEmail = parentData.email || application.email;
     const parentPhone = parentData.phone || application.phoneNumber;
 
+    // For walk-in candidates, generate initial temporary credentials
+    const rawTempPassword = `Welcome@${Math.floor(1000 + Math.random() * 9000)}`;
+    const hashedTempPassword = await bcrypt.hash(rawTempPassword, 12);
+
+    let isApplicantSelfService = isPublicSelfService;
+
     // 5. Execute Atomic Enrollment Transaction
     const result = await db.$transaction(async (tx: any) => {
-      // Step A: Create or Link User
-      const user = await tx.user.upsert({
+      // Step A: Check if User already exists
+      const existingUser = await tx.user.findFirst({
         where: { schoolId_email: { schoolId: targetSchoolId, email: userEmail } },
-        update: {
-          role: "STUDENT",
-          firstName: application.firstName,
-          lastName: application.lastName,
-          status: "ACTIVE",
-          mustChangePassword: true,
-        },
-        create: {
-          schoolId: targetSchoolId,
-          email: userEmail,
-          passwordHash: hashedPassword,
-          role: "STUDENT",
-          firstName: application.firstName,
-          lastName: application.lastName,
-          status: "ACTIVE",
-          mustChangePassword: true,
-        },
       });
+
+      if (existingUser && existingUser.passwordHash) {
+        isApplicantSelfService = true;
+      }
+
+      let user: any;
+      if (existingUser) {
+        // PRESERVE user's existing chosen password; promote role to STUDENT
+        user = await tx.user.update({
+          where: { id: existingUser.id },
+          data: {
+            role: "STUDENT",
+            firstName: application.firstName,
+            lastName: application.lastName,
+            status: "ACTIVE",
+            ...(isApplicantSelfService
+              ? { mustChangePassword: false }
+              : { passwordHash: hashedTempPassword, mustChangePassword: true }),
+          },
+        });
+      } else {
+        // Walk-in applicant without pre-existing user: generate credentials
+        user = await tx.user.create({
+          data: {
+            schoolId: targetSchoolId,
+            email: userEmail,
+            passwordHash: hashedTempPassword,
+            role: "STUDENT",
+            firstName: application.firstName,
+            lastName: application.lastName,
+            status: "ACTIVE",
+            mustChangePassword: !isApplicantSelfService,
+          },
+        });
+      }
 
       // Step B: Create or Update Student in target database
       const existingStudent = await tx.student.findFirst({
@@ -3969,7 +3999,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
             name: parentName,
             email: parentEmail.toLowerCase().trim(),
             phone: parentPhone,
-            passwordHash: hashedPassword,
+            passwordHash: hashedTempPassword,
             relationship: parentData.relationship || "Parent",
           },
         });
@@ -4010,7 +4040,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
             dueDate,
             description: feeTemplate?.name
               ? `${feeTemplate.name} - ${matriculationNumber}`
-              : `Bursary Linked Tuition & Enrollment Fee - ${matriculationNumber}`,
+              : `1st Term Academic Tuition & Registration Ledger - ${matriculationNumber}`,
           },
         });
       }
@@ -4100,7 +4130,8 @@ export async function enrollAdmissionsApplicationAction(payload: {
       matriculationNumber,
       studentPortalUrl: studentLoginUrl,
       portalUsername: userEmail,
-      portalTempPassword: rawTempPassword,
+      portalTempPassword: isApplicantSelfService ? undefined : rawTempPassword,
+      isSelfServiceApplicant: isApplicantSelfService,
     }).catch((err) => console.warn("[dispatchAdmissionsNotification:ENROLLED]", err));
 
     await invalidateStudentNamespace(targetSchoolId);
@@ -4116,7 +4147,8 @@ export async function enrollAdmissionsApplicationAction(payload: {
       studentId: result.student.id,
       studentName: `${result.student.firstName} ${result.student.lastName}`,
       userEmail,
-      tempPassword: rawTempPassword,
+      tempPassword: isApplicantSelfService ? undefined : rawTempPassword,
+      isSelfService: isApplicantSelfService,
       message: `Successfully matriculated as ${matriculationNumber}.`,
     };
   } catch (err: any) {

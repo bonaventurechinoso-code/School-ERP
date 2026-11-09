@@ -1293,22 +1293,6 @@ export default function AdmissionRegisterTable({
               </p>
             </div>
 
-            {/* Bursary & Fee Linkage Banner */}
-            <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
-              <Receipt className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
-              <div className="space-y-0.5 text-xs text-emerald-950 dark:text-emerald-200">
-                <div className="font-bold flex items-center gap-1.5">
-                  <span>Bursary &amp; Fee Schedules Linked</span>
-                  <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-md bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
-                    Bursar Managed
-                  </span>
-                </div>
-                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                  Tuition and term billing are centrally configured by the Bursar and School Admin. This student will be automatically linked to institutional fee schedules upon matriculation.
-                </p>
-              </div>
-            </div>
-
             {/* Modal Actions */}
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
               <button

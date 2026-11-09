@@ -19,6 +19,7 @@ export interface EnrollmentHandshakeResult {
   user?: any;
   userEmail?: string;
   tempPassword?: string;
+  isSelfService?: boolean;
   invoice?: any;
   parent?: any;
   register?: any;
@@ -144,19 +145,31 @@ export async function executeEnrollmentHandshake(
         },
       });
 
+      // Self-service applicants created their own credentials during application
+      const isWalkIn =
+        creds.isWalkIn === true ||
+        creds.intakeChannel === "WALK_IN" ||
+        regAny.intakeChannel === "WALK_IN" ||
+        personal.intakeChannel === "WALK_IN";
+
+      const isSelfService = !isWalkIn && Boolean(user && user.passwordHash);
+
       if (user) {
+        // PRESERVE applicant's existing chosen password for self-service registrations!
         user = await tx.user.update({
           where: { id: user.id },
           data: {
             role: "STUDENT",
             firstName: register.firstName.trim(),
             lastName: register.lastName.trim(),
-            passwordHash: defaultPasswordHash,
             status: "ACTIVE",
-            mustChangePassword: true,
+            ...(isSelfService
+              ? { mustChangePassword: false }
+              : { passwordHash: defaultPasswordHash, mustChangePassword: true }),
           },
         });
       } else {
+        // For walk-in intake without pre-registered user, generate initial temporary credentials
         user = await tx.user.create({
           data: {
             schoolId: tenantId,
@@ -166,7 +179,7 @@ export async function executeEnrollmentHandshake(
             firstName: register.firstName.trim(),
             lastName: register.lastName.trim(),
             status: "ACTIVE",
-            mustChangePassword: true,
+            mustChangePassword: !isSelfService,
           },
         });
       }
@@ -261,7 +274,7 @@ export async function executeEnrollmentHandshake(
           amountPaid: 0,
           dueDate: invoiceDueDate,
           status: "PENDING",
-          description: input.feeDescription || (feeTemplate?.name ? `${feeTemplate.name} - ${matricNo}` : `Bursary Linked Tuition & Enrollment Fee - ${matricNo}`),
+          description: input.feeDescription || (feeTemplate?.name ? `${feeTemplate.name} - ${matricNo}` : `Tuition & Enrollment Acceptance Fee - ${matricNo}`),
         },
       });
 
@@ -276,7 +289,7 @@ export async function executeEnrollmentHandshake(
         toStatus: "ENROLLED",
         action: "ENROLLED",
         changedById: actorId,
-        reason: `Final matriculation complete. Student enrolled in SIS [Matric No: ${matricNo}]. Bursary invoice [${invoice.id}] issued.`,
+        reason: `Final matriculation complete. Student enrolled in SIS [Matric No: ${matricNo}].`,
         createdAt: new Date().toISOString(),
       };
 
@@ -367,7 +380,8 @@ export async function executeEnrollmentHandshake(
         student,
         user,
         userEmail,
-        tempPassword,
+        tempPassword: isSelfService ? undefined : tempPassword,
+        isSelfService,
         invoice,
         parent,
         register: updatedRegister,
