@@ -18,7 +18,7 @@ import {
 import { AdmissionTierType, ApplicationStatus } from "@prisma/client";
 import { dispatchAdmissionsNotification } from "@/lib/notifications/admissionsNotifier";
 
-import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier, invalidateTierConnection, resolveTierIdForTierDb, isDemoSchool, getDemoPrismaClient, setDemoSchoolId } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import {
   sendAdmissionOfferEmail,
@@ -57,6 +57,13 @@ function safeRevalidate(path: string, type?: "page" | "layout") {
   }
 }
 
+function getCentralDb(schoolIdentifier?: string | null): any {
+  if (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolIdentifier)) {
+    return getDemoPrismaClient();
+  }
+  return basePrisma;
+}
+
 /**
  * Safely resolves school identifier whether passed as UUID or subdomain string
  */
@@ -65,16 +72,21 @@ export async function resolveSchoolId(schoolIdentifier: string): Promise<string>
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
   if (isUuid) return schoolIdentifier;
 
+  const db = getCentralDb(schoolIdentifier);
+
   try {
-    const school = await basePrisma.school.findFirst({
+    const school = await db.school.findFirst({
       where: {
         OR: [
           { subdomain: { equals: schoolIdentifier, mode: "insensitive" as const } },
           { slug: { equals: schoolIdentifier, mode: "insensitive" as const } },
         ],
       },
-      select: { id: true },
+      select: { id: true, subdomain: true },
     });
+    if (school?.id && (schoolIdentifier === "demo" || school.subdomain === "demo")) {
+      setDemoSchoolId(school.id);
+    }
     return school?.id || schoolIdentifier;
   } catch {
     return schoolIdentifier;
@@ -3492,14 +3504,43 @@ export async function updateApplicationStageAction(payload: {
 }) {
   try {
     const targetSchoolId = await resolveSchoolId(payload.schoolId);
+    let db: any = (process.env.DEMO_DATABASE_URL && (isDemoSchool(targetSchoolId) || isDemoSchool(payload.schoolDomain) || isDemoSchool(payload.schoolId)))
+      ? getDemoPrismaClient()
+      : basePrisma;
 
     // Scoped query for strict tenant isolation
-    const app = await basePrisma.admissionsApplication.findFirst({
+    let app = await db.admissionsApplication.findFirst({
       where: {
         id: payload.applicationId,
         schoolId: targetSchoolId,
       },
     });
+
+    if (!app) {
+      app = await db.admissionsApplication.findFirst({
+        where: {
+          id: payload.applicationId,
+          OR: [
+            { schoolId: targetSchoolId },
+            { tenantId: targetSchoolId },
+          ],
+        },
+      });
+    }
+
+    if (!app && process.env.DEMO_DATABASE_URL && db === basePrisma) {
+      try {
+        const demoClient = getDemoPrismaClient();
+        const demoApp = await demoClient.admissionsApplication.findFirst({
+          where: { id: payload.applicationId },
+        });
+        if (demoApp) {
+          app = demoApp;
+          db = demoClient;
+          if (demoApp.schoolId) setDemoSchoolId(demoApp.schoolId);
+        }
+      } catch {}
+    }
 
     if (!app) {
       return { success: false, error: "Application record not found or belongs to another institution." };
@@ -3528,7 +3569,7 @@ export async function updateApplicationStageAction(payload: {
     const previousStatus = app.status;
 
     // Mutate via single update where id (no updateMany)
-    const updated = await basePrisma.admissionsApplication.update({
+    const updated = await db.admissionsApplication.update({
       where: { id: app.id },
       data: {
         status: targetStatus,
@@ -3545,9 +3586,30 @@ export async function updateApplicationStageAction(payload: {
       },
     });
 
+    // Synchronize linked AdmissionLead if present so background auto-reconciliation will never regress it
+    const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
+    if (leadId) {
+      let leadStatus: string | null = null;
+      if (targetStatus === ApplicationStatus.ENROLLED) {
+        leadStatus = "CONVERTED";
+      } else if (targetStatus === ApplicationStatus.REJECTED) {
+        leadStatus = "LOST";
+      } else if (targetStatus === ApplicationStatus.OFFER_EXTENDED) {
+        leadStatus = "OFFER_EXTENDED";
+      } else if (targetStatus === ApplicationStatus.UNDER_REVIEW) {
+        leadStatus = "SCREENING";
+      }
+      if (leadStatus) {
+        await db.admissionLead.update({
+          where: { id: leadId },
+          data: { status: leadStatus as any },
+        }).catch(() => null);
+      }
+    }
+
     // Record immutable audit trail
     try {
-      await basePrisma.admissionAuditTrail.create({
+      await db.admissionAuditTrail.create({
         data: {
           tenantId: targetSchoolId,
           schoolId: targetSchoolId,
@@ -3570,7 +3632,7 @@ export async function updateApplicationStageAction(payload: {
 
     // If moved to OFFER_EXTENDED, notify applicant omnichannel
     if (targetStatus === ApplicationStatus.OFFER_EXTENDED) {
-      const school = await basePrisma.school.findFirst({
+      const school = await db.school.findFirst({
         where: { id: targetSchoolId },
         select: { name: true, subdomain: true },
       });

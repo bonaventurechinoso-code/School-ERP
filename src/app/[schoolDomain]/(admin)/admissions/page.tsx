@@ -1,5 +1,5 @@
 import React from "react";
-import { basePrisma } from "@/lib/tenant-prisma";
+import { basePrisma, isDemoSchool, getDemoPrismaClient, setDemoSchoolId } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/admissions.service";
 import {
@@ -159,7 +159,11 @@ export default async function AdmissionsPage({
   const canMutate = mutateAuth.canMutate;
 
   // 2. Resolve Target School Institution
-  const school = await basePrisma.school.findFirst({
+  let centralDb: any = (process.env.DEMO_DATABASE_URL && isDemoSchool(schoolDomain))
+    ? getDemoPrismaClient()
+    : basePrisma;
+
+  let school = await centralDb.school.findFirst({
     where: {
       OR: [{ subdomain: schoolDomain }, { slug: schoolDomain }],
     },
@@ -170,6 +174,29 @@ export default async function AdmissionsPage({
     },
   });
 
+  // If not found in primary and DEMO_DATABASE_URL is set, attempt lookup in demo database
+  if (!school && process.env.DEMO_DATABASE_URL && centralDb === basePrisma) {
+    try {
+      const demoClient = getDemoPrismaClient();
+      const demoSchool = await demoClient.school.findFirst({
+        where: {
+          OR: [{ subdomain: schoolDomain }, { slug: schoolDomain }],
+        },
+        include: {
+          academicTiers: {
+            orderBy: { level: "asc" },
+          },
+        },
+      });
+      if (demoSchool) {
+        school = demoSchool;
+        centralDb = demoClient;
+      }
+    } catch {
+      // Ignore fallback lookup error
+    }
+  }
+
   if (!school) {
     return (
       <div className="p-8 text-center text-slate-500">
@@ -179,10 +206,14 @@ export default async function AdmissionsPage({
     );
   }
 
+  if (school.subdomain === "demo" || isDemoSchool(school.id) || isDemoSchool(schoolDomain)) {
+    setDemoSchoolId(school.id);
+  }
+
   // 3. Query Admissions Applications scoped to tenant
   // Auto-reconcile / backfill any pending AdmissionLead or AdmissionRegister records into AdmissionsApplication
   try {
-    const existingApps = await basePrisma.admissionsApplication.findMany({
+    const existingApps: any[] = await centralDb.admissionsApplication.findMany({
       where: { schoolId: school.id },
       select: {
         id: true,
@@ -198,9 +229,9 @@ export default async function AdmissionsPage({
         metadata: true,
       },
     });
-    const knownAppNos = new Set(existingApps.map((a) => a.applicationNumber));
+    const knownAppNos = new Set(existingApps.map((a: any) => a.applicationNumber));
 
-    const pendingRegisters = await basePrisma.admissionRegister.findMany({
+    const pendingRegisters: any[] = await centralDb.admissionRegister.findMany({
       where: { tenantId: school.id },
       take: 50,
     });
@@ -213,7 +244,7 @@ export default async function AdmissionsPage({
       const normRegClass = normalizeCandidateGrade(reg.classApplied);
 
       // Deterministic check: do NOT create duplicate if pupil already has an application
-      const matchApp = existingApps.find((app) => {
+      const matchApp = existingApps.find((app: any) => {
         const appFullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
         const normApp = normalizeCandidateName(appFullName);
         const nameMatch = normApp === normRegName || (normRegName.length > 5 && (normApp.includes(normRegName) || normRegName.includes(normApp)));
@@ -265,7 +296,7 @@ export default async function AdmissionsPage({
           knownAppNos.delete(matchApp.applicationNumber);
           matchApp.applicationNumber = reg.applicationNo;
         }
-        await basePrisma.admissionsApplication.update({
+        await centralDb.admissionsApplication.update({
           where: { id: matchApp.id },
           data: updateData,
         }).catch(() => null);
@@ -274,7 +305,7 @@ export default async function AdmissionsPage({
       }
 
       const currentYear = new Date().getFullYear();
-      await basePrisma.admissionsApplication.create({
+      await centralDb.admissionsApplication.create({
         data: {
           tenantId: school.id,
           schoolId: school.id,
@@ -301,7 +332,7 @@ export default async function AdmissionsPage({
       knownAppNos.add(reg.applicationNo);
     }
 
-    const pendingLeads = await basePrisma.admissionLead.findMany({
+    const pendingLeads: any[] = await centralDb.admissionLead.findMany({
       where: { schoolId: school.id },
       take: 50,
     });
@@ -315,7 +346,7 @@ export default async function AdmissionsPage({
       const normLeadClass = normalizeCandidateGrade(lead.targetGrade);
 
       // Deterministic check: do NOT create duplicate if pupil already has an application
-      const matchApp = existingApps.find((app) => {
+      const matchApp = existingApps.find((app: any) => {
         const appFullName = `${app.firstName || ""} ${app.middleName || ""} ${app.lastName || ""}`.trim();
         const normApp = normalizeCandidateName(appFullName);
         const nameMatch = normApp === normLeadName || (normLeadName.length > 5 && (normApp.includes(normLeadName) || normLeadName.includes(normApp)));
@@ -331,27 +362,38 @@ export default async function AdmissionsPage({
           const appMeta = (matchApp.metadata as any) || {};
           const appTierData = (matchApp.tierSpecificData as any) || {};
           const mergedDocs = mergeDocMapsNonDestructively(appMeta.documents || {}, appTierData.documents || {}, leadDocs);
-          const hasFee = Boolean(mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl);
-          const hasDocs = Object.keys(mergedDocs).length > 1;
-          const nextStatus = (hasFee && hasDocs) ? "UNDER_REVIEW" : hasDocs ? "SUBMITTED" : matchApp.status;
 
-          await basePrisma.admissionsApplication.update({
-            where: { id: matchApp.id },
-            data: {
-              status: nextStatus as any,
-              metadata: {
-                ...appMeta,
-                leadId: lead.id,
-                documents: mergedDocs,
-                applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appMeta.applicationFeeReceiptUrl,
-              },
-              tierSpecificData: {
-                ...appTierData,
-                leadId: lead.id,
-                documents: mergedDocs,
-                applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appTierData.applicationFeeReceiptUrl,
-              },
+          const updateData: any = {
+            metadata: {
+              ...appMeta,
+              leadId: lead.id,
+              documents: mergedDocs,
+              applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appMeta.applicationFeeReceiptUrl,
             },
+            tierSpecificData: {
+              ...appTierData,
+              leadId: lead.id,
+              documents: mergedDocs,
+              applicationFeeReceiptUrl: mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl || appTierData.applicationFeeReceiptUrl,
+            },
+          };
+
+          // CRITICAL: Only advance status for early intake stages (DRAFT or PAYMENT_PENDING).
+          // NEVER regress or overwrite an application that has been reviewed, approved, offered, enrolled, or rejected!
+          const isEarlyIntake = !matchApp.status || matchApp.status === "DRAFT" || matchApp.status === "PAYMENT_PENDING";
+          if (isEarlyIntake) {
+            const hasFee = Boolean(mergedDocs.applicationFeeReceiptUrl || (lead as any).applicationFeeReceiptUrl);
+            const hasDocs = Object.keys(mergedDocs).length > 1;
+            const nextStatus = (hasFee && hasDocs) ? "UNDER_REVIEW" : hasDocs ? "SUBMITTED" : matchApp.status;
+            if (nextStatus && nextStatus !== matchApp.status) {
+              updateData.status = nextStatus as any;
+              matchApp.status = nextStatus;
+            }
+          }
+
+          await centralDb.admissionsApplication.update({
+            where: { id: matchApp.id },
+            data: updateData,
           }).catch(() => null);
         }
         continue;
@@ -365,7 +407,7 @@ export default async function AdmissionsPage({
       const lastName = nameParts.slice(1).join(" ") || "Applicant";
       const currentYear = new Date().getFullYear();
 
-      await basePrisma.admissionsApplication.create({
+      await centralDb.admissionsApplication.create({
         data: {
           tenantId: school.id,
           schoolId: school.id,
@@ -403,7 +445,7 @@ export default async function AdmissionsPage({
   // Wrap auditTrails include in try/catch - if table missing, fallback to empty array
   let rawApplications: any[] = [];
   try {
-    rawApplications = await basePrisma.admissionsApplication.findMany({
+    rawApplications = await centralDb.admissionsApplication.findMany({
       where: {
         schoolId: school.id,
       },
@@ -450,7 +492,7 @@ export default async function AdmissionsPage({
   } catch (auditErr) {
     console.warn("[ADMISSIONS] Failed querying applications with auditTrails, falling back without auditTrails:", auditErr);
     try {
-      rawApplications = await basePrisma.admissionsApplication.findMany({
+      rawApplications = await centralDb.admissionsApplication.findMany({
         where: {
           schoolId: school.id,
         },
@@ -507,17 +549,37 @@ export default async function AdmissionsPage({
       deduplicatedApps.push(app);
     } else {
       const existing = compositeKeyMap.get(dKey);
+      // Preserve the more progressed/advanced stage between duplicates
+      const STATUS_WEIGHT: Record<string, number> = {
+        ENROLLED: 6,
+        ADMITTED: 6,
+        OFFER_EXTENDED: 5,
+        APPROVED: 5,
+        UNDER_REVIEW: 4,
+        VERIFIED: 4,
+        SUBMITTED: 3,
+        PAYMENT_PENDING: 2,
+        DRAFT: 1,
+      };
+      const existingWeight = STATUS_WEIGHT[existing.status] || 0;
+      const appWeight = STATUS_WEIGHT[app.status] || 0;
+      if (existingWeight > appWeight) {
+        app.status = existing.status;
+      } else if (appWeight > existingWeight) {
+        existing.status = app.status;
+      }
+
       // Prefer finalized localized institutional number (e.g. EGEDE/2026/0001) over temporary portal ID (APP-7F6950)
       if (isInstitutionalApplicationNo(app.applicationNumber) && !isInstitutionalApplicationNo(existing.applicationNumber)) {
         const idx = deduplicatedApps.indexOf(existing);
         if (idx !== -1) deduplicatedApps[idx] = app;
         compositeKeyMap.set(dKey, app);
         // Safely re-point documents & fee transactions before purging duplicate!
-        basePrisma.admissionsDocument.updateMany({
+        centralDb.admissionsDocument.updateMany({
           where: { applicationId: existing.id },
           data: { applicationId: app.id },
         }).catch(() => null);
-        basePrisma.admissionsFeeTransaction.updateMany({
+        centralDb.admissionsFeeTransaction.updateMany({
           where: { applicationId: existing.id },
           data: { applicationId: app.id },
         }).catch(() => null);
@@ -526,14 +588,14 @@ export default async function AdmissionsPage({
         app.metadata = { ...((existing.metadata as any) || {}), ...((app.metadata as any) || {}) };
         app.tierSpecificData = { ...((existing.tierSpecificData as any) || {}), ...((app.tierSpecificData as any) || {}) };
         // Purge redundant temporary record from database
-        basePrisma.admissionsApplication.delete({ where: { id: existing.id } }).catch(() => null);
+        centralDb.admissionsApplication.delete({ where: { id: existing.id } }).catch(() => null);
       } else {
         // Current app is the duplicate; migrate its documents to existing before purging!
-        basePrisma.admissionsDocument.updateMany({
+        centralDb.admissionsDocument.updateMany({
           where: { applicationId: app.id },
           data: { applicationId: existing.id },
         }).catch(() => null);
-        basePrisma.admissionsFeeTransaction.updateMany({
+        centralDb.admissionsFeeTransaction.updateMany({
           where: { applicationId: app.id },
           data: { applicationId: existing.id },
         }).catch(() => null);
@@ -541,7 +603,7 @@ export default async function AdmissionsPage({
         existing.feeTransactions = [...(existing.feeTransactions || []), ...(app.feeTransactions || [])];
         existing.metadata = { ...((app.metadata as any) || {}), ...((existing.metadata as any) || {}) };
         existing.tierSpecificData = { ...((app.tierSpecificData as any) || {}), ...((existing.tierSpecificData as any) || {}) };
-        basePrisma.admissionsApplication.delete({ where: { id: app.id } }).catch(() => null);
+        centralDb.admissionsApplication.delete({ where: { id: app.id } }).catch(() => null);
       }
     }
   }
@@ -555,7 +617,7 @@ export default async function AdmissionsPage({
       const leadId = (app.metadata as any)?.leadId || (app.tierSpecificData as any)?.leadId;
       const cleanNo = (app.applicationNumber || "").replace(/^ADM-|^APP-/i, "").replace(/[^a-zA-Z0-9]/g, "");
 
-      const linkedLead = await basePrisma.admissionLead.findFirst({
+      const linkedLead = await centralDb.admissionLead.findFirst({
         where: {
           schoolId: school.id,
           OR: [
@@ -571,7 +633,7 @@ export default async function AdmissionsPage({
         },
       });
 
-      const linkedReg = await basePrisma.admissionRegister.findFirst({
+      const linkedReg = await centralDb.admissionRegister.findFirst({
         where: {
           tenantId: school.id,
           OR: [
@@ -583,7 +645,7 @@ export default async function AdmissionsPage({
       });
 
       // Gather all documents from AdmissionsDocument table
-      const dbDocs = await basePrisma.admissionsDocument.findMany({
+      const dbDocs = await centralDb.admissionsDocument.findMany({
         where: { applicationId: app.id },
       });
 
@@ -761,7 +823,7 @@ export default async function AdmissionsPage({
       }
 
       if (feeReceiptUrl && (!app.feeTransactions || app.feeTransactions.length === 0)) {
-        const persistedTx = await basePrisma.admissionsFeeTransaction
+        const persistedTx = await centralDb.admissionsFeeTransaction
           .create({
             data: {
               tenantId: app.tenantId || school.id,
@@ -853,7 +915,7 @@ export default async function AdmissionsPage({
             (key === "applicationFeeReceipt" ? metaDocs.applicationFeeReceiptUrl || metaDocs.formFeeReceiptUrl : null);
           if (
             url &&
-            !docsList.some((d) =>
+            !docsList.some((d: any) =>
               d.documentType.toUpperCase().replace(/[\s-_]/g, "").includes(key.toUpperCase().replace(/[\s-_]/g, "")) ||
               d.documentType === dType
             )
@@ -897,14 +959,14 @@ export default async function AdmissionsPage({
   // 4. Query Admission Cycles for session filtering (with tenantId & schoolId scoping and catch fallback)
   let rawCycles: any[] = [];
   try {
-    rawCycles = await basePrisma.admissionCycle.findMany({
+    rawCycles = await centralDb.admissionCycle.findMany({
       where: {
         schoolId: school.id,
       },
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
     if (!rawCycles || rawCycles.length === 0) {
-      rawCycles = await basePrisma.admissionCycle.findMany({
+      rawCycles = await centralDb.admissionCycle.findMany({
         where: {
           OR: [{ schoolId: school.id }, { tenantId: school.id }],
         },
@@ -943,7 +1005,7 @@ export default async function AdmissionsPage({
   // 5. Query Admissions Fee Transactions for embedded reconciliation
   let rawTransactions: any[] = [];
   try {
-    rawTransactions = await basePrisma.admissionsFeeTransaction.findMany({
+    rawTransactions = await centralDb.admissionsFeeTransaction.findMany({
       where: {
         OR: [
           { tenantId: school.id },
@@ -1007,7 +1069,7 @@ export default async function AdmissionsPage({
     accountName: school.settlementAccountName || school.name,
   };
 
-  const academicTiers = school.academicTiers.map((t) => ({
+  const academicTiers = (school.academicTiers || []).map((t: any) => ({
     id: t.id,
     name: t.name,
     level: t.level ?? 1,

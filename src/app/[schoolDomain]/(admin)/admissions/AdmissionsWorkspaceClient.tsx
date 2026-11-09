@@ -264,14 +264,24 @@ export default function AdmissionsWorkspaceClient({
   const tierConfig = incomingTierConfig || DEFAULT_TIER_CONFIG;
   const router = useRouter();
 
-  useEffect(() => {
-    setApplications(initialApplications);
-  }, [initialApplications]);
-
   const [applications, setApplications] = useState<SerializedApplication[]>(initialApplications);
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
   const [activeTab, setActiveTab] = useState("kanban");
   const [isPending, startTransition] = useTransition();
+  const [transitioningAppId, setTransitioningAppId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApplications((prev) => {
+      if (!transitioningAppId) return initialApplications;
+      return initialApplications.map((app) => {
+        if (app.id === transitioningAppId) {
+          const currentInFlight = prev.find((p) => p.id === transitioningAppId);
+          return currentInFlight ? { ...app, status: currentInFlight.status } : app;
+        }
+        return app;
+      });
+    });
+  }, [initialApplications, transitioningAppId]);
 
   // Feedback banner state
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -553,8 +563,36 @@ export default function AdmissionsWorkspaceClient({
   };
 
   // Action: update stage
-  const handleStageChange = (appId: string, targetStage: string) => {
-    startTransition(async () => {
+  const handleStageChange = async (appId: string, targetStage: string) => {
+    const appToUpdate = applications.find((a) => a.id === appId);
+    if (!appToUpdate) return;
+
+    // Avoid redundant transitions if candidate is already in this stage
+    const currentKanbanStage = mapAppToKanbanStage(appToUpdate.status);
+    if (currentKanbanStage === targetStage) return;
+
+    const previousStatus = appToUpdate.status;
+
+    // Calculate optimistic status mapped to ApplicationStatus
+    let optimisticStatus = targetStage;
+    const stageUpper = targetStage.toUpperCase().replace(/\s+/g, "_");
+    if (stageUpper === "DOCS_PENDING" || stageUpper === "DOCS PENDING") {
+      optimisticStatus = "PAYMENT_PENDING";
+    } else if (stageUpper === "VERIFIED") {
+      optimisticStatus = "UNDER_REVIEW";
+    } else if (stageUpper === "APPROVED") {
+      optimisticStatus = "OFFER_EXTENDED";
+    } else if (stageUpper === "ADMITTED") {
+      optimisticStatus = "ENROLLED";
+    }
+
+    // 1. Optimistic transition: move card immediately in local state
+    setApplications((prev) =>
+      prev.map((a) => (a.id === appId ? { ...a, status: optimisticStatus } : a))
+    );
+    setTransitioningAppId(appId);
+
+    try {
       const res = await updateApplicationStageAction({
         applicationId: appId,
         newStage: targetStage,
@@ -566,11 +604,23 @@ export default function AdmissionsWorkspaceClient({
         setApplications((prev) =>
           prev.map((a) => (a.id === appId ? { ...a, status: res.newStage } : a))
         );
-        setFeedback({ type: "success", message: res.message || "Stage updated successfully." });
+        setFeedback({ type: "success", message: res.message || `Candidate stage moved to ${targetStage}.` });
       } else {
+        // Revert on failure
+        setApplications((prev) =>
+          prev.map((a) => (a.id === appId ? { ...a, status: previousStatus } : a))
+        );
         setFeedback({ type: "error", message: res.error || "Failed to update stage." });
       }
-    });
+    } catch (err: any) {
+      // Revert on network/server exception
+      setApplications((prev) =>
+        prev.map((a) => (a.id === appId ? { ...a, status: previousStatus } : a))
+      );
+      setFeedback({ type: "error", message: err?.message || "Failed to update stage." });
+    } finally {
+      setTransitioningAppId(null);
+    }
   };
 
   // Action: enroll candidate
@@ -1519,18 +1569,28 @@ export default function AdmissionsWorkspaceClient({
                             {/* Stage Selector / Action Controls */}
                             {canMutate && (
                               <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-zinc-800/80">
-                                <select
-                                  value={col.key}
-                                  onChange={(e) => handleStageChange(app.id, e.target.value)}
-                                  disabled={isPending}
-                                  className="text-[11px] font-medium bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-slate-700 dark:text-zinc-200 focus:outline-hidden w-full cursor-pointer"
-                                >
-                                  {KANBAN_STAGES.map((s) => (
-                                    <option key={s.key} value={s.key}>
-                                      Move to {s.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                <div className="relative w-full">
+                                  <select
+                                    value={col.key}
+                                    onChange={(e) => handleStageChange(app.id, e.target.value)}
+                                    disabled={transitioningAppId === app.id}
+                                    className={`text-[11px] font-medium bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-slate-700 dark:text-zinc-200 focus:outline-hidden w-full cursor-pointer transition ${
+                                      transitioningAppId === app.id ? "opacity-60 cursor-wait" : ""
+                                    }`}
+                                  >
+                                    {KANBAN_STAGES.map((s) => (
+                                      <option key={s.key} value={s.key}>
+                                        Move to {s.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {transitioningAppId === app.id && (
+                                    <span className="absolute right-2 top-2 flex h-2 w-2 pointer-events-none">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                    </span>
+                                  )}
+                                </div>
 
                                 {/* Direct matriculate button if approved */}
                                 {(app.status === "OFFER_EXTENDED" || app.status === "OFFER_ACCEPTED") && (
