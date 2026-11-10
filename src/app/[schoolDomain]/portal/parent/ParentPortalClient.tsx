@@ -34,7 +34,7 @@ import {
   DollarSign,
   ChevronRight,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { performTenantLogout } from "@/lib/client-logout";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -67,6 +67,7 @@ export default function ParentPortalClient({
   const [expandedSection, setExpandedSection] = useState<string | null>("My Wards (Children)");
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
 
   const toggleSection = (sectionTitle: string) => {
@@ -1663,10 +1664,15 @@ export default function ParentPortalClient({
               </button>
               <button
                 type="button"
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-2"
+                onClick={() => {
+                  if (isLoggingOut) return;
+                  setIsLoggingOut(true);
+                  performTenantLogout(schoolDomain);
+                }}
+                disabled={isLoggingOut}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
               >
-                <span>Log out</span>
+                <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
               </button>
             </div>
           </div>

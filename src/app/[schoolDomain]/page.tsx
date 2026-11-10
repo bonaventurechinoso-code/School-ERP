@@ -4,6 +4,9 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { 
   Building2, 
   Phone, 
@@ -264,8 +267,14 @@ export default async function PublicGuestPortalPage({
                   href={workspaceHref}
                   className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm"
                 >
-                  <span>Sign In</span>
+                  <span>Dashboard</span>
                   <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                </Link>
+                <Link
+                  href={`/api/auth/logout?redirect=/${school.subdomain}/login`}
+                  className="inline-flex items-center gap-1 px-3 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-all text-xs sm:text-sm"
+                >
+                  <span>Sign Out</span>
                 </Link>
               </div>
             ) : (
@@ -420,13 +429,31 @@ export default async function PublicGuestPortalPage({
             </p>
             {!isDemo && (
               <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
-                <Link
-                  href={session ? workspaceHref : `/${school.subdomain}/login`}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
-                >
-                  <span>Sign In</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                {session ? (
+                  <>
+                    <Link
+                      href={workspaceHref}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      <span>Dashboard</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                    <Link
+                      href={`/api/auth/logout?redirect=/${school.subdomain}/login`}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition-colors border border-white/10"
+                    >
+                      <span>Sign Out</span>
+                    </Link>
+                  </>
+                ) : (
+                  <Link
+                    href={`/${school.subdomain}/login`}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
+                  >
+                    <span>Sign In</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
               </div>
             )}
           </div>

@@ -1,21 +1,38 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { revokeDatabaseSession } from "@/lib/session-manager";
+import { clearAllAuthSessionData, applyLogoutCookiesAndHeaders } from "@/lib/server-logout";
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
-
-    if (sessionCookie) {
-      await revokeDatabaseSession(sessionCookie);
-    } else {
-      cookieStore.delete("session");
-    }
-
-    return NextResponse.json({ success: true, message: "Logged out successfully" });
+    await clearAllAuthSessionData(cookieStore);
+    const response = NextResponse.json({ success: true, message: "Logged out successfully" });
+    return applyLogoutCookiesAndHeaders(response);
   } catch (error) {
     console.error("Logout error:", error);
-    return NextResponse.json({ error: "Failed to logout" }, { status: 500 });
+    const response = NextResponse.json({ success: true });
+    return applyLogoutCookiesAndHeaders(response);
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const redirectParam = searchParams.get("redirect") || searchParams.get("callbackUrl") || "/login";
+    let safeTarget = "/login";
+    if (redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
+      safeTarget = redirectParam;
+    }
+
+    const cookieStore = await cookies();
+    await clearAllAuthSessionData(cookieStore);
+
+    const redirectUrl = new URL(safeTarget, req.url);
+    const response = NextResponse.redirect(redirectUrl);
+    return applyLogoutCookiesAndHeaders(response);
+  } catch {
+    const redirectUrl = new URL("/login", req.url);
+    const response = NextResponse.redirect(redirectUrl);
+    return applyLogoutCookiesAndHeaders(response);
   }
 }
