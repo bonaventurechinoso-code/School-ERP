@@ -52,10 +52,12 @@ export interface TierTerminology {
 export function resolveInstitutionalTier(
   schoolName: string = "",
   academicTiers: Array<{ name: string }> = [],
-  explicitTier?: string
+  explicitTier?: string,
 ): TierTerminology {
   const nameUpper = (schoolName || "").toUpperCase();
-  const tierNames = (academicTiers || []).map((t) => (t?.name || "").toUpperCase());
+  const tierNames = (academicTiers || []).map((t) =>
+    (t?.name || "").toUpperCase(),
+  );
 
   let tierType: InstitutionalTierType = "PRIMARY";
 
@@ -77,14 +79,38 @@ export function resolveInstitutionalTier(
       tierType = "COLLEGE_OF_EDUCATION";
     } else if (
       tierNames.some((t) => t.includes("PRIMARY") || t.includes("BASIC")) &&
-      tierNames.some((t) => t.includes("SECONDARY") || t.includes("HIGH") || t.includes("COLLEGE"))
+      tierNames.some(
+        (t) =>
+          t.includes("SECONDARY") ||
+          t.includes("HIGH") ||
+          t.includes("COLLEGE"),
+      )
     ) {
       tierType = "PRIMARY_SECONDARY";
-    } else if (tierNames.some((t) => t.includes("SECONDARY") || t.includes("HIGH") || (t.includes("COLLEGE") && !t.includes("EDUCATION")))) {
+    } else if (
+      tierNames.some(
+        (t) =>
+          t.includes("SECONDARY") ||
+          t.includes("HIGH") ||
+          (t.includes("COLLEGE") && !t.includes("EDUCATION")),
+      )
+    ) {
       tierType = "SECONDARY";
-    } else if (tierNames.some((t) => t.includes("PRIMARY") || t.includes("BASIC") || t.includes("ELEMENTARY"))) {
+    } else if (
+      tierNames.some(
+        (t) =>
+          t.includes("PRIMARY") ||
+          t.includes("BASIC") ||
+          t.includes("ELEMENTARY"),
+      )
+    ) {
       tierType = "PRIMARY";
-    } else if (tierNames.some((t) => t.includes("NURSERY") || t.includes("CRECHE") || t.includes("EARLY"))) {
+    } else if (
+      tierNames.some(
+        (t) =>
+          t.includes("NURSERY") || t.includes("CRECHE") || t.includes("EARLY"),
+      )
+    ) {
       tierType = "NURSERY";
     }
   } else {
@@ -95,27 +121,43 @@ export function resolveInstitutionalTier(
       tierType = "POLYTECHNIC";
     } else if (nameUpper.includes("COLLEGE OF EDUCATION")) {
       tierType = "COLLEGE_OF_EDUCATION";
-    } else if (nameUpper.includes("SECONDARY") || nameUpper.includes("HIGH SCHOOL") || nameUpper.includes("GRAMMAR")) {
+    } else if (
+      nameUpper.includes("SECONDARY") ||
+      nameUpper.includes("HIGH SCHOOL") ||
+      nameUpper.includes("GRAMMAR")
+    ) {
       tierType = "SECONDARY";
-    } else if (nameUpper.includes("PRIMARY") || nameUpper.includes("BASIC") || nameUpper.includes("ELEMENTARY")) {
+    } else if (
+      nameUpper.includes("PRIMARY") ||
+      nameUpper.includes("BASIC") ||
+      nameUpper.includes("ELEMENTARY")
+    ) {
       tierType = "PRIMARY";
-    } else if (nameUpper.includes("NURSERY") || nameUpper.includes("CRECHE") || nameUpper.includes("KINDERGARTEN")) {
+    } else if (
+      nameUpper.includes("NURSERY") ||
+      nameUpper.includes("CRECHE") ||
+      nameUpper.includes("KINDERGARTEN")
+    ) {
       tierType = "NURSERY";
     }
   }
 
   const isCreche = tierType === "NURSERY";
   const isPrimary = tierType === "PRIMARY" || tierType === "PRIMARY_SECONDARY";
-  const isSecondary = tierType === "SECONDARY" || tierType === "PRIMARY_SECONDARY";
-  const isTertiary = tierType === "UNIVERSITY" || tierType === "POLYTECHNIC" || tierType === "COLLEGE_OF_EDUCATION";
+  const isSecondary =
+    tierType === "SECONDARY" || tierType === "PRIMARY_SECONDARY";
+  const isTertiary =
+    tierType === "UNIVERSITY" ||
+    tierType === "POLYTECHNIC" ||
+    tierType === "COLLEGE_OF_EDUCATION";
 
   if (isTertiary) {
     const instName =
       tierType === "UNIVERSITY"
         ? "University"
         : tierType === "POLYTECHNIC"
-        ? "Polytechnic"
-        : "College of Education";
+          ? "Polytechnic"
+          : "College of Education";
 
     return {
       tierType,
@@ -129,20 +171,29 @@ export function resolveInstitutionalTier(
       studentsNoun: "Students",
       teacherNoun: "Lecturer",
       teachersNoun: "Faculty",
-      headNoun: tierType === "UNIVERSITY" ? "Vice Chancellor" : tierType === "POLYTECHNIC" ? "Rector" : "Provost",
+      headNoun:
+        tierType === "UNIVERSITY"
+          ? "Vice Chancellor"
+          : tierType === "POLYTECHNIC"
+            ? "Rector"
+            : "Provost",
       academicPeriodNoun: "Semester",
       currentPeriodLabel: "Current Semester",
-      periodOrdinal: (n = 1) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Semester`,
+      periodOrdinal: (n = 1) =>
+        `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Semester`,
       classroomNoun: "Course Unit / Lecture Hall",
       classroomsNoun: "Lecture Halls & Units",
       regNumberNoun: "Matric / Reg #",
       classLevelLabel: "Academic Level",
-      curriculumEngineLabel: "Grading Engine: University Semester Examination System",
+      curriculumEngineLabel:
+        "Grading Engine: University Semester Examination System",
       noticesTitle: "Campus Notices",
-      noticesSubtitle: "Official announcements, academic calendars, and campus administrative updates.",
+      noticesSubtitle:
+        "Official announcements, academic calendars, and campus administrative updates.",
       circularsTabTitle: "Departmental Circulars & Senate Resolutions",
       circularsHeading: "Departmental Circulars & Senate Resolutions",
-      circularsSubheading: "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines.",
+      circularsSubheading:
+        "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines.",
       timetableLabel: "Lecture Timetables",
       lessonNotesLabel: "Course Outline & Syllabi",
       reportCardLabel: "Semester Result Transcripts",
@@ -151,10 +202,14 @@ export function resolveInstitutionalTier(
       staffSearchPlaceholder: "Search faculty by name, department, or email...",
       staffTableHead: "Faculty Member",
       authorizingBody: "Academic Senate & Registry",
-      sampleNotice1Title: "Senate Directives on Mid-Semester Continuous Assessment Score Uploads",
-      sampleNotice1Body: "All faculty members and course lecturers are instructed to conclude continuous assessments (CA1 & CA2) and lock student portal grades on or before Friday, November 14th.",
-      sampleNotice2Title: "Statutory Faculty Board Meeting & Question Moderation",
-      sampleNotice2Body: "The statutory semester meeting for external examiner appointments and courseware syllabus moderation is scheduled for the Faculty Board Room.",
+      sampleNotice1Title:
+        "Senate Directives on Mid-Semester Continuous Assessment Score Uploads",
+      sampleNotice1Body:
+        "All faculty members and course lecturers are instructed to conclude continuous assessments (CA1 & CA2) and lock student portal grades on or before Friday, November 14th.",
+      sampleNotice2Title:
+        "Statutory Faculty Board Meeting & Question Moderation",
+      sampleNotice2Body:
+        "The statutory semester meeting for external examiner appointments and courseware syllabus moderation is scheduled for the Faculty Board Room.",
     };
   }
 
@@ -174,17 +229,21 @@ export function resolveInstitutionalTier(
       headNoun: "Head of Early Years",
       academicPeriodNoun: "Term",
       currentPeriodLabel: "Academic Term",
-      periodOrdinal: (n = 1) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term Care`,
+      periodOrdinal: (n = 1) =>
+        `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term Care`,
       classroomNoun: "Care Pod / Playgroup",
       classroomsNoun: "Care Pods",
       regNumberNoun: "Birth Reg / Tag #",
       classLevelLabel: "Care Pod / Group",
-      curriculumEngineLabel: "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards",
+      curriculumEngineLabel:
+        "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards",
       noticesTitle: "Early Care Notices",
-      noticesSubtitle: "Parent announcements, care schedules, and early childhood activity updates.",
+      noticesSubtitle:
+        "Parent announcements, care schedules, and early childhood activity updates.",
       circularsTabTitle: "Parent Circulars & Creche Bulletins",
       circularsHeading: "Parent Circulars & Creche Bulletins",
-      circularsSubheading: "Pediatric health guidance, nursery activities, hygiene protocols, and early years caregiver memos.",
+      circularsSubheading:
+        "Pediatric health guidance, nursery activities, hygiene protocols, and early years caregiver memos.",
       timetableLabel: "Daily Activity Logs (Feeding / Nap Schedules)",
       lessonNotesLabel: "Immunization & Health Vitals",
       reportCardLabel: "Child Growth Trackers (Milestones)",
@@ -194,9 +253,12 @@ export function resolveInstitutionalTier(
       staffTableHead: "Caregiver",
       authorizingBody: "Early Years Directorate & Nursery Management",
       sampleNotice1Title: "Pediatric Health & Immunization Review Exercise",
-      sampleNotice1Body: "All classroom caregivers and nursery minders must log weekly infant developmental checklists before the upcoming parent-caregiver conference.",
-      sampleNotice2Title: "Monthly Montessori Sensory Toy Sterilization Protocol",
-      sampleNotice2Body: "In compliance with early childhood hygiene standards, all nursery playrooms and day-rest cribs will undergo routine sanitization this weekend.",
+      sampleNotice1Body:
+        "All classroom caregivers and nursery minders must log weekly infant developmental checklists before the upcoming parent-caregiver conference.",
+      sampleNotice2Title:
+        "Monthly Montessori Sensory Toy Sterilization Protocol",
+      sampleNotice2Body:
+        "In compliance with early childhood hygiene standards, all nursery playrooms and day-rest cribs will undergo routine sanitization this weekend.",
     };
   }
 
@@ -216,17 +278,21 @@ export function resolveInstitutionalTier(
       headNoun: "Principal",
       academicPeriodNoun: "Term",
       currentPeriodLabel: "Current Term",
-      periodOrdinal: (n = 1) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term`,
+      periodOrdinal: (n = 1) =>
+        `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term`,
       classroomNoun: "Classroom",
       classroomsNoun: "Classrooms & Streams",
       regNumberNoun: "Admission / Reg #",
       classLevelLabel: "Class / Stream",
-      curriculumEngineLabel: "Grading Engine: WAEC / NECO Secondary Standard Continuous Assessment",
+      curriculumEngineLabel:
+        "Grading Engine: WAEC / NECO Secondary Standard Continuous Assessment",
       noticesTitle: "School Notices",
-      noticesSubtitle: "Official school announcements, academic calendars, and administrative directives.",
+      noticesSubtitle:
+        "Official school announcements, academic calendars, and administrative directives.",
       circularsTabTitle: "Staff Circulars & Management Directives",
       circularsHeading: "Staff Circulars & Principal's Directives",
-      circularsSubheading: "Official teaching staff circulars, examination moderation notices, and term academic guidelines.",
+      circularsSubheading:
+        "Official teaching staff circulars, examination moderation notices, and term academic guidelines.",
       timetableLabel: "Teaching & Class Schedule",
       lessonNotesLabel: "Lesson Notes & Schemes of Work",
       reportCardLabel: "Termly Report Cards",
@@ -236,20 +302,26 @@ export function resolveInstitutionalTier(
       staffTableHead: "Staff Member / Teacher",
       authorizingBody: "Office of the Principal & Academic Board",
       sampleNotice1Title: "Term Continuous Assessment (CA) Submission Deadline",
-      sampleNotice1Body: "All subject teachers and form masters are instructed to compile continuous assessments (CA1 & CA2) and lock student portal grades before term examinations.",
+      sampleNotice1Body:
+        "All subject teachers and form masters are instructed to compile continuous assessments (CA1 & CA2) and lock student portal grades before term examinations.",
       sampleNotice2Title: "Staff Academic Briefing & Examination Preparation",
-      sampleNotice2Body: "The statutory staff academic briefing for term examination invigilation and question paper submission is scheduled for the Staff Common Room.",
+      sampleNotice2Body:
+        "The statutory staff academic briefing for term examination invigilation and question paper submission is scheduled for the Staff Common Room.",
     };
   }
 
   // PRIMARY or PRIMARY_SECONDARY (e.g. Egede Primary School)
   return {
-    tierType: tierType === "PRIMARY_SECONDARY" ? "PRIMARY_SECONDARY" : "PRIMARY",
+    tierType:
+      tierType === "PRIMARY_SECONDARY" ? "PRIMARY_SECONDARY" : "PRIMARY",
     isCreche: false,
     isPrimary: true,
     isSecondary: tierType === "PRIMARY_SECONDARY",
     isTertiary: false,
-    institutionCategory: tierType === "PRIMARY_SECONDARY" ? "Primary & Secondary School" : "Primary School",
+    institutionCategory:
+      tierType === "PRIMARY_SECONDARY"
+        ? "Primary & Secondary School"
+        : "Primary School",
     workspaceTitle: "School Workspace",
     studentNoun: "Pupil",
     studentsNoun: "Pupils",
@@ -258,17 +330,21 @@ export function resolveInstitutionalTier(
     headNoun: "Headmaster / Headmistress",
     academicPeriodNoun: "Term",
     currentPeriodLabel: "Current Term",
-    periodOrdinal: (n = 1) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term`,
+    periodOrdinal: (n = 1) =>
+      `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term`,
     classroomNoun: "Class",
     classroomsNoun: "Classes (Basic 1 - 6)",
     regNumberNoun: "Admission / Reg #",
     classLevelLabel: "Class / Section",
-    curriculumEngineLabel: "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment",
+    curriculumEngineLabel:
+      "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment",
     noticesTitle: "School Notices",
-    noticesSubtitle: "Official announcements, academic calendars, and school administrative updates.",
+    noticesSubtitle:
+      "Official announcements, academic calendars, and school administrative updates.",
     circularsTabTitle: "Staff Circulars & School Directives",
     circularsHeading: "Staff Circulars & Headmaster's Directives",
-    circularsSubheading: "Official teachers memos, basic curriculum directives, and school administrative guidelines.",
+    circularsSubheading:
+      "Official teachers memos, basic curriculum directives, and school administrative guidelines.",
     timetableLabel: "Class Timetable",
     lessonNotesLabel: "Lesson Notes & Schemes of Work",
     reportCardLabel: "Termly Report Cards",
@@ -278,8 +354,10 @@ export function resolveInstitutionalTier(
     staffTableHead: "Teacher / Staff Member",
     authorizingBody: "Office of the Headmaster & School Administration",
     sampleNotice1Title: "Term Continuous Assessment (CA) Score Compilation",
-    sampleNotice1Body: "All primary class teachers and subject instructors are reminded to conclude continuous assessments (CA1 & CA2) and submit pupil scores before the term deadline.",
+    sampleNotice1Body:
+      "All primary class teachers and subject instructors are reminded to conclude continuous assessments (CA1 & CA2) and submit pupil scores before the term deadline.",
     sampleNotice2Title: "Staff Meeting & Foundational Curriculum Review",
-    sampleNotice2Body: "The general teachers meeting with the Headmaster to review basic literacy and numeracy milestones will take place in the School Staff Room.",
+    sampleNotice2Body:
+      "The general teachers meeting with the Headmaster to review basic literacy and numeracy milestones will take place in the School Staff Room.",
   };
 }

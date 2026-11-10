@@ -30,9 +30,15 @@ const AUTH_COOKIE_NAMES = [
  * 4. Auth cookies across accessible document.cookie paths.
  * 5. Full hard navigation to the tenant's login screen (/schoolDomain/login?logout=1&loggedOut=true).
  */
-export async function performTenantLogout(options: string | TenantLogoutOptions = ""): Promise<void> {
-  const schoolDomain = typeof options === "string" ? options : options.schoolDomain;
-  let targetUrl = typeof options === "object" && options.redirectUrl ? options.redirectUrl : "";
+export async function performTenantLogout(
+  options: string | TenantLogoutOptions = "",
+): Promise<void> {
+  const schoolDomain =
+    typeof options === "string" ? options : options.schoolDomain;
+  let targetUrl =
+    typeof options === "object" && options.redirectUrl
+      ? options.redirectUrl
+      : "";
 
   if (!targetUrl) {
     if (schoolDomain && schoolDomain !== "admin" && schoolDomain !== "root") {
