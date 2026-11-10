@@ -43,6 +43,10 @@ export default async function PortalSettingsPage({
     enabled: true,
     tiers: {},
   };
+  const initialLogo = school.logo || "";
+  const initialHeroImage = schoolConfig.customHeroImage || (school as any).metadata?.customHeroImage || "";
+  const initialHeroVideo = schoolConfig.customHeroVideo || "";
+  const initialHeroType: "image" | "video" = schoolConfig.customHeroType || (initialHeroVideo ? "video" : "image");
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -119,6 +123,10 @@ export default async function PortalSettingsPage({
         initialAccountName={school.settlementAccountName || ""}
         initialPaymentInstruction={school.paymentInstruction || "Use Student Admission No as transfer narration"}
         initialEntranceExamSettings={initialEntranceExamSettings}
+        initialLogo={initialLogo}
+        initialHeroImage={initialHeroImage}
+        initialHeroVideo={initialHeroVideo}
+        initialHeroType={initialHeroType}
         initialTab={initialTab}
       />
     </div>

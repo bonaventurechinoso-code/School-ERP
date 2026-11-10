@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import React, { useState, useEffect, useTransition, useRef } from "react";
 import { updatePortalSettings, EntranceExamSettings, EntranceExamTierConfig } from "./actions";
@@ -30,6 +31,13 @@ import {
   BookOpen,
   Sliders,
   Send,
+  Upload,
+  Trash2,
+  Loader2,
+  RefreshCw,
+  Play,
+  Image as ImageIcon,
+  Video,
 } from "lucide-react";
 
 export interface PortalSettingsFormProps {
@@ -46,6 +54,10 @@ export interface PortalSettingsFormProps {
   initialAccountName?: string;
   initialPaymentInstruction?: string;
   initialEntranceExamSettings?: EntranceExamSettings;
+  initialLogo?: string;
+  initialHeroImage?: string;
+  initialHeroVideo?: string;
+  initialHeroType?: "image" | "video";
   initialTab?: string;
 }
 
@@ -63,6 +75,10 @@ export default function PortalSettingsForm({
   initialAccountName = "",
   initialPaymentInstruction = "Use Student Admission No as transfer narration",
   initialEntranceExamSettings,
+  initialLogo = "",
+  initialHeroImage = "",
+  initialHeroVideo = "",
+  initialHeroType = "image",
   initialTab,
 }: PortalSettingsFormProps) {
   // Navigation tabs
@@ -81,6 +97,22 @@ export default function PortalSettingsForm({
   const [phone, setPhone] = useState(initialPhone);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [greeting, setGreeting] = useState(initialGreeting || "");
+
+  // Institutional Visual Branding & Media
+  const [logo, setLogo] = useState(initialLogo || "");
+  const [heroImage, setHeroImage] = useState(initialHeroImage || "");
+  const [heroVideo, setHeroVideo] = useState(initialHeroVideo || "");
+  const [heroType, setHeroType] = useState<"image" | "video">(initialHeroType || "image");
+
+  // Media Upload State & Refs
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
+
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const heroImageInputRef = useRef<HTMLInputElement | null>(null);
+  const heroVideoInputRef = useRef<HTMLInputElement | null>(null);
 
   // Tab 2: Direct Commercial Bank Settlement (Manual Bank Transfer Engine)
   const [bankName, setBankName] = useState(initialBankName || "");
@@ -246,6 +278,78 @@ export default function PortalSettingsForm({
     setAccountNumber(numericOnly);
   };
 
+  const handleUploadLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLogoUploadError(null);
+    setIsUploadingLogo(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("mediaKind", "logo");
+
+      const res = await fetch(`/api/school/${schoolId}/branding/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to upload logo.");
+      }
+
+      setLogo(json.url);
+    } catch (err: any) {
+      setLogoUploadError(err.message || "Failed to upload logo.");
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  };
+
+  const handleUploadHeroFile = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    targetKind: "image" | "video"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setHeroUploadError(null);
+    setIsUploadingHero(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("mediaKind", "hero");
+
+      const res = await fetch(`/api/school/${schoolId}/branding/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to upload background media.");
+      }
+
+      if (json.mediaType === "video" || targetKind === "video") {
+        setHeroVideo(json.url);
+        setHeroType("video");
+      } else {
+        setHeroImage(json.url);
+        setHeroType("image");
+      }
+    } catch (err: any) {
+      setHeroUploadError(err.message || "Failed to upload background media.");
+    } finally {
+      setIsUploadingHero(false);
+      if (heroImageInputRef.current) heroImageInputRef.current.value = "";
+      if (heroVideoInputRef.current) heroVideoInputRef.current.value = "";
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
@@ -286,6 +390,10 @@ export default function PortalSettingsForm({
           contactPhone: phone,
           isPublicPortalEnabled: isPublic,
           welcomeGreeting: greeting,
+          logo: logo || null,
+          customHeroImage: heroImage || null,
+          customHeroVideo: heroVideo || null,
+          customHeroType: heroType,
           settlementBankName: bankName,
           settlementBankCode: bankCode,
           settlementAccountNumber: accountNumber,
@@ -536,6 +644,353 @@ export default function PortalSettingsForm({
               </div>
             </div>
 
+            {/* INSTITUTIONAL VISUAL BRANDING & MEDIA UPLOAD */}
+            <div className="border-t border-slate-100 dark:border-zinc-800 pt-6 space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Visual Branding & Media
+                  </span>
+                </div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  Institutional Logo & Public Portal Hero Media
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Upload your institution&apos;s crest/logo and configure the hero background (image or video) displayed on your public website.
+                </p>
+              </div>
+
+              {/* 1. LOGO UPLOAD */}
+              <div className="bg-slate-50 dark:bg-zinc-950/60 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-zinc-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    {/* Logo Preview Square */}
+                    <div className="relative w-20 h-20 rounded-2xl border-2 border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-1.5 flex items-center justify-center shadow-xs overflow-hidden shrink-0 group">
+                      {logo ? (
+                        <>
+                          <img
+                            src={logo}
+                            alt={`${name} Logo`}
+                            className="w-full h-full object-contain"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setLogo("")}
+                            className="absolute inset-0 bg-slate-900/75 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-[10px] font-bold cursor-pointer"
+                            title="Remove Logo"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-400 mb-0.5" />
+                            <span>Remove</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
+                          <Building2 className="w-8 h-8 text-slate-400 dark:text-zinc-500 mb-0.5" />
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">No Logo</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-zinc-200">
+                          Official Crest / Logo
+                        </label>
+                        {logo && (
+                          <span className="px-2 py-0.2 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Custom Logo Set
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-md">
+                        Rendered on the public portal header, footer, official invoice receipts, student report cards, and administrative drawer.
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-zinc-500 font-medium">
+                        Supported formats: PNG, JPG, WebP, SVG • Maximum file size: 5MB
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      type="file"
+                      ref={logoInputRef}
+                      onChange={handleUploadLogoFile}
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isUploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
+                      {isUploadingLogo ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{logo ? "Change Logo" : "Upload Logo"}</span>
+                        </>
+                      )}
+                    </button>
+                    {logo && (
+                      <button
+                        type="button"
+                        onClick={() => setLogo("")}
+                        className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {logoUploadError && (
+                  <div className="mt-3 p-2.5 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                    <span>{logoUploadError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. PUBLIC PORTAL HERO BACKGROUND MEDIA */}
+              <div className="bg-slate-50 dark:bg-zinc-950/60 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-zinc-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-zinc-200 block">
+                      Public Landing Page Hero Media
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                      Choose between a high-resolution campus photo or a dynamic looping ambient video backdrop.
+                    </p>
+                  </div>
+
+                  {/* Media Type Switcher: Image vs Video */}
+                  <div className="inline-flex items-center p-1 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setHeroType("image")}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        heroType === "image"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>Background Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHeroType("video")}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        heroType === "video"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Ambient Video</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* IMAGE MODE PANEL */}
+                {heroType === "image" && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-3.5 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {heroImage ? (
+                          <div className="relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-900 shrink-0">
+                            <img
+                              src={heroImage}
+                              alt="Hero Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-24 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 flex flex-col items-center justify-center text-slate-400 shrink-0">
+                            <ImageIcon className="w-5 h-5 mb-0.5" />
+                            <span className="text-[9px] uppercase font-bold">Tier Default</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {heroImage ? "Custom Campus Photo Active" : "Default Academic Tier Background"}
+                          </p>
+                          <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5">
+                            PNG, JPG, or WebP up to 10MB. Automatically darkened for high-contrast headline readability.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <input
+                          type="file"
+                          ref={heroImageInputRef}
+                          onChange={(e) => handleUploadHeroFile(e, "image")}
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          disabled={isUploadingHero}
+                          onClick={() => heroImageInputRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          {isUploadingHero ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{heroImage ? "Replace Photo" : "Upload Photo"}</span>
+                            </>
+                          )}
+                        </button>
+                        {heroImage && (
+                          <button
+                            type="button"
+                            onClick={() => setHeroImage("")}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                            title="Reset to tier default"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Reset to Default</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Direct Image URL input for external CDN */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                        Or Image URL:
+                      </span>
+                      <input
+                        type="url"
+                        value={heroImage}
+                        onChange={(e) => setHeroImage(e.target.value)}
+                        placeholder="https://example.com/campus-photo.jpg"
+                        className="flex-1 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-slate-800 dark:text-zinc-200 bg-white dark:bg-zinc-900 font-mono focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* VIDEO MODE PANEL */}
+                {heroType === "video" && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-3.5 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {heroVideo ? (
+                          <div className="relative w-28 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 bg-slate-900 shrink-0">
+                            <video
+                              src={heroVideo}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute bottom-1 right-1 bg-black/60 px-1 py-0.2 rounded text-[8px] font-mono text-white">
+                              VIDEO
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-28 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 flex flex-col items-center justify-center text-slate-400 shrink-0">
+                            <Video className="w-5 h-5 mb-0.5" />
+                            <span className="text-[9px] uppercase font-bold">No Video</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {heroVideo ? "Looping Ambient Video Active" : "No Custom Video (Defaulting to Tier Photo)"}
+                          </p>
+                          <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5">
+                            MP4 or WebM up to 50MB. Plays automatically in silence on both desktop and mobile devices.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <input
+                          type="file"
+                          ref={heroVideoInputRef}
+                          onChange={(e) => handleUploadHeroFile(e, "video")}
+                          accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          disabled={isUploadingHero}
+                          onClick={() => heroVideoInputRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          {isUploadingHero ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{heroVideo ? "Replace Video" : "Upload Video"}</span>
+                            </>
+                          )}
+                        </button>
+                        {heroVideo && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeroVideo("");
+                              setHeroType("image");
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                            title="Remove video and switch to photo"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Direct Video URL input for external video hosting */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                        Or Video URL:
+                      </span>
+                      <input
+                        type="url"
+                        value={heroVideo}
+                        onChange={(e) => {
+                          setHeroVideo(e.target.value);
+                          if (e.target.value) setHeroType("video");
+                        }}
+                        placeholder="https://example.com/ambient-campus.mp4"
+                        className="flex-1 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-slate-800 dark:text-zinc-200 bg-white dark:bg-zinc-900 font-mono focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {heroUploadError && (
+                  <div className="p-2.5 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                    <span>{heroUploadError}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* STATUS TOGGLE */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-slate-100 dark:border-zinc-800 pt-6 gap-4">
               <div>
@@ -590,25 +1045,56 @@ export default function PortalSettingsForm({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                    Interactive Public Header Preview
+                    Interactive Public Portal Header & Hero Preview
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400 dark:text-zinc-500">Live preview reflects unsaved inputs</span>
+                <span className="text-[11px] text-slate-400 dark:text-zinc-500">Live preview reflects unsaved branding</span>
               </div>
 
-              <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl shadow-xl border border-indigo-900/50 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
+              <div className="relative overflow-hidden text-white p-6 rounded-2xl shadow-xl border border-indigo-900/50 space-y-4 bg-slate-950 min-h-[180px]">
+                {/* Background media preview */}
+                <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
+                  {heroType === "video" && heroVideo ? (
+                    <video
+                      key={heroVideo}
+                      src={heroVideo}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : heroImage ? (
+                    <img
+                      src={heroImage}
+                      alt="Hero Backdrop"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900" />
+                  )}
+                  {/* Contrast dark overlay */}
+                  <div className="absolute inset-0 bg-black/60 z-0" />
+                </div>
+
+                <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/15 pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-600/30">
-                      <School className="w-5 h-5" />
-                    </div>
+                    {logo ? (
+                      <div className="w-11 h-11 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shadow-indigo-600/30 overflow-hidden shrink-0 border border-white/20">
+                        <img src={logo} alt="School Logo" className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-600/30 shrink-0">
+                        <School className="w-5 h-5" />
+                      </div>
+                    )}
                     <div>
-                      <h4 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      <h4 className="text-base sm:text-lg font-bold text-white tracking-tight drop-shadow-sm">
                         {name || "Institution Name"}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`w-2 h-2 rounded-full ${isPublic ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
-                        <span className="text-[11px] font-medium text-slate-300">
+                        <span className="text-[11px] font-medium text-slate-300 drop-shadow-xs">
                           {isPublic ? "Public Portal Live" : "Portal Offline / Maintenance"}
                         </span>
                       </div>
@@ -616,7 +1102,7 @@ export default function PortalSettingsForm({
                   </div>
 
                   {phone ? (
-                    <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg border border-white/15 text-xs text-indigo-200">
+                    <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/15 text-xs text-indigo-200">
                       <Phone className="w-3.5 h-3.5 text-indigo-300" />
                       <span className="font-mono font-medium">{phone}</span>
                     </div>
@@ -625,21 +1111,21 @@ export default function PortalSettingsForm({
                   )}
                 </div>
 
-                <div>
-                  <p className="text-indigo-100 text-sm sm:text-base font-medium leading-relaxed">
+                <div className="relative z-10">
+                  <p className="text-indigo-100 text-sm sm:text-base font-medium leading-relaxed drop-shadow-sm">
                     &ldquo;{greeting || "Welcome to our institution!"}&rdquo;
                   </p>
                 </div>
 
                 {academicTiers.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <div className="relative z-10 flex flex-wrap items-center gap-2 pt-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1">
                       <Layers className="w-3 h-3" /> Academic Pathways:
                     </span>
                     {academicTiers.map((tierName, idx) => (
                       <span 
                         key={idx} 
-                        className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-white border border-white/15"
+                        className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-white border border-white/15 backdrop-blur-xs"
                       >
                         {tierName}
                       </span>

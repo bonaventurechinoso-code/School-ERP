@@ -3,6 +3,7 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { safeRedisDel, safeRedisScanDel } from "@/lib/redis";
+import { clearL1TenantCache } from "@/lib/cache";
 import { isValidNubanAccountNumber } from "@/lib/nigerian-banks";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
@@ -33,6 +34,10 @@ export interface UpdatePortalSettingsPayload {
   contactPhone?: string;
   isPublicPortalEnabled?: boolean;
   welcomeGreeting?: string;
+  logo?: string | null;
+  customHeroImage?: string | null;
+  customHeroVideo?: string | null;
+  customHeroType?: "image" | "video" | null;
   settlementBankName?: string | null;
   settlementBankCode?: string | null;
   settlementAccountNumber?: string | null;
@@ -61,6 +66,9 @@ export async function updatePortalSettings(
     if (data.contactPhone !== undefined) {
       updatePayload.contactPhone = data.contactPhone ? data.contactPhone.trim() : null;
     }
+    if (data.logo !== undefined) {
+      updatePayload.logo = data.logo ? data.logo.trim() : null;
+    }
 
     // Direct Bank Settlement details (Manual Bank Transfer Engine)
     if (data.settlementBankName !== undefined) {
@@ -88,17 +96,35 @@ export async function updatePortalSettings(
         : "Use Student Admission No as transfer narration";
     }
 
-    // Entrance Examination & Screening Scheduling per Academic Tier
-    if (data.entranceExamSettings !== undefined) {
+    // Extended Tier / Portal Configuration (Entrance Exam & Custom Hero Media)
+    const hasTierConfigUpdate = 
+      data.entranceExamSettings !== undefined ||
+      data.customHeroImage !== undefined ||
+      data.customHeroVideo !== undefined ||
+      data.customHeroType !== undefined;
+
+    if (hasTierConfigUpdate) {
       const currentSchool = await basePrisma.school.findUnique({
         where: { id: schoolId },
         select: { tierDatabasesConfig: true },
       });
       const existingConfig: any = (currentSchool?.tierDatabasesConfig as object) || {};
-      updatePayload.tierDatabasesConfig = {
-        ...existingConfig,
-        entranceExamSettings: data.entranceExamSettings,
-      };
+      const nextConfig: any = { ...existingConfig };
+
+      if (data.entranceExamSettings !== undefined) {
+        nextConfig.entranceExamSettings = data.entranceExamSettings;
+      }
+      if (data.customHeroImage !== undefined) {
+        nextConfig.customHeroImage = data.customHeroImage ? data.customHeroImage.trim() : null;
+      }
+      if (data.customHeroVideo !== undefined) {
+        nextConfig.customHeroVideo = data.customHeroVideo ? data.customHeroVideo.trim() : null;
+      }
+      if (data.customHeroType !== undefined) {
+        nextConfig.customHeroType = data.customHeroType || "image";
+      }
+
+      updatePayload.tierDatabasesConfig = nextConfig;
     }
 
     // Enforce CBN Model A Direct Manual Transfer
@@ -132,9 +158,11 @@ export async function updatePortalSettings(
       }
     }
 
-    // Invalidate Redis cache for tenant
+    // Invalidate L1 & Redis L2 cache for tenant
     if (targetSubdomain) {
       const normDomain = targetSubdomain.toLowerCase().trim();
+      clearL1TenantCache(normDomain);
+      clearL1TenantCache(schoolId);
       await safeRedisDel(`cache:tenant:meta:${normDomain}`);
       await safeRedisScanDel(`cache:tenant:${schoolId}:*`);
     }
@@ -148,6 +176,7 @@ export async function updatePortalSettings(
       safeRevalidatePath(`/${targetSubdomain}/apply`, "page");
       safeRevalidatePath(`/${targetSubdomain}/finance`, "page");
       safeRevalidatePath(`/${targetSubdomain}/portal/student`, "page");
+      safeRevalidatePath(`/${targetSubdomain}/portal/principal`, "page");
     } else {
       safeRevalidatePath(`/portal-settings`, "page");
     }

@@ -215,11 +215,21 @@ export default async function PublicGuestPortalPage({
   const contactEmail = school.staff.length > 0 ? school.staff[0].email : "admissions@school.local";
   const contactPhone = school.contactPhone || "+234 (0) 800 000 0000";
   
+  // Resolve institutional branding media (custom hero image/video & logo)
+  const schoolConfig = (school.tierDatabasesConfig as any) || {};
+  const customHeroType: "image" | "video" =
+    schoolConfig.customHeroType || (schoolConfig.customHeroVideo ? "video" : "image");
+  const customHeroVideo: string | null = schoolConfig.customHeroVideo || null;
+  const customHeroImage: string | null =
+    schoolConfig.customHeroImage || (school as any).metadata?.customHeroImage || null;
+
   // Resolve tier-specific hero background image with verified local fallback
   const fallbackCampusImage = "/hero-bg.jpg";
-  const heroImageUrl = isDemo
-    ? ((school as any).metadata?.customHeroImage || fallbackCampusImage)
-    : (getHeroImage(preciseTier, (school as any).metadata?.customHeroImage) || fallbackCampusImage);
+  const heroImageUrl = customHeroImage
+    ? customHeroImage
+    : isDemo
+    ? fallbackCampusImage
+    : (getHeroImage(preciseTier) || fallbackCampusImage);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -256,9 +266,22 @@ export default async function PublicGuestPortalPage({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 min-h-[5rem] py-2.5 flex justify-between items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-            <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
-              <Building2 className="w-6 h-6" />
-            </div>
+            {school.logo ? (
+              <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden shadow-xs border border-slate-200 bg-white shrink-0 flex items-center justify-center p-1">
+                <Image
+                  src={school.logo}
+                  alt={`${school.name} Logo`}
+                  fill
+                  sizes="48px"
+                  className="object-contain"
+                  unoptimized={school.logo.startsWith("data:") || school.logo.endsWith(".svg")}
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
+                <Building2 className="w-6 h-6" />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight truncate">{school.name}</h1>
               <p className="text-[11px] sm:text-xs font-semibold text-indigo-600 uppercase tracking-wide leading-tight mt-0.5">
@@ -300,16 +323,34 @@ export default async function PublicGuestPortalPage({
       {/* Hero Section */}
       <main className="flex-1">
         <div className="relative w-full min-h-[580px] overflow-hidden bg-slate-950 text-white flex items-center">
-          {/* Full Background Image */}
-          <div className="absolute inset-0 w-full h-full z-0">
-            <Image 
-              src={heroImageUrl} 
-              fill
-              priority
-              className="object-cover" 
-              alt={`${school.name} ${preciseTier === "UNIVERSITY" || preciseTier === "POLYTECHNIC" ? "Campus" : "School Premises"}`} 
-            />
-            {/* 45% Opacity Dark Overlay for clear campus image visibility and high-contrast text */}
+          {/* Full Background Media (Image or Video) */}
+          <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
+            {customHeroType === "video" && customHeroVideo ? (
+              <video
+                key={customHeroVideo}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                className="w-full h-full object-cover"
+              >
+                <source
+                  src={customHeroVideo}
+                  type={customHeroVideo.endsWith(".webm") ? "video/webm" : "video/mp4"}
+                />
+              </video>
+            ) : (
+              <Image 
+                src={heroImageUrl} 
+                fill
+                priority
+                className="object-cover" 
+                alt={`${school.name} ${preciseTier === "UNIVERSITY" || preciseTier === "POLYTECHNIC" ? "Campus" : "School Premises"}`} 
+                unoptimized={heroImageUrl.startsWith("data:")}
+              />
+            )}
+            {/* 45% Opacity Dark Overlay for clear campus image/video visibility and high-contrast text */}
             <div className="absolute inset-0 bg-black/45 z-0 pointer-events-none" />
           </div>
 
@@ -424,9 +465,22 @@ export default async function PublicGuestPortalPage({
           
           <div>
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-9 h-9 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-sm">
-                <Building2 className="w-5 h-5" />
-              </div>
+              {school.logo ? (
+                <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-xs border border-slate-700 bg-white shrink-0 flex items-center justify-center p-1">
+                  <Image
+                    src={school.logo}
+                    alt={`${school.name} Logo`}
+                    fill
+                    sizes="40px"
+                    className="object-contain"
+                    unoptimized={school.logo.startsWith("data:") || school.logo.endsWith(".svg")}
+                  />
+                </div>
+              ) : (
+                <div className="w-9 h-9 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                  <Building2 className="w-5 h-5" />
+                </div>
+              )}
               <h2 className="text-xl font-bold text-white">{school.name}</h2>
             </div>
             <p className="text-sm text-slate-400 max-w-sm mb-6 leading-relaxed">

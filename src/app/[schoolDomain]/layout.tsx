@@ -201,6 +201,7 @@ export default async function TenantLayout({
     },
     branding: {
       primaryColor: "#0f172a", // Defaulting to slate-900
+      logoUrl: school.logo || undefined,
     },
   };
 

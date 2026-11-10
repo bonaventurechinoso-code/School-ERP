@@ -16,6 +16,10 @@ const MIME_TYPES: Record<string, string> = {
   ".txt": "text/plain",
   ".doc": "application/msword",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".ogg": "video/ogg",
+  ".mov": "video/quicktime",
 };
 
 export async function GET(
