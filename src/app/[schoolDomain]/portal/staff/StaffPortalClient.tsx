@@ -428,10 +428,10 @@ export default function StaffPortalClient({
         rank % 10 === 1 && rank !== 11
           ? "st"
           : rank % 10 === 2 && rank !== 12
-          ? "nd"
-          : rank % 10 === 3 && rank !== 13
-          ? "rd"
-          : "th";
+            ? "nd"
+            : rank % 10 === 3 && rank !== 13
+              ? "rd"
+              : "th";
       ranks.set(item.student.id, `${rank}${suffix}`);
     });
 
@@ -839,8 +839,8 @@ export default function StaffPortalClient({
   // Auto-expand accordion section containing the active tab
   useEffect(() => {
     const currentGroup = navSections.find((g) => g.items.some((it) => it.id === activeTab));
-    if (currentGroup && expandedSection !== currentGroup.title) {
-      setExpandedSection(currentGroup.title);
+    if (currentGroup) {
+      setExpandedSection((prev) => (prev !== currentGroup.title ? currentGroup.title : prev));
     }
   }, [activeTab, navSections]);
 
@@ -856,9 +856,8 @@ export default function StaffPortalClient({
 
       {/* 1. True Left-Hand Side Panel (Full-height persistent sidebar matching Admin layout) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
-          isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
+          }`}
       >
         {/* Consolidated Tenant / Profile Header Block */}
         <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between shrink-0">
@@ -914,17 +913,15 @@ export default function StaffPortalClient({
                   type="button"
                   onClick={() => toggleSection(group.title)}
                   title={group.title}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                    anyChildActive
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${anyChildActive
                       ? "bg-emerald-600/15 text-white font-bold"
                       : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <FolderIcon
-                      className={`w-4 h-4 shrink-0 transition-colors ${
-                        anyChildActive ? "text-emerald-400" : "text-slate-400"
-                      }`}
+                      className={`w-4 h-4 shrink-0 transition-colors ${anyChildActive ? "text-emerald-400" : "text-slate-400"
+                        }`}
                     />
                     <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left truncate">
                       {group.title}
@@ -958,18 +955,16 @@ export default function StaffPortalClient({
                             setIsSidebarOpen(false);
                           }}
                           title={child.label}
-                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
-                            isChildActive
+                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${isChildActive
                               ? "bg-emerald-600/20 text-white font-bold border-l-2 border-emerald-500 shadow-2xs"
                               : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border-l-2 border-transparent"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             {ChildIcon && (
                               <ChildIcon
-                                className={`w-3.5 h-3.5 shrink-0 ${
-                                  isChildActive ? "text-emerald-400" : "text-slate-500"
-                                }`}
+                                className={`w-3.5 h-3.5 shrink-0 ${isChildActive ? "text-emerald-400" : "text-slate-500"
+                                  }`}
                               />
                             )}
                             <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left truncate">
@@ -1020,8 +1015,8 @@ export default function StaffPortalClient({
                   {isTertiary
                     ? "Faculty Academic Workspace"
                     : isCreche
-                    ? "Early Childhood & Creche Caregiver Workspace"
-                    : "Staff Educator Workspace"}
+                      ? "Early Childhood & Creche Caregiver Workspace"
+                      : "Staff Educator Workspace"}
                 </h1>
                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
                   {selectedClass} {isTertiary ? "Course Unit" : isCreche ? "Care Pod / Playgroup" : "Classroom Workspace"}
@@ -1068,9 +1063,8 @@ export default function StaffPortalClient({
                   </span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 transition-transform duration-200 ${
-                    isProfileDropdownOpen ? "rotate-180 text-emerald-500" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 transition-transform duration-200 ${isProfileDropdownOpen ? "rotate-180 text-emerald-500" : ""
+                    }`}
                 />
               </button>
 
@@ -1177,22 +1171,20 @@ export default function StaffPortalClient({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveTab(item.id as any)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-                  isActive
+                onClick={() => setActiveTab(item.id as typeof activeTab)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer ${isActive
                     ? "bg-emerald-600 text-white shadow-xs"
                     : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700"
-                }`}
+                  }`}
               >
                 {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
                 <span>{item.label}</span>
                 {item.badge && (
                   <span
-                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
-                      isActive
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${isActive
                         ? "bg-white/20 text-white"
                         : "bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300"
-                    }`}
+                      }`}
                   >
                     {item.badge}
                   </span>
@@ -1404,1760 +1396,19 @@ export default function StaffPortalClient({
             </div>
           )}
 
-      {/* ========================================================================= */}
-      {/* TAB 2: CLASSROOM ROSTERS                                                  */}
-      {/* ========================================================================= */}
-      {activeTab === "rosters" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Class Stream Filter */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400">Class:</label>
-              <select
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
-                className="px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              >
-                {initialClassrooms.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by student name or registration #..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-900 dark:text-zinc-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              />
-            </div>
-          </div>
-
-          {/* Rosters Table */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                {selectedClass} {isCreche ? "Infant & Toddler Roster" : isTertiary ? "Course Student Registration Roster" : "Student Directory"}
-              </h3>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                {classStudents.length} {isCreche ? "Infants Registered" : "Students Enrolled"}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
-                  <tr>
-                    <th className="px-6 py-3.5">{isCreche ? "Infant / Child Name" : "Student Name"}</th>
-                    <th className="px-6 py-3.5">{isCreche ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
-                    <th className="px-6 py-3.5">{isCreche ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
-                    <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5">{isCreche ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {classStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                        No students found matching your filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    classStudents.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
-                        <td className="px-6 py-3.5 font-bold text-slate-900 dark:text-white">
-                          {s.firstName} {s.lastName}
-                        </td>
-                        <td className="px-6 py-3.5 font-mono text-slate-500 dark:text-zinc-400">
-                          {s.admissionNumber || s.registrationNumber || "N/A"}
-                        </td>
-                        <td className="px-6 py-3.5 text-slate-600 dark:text-zinc-300">
-                          {s.currentClass || s.class || selectedClass}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            {s.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 font-mono text-slate-500 dark:text-zinc-400">
-                          {s.parentPhone || s.guardianPhone || "Not Provided"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: DAILY ATTENDANCE REGISTER                                          */}
-      {/* ========================================================================= */}
-      {activeTab === "attendance" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Printable Attendance Sheet Header */}
-          <div className="hidden print:block mb-6 text-center border-b border-slate-300 pb-4">
-            <h1 className="text-xl font-black uppercase tracking-wide text-black">{schoolName}</h1>
-            <p className="text-sm font-semibold text-slate-700">
-              {isCreche ? "Official Daily Drop-off & Pick-up Custody Register" : "Official Daily Classroom Attendance Register"}
-            </p>
-            <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
-              <span><strong>{isCreche ? "Care Pod / Group:" : "Class / Arm:"}</strong> {selectedClass}</span>
-              <span><strong>Date:</strong> {attendanceDate}</span>
-              <span><strong>Caregiver / Staff:</strong> {staffName} ({staffRole})</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs print:hidden">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  {isCreche ? "Custody Log Date:" : "Attendance Date:"}
-                </label>
+          {/* ========================================================================= */}
+          {/* TAB 2: CLASSROOM ROSTERS                                                  */}
+          {/* ========================================================================= */}
+          {activeTab === "rosters" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Class Stream Filter */}
                 <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={attendanceDate}
-                    onChange={(e) => setAttendanceDate(e.target.value)}
-                    className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
-                  />
-                  {isLoadingAttendance && (
-                    <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  Cohort:
-                </label>
-                <select
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
-                >
-                  {initialClassrooms.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 justify-end">
-              <button
-                type="button"
-                onClick={handleExportAttendanceCSV}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
-                title="Export current classroom attendance register to CSV file"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export CSV</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
-                title="Print physical attendance roster sheet"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Register</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleMarkAllPresent}
-                className="px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition cursor-pointer"
-              >
-                Mark All Present
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleSaveAttendance}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isPending ? "Saving..." : "Save Register"}</span>
-              </button>
-            </div>
-          </div>
-
-          {attendanceSaveMessage && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>{attendanceSaveMessage}</span>
-            </div>
-          )}
-
-          {/* Attendance Table */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
-                  <tr>
-                    <th className="px-6 py-3.5">Student Name</th>
-                    <th className="px-6 py-3.5 text-center">Status</th>
-                    <th className="px-6 py-3.5">Notes / Reasons</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {classStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
-                        No students in this class register.
-                      </td>
-                    </tr>
-                  ) : (
-                    classStudents.map((s) => {
-                      const currentStatus = attendanceMap[s.id]?.status || "PRESENT";
-                      return (
-                        <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
-                          <td className="px-6 py-3.5">
-                            <div className="font-bold text-slate-900 dark:text-white">
-                              {s.firstName} {s.lastName}
-                            </div>
-                            <div className="text-[10px] font-mono text-slate-400">
-                              {s.admissionNumber || s.registrationNumber || "No Reg"}
-                            </div>
-                          </td>
-                          <td className="px-6 py-3.5">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {(["PRESENT", "LATE", "ABSENT", "EXCUSED"] as const).map((st) => {
-                                const isSelected = currentStatus === st;
-                                let colorClass = "text-slate-500 bg-slate-100 dark:bg-zinc-800";
-                                if (isSelected) {
-                                  if (st === "PRESENT") colorClass = "bg-emerald-600 text-white font-black";
-                                  if (st === "LATE") colorClass = "bg-amber-500 text-white font-black";
-                                  if (st === "ABSENT") colorClass = "bg-rose-600 text-white font-black";
-                                  if (st === "EXCUSED") colorClass = "bg-blue-600 text-white font-black";
-                                }
-                                return (
-                                  <button
-                                    key={st}
-                                    type="button"
-                                    onClick={() => handleSetAttendanceStatus(s.id, st)}
-                                    className={`px-2.5 py-1 rounded-lg text-[10px] transition font-bold cursor-pointer ${colorClass}`}
-                                  >
-                                    {st}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                          <td className="px-6 py-3.5">
-                            <input
-                              type="text"
-                              placeholder="Add optional note..."
-                              value={attendanceMap[s.id]?.notes || ""}
-                              onChange={(e) =>
-                                setAttendanceMap((prev) => ({
-                                  ...prev,
-                                  [s.id]: {
-                                    status: currentStatus,
-                                    notes: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="w-full max-w-xs px-2.5 py-1 text-xs border border-slate-200 dark:border-zinc-700 rounded-lg bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Print-only Teacher & Principal Signature Block */}
-          <div className="hidden print:flex justify-between items-center mt-12 pt-6 border-t border-slate-400 text-xs text-black">
-            <div>
-              <p className="font-bold">Class Teacher Signature: _______________________</p>
-              <p className="text-[10px] text-slate-600 mt-1">Date: {attendanceDate}</p>
-            </div>
-            <div className="text-right">
-              <p className="font-bold">Principal / Supervisor Seal: _______________________</p>
-              <p className="text-[10px] text-slate-600 mt-1">Official Institutional Register Stamp</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 4: 20/20/60 GRADEBOOK & ASSESSMENTS                                   */}
-      {/* ========================================================================= */}
-      {activeTab === "gradebook" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Gradebook Config Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  Class:
-                </label>
-                <select
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
-                >
-                  {initialClassrooms.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  Subject:
-                </label>
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
-                >
-                  {initialCourses.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                  Term:
-                </label>
-                <select
-                  value={selectedTerm}
-                  onChange={(e) => setSelectedTerm(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
-                >
-                  <option value="1st Term">1st Term</option>
-                  <option value="2nd Term">2nd Term</option>
-                  <option value="3rd Term">3rd Term</option>
-                </select>
-              </div>
-
-              {isLoadingGrades && (
-                <div className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold pt-4">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Loading marks...</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 justify-end">
-              <button
-                type="button"
-                disabled={isCompilingReportCards || isPending}
-                onClick={handleCompileReportCards}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
-                title="Compile term report cards with class ranking, GPA, and subject summaries for all students in this class"
-              >
-                {isCompilingReportCards ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <FileCheck className="w-3.5 h-3.5" />
-                )}
-                <span>{isCompilingReportCards ? "Compiling..." : isCreche ? "Compile Growth Records" : "Compile Class Report Cards"}</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isPending || isCompilingReportCards}
-                onClick={handleSaveGrades}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isPending ? "Persisting Marks..." : isCreche ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
-              </button>
-            </div>
-          </div>
-
-          {compilationMessage && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-amber-600" />
-              <span>{compilationMessage}</span>
-            </div>
-          )}
-
-          {compilationError && (
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{compilationError}</span>
-            </div>
-          )}
-
-          {gradesSaveMessage && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>{gradesSaveMessage}</span>
-            </div>
-          )}
-
-          {/* Gradebook Matrix Table */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
-                  <tr>
-                    <th className="px-5 py-3.5">Student Name & Reg #</th>
-                    <th className="px-3 py-3.5 text-center w-24">1st CA (20)</th>
-                    <th className="px-3 py-3.5 text-center w-24">2nd CA (20)</th>
-                    <th className="px-3 py-3.5 text-center w-24">Exam (60)</th>
-                    <th className="px-3 py-3.5 text-center w-24 bg-slate-100/60 dark:bg-zinc-800/80">
-                      Total (100)
-                    </th>
-                    <th className="px-3 py-3.5 text-center w-20">WAEC Grade</th>
-                    <th className="px-3 py-3.5 text-center w-20">Position</th>
-                    <th className="px-4 py-3.5">Teacher Remark</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {gradedMatrix.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-slate-400">
-                        No students found for this class stream.
-                      </td>
-                    </tr>
-                  ) : (
-                    gradedMatrix.map((item) => (
-                      <tr
-                        key={item.student.id}
-                        className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors"
-                      >
-                        <td className="px-5 py-3.5">
-                          <p className="font-bold text-slate-900 dark:text-white">
-                            {item.student.lastName}, {item.student.firstName}
-                          </p>
-                          <span className="font-mono text-[10px] text-slate-400">
-                            {item.student.admissionNumber || item.student.registrationNumber || "NO REG"}
-                          </span>
-                        </td>
-
-                        {/* CA 1 */}
-                        <td className="px-3 py-3.5 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={item.ca1 || ""}
-                            onChange={(e) => handleScoreChange(item.student.id, "ca1", e.target.value)}
-                            className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </td>
-
-                        {/* CA 2 */}
-                        <td className="px-3 py-3.5 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={item.ca2 || ""}
-                            onChange={(e) => handleScoreChange(item.student.id, "ca2", e.target.value)}
-                            className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </td>
-
-                        {/* Exam */}
-                        <td className="px-3 py-3.5 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="60"
-                            value={item.exam || ""}
-                            onChange={(e) => handleScoreChange(item.student.id, "exam", e.target.value)}
-                            className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </td>
-
-                        {/* Total Score */}
-                        <td className="px-3 py-3.5 text-center bg-slate-50/80 dark:bg-zinc-800/40">
-                          <span
-                            className={`font-mono text-sm font-black ${
-                              item.total >= 50
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-rose-600 dark:text-rose-400"
-                            }`}
-                          >
-                            {item.total}
-                          </span>
-                        </td>
-
-                        {/* Grade Letter */}
-                        <td className="px-3 py-3.5 text-center">
-                          <span
-                            className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${item.grade.color}`}
-                          >
-                            {item.grade.letter}
-                          </span>
-                        </td>
-
-                        {/* Position */}
-                        <td className="px-3 py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
-                          {item.position}
-                        </td>
-
-                        {/* Remark */}
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="text"
-                            placeholder="e.g. Excellent work, Commendable effort"
-                            value={item.remarks}
-                            onChange={(e) =>
-                              handleScoreChange(item.student.id, "remarks", e.target.value)
-                            }
-                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/40 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400 font-semibold">
-              <span>{isCreche ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isCreche ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
-              <span>{isCreche ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 5: TEACHING SCHEDULE & TIMETABLE                                      */}
-      {/* ========================================================================= */}
-      {activeTab === "schedule" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              {isCreche
-                ? "Daily Activity Logs & Care Routine (Feeding / Nap Schedules)"
-                : isTertiary
-                ? "Weekly Lecture & Seminar Timetable"
-                : "Weekly Teaching Timetable"}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
-              {isCreche
-                ? `Scheduled infant feeding times, nap windows, diaper checks, and outdoor sensory sessions for ${selectedClass}.`
-                : `Assigned lecture periods, course codes, and classroom halls for ${staffName}.`}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"].map((day) => {
-              const periods = scheduleByDay[day] || [];
-              return (
-                <div
-                  key={day}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-4 shadow-xs space-y-3"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
-                    <h4 className="font-extrabold text-xs tracking-wider text-slate-900 dark:text-white uppercase">
-                      {day}
-                    </h4>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                      {periods.length} {isCreche ? "Care Blocks" : "Periods"}
-                    </span>
-                  </div>
-
-                  {periods.length === 0 ? (
-                    <div className="p-4 text-center text-slate-400 text-xs italic">
-                      No periods scheduled.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {periods.map((p) => (
-                        <div
-                          key={p.id}
-                          className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800 space-y-1"
-                        >
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-900 dark:text-white">
-                              {p.course.name}
-                            </span>
-                            <span className="font-mono font-bold text-[10px] text-emerald-600 dark:text-emerald-400">
-                              {p.startTime} - {p.endTime}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
-                            <span>Room: <strong>{p.classroom.name}</strong></span>
-                            <span className="font-mono text-[10px]">{p.course.code}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 6: REMUNERATION & PAYSLIPS                                            */}
-      {/* ========================================================================= */}
-      {activeTab === "payslips" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Remuneration & Monthly Payslips</h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Review institutional salary disbursements, bank details, and print official electronic vouchers.
-            </p>
-          </div>
-
-          {/* Salary & Bank Profile Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-emerald-500">
-              <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
-                Base Monthly Salary
-              </span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                {formatNaira(staffProfile?.baseSalary || 220000)}
-              </p>
-              <span className="text-[10px] text-slate-400 mt-1 block">
-                Direct bank disbursement rate
-              </span>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-blue-500">
-              <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
-                Destination Bank
-              </span>
-              <p className="text-base font-black text-slate-900 dark:text-white truncate">
-                {staffProfile?.bankName || "First Bank of Nigeria"}
-              </p>
-              <span className="text-xs font-mono text-slate-500 dark:text-zinc-400 mt-0.5 block">
-                Acct: {staffProfile?.bankAccountNumber || "0123456789"}
-              </span>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-indigo-500">
-              <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
-                Disbursements Count
-              </span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                {initialPayroll.length} Records
-              </p>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block font-semibold">
-                Electronic Receipts Available
-              </span>
-            </div>
-          </div>
-
-          {/* Payslips Table */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                Disbursement History
-              </h4>
-              <span className="text-xs text-slate-400 font-mono">
-                {initialPayroll.length} Pay Slips
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
-                  <tr>
-                    <th className="px-6 py-3.5">Disbursement Date</th>
-                    <th className="px-6 py-3.5">Receipt Code</th>
-                    <th className="px-6 py-3.5">Gross Amount</th>
-                    <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {initialPayroll.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                        No disbursed salary records found yet. Disbursed salaries from HR will appear here automatically.
-                      </td>
-                    </tr>
-                  ) : (
-                    initialPayroll.map((pay) => (
-                      <tr key={pay.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
-                        <td className="px-6 py-3.5 font-medium text-slate-900 dark:text-white">
-                          {new Date(pay.payDate).toLocaleDateString("en-NG", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </td>
-                        <td className="px-6 py-3.5 font-mono font-bold text-slate-600 dark:text-zinc-400">
-                          {pay.receiptCode || "N/A"}
-                        </td>
-                        <td className="px-6 py-3.5 font-mono font-bold text-slate-900 dark:text-zinc-100">
-                          {formatNaira(pay.amount)}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            {pay.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPayslip(pay)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg font-bold text-xs transition cursor-pointer shadow-2xs"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            <span>View Pay Slip</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* PRINTABLE ELECTRONIC PAY SLIP MODAL                                       */}
-      {/* ========================================================================= */}
-      {selectedPayslip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
-            {/* Modal Actions Bar */}
-            <div className="p-4 bg-slate-50 dark:bg-zinc-800 border-b border-slate-200 dark:border-zinc-700 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">Electronic Pay Slip Voucher</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Voucher</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPayslip(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg transition cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Printable Payslip Body */}
-            <div className="p-6 sm:p-8 overflow-y-auto space-y-6 text-slate-900 dark:text-white" id="printable-payslip">
-              {/* Institution Header */}
-              <div className="text-center border-b-2 border-slate-900 dark:border-zinc-700 pb-4">
-                <h2 className="text-xl font-black uppercase tracking-wider">{schoolName}</h2>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Bursary & Payroll Administration</p>
-                <div className="inline-block mt-2 px-3 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] font-bold">
-                  Receipt: {selectedPayslip.receiptCode || "VOUCHER-PAYROLL"}
-                </div>
-              </div>
-
-              {/* Staff Bio-Data Grid */}
-              <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800">
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Employee Name</span>
-                  <span className="font-bold text-sm">{staffName}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Designation & Role</span>
-                  <span className="font-bold text-sm">{staffRole}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Department</span>
-                  <span className="font-semibold">{staffProfile?.department || "Academics"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Disbursement Date</span>
-                  <span className="font-semibold">{new Date(selectedPayslip.payDate).toLocaleDateString("en-NG")}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Bank Name</span>
-                  <span className="font-semibold">{staffProfile?.bankName || "First Bank"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Account Number</span>
-                  <span className="font-mono font-semibold">{staffProfile?.bankAccountNumber || "N/A"}</span>
-                </div>
-              </div>
-
-              {/* Earnings Breakdown */}
-              <div className="border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 font-bold uppercase text-[10px]">
-                    <tr>
-                      <th className="p-3 text-left">Component</th>
-                      <th className="p-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
-                    <tr>
-                      <td className="p-3">Basic Salary (70%)</td>
-                      <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.7)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-3">Housing & Transport Allowance (20%)</td>
-                      <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.2)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-3">Utility & Instructional Allowance (10%)</td>
-                      <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.1)}</td>
-                    </tr>
-                    <tr className="bg-slate-50 dark:bg-zinc-800/50 font-bold">
-                      <td className="p-3">Gross Total Earnings</td>
-                      <td className="p-3 text-right font-mono text-sm">{formatNaira(selectedPayslip.amount)}</td>
-                    </tr>
-                    <tr>
-                      <td className="p-3 text-slate-400">Total Statutory Deductions (Tax & Pension)</td>
-                      <td className="p-3 text-right font-mono text-slate-400">₦0.00</td>
-                    </tr>
-                    <tr className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-black text-sm">
-                      <td className="p-3">Net Take-Home Salary Disbursed</td>
-                      <td className="p-3 text-right font-mono">{formatNaira(selectedPayslip.amount)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Electronic Stamp Seal */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800 text-xs">
-                <div>
-                  <p className="text-slate-400 text-[10px]">Generated electronically by Bursary Portal</p>
-                  <p className="font-semibold text-slate-700 dark:text-zinc-300">Status: {selectedPayslip.status}</p>
-                </div>
-                <div className="border-2 border-dashed border-emerald-600 text-emerald-600 px-3 py-1.5 rounded-lg text-center font-extrabold text-[10px] tracking-wider uppercase">
-                  ELECTRONICALLY VERIFIED<br />
-                  <span className="font-normal text-[9px]">BURSARY DISBURSEMENT</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 7: LESSON NOTES & SCHEMES OF WORK                                     */}
-      {/* ========================================================================= */}
-      {activeTab === "lessons" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Header & Action Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-emerald-600" />
-                <span>
-                  {isCreche
-                    ? "Immunization Records & Pediatric Health Vitals"
-                    : isTertiary
-                    ? "Course Outlines & Syllabus Architectures"
-                    : "Lesson Notes & Curriculum Schemes"}
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                {isCreche
-                  ? "Maintain pediatric immunization schedules, allergy warning tags, and infant health vital check logs."
-                  : isTertiary
-                  ? "Structure and publish courseware syllabi, lecture modules, and academic reading lists for faculty appraisal."
-                  : "Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review."}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedLessonNote(null);
-                setLessonFormData({
-                  weekNumber: 1,
-                  subject: initialCourses[0]?.name || "General Mathematics",
-                  className: initialClassrooms[0]?.name || "JSS 1",
-                  topic: "",
-                  subTopic: "",
-                  objectives: "",
-                  instructionalMaterials: "",
-                  introduction: "",
-                  presentationSteps: "",
-                  evaluation: "",
-                  status: "SUBMITTED",
-                });
-                setShowLessonNoteModal(true);
-              }}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>{isCreche ? "Log Health Vital / Vaccine" : isTertiary ? "New Course Outline" : "New Lesson Plan"}</span>
-            </button>
-          </div>
-
-          {/* Metrics Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
-                Total Lesson Plans
-              </span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{lessonNotes.length}</p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
-                Under Review
-              </span>
-              <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                {lessonNotes.filter((n) => n.status === "SUBMITTED").length}
-              </p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
-                Approved by HOD
-              </span>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                {lessonNotes.filter((n) => n.status === "APPROVED").length}
-              </p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-500 block mb-1">
-                Drafts
-              </span>
-              <p className="text-2xl font-black text-slate-600 dark:text-zinc-300">
-                {lessonNotes.filter((n) => n.status === "DRAFT").length}
-              </p>
-            </div>
-          </div>
-
-          {/* Lesson Plans List */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
-                Weekly Instructional Submissions
-              </h4>
-              <span className="text-xs text-slate-400">
-                Showing {lessonNotes.length} plan{lessonNotes.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {lessonNotes.length === 0 ? (
-              <div className="p-12 text-center">
-                <BookOpen className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
-                <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Lesson Notes Prepared Yet</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                  Create your weekly scheme of work, objectives, instructional aids, and evaluation steps.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedLessonNote(null);
-                    setShowLessonNoteModal(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Create First Lesson Note</span>
-                </button>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-zinc-800">
-                {lessonNotes.map((note) => {
-                  const isApproved = note.status === "APPROVED";
-                  const isSubmitted = note.status === "SUBMITTED";
-                  const isRevision = note.status === "REVISION_REQUESTED";
-
-                  const badgeStyle = isApproved
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                    : isSubmitted
-                    ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
-                    : isRevision
-                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                    : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
-
-                  return (
-                    <div
-                      key={note.id || `${note.weekNumber}-${note.topic}`}
-                      className="p-5 hover:bg-slate-50/70 dark:hover:bg-zinc-800/30 transition flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase">
-                            Week {note.weekNumber}
-                          </span>
-                          <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-                            {note.className} • {note.subject}
-                          </span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
-                            {note.status}
-                          </span>
-                        </div>
-                        <h5 className="text-sm font-bold text-slate-900 dark:text-white">{note.topic}</h5>
-                        {note.subTopic && (
-                          <p className="text-xs text-slate-600 dark:text-zinc-400">
-                            <strong>Sub-Topic:</strong> {note.subTopic}
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-500 dark:text-zinc-500 line-clamp-1">
-                          <strong>Objectives:</strong> {note.objectives}
-                        </p>
-                        {note.supervisorFeedback && (
-                          <div className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
-                            <strong>HOD Review:</strong> {note.supervisorFeedback}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedLessonNote(note);
-                            setLessonFormData({ ...note });
-                            setShowLessonNoteModal(true);
-                          }}
-                          className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition cursor-pointer"
-                        >
-                          View & Edit
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 8: FACULTY LEAVE REQUESTS                                             */}
-      {/* ========================================================================= */}
-      {activeTab === "leaves" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Header & Action Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-indigo-600" />
-                <span>Staff Leave Applications & Absence</span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                Apply for statutory staff leave, assign relief teachers for class coverage, and track approval status.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowLeaveModal(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Apply for Leave</span>
-            </button>
-          </div>
-
-          {/* Statutory Allowances & Status */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
-                Casual Leave Entitlement
-              </span>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">7 Days / Yr</p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
-                Medical Leave Allowance
-              </span>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">10 Days / Yr</p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
-                Pending Applications
-              </span>
-              <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                {leaveRequests.filter((l) => l.status === "PENDING").length}
-              </p>
-            </div>
-            <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-500 block mb-1">
-                Approved Records
-              </span>
-              <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-                {leaveRequests.filter((l) => l.status === "APPROVED").length}
-              </p>
-            </div>
-          </div>
-
-          {/* Leave History Table */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
-                Application History & Duty Relief
-              </h4>
-              <span className="text-xs text-slate-400">
-                {leaveRequests.length} Record{leaveRequests.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {leaveRequests.length === 0 ? (
-              <div className="p-12 text-center">
-                <CalendarDays className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
-                <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Leave Applications on Record</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                  You have full attendance standing. When you require absence, submit an application here.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowLeaveModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Apply for Leave</span>
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
-                    <tr>
-                      <th className="px-6 py-3.5">Leave Type</th>
-                      <th className="px-6 py-3.5">Duration</th>
-                      <th className="px-6 py-3.5">Relief Staff / Teacher</th>
-                      <th className="px-6 py-3.5">Reason</th>
-                      <th className="px-6 py-3.5 text-center">Status</th>
-                      <th className="px-6 py-3.5">Admin Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                    {leaveRequests.map((leave) => {
-                      const isPendingStatus = leave.status === "PENDING";
-                      const isApproved = leave.status === "APPROVED";
-                      const badgeClass = isApproved
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                        : isPendingStatus
-                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                        : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
-
-                      return (
-                        <tr key={leave.id || `${leave.startDate}-${leave.leaveType}`} className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40">
-                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-mono text-[11px]">
-                              {leave.leaveType}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-semibold text-slate-700 dark:text-zinc-200">
-                              {leave.startDate} to {leave.endDate}
-                            </div>
-                            <span className="text-[10px] text-slate-400">
-                              {Math.max(1, Math.round((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / 86400000) + 1)} day(s)
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-700 dark:text-zinc-300">
-                            {leave.reliefTeacher || "None Nominated"}
-                          </td>
-                          <td className="px-6 py-4 text-slate-600 dark:text-zinc-400 max-w-xs truncate" title={leave.reason}>
-                            {leave.reason}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
-                              {leave.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 dark:text-zinc-400 text-xs">
-                            {leave.adminNotes || "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB: EDUCATOR PROFILE                                                     */}
-      {/* ========================================================================= */}
-      {activeTab === "profile" && (
-        <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl">
-          {/* Header Card */}
-          <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-emerald-500/10 via-transparent to-transparent rounded-bl-full pointer-events-none" />
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 relative z-10">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shrink-0 shadow-md ring-4 ring-emerald-50 dark:ring-emerald-950/40">
-                {staffInitials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
-                    {staffProfile?.role || staffRole || "Staff Educator"}
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                    {staffProfile?.department || "Academic Faculty"}
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {staffProfile?.status || "ACTIVE"}
-                  </span>
-                </div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">
-                  {staffName}
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-                  {staffProfile?.email || "educator@school.edu"} • {schoolName}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 pt-2 sm:pt-0 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowChangeEmailModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
-                >
-                  <Mail className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Change Email</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("security")}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Security & Password</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Details Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Employment & Institution Card */}
-            <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
-                <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
-                  Institutional Profile
-                </h3>
-              </div>
-              <dl className="space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">School Institution</dt>
-                  <dd className="font-bold text-slate-900 dark:text-white">{schoolName}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Institutional Domain</dt>
-                  <dd className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">{schoolDomain}.school.edu</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Department</dt>
-                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.department || "Academic Division"}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Staff Designation</dt>
-                  <dd className="font-semibold text-slate-900 dark:text-white">{staffRole}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Assigned Cohort</dt>
-                  <dd className="font-bold text-slate-900 dark:text-white">{selectedClass}</dd>
-                </div>
-              </dl>
-            </div>
-
-            {/* Compensation & Bank Card */}
-            <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
-                <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
-                  Payroll & Disbursement
-                </h3>
-              </div>
-              <dl className="space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Base Monthly Remuneration</dt>
-                  <dd className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    {formatNaira(staffProfile?.baseSalary || 220000)}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Beneficiary Bank</dt>
-                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.bankName || "First Bank of Nigeria"}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Account Number</dt>
-                  <dd className="font-mono font-bold text-slate-900 dark:text-white">{staffProfile?.bankAccountNumber || "3081294810"}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Account Name</dt>
-                  <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.accountName || staffName}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-500 dark:text-zinc-400">Disbursement Status</dt>
-                  <dd className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle className="w-3.5 h-3.5" /> Synchronized
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-
-          {/* Assigned Classes and Courses Card */}
-          <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
-                  Curriculum & Classroom Scope
-                </h3>
-              </div>
-              <span className="text-[10px] text-slate-400 font-semibold">
-                {initialClassrooms.length} Classroom Streams Assigned
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                  Assigned Stream Cohorts
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {initialClassrooms.map((c) => (
-                    <span
-                      key={c.id}
-                      className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${
-                        c.name === selectedClass
-                          ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
-                          : "bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
-                      }`}
-                    >
-                      {c.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                  Assigned Subject Disciplines
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {initialCourses.map((crs) => (
-                    <span
-                      key={crs.id}
-                      className="text-xs px-3 py-1.5 rounded-xl font-medium bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
-                    >
-                      {crs.name} ({crs.code})
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 9: PERSONAL SECURITY & PASSWORD SETTINGS                             */}
-      {/* ========================================================================= */}
-      {activeTab === "security" && (
-        <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
-          {/* Account Information Layout Block */}
-          <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 dark:text-white text-base truncate">
-                      Account Information
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
-                      Primary
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 font-mono truncate">
-                    {staffProfile?.email || "educator@school.edu"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowChangeEmailModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 transition shadow-2xs cursor-pointer shrink-0"
-              >
-                <Mail className="w-3.5 h-3.5" />
-                <span>Change email</span>
-              </button>
-            </div>
-          </div>
-
-          <SecurityPasswordForm
-            schoolDomain={schoolDomain}
-            userRole={staffRole || "STAFF"}
-            brandColor="#059669"
-          />
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB: DEPARTMENTAL CIRCULARS & SENATE MEMOS (TERTIARY / UNIVERSITY)         */}
-      {/* ========================================================================= */}
-      {activeTab === "circulars" && (
-        <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  {isCreche ? "Parent Circulars & Creche Bulletins" : "Departmental Circulars & Senate Resolutions"}
-                </h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                  {isCreche ? "Early Childhood Communications" : "Tertiary Academic Registry"}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                {isCreche
-                  ? "Caregiver updates, feeding advisories, pediatric health alerts, and guardian notices."
-                  : "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."}
-              </p>
-            </div>
-            <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-              {isCreche ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                Active Circulars
-              </p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                4 Official
-              </p>
-            </div>
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Action Required
-              </p>
-              <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
-                2 Directives
-              </p>
-            </div>
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                {isCreche ? "Academic Term" : "Current Semester"}
-              </p>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                {isCreche ? "1st Term Care" : "1st Semester"}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {(isCreche ? [
-              {
-                ref: "DCR/2026/CIRC/04",
-                date: "October 20, 2026",
-                title: "Infant Nutritional Guidelines & Weekly Puree/Snack Schedules",
-                body: "Caregivers are to adhere strictly to the updated dietary allergy chart. Organic puree and fruit snacking schedules for Toddler Pods A & B are now posted.",
-                priority: "HIGH PRIORITY",
-                tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
-              },
-              {
-                ref: "DCR/2026/MEMO/11",
-                date: "October 16, 2026",
-                title: "Mandatory Guardian Identification Verification for Afternoon Pick-ups",
-                body: "All evening release staff must verify authorized guardian photo IDs or dynamic mobile OTP verification passes prior to releasing toddlers to drivers or relatives.",
-                priority: "ACTION REQUIRED",
-                tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
-              },
-              {
-                ref: "DCR/2026/HLT/02",
-                date: "October 11, 2026",
-                title: "Pediatric Wellness Protocol & Morning Temperature Screening Routine",
-                body: "Morning drop-off health checks for early fever, skin rashes, or respiratory distress must be logged directly into the Health Vitals Tracker upon arrival.",
-                priority: "HEALTH DIRECTIVE",
-                tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
-              },
-              {
-                ref: "DCR/2026/GEN/09",
-                date: "October 02, 2026",
-                title: "Monthly Parent-Caregiver Early Childhood Milestone Reviews",
-                body: "Scheduled one-on-one parent conferences for fine motor, language acquisition, and sensory developmental assessment updates begin next Monday.",
-                priority: "GENERAL NOTICE",
-                tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
-              },
-            ] : [
-              {
-                ref: "SEN/2026/RES/08",
-                date: "October 18, 2026",
-                title: "Senate Directives on Mid-Semester Continuous Assessment Score Uploads",
-                body: "All faculty members and course lecturers are instructed to conclude continuous assessments (CA1 & CA2) and lock student portal grades on or before Friday, November 14th.",
-                priority: "HIGH PRIORITY",
-                tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
-              },
-              {
-                ref: "DCS/2026/CIRC/14",
-                date: "October 14, 2026",
-                title: "Departmental Board of Studies Meeting & Curriculum Moderation",
-                body: "The statutory semester meeting for external examiner appointments and courseware syllabus moderation is scheduled for the Faculty Board Room.",
-                priority: "STATUTORY",
-                tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
-              },
-              {
-                ref: "FAS/2026/MEMO/03",
-                date: "October 09, 2026",
-                title: "Vetting of Examination Questions & Standard Marking Keys",
-                body: "Please submit sealed course examination papers along with complete model answers to the Departmental Examination Officer for internal vetting.",
-                priority: "ACTION REQUIRED",
-                tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
-              },
-              {
-                ref: "REG/2026/GEN/22",
-                date: "September 28, 2026",
-                title: "Research Ethics & Institutional Review Board Clearance Notice",
-                body: "All empirical studies involving undergraduate and postgraduate student subjects must secure institutional IRB ethics compliance before fieldwork commences.",
-                priority: "GENERAL CIRCULAR",
-                tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
-              },
-            ]).map((circ, idx) => (
-              <div
-                key={idx}
-                className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${circ.tagColor}`}>
-                      {circ.priority}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
-                      {circ.ref}
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400">{circ.date}</span>
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    {circ.title}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-zinc-300 mt-1 leading-relaxed">
-                    {circ.body}
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                  <span>Authorizing Body: Academic Senate & Registry</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Acknowledged</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB: RESEARCH & GRANT TRACKERS (TERTIARY / UNIVERSITY)                     */}
-      {/* ========================================================================= */}
-      {activeTab === "research" && (
-        <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  Research & Grant Trackers
-                </h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                  Scholarly Portfolio
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                Manage competitive institutional research grants, indexed journal publication trackers, and postgraduate thesis supervisions.
-              </p>
-            </div>
-            <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-              ORCID: 0009-0004-7128-3391
-            </span>
-          </div>
-
-          {/* Research Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                Funded Grants
-              </p>
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                ₦28.5M
-              </p>
-            </div>
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                Indexed Publications
-              </p>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                14 Articles
-              </p>
-            </div>
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                Active Projects
-              </p>
-              <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
-                3 Ongoing
-              </p>
-            </div>
-            <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-                Postgraduate Theses
-              </p>
-              <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
-                5 Advisees
-              </p>
-            </div>
-          </div>
-
-          {/* Research Projects List */}
-          <div className="space-y-3">
-            {[
-              {
-                title: "Distributed Fault-Tolerant Architectures for Large-Scale Enterprise School ERP Systems",
-                sponsor: "TETFund National Research Fund (NRF)",
-                grantCode: "TETF/NRF/2025/APP/0192",
-                amount: "₦16,000,000",
-                progress: 65,
-                stage: "Empirical Benchmarking Phase",
-                status: "ACTIVE",
-              },
-              {
-                title: "Machine Learning Approaches to Continuous Formative Assessment & Student Attrition Early Warning",
-                sponsor: "Institutional Seed Grant (Faculty of Science)",
-                grantCode: "UNIV/ISG/2026/04",
-                amount: "₦4,500,000",
-                progress: 85,
-                stage: "Peer Review & Journal Submission",
-                status: "UNDER REVIEW",
-              },
-              {
-                title: "Comparative Study of Multitenant Postgres Row-Level Security vs Database-Per-Tenant Isolation",
-                sponsor: "International Computing Research Consortium",
-                grantCode: "ICRC/GR/2026/B2",
-                amount: "₦8,000,000",
-                progress: 30,
-                stage: "Data Collection & Architecture Modeling",
-                status: "ACTIVE",
-              },
-            ].map((proj, idx) => (
-              <div
-                key={idx}
-                className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                      {proj.status}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
-                      {proj.grantCode}
-                    </span>
-                  </div>
-                  <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
-                    {proj.amount}
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                    {proj.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                    Funding Agency: <strong>{proj.sponsor}</strong> • Stage: <em>{proj.stage}</em>
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span>Research Milestone Progress</span>
-                    <span className="font-bold">{proj.progress}%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: `${proj.progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: CREATE / EDIT LESSON NOTE                                          */}
-      {/* ========================================================================= */}
-      {showLessonNoteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
-                    {selectedLessonNote ? "Edit Curriculum Lesson Plan" : "Prepare Weekly Lesson Note"}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Standard educational delivery scheme & behavioral objectives
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLessonNoteModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Week Number (1 - 14):
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={14}
-                    value={lessonFormData.weekNumber}
-                    onChange={(e) =>
-                      setLessonFormData((prev) => ({ ...prev, weekNumber: parseInt(e.target.value) || 1 }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Class Cohort:
-                  </label>
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400">Class:</label>
                   <select
-                    value={lessonFormData.className}
-                    onChange={(e) =>
-                      setLessonFormData((prev) => ({ ...prev, className: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                    value={selectedClass}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                    className="px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   >
                     {initialClassrooms.map((c) => (
                       <option key={c.id} value={c.name}>
@@ -3167,305 +1418,2044 @@ export default function StaffPortalClient({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Subject / Course:
-                  </label>
-                  <select
-                    value={lessonFormData.subject}
-                    onChange={(e) =>
-                      setLessonFormData((prev) => ({ ...prev, subject: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
-                  >
-                    {initialCourses.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Topic: *
-                  </label>
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="e.g., Quadratic Equations by Factorization"
-                    value={lessonFormData.topic}
-                    onChange={(e) => setLessonFormData((prev) => ({ ...prev, topic: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Sub-Topic (Optional):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Finding roots of trinomials"
-                    value={lessonFormData.subTopic || ""}
-                    onChange={(e) => setLessonFormData((prev) => ({ ...prev, subTopic: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    placeholder="Search by student name or registration #..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-900 dark:text-zinc-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Behavioral Objectives: * (By the end of the lesson, learners should be able to...)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="1. Define quadratic equations in standard form. 2. Factorize ax^2 + bx + c = 0."
-                  value={lessonFormData.objectives}
-                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, objectives: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Instructional Aids & Teaching Materials:
-                </label>
-                <input
-                  type="text"
-                  placeholder="Whiteboard, geometric models, graphing paper, flashcards"
-                  value={lessonFormData.instructionalMaterials || ""}
-                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, instructionalMaterials: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Introduction / Prior Knowledge Hook:
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Review linear equations and expansion of brackets with interactive questions."
-                  value={lessonFormData.introduction || ""}
-                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, introduction: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Step-by-Step Presentation / Teacher & Student Activities:
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Step 1: Teacher explains standard form ax^2 + bx + c = 0. Step 2: Teacher solves worked example on the board. Step 3: Students work in pairs on guided problem set."
-                  value={lessonFormData.presentationSteps || ""}
-                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, presentationSteps: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Evaluation, Classwork & Homework:
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Classwork: Exercises 1 to 4 on page 82. Homework: Solve questions 5 to 10 for submission on Thursday."
-                  value={lessonFormData.evaluation || ""}
-                  onChange={(e) => setLessonFormData((prev) => ({ ...prev, evaluation: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
-              <button
-                type="button"
-                onClick={() => setShowLessonNoteModal(false)}
-                className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
-              >
-                Cancel
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleSaveLessonNote("DRAFT")}
-                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-white font-bold text-xs hover:bg-slate-300 dark:hover:bg-zinc-600 transition disabled:opacity-50 cursor-pointer"
-                >
-                  Save as Draft
-                </button>
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleSaveLessonNote("SUBMITTED")}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition disabled:opacity-50 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{isPending ? "Submitting..." : "Submit for HOD Approval"}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: LEAVE APPLICATION                                                  */}
-      {/* ========================================================================= */}
-      {showLeaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
-                    Staff Leave Application
+              {/* Rosters Table */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                    {selectedClass} {isCreche ? "Infant & Toddler Roster" : isTertiary ? "Course Student Registration Roster" : "Student Directory"}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Formal notice for statutory or medical absence
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                    {classStudents.length} {isCreche ? "Infants Registered" : "Students Enrolled"}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                      <tr>
+                        <th className="px-6 py-3.5">{isCreche ? "Infant / Child Name" : "Student Name"}</th>
+                        <th className="px-6 py-3.5">{isCreche ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
+                        <th className="px-6 py-3.5">{isCreche ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
+                        <th className="px-6 py-3.5">Status</th>
+                        <th className="px-6 py-3.5">{isCreche ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                      {classStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                            No students found matching your filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        classStudents.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
+                            <td className="px-6 py-3.5 font-bold text-slate-900 dark:text-white">
+                              {s.firstName} {s.lastName}
+                            </td>
+                            <td className="px-6 py-3.5 font-mono text-slate-500 dark:text-zinc-400">
+                              {s.admissionNumber || s.registrationNumber || "N/A"}
+                            </td>
+                            <td className="px-6 py-3.5 text-slate-600 dark:text-zinc-300">
+                              {s.currentClass || s.class || selectedClass}
+                            </td>
+                            <td className="px-6 py-3.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                {s.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3.5 font-mono text-slate-500 dark:text-zinc-400">
+                              {s.parentPhone || s.guardianPhone || "Not Provided"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 3: DAILY ATTENDANCE REGISTER                                          */}
+          {/* ========================================================================= */}
+          {activeTab === "attendance" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Printable Attendance Sheet Header */}
+              <div className="hidden print:block mb-6 text-center border-b border-slate-300 pb-4">
+                <h1 className="text-xl font-black uppercase tracking-wide text-black">{schoolName}</h1>
+                <p className="text-sm font-semibold text-slate-700">
+                  {isCreche ? "Official Daily Drop-off & Pick-up Custody Register" : "Official Daily Classroom Attendance Register"}
+                </p>
+                <div className="flex justify-between items-center text-xs mt-3 px-2 text-slate-800">
+                  <span><strong>{isCreche ? "Care Pod / Group:" : "Class / Arm:"}</strong> {selectedClass}</span>
+                  <span><strong>Date:</strong> {attendanceDate}</span>
+                  <span><strong>Caregiver / Staff:</strong> {staffName} ({staffRole})</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs print:hidden">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      {isCreche ? "Custody Log Date:" : "Attendance Date:"}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={attendanceDate}
+                        onChange={(e) => setAttendanceDate(e.target.value)}
+                        className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                      {isLoadingAttendance && (
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Cohort:
+                    </label>
+                    <select
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {initialClassrooms.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={handleExportAttendanceCSV}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
+                    title="Export current classroom attendance register to CSV file"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
+                    title="Print physical attendance roster sheet"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Register</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMarkAllPresent}
+                    className="px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition cursor-pointer"
+                  >
+                    Mark All Present
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={handleSaveAttendance}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isPending ? "Saving..." : "Save Register"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {attendanceSaveMessage && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{attendanceSaveMessage}</span>
+                </div>
+              )}
+
+              {/* Attendance Table */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                      <tr>
+                        <th className="px-6 py-3.5">Student Name</th>
+                        <th className="px-6 py-3.5 text-center">Status</th>
+                        <th className="px-6 py-3.5">Notes / Reasons</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                      {classStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
+                            No students in this class register.
+                          </td>
+                        </tr>
+                      ) : (
+                        classStudents.map((s) => {
+                          const currentStatus = attendanceMap[s.id]?.status || "PRESENT";
+                          return (
+                            <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
+                              <td className="px-6 py-3.5">
+                                <div className="font-bold text-slate-900 dark:text-white">
+                                  {s.firstName} {s.lastName}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400">
+                                  {s.admissionNumber || s.registrationNumber || "No Reg"}
+                                </div>
+                              </td>
+                              <td className="px-6 py-3.5">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {(["PRESENT", "LATE", "ABSENT", "EXCUSED"] as const).map((st) => {
+                                    const isSelected = currentStatus === st;
+                                    let colorClass = "text-slate-500 bg-slate-100 dark:bg-zinc-800";
+                                    if (isSelected) {
+                                      if (st === "PRESENT") colorClass = "bg-emerald-600 text-white font-black";
+                                      if (st === "LATE") colorClass = "bg-amber-500 text-white font-black";
+                                      if (st === "ABSENT") colorClass = "bg-rose-600 text-white font-black";
+                                      if (st === "EXCUSED") colorClass = "bg-blue-600 text-white font-black";
+                                    }
+                                    return (
+                                      <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => handleSetAttendanceStatus(s.id, st)}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] transition font-bold cursor-pointer ${colorClass}`}
+                                      >
+                                        {st}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td className="px-6 py-3.5">
+                                <input
+                                  type="text"
+                                  placeholder="Add optional note..."
+                                  value={attendanceMap[s.id]?.notes || ""}
+                                  onChange={(e) =>
+                                    setAttendanceMap((prev) => ({
+                                      ...prev,
+                                      [s.id]: {
+                                        status: currentStatus,
+                                        notes: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="w-full max-w-xs px-2.5 py-1 text-xs border border-slate-200 dark:border-zinc-700 rounded-lg bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Print-only Teacher & Principal Signature Block */}
+              <div className="hidden print:flex justify-between items-center mt-12 pt-6 border-t border-slate-400 text-xs text-black">
+                <div>
+                  <p className="font-bold">Class Teacher Signature: _______________________</p>
+                  <p className="text-[10px] text-slate-600 mt-1">Date: {attendanceDate}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">Principal / Supervisor Seal: _______________________</p>
+                  <p className="text-[10px] text-slate-600 mt-1">Official Institutional Register Stamp</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 4: 20/20/60 GRADEBOOK & ASSESSMENTS                                   */}
+          {/* ========================================================================= */}
+          {activeTab === "gradebook" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Gradebook Config Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Class:
+                    </label>
+                    <select
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {initialClassrooms.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Subject:
+                    </label>
+                    <select
+                      value={selectedSubject}
+                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {initialCourses.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Term:
+                    </label>
+                    <select
+                      value={selectedTerm}
+                      onChange={(e) => setSelectedTerm(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      <option value="1st Term">1st Term</option>
+                      <option value="2nd Term">2nd Term</option>
+                      <option value="3rd Term">3rd Term</option>
+                    </select>
+                  </div>
+
+                  {isLoadingGrades && (
+                    <div className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold pt-4">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading marks...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    disabled={isCompilingReportCards || isPending}
+                    onClick={handleCompileReportCards}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                    title="Compile term report cards with class ranking, GPA, and subject summaries for all students in this class"
+                  >
+                    {isCompilingReportCards ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <FileCheck className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isCompilingReportCards ? "Compiling..." : isCreche ? "Compile Growth Records" : "Compile Class Report Cards"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isPending || isCompilingReportCards}
+                    onClick={handleSaveGrades}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isPending ? "Persisting Marks..." : isCreche ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {compilationMessage && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>{compilationMessage}</span>
+                </div>
+              )}
+
+              {compilationError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{compilationError}</span>
+                </div>
+              )}
+
+              {gradesSaveMessage && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{gradesSaveMessage}</span>
+                </div>
+              )}
+
+              {/* Gradebook Matrix Table */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                      <tr>
+                        <th className="px-5 py-3.5">Student Name & Reg #</th>
+                        <th className="px-3 py-3.5 text-center w-24">1st CA (20)</th>
+                        <th className="px-3 py-3.5 text-center w-24">2nd CA (20)</th>
+                        <th className="px-3 py-3.5 text-center w-24">Exam (60)</th>
+                        <th className="px-3 py-3.5 text-center w-24 bg-slate-100/60 dark:bg-zinc-800/80">
+                          Total (100)
+                        </th>
+                        <th className="px-3 py-3.5 text-center w-20">WAEC Grade</th>
+                        <th className="px-3 py-3.5 text-center w-20">Position</th>
+                        <th className="px-4 py-3.5">Teacher Remark</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                      {gradedMatrix.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-5 py-12 text-center text-slate-400">
+                            No students found for this class stream.
+                          </td>
+                        </tr>
+                      ) : (
+                        gradedMatrix.map((item) => (
+                          <tr
+                            key={item.student.id}
+                            className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                          >
+                            <td className="px-5 py-3.5">
+                              <p className="font-bold text-slate-900 dark:text-white">
+                                {item.student.lastName}, {item.student.firstName}
+                              </p>
+                              <span className="font-mono text-[10px] text-slate-400">
+                                {item.student.admissionNumber || item.student.registrationNumber || "NO REG"}
+                              </span>
+                            </td>
+
+                            {/* CA 1 */}
+                            <td className="px-3 py-3.5 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={item.ca1 || ""}
+                                onChange={(e) => handleScoreChange(item.student.id, "ca1", e.target.value)}
+                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </td>
+
+                            {/* CA 2 */}
+                            <td className="px-3 py-3.5 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={item.ca2 || ""}
+                                onChange={(e) => handleScoreChange(item.student.id, "ca2", e.target.value)}
+                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </td>
+
+                            {/* Exam */}
+                            <td className="px-3 py-3.5 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="60"
+                                value={item.exam || ""}
+                                onChange={(e) => handleScoreChange(item.student.id, "exam", e.target.value)}
+                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </td>
+
+                            {/* Total Score */}
+                            <td className="px-3 py-3.5 text-center bg-slate-50/80 dark:bg-zinc-800/40">
+                              <span
+                                className={`font-mono text-sm font-black ${item.total >= 50
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-rose-600 dark:text-rose-400"
+                                  }`}
+                              >
+                                {item.total}
+                              </span>
+                            </td>
+
+                            {/* Grade Letter */}
+                            <td className="px-3 py-3.5 text-center">
+                              <span
+                                className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${item.grade.color}`}
+                              >
+                                {item.grade.letter}
+                              </span>
+                            </td>
+
+                            {/* Position */}
+                            <td className="px-3 py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
+                              {item.position}
+                            </td>
+
+                            {/* Remark */}
+                            <td className="px-4 py-3.5">
+                              <input
+                                type="text"
+                                placeholder="e.g. Excellent work, Commendable effort"
+                                value={item.remarks}
+                                onChange={(e) =>
+                                  handleScoreChange(item.student.id, "remarks", e.target.value)
+                                }
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/40 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400 font-semibold">
+                  <span>{isCreche ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isCreche ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
+                  <span>{isCreche ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 5: TEACHING SCHEDULE & TIMETABLE                                      */}
+          {/* ========================================================================= */}
+          {activeTab === "schedule" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {isCreche
+                    ? "Daily Activity Logs & Care Routine (Feeding / Nap Schedules)"
+                    : isTertiary
+                      ? "Weekly Lecture & Seminar Timetable"
+                      : "Weekly Teaching Timetable"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  {isCreche
+                    ? `Scheduled infant feeding times, nap windows, diaper checks, and outdoor sensory sessions for ${selectedClass}.`
+                    : `Assigned lecture periods, course codes, and classroom halls for ${staffName}.`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"].map((day) => {
+                  const periods = scheduleByDay[day] || [];
+                  return (
+                    <div
+                      key={day}
+                      className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-4 shadow-xs space-y-3"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
+                        <h4 className="font-extrabold text-xs tracking-wider text-slate-900 dark:text-white uppercase">
+                          {day}
+                        </h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                          {periods.length} {isCreche ? "Care Blocks" : "Periods"}
+                        </span>
+                      </div>
+
+                      {periods.length === 0 ? (
+                        <div className="p-4 text-center text-slate-400 text-xs italic">
+                          No periods scheduled.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {periods.map((p) => (
+                            <div
+                              key={p.id}
+                              className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800 space-y-1"
+                            >
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  {p.course.name}
+                                </span>
+                                <span className="font-mono font-bold text-[10px] text-emerald-600 dark:text-emerald-400">
+                                  {p.startTime} - {p.endTime}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+                                <span>Room: <strong>{p.classroom.name}</strong></span>
+                                <span className="font-mono text-[10px]">{p.course.code}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 6: REMUNERATION & PAYSLIPS                                            */}
+          {/* ========================================================================= */}
+          {activeTab === "payslips" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Remuneration & Monthly Payslips</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  Review institutional salary disbursements, bank details, and print official electronic vouchers.
+                </p>
+              </div>
+
+              {/* Salary & Bank Profile Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-emerald-500">
+                  <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
+                    Base Monthly Salary
+                  </span>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {formatNaira(staffProfile?.baseSalary || 220000)}
+                  </p>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Direct bank disbursement rate
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-blue-500">
+                  <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
+                    Destination Bank
+                  </span>
+                  <p className="text-base font-black text-slate-900 dark:text-white truncate">
+                    {staffProfile?.bankName || "First Bank of Nigeria"}
+                  </p>
+                  <span className="text-xs font-mono text-slate-500 dark:text-zinc-400 mt-0.5 block">
+                    Acct: {staffProfile?.bankAccountNumber || "0123456789"}
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs border-l-4 border-l-indigo-500">
+                  <span className="text-slate-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-1">
+                    Disbursements Count
+                  </span>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {initialPayroll.length} Records
+                  </p>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block font-semibold">
+                    Electronic Receipts Available
+                  </span>
+                </div>
+              </div>
+
+              {/* Payslips Table */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex justify-between items-center">
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Disbursement History
+                  </h4>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {initialPayroll.length} Pay Slips
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                      <tr>
+                        <th className="px-6 py-3.5">Disbursement Date</th>
+                        <th className="px-6 py-3.5">Receipt Code</th>
+                        <th className="px-6 py-3.5">Gross Amount</th>
+                        <th className="px-6 py-3.5">Status</th>
+                        <th className="px-6 py-3.5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                      {initialPayroll.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                            No disbursed salary records found yet. Disbursed salaries from HR will appear here automatically.
+                          </td>
+                        </tr>
+                      ) : (
+                        initialPayroll.map((pay) => (
+                          <tr key={pay.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors">
+                            <td className="px-6 py-3.5 font-medium text-slate-900 dark:text-white">
+                              {new Date(pay.payDate).toLocaleDateString("en-NG", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              })}
+                            </td>
+                            <td className="px-6 py-3.5 font-mono font-bold text-slate-600 dark:text-zinc-400">
+                              {pay.receiptCode || "N/A"}
+                            </td>
+                            <td className="px-6 py-3.5 font-mono font-bold text-slate-900 dark:text-zinc-100">
+                              {formatNaira(pay.amount)}
+                            </td>
+                            <td className="px-6 py-3.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                {pay.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPayslip(pay)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-lg font-bold text-xs transition cursor-pointer shadow-2xs"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>View Pay Slip</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* PRINTABLE ELECTRONIC PAY SLIP MODAL                                       */}
+          {/* ========================================================================= */}
+          {selectedPayslip && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-zinc-800 w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
+                {/* Modal Actions Bar */}
+                <div className="p-4 bg-slate-50 dark:bg-zinc-800 border-b border-slate-200 dark:border-zinc-700 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">Electronic Pay Slip Voucher</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print Voucher</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPayslip(null)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Printable Payslip Body */}
+                <div className="p-6 sm:p-8 overflow-y-auto space-y-6 text-slate-900 dark:text-white" id="printable-payslip">
+                  {/* Institution Header */}
+                  <div className="text-center border-b-2 border-slate-900 dark:border-zinc-700 pb-4">
+                    <h2 className="text-xl font-black uppercase tracking-wider">{schoolName}</h2>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Bursary & Payroll Administration</p>
+                    <div className="inline-block mt-2 px-3 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 font-mono text-[11px] font-bold">
+                      Receipt: {selectedPayslip.receiptCode || "VOUCHER-PAYROLL"}
+                    </div>
+                  </div>
+
+                  {/* Staff Bio-Data Grid */}
+                  <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-slate-100 dark:border-zinc-800">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Employee Name</span>
+                      <span className="font-bold text-sm">{staffName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Designation & Role</span>
+                      <span className="font-bold text-sm">{staffRole}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Department</span>
+                      <span className="font-semibold">{staffProfile?.department || "Academics"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Disbursement Date</span>
+                      <span className="font-semibold">{new Date(selectedPayslip.payDate).toLocaleDateString("en-NG")}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Bank Name</span>
+                      <span className="font-semibold">{staffProfile?.bankName || "First Bank"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Account Number</span>
+                      <span className="font-mono font-semibold">{staffProfile?.bankAccountNumber || "N/A"}</span>
+                    </div>
+                  </div>
+
+                  {/* Earnings Breakdown */}
+                  <div className="border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 font-bold uppercase text-[10px]">
+                        <tr>
+                          <th className="p-3 text-left">Component</th>
+                          <th className="p-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                        <tr>
+                          <td className="p-3">Basic Salary (70%)</td>
+                          <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.7)}</td>
+                        </tr>
+                        <tr>
+                          <td className="p-3">Housing & Transport Allowance (20%)</td>
+                          <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.2)}</td>
+                        </tr>
+                        <tr>
+                          <td className="p-3">Utility & Instructional Allowance (10%)</td>
+                          <td className="p-3 text-right font-mono font-semibold">{formatNaira(selectedPayslip.amount * 0.1)}</td>
+                        </tr>
+                        <tr className="bg-slate-50 dark:bg-zinc-800/50 font-bold">
+                          <td className="p-3">Gross Total Earnings</td>
+                          <td className="p-3 text-right font-mono text-sm">{formatNaira(selectedPayslip.amount)}</td>
+                        </tr>
+                        <tr>
+                          <td className="p-3 text-slate-400">Total Statutory Deductions (Tax & Pension)</td>
+                          <td className="p-3 text-right font-mono text-slate-400">₦0.00</td>
+                        </tr>
+                        <tr className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-black text-sm">
+                          <td className="p-3">Net Take-Home Salary Disbursed</td>
+                          <td className="p-3 text-right font-mono">{formatNaira(selectedPayslip.amount)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Electronic Stamp Seal */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800 text-xs">
+                    <div>
+                      <p className="text-slate-400 text-[10px]">Generated electronically by Bursary Portal</p>
+                      <p className="font-semibold text-slate-700 dark:text-zinc-300">Status: {selectedPayslip.status}</p>
+                    </div>
+                    <div className="border-2 border-dashed border-emerald-600 text-emerald-600 px-3 py-1.5 rounded-lg text-center font-extrabold text-[10px] tracking-wider uppercase">
+                      ELECTRONICALLY VERIFIED<br />
+                      <span className="font-normal text-[9px]">BURSARY DISBURSEMENT</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 7: LESSON NOTES & SCHEMES OF WORK                                     */}
+          {/* ========================================================================= */}
+          {activeTab === "lessons" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Header & Action Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-emerald-600" />
+                    <span>
+                      {isCreche
+                        ? "Immunization Records & Pediatric Health Vitals"
+                        : isTertiary
+                          ? "Course Outlines & Syllabus Architectures"
+                          : "Lesson Notes & Curriculum Schemes"}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                    {isCreche
+                      ? "Maintain pediatric immunization schedules, allergy warning tags, and infant health vital check logs."
+                      : isTertiary
+                        ? "Structure and publish courseware syllabi, lecture modules, and academic reading lists for faculty appraisal."
+                        : "Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedLessonNote(null);
+                    setLessonFormData({
+                      weekNumber: 1,
+                      subject: initialCourses[0]?.name || "General Mathematics",
+                      className: initialClassrooms[0]?.name || "JSS 1",
+                      topic: "",
+                      subTopic: "",
+                      objectives: "",
+                      instructionalMaterials: "",
+                      introduction: "",
+                      presentationSteps: "",
+                      evaluation: "",
+                      status: "SUBMITTED",
+                    });
+                    setShowLessonNoteModal(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>{isCreche ? "Log Health Vital / Vaccine" : isTertiary ? "New Course Outline" : "New Lesson Plan"}</span>
+                </button>
+              </div>
+
+              {/* Metrics Overview */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
+                    Total Lesson Plans
+                  </span>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white">{lessonNotes.length}</p>
+                </div>
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
+                    Under Review
+                  </span>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                    {lessonNotes.filter((n) => n.status === "SUBMITTED").length}
+                  </p>
+                </div>
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
+                    Approved by HOD
+                  </span>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                    {lessonNotes.filter((n) => n.status === "APPROVED").length}
+                  </p>
+                </div>
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-500 block mb-1">
+                    Drafts
+                  </span>
+                  <p className="text-2xl font-black text-slate-600 dark:text-zinc-300">
+                    {lessonNotes.filter((n) => n.status === "DRAFT").length}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowLeaveModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4 text-xs">
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Leave Category:
-                </label>
-                <select
-                  value={leaveFormData.leaveType}
-                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, leaveType: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+              {/* Lesson Plans List */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                    Weekly Instructional Submissions
+                  </h4>
+                  <span className="text-xs text-slate-400">
+                    Showing {lessonNotes.length} plan{lessonNotes.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {lessonNotes.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <BookOpen className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Lesson Notes Prepared Yet</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                      Create your weekly scheme of work, objectives, instructional aids, and evaluation steps.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedLessonNote(null);
+                        setShowLessonNoteModal(true);
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Create First Lesson Note</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                    {lessonNotes.map((note) => {
+                      const isApproved = note.status === "APPROVED";
+                      const isSubmitted = note.status === "SUBMITTED";
+                      const isRevision = note.status === "REVISION_REQUESTED";
+
+                      const badgeStyle = isApproved
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                        : isSubmitted
+                          ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                          : isRevision
+                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
+
+                      return (
+                        <div
+                          key={note.id || `${note.weekNumber}-${note.topic}`}
+                          className="p-5 hover:bg-slate-50/70 dark:hover:bg-zinc-800/30 transition flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase">
+                                Week {note.weekNumber}
+                              </span>
+                              <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                                {note.className} • {note.subject}
+                              </span>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
+                                {note.status}
+                              </span>
+                            </div>
+                            <h5 className="text-sm font-bold text-slate-900 dark:text-white">{note.topic}</h5>
+                            {note.subTopic && (
+                              <p className="text-xs text-slate-600 dark:text-zinc-400">
+                                <strong>Sub-Topic:</strong> {note.subTopic}
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-500 dark:text-zinc-500 line-clamp-1">
+                              <strong>Objectives:</strong> {note.objectives}
+                            </p>
+                            {note.supervisorFeedback && (
+                              <div className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+                                <strong>HOD Review:</strong> {note.supervisorFeedback}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedLessonNote(note);
+                                setLessonFormData({ ...note });
+                                setShowLessonNoteModal(true);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition cursor-pointer"
+                            >
+                              View & Edit
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 8: FACULTY LEAVE REQUESTS                                             */}
+          {/* ========================================================================= */}
+          {activeTab === "leaves" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Header & Action Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-600" />
+                    <span>Staff Leave Applications & Absence</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                    Apply for statutory staff leave, assign relief teachers for class coverage, and track approval status.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(true)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition cursor-pointer"
                 >
-                  <option value="CASUAL">Casual Leave (Short absence)</option>
-                  <option value="SICK">Medical / Sick Leave</option>
-                  <option value="ANNUAL">Annual Leave / Recess</option>
-                  <option value="COMPASSIONATE">Compassionate / Bereavement</option>
-                  <option value="MATERNITY">Maternity Leave</option>
-                  <option value="PATERNITY">Paternity Leave</option>
-                  <option value="STUDY">Academic / Study Leave</option>
-                </select>
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Apply for Leave</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Start Date:
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveFormData.startDate}
-                    onChange={(e) => setLeaveFormData((prev) => ({ ...prev, startDate: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
-                  />
+              {/* Statutory Allowances & Status */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block mb-1">
+                    Casual Leave Entitlement
+                  </span>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white">7 Days / Yr</p>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                    Resumption Date:
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveFormData.endDate}
-                    onChange={(e) => setLeaveFormData((prev) => ({ ...prev, endDate: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
-                  />
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-500 block mb-1">
+                    Medical Leave Allowance
+                  </span>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">10 Days / Yr</p>
+                </div>
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-amber-500 block mb-1">
+                    Pending Applications
+                  </span>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                    {leaveRequests.filter((l) => l.status === "PENDING").length}
+                  </p>
+                </div>
+                <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-500 block mb-1">
+                    Approved Records
+                  </span>
+                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                    {leaveRequests.filter((l) => l.status === "APPROVED").length}
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Nominated Relief Teacher (For classroom coverage):
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Mr. Chukwuemeka Eze (English Dept)"
-                  value={leaveFormData.reliefTeacher || ""}
-                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reliefTeacher: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
-              </div>
+              {/* Leave History Table */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-zinc-300">
+                    Application History & Duty Relief
+                  </h4>
+                  <span className="text-xs text-slate-400">
+                    {leaveRequests.length} Record{leaveRequests.length === 1 ? "" : "s"}
+                  </span>
+                </div>
 
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
-                  Reason & Academic Handover Notes: *
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Provide details regarding the reason for leave and instructional plans handed over..."
-                  value={leaveFormData.reason}
-                  onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
-                />
+                {leaveRequests.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <CalendarDays className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-zinc-300">No Leave Applications on Record</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                      You have full attendance standing. When you require absence, submit an application here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowLeaveModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Apply for Leave</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-slate-50 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                        <tr>
+                          <th className="px-6 py-3.5">Leave Type</th>
+                          <th className="px-6 py-3.5">Duration</th>
+                          <th className="px-6 py-3.5">Relief Staff / Teacher</th>
+                          <th className="px-6 py-3.5">Reason</th>
+                          <th className="px-6 py-3.5 text-center">Status</th>
+                          <th className="px-6 py-3.5">Admin Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                        {leaveRequests.map((leave) => {
+                          const isPendingStatus = leave.status === "PENDING";
+                          const isApproved = leave.status === "APPROVED";
+                          const badgeClass = isApproved
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                            : isPendingStatus
+                              ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                              : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
+
+                          return (
+                            <tr key={leave.id || `${leave.startDate}-${leave.leaveType}`} className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40">
+                              <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-mono text-[11px]">
+                                  {leave.leaveType}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-semibold text-slate-700 dark:text-zinc-200">
+                                  {leave.startDate} to {leave.endDate}
+                                </div>
+                                <span className="text-[10px] text-slate-400">
+                                  {Math.max(1, Math.round((new Date(leave.endDate).getTime() - new Date(leave.startDate).getTime()) / 86400000) + 1)} day(s)
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-slate-700 dark:text-zinc-300">
+                                {leave.reliefTeacher || "None Nominated"}
+                              </td>
+                              <td className="px-6 py-4 text-slate-600 dark:text-zinc-400 max-w-xs truncate" title={leave.reason}>
+                                {leave.reason}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
+                                  {leave.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-slate-500 dark:text-zinc-400 text-xs">
+                                {leave.adminNotes || "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
-              <button
-                type="button"
-                onClick={() => setShowLeaveModal(false)}
-                className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
-              >
-                Cancel
-              </button>
+          {/* ========================================================================= */}
+          {/* TAB: EDUCATOR PROFILE                                                     */}
+          {/* ========================================================================= */}
+          {activeTab === "profile" && (
+            <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl">
+              {/* Header Card */}
+              <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border border-slate-200/90 dark:border-zinc-800 shadow-2xs relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-emerald-500/10 via-transparent to-transparent rounded-bl-full pointer-events-none" />
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 relative z-10">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-700 to-emerald-800 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shrink-0 shadow-md ring-4 ring-emerald-50 dark:ring-emerald-950/40">
+                    {staffInitials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                        {staffProfile?.role || staffRole || "Staff Educator"}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                        {staffProfile?.department || "Academic Faculty"}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        {staffProfile?.status || "ACTIVE"}
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">
+                      {staffName}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
+                      {staffProfile?.email || "educator@school.edu"} • {schoolName}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 sm:pt-0 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeEmailModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Change Email</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("security")}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Security & Password</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleSaveLeaveRequest}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition disabled:opacity-50 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isPending ? "Submitting..." : "Submit Application"}</span>
-              </button>
+              {/* Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Employment & Institution Card */}
+                <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
+                    <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Institutional Profile
+                    </h3>
+                  </div>
+                  <dl className="space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">School Institution</dt>
+                      <dd className="font-bold text-slate-900 dark:text-white">{schoolName}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Institutional Domain</dt>
+                      <dd className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">{schoolDomain}.school.edu</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Department</dt>
+                      <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.department || "Academic Division"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Staff Designation</dt>
+                      <dd className="font-semibold text-slate-900 dark:text-white">{staffRole}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Assigned Cohort</dt>
+                      <dd className="font-bold text-slate-900 dark:text-white">{selectedClass}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                {/* Compensation & Bank Card */}
+                <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
+                    <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Payroll & Disbursement
+                    </h3>
+                  </div>
+                  <dl className="space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Base Monthly Remuneration</dt>
+                      <dd className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatNaira(staffProfile?.baseSalary || 220000)}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Beneficiary Bank</dt>
+                      <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.bankName || "First Bank of Nigeria"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Account Number</dt>
+                      <dd className="font-mono font-bold text-slate-900 dark:text-white">{staffProfile?.bankAccountNumber || "3081294810"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Account Name</dt>
+                      <dd className="font-semibold text-slate-900 dark:text-white">{staffProfile?.accountName || staffName}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-slate-500 dark:text-zinc-400">Disbursement Status</dt>
+                      <dd className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle className="w-3.5 h-3.5" /> Synchronized
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+
+              {/* Assigned Classes and Courses Card */}
+              <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Curriculum & Classroom Scope
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {initialClassrooms.length} Classroom Streams Assigned
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                      Assigned Stream Cohorts
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {initialClassrooms.map((c) => (
+                        <span
+                          key={c.id}
+                          className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${c.name === selectedClass
+                              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                              : "bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
+                            }`}
+                        >
+                          {c.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                      Assigned Subject Disciplines
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {initialCourses.map((crs) => (
+                        <span
+                          key={crs.id}
+                          className="text-xs px-3 py-1.5 rounded-xl font-medium bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
+                        >
+                          {crs.name} ({crs.code})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: CHANGE EMAIL                                                       */}
-      {/* ========================================================================= */}
-      {showChangeEmailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-xl w-full overflow-hidden relative">
-            <button
-              type="button"
-              onClick={() => setShowChangeEmailModal(false)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition z-10 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="p-6">
-              <ChangeEmailCard
-                initialEmail={staffProfile?.email || ""}
-                brandColor="#059669"
+          {/* ========================================================================= */}
+          {/* TAB 9: PERSONAL SECURITY & PASSWORD SETTINGS                             */}
+          {/* ========================================================================= */}
+          {activeTab === "security" && (
+            <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
+              {/* Account Information Layout Block */}
+              <div className="p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-base truncate">
+                          Account Information
+                        </h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                          Primary
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 font-mono truncate">
+                        {staffProfile?.email || "educator@school.edu"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowChangeEmailModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 transition shadow-2xs cursor-pointer shrink-0"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Change email</span>
+                  </button>
+                </div>
+              </div>
+
+              <SecurityPasswordForm
                 schoolDomain={schoolDomain}
-                isSuperAdmin={false}
+                userRole={staffRole || "STAFF"}
+                brandColor="#059669"
               />
             </div>
-          </div>
-        </div>
-      )}
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: DEPARTMENTAL CIRCULARS & SENATE MEMOS (TERTIARY / UNIVERSITY)         */}
+          {/* ========================================================================= */}
+          {activeTab === "circulars" && (
+            <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                      {isCreche ? "Parent Circulars & Creche Bulletins" : "Departmental Circulars & Senate Resolutions"}
+                    </h2>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                      {isCreche ? "Early Childhood Communications" : "Tertiary Academic Registry"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {isCreche
+                      ? "Caregiver updates, feeding advisories, pediatric health alerts, and guardian notices."
+                      : "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."}
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                  {isCreche ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Active Circulars
+                  </p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    4 Official
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Action Required
+                  </p>
+                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                    2 Directives
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    {isCreche ? "Academic Term" : "Current Semester"}
+                  </p>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                    {isCreche ? "1st Term Care" : "1st Semester"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {(isCreche ? [
+                  {
+                    ref: "DCR/2026/CIRC/04",
+                    date: "October 20, 2026",
+                    title: "Infant Nutritional Guidelines & Weekly Puree/Snack Schedules",
+                    body: "Caregivers are to adhere strictly to the updated dietary allergy chart. Organic puree and fruit snacking schedules for Toddler Pods A & B are now posted.",
+                    priority: "HIGH PRIORITY",
+                    tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
+                  },
+                  {
+                    ref: "DCR/2026/MEMO/11",
+                    date: "October 16, 2026",
+                    title: "Mandatory Guardian Identification Verification for Afternoon Pick-ups",
+                    body: "All evening release staff must verify authorized guardian photo IDs or dynamic mobile OTP verification passes prior to releasing toddlers to drivers or relatives.",
+                    priority: "ACTION REQUIRED",
+                    tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
+                  },
+                  {
+                    ref: "DCR/2026/HLT/02",
+                    date: "October 11, 2026",
+                    title: "Pediatric Wellness Protocol & Morning Temperature Screening Routine",
+                    body: "Morning drop-off health checks for early fever, skin rashes, or respiratory distress must be logged directly into the Health Vitals Tracker upon arrival.",
+                    priority: "HEALTH DIRECTIVE",
+                    tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
+                  },
+                  {
+                    ref: "DCR/2026/GEN/09",
+                    date: "October 02, 2026",
+                    title: "Monthly Parent-Caregiver Early Childhood Milestone Reviews",
+                    body: "Scheduled one-on-one parent conferences for fine motor, language acquisition, and sensory developmental assessment updates begin next Monday.",
+                    priority: "GENERAL NOTICE",
+                    tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
+                  },
+                ] : [
+                  {
+                    ref: "SEN/2026/RES/08",
+                    date: "October 18, 2026",
+                    title: "Senate Directives on Mid-Semester Continuous Assessment Score Uploads",
+                    body: "All faculty members and course lecturers are instructed to conclude continuous assessments (CA1 & CA2) and lock student portal grades on or before Friday, November 14th.",
+                    priority: "HIGH PRIORITY",
+                    tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
+                  },
+                  {
+                    ref: "DCS/2026/CIRC/14",
+                    date: "October 14, 2026",
+                    title: "Departmental Board of Studies Meeting & Curriculum Moderation",
+                    body: "The statutory semester meeting for external examiner appointments and courseware syllabus moderation is scheduled for the Faculty Board Room.",
+                    priority: "STATUTORY",
+                    tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
+                  },
+                  {
+                    ref: "FAS/2026/MEMO/03",
+                    date: "October 09, 2026",
+                    title: "Vetting of Examination Questions & Standard Marking Keys",
+                    body: "Please submit sealed course examination papers along with complete model answers to the Departmental Examination Officer for internal vetting.",
+                    priority: "ACTION REQUIRED",
+                    tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
+                  },
+                  {
+                    ref: "REG/2026/GEN/22",
+                    date: "September 28, 2026",
+                    title: "Research Ethics & Institutional Review Board Clearance Notice",
+                    body: "All empirical studies involving undergraduate and postgraduate student subjects must secure institutional IRB ethics compliance before fieldwork commences.",
+                    priority: "GENERAL CIRCULAR",
+                    tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
+                  },
+                ]).map((circ, idx) => (
+                  <div
+                    key={idx}
+                    className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${circ.tagColor}`}>
+                          {circ.priority}
+                        </span>
+                        <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
+                          {circ.ref}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400">{circ.date}</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                        {circ.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                        {circ.body}
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                      <span>Authorizing Body: Academic Senate & Registry</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">Acknowledged</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: RESEARCH & GRANT TRACKERS (TERTIARY / UNIVERSITY)                     */}
+          {/* ========================================================================= */}
+          {activeTab === "research" && (
+            <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                      Research & Grant Trackers
+                    </h2>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                      Scholarly Portfolio
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Manage competitive institutional research grants, indexed journal publication trackers, and postgraduate thesis supervisions.
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
+                  ORCID: 0009-0004-7128-3391
+                </span>
+              </div>
+
+              {/* Research Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Funded Grants
+                  </p>
+                  <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    ₦28.5M
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Indexed Publications
+                  </p>
+                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                    14 Articles
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    Active Projects
+                  </p>
+                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                    3 Ongoing
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                    Postgraduate Theses
+                  </p>
+                  <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+                    5 Advisees
+                  </p>
+                </div>
+              </div>
+
+              {/* Research Projects List */}
+              <div className="space-y-3">
+                {[
+                  {
+                    title: "Distributed Fault-Tolerant Architectures for Large-Scale Enterprise School ERP Systems",
+                    sponsor: "TETFund National Research Fund (NRF)",
+                    grantCode: "TETF/NRF/2025/APP/0192",
+                    amount: "₦16,000,000",
+                    progress: 65,
+                    stage: "Empirical Benchmarking Phase",
+                    status: "ACTIVE",
+                  },
+                  {
+                    title: "Machine Learning Approaches to Continuous Formative Assessment & Student Attrition Early Warning",
+                    sponsor: "Institutional Seed Grant (Faculty of Science)",
+                    grantCode: "UNIV/ISG/2026/04",
+                    amount: "₦4,500,000",
+                    progress: 85,
+                    stage: "Peer Review & Journal Submission",
+                    status: "UNDER REVIEW",
+                  },
+                  {
+                    title: "Comparative Study of Multitenant Postgres Row-Level Security vs Database-Per-Tenant Isolation",
+                    sponsor: "International Computing Research Consortium",
+                    grantCode: "ICRC/GR/2026/B2",
+                    amount: "₦8,000,000",
+                    progress: 30,
+                    stage: "Data Collection & Architecture Modeling",
+                    status: "ACTIVE",
+                  },
+                ].map((proj, idx) => (
+                  <div
+                    key={idx}
+                    className="p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                          {proj.status}
+                        </span>
+                        <span className="font-mono text-xs font-bold text-slate-500 dark:text-zinc-400">
+                          {proj.grantCode}
+                        </span>
+                      </div>
+                      <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                        {proj.amount}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                        {proj.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                        Funding Agency: <strong>{proj.sponsor}</strong> • Stage: <em>{proj.stage}</em>
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>Research Milestone Progress</span>
+                        <span className="font-bold">{proj.progress}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${proj.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODAL: CREATE / EDIT LESSON NOTE                                          */}
+          {/* ========================================================================= */}
+          {showLessonNoteModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                        {selectedLessonNote ? "Edit Curriculum Lesson Plan" : "Prepare Weekly Lesson Note"}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">
+                        Standard educational delivery scheme & behavioral objectives
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLessonNoteModal(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Week Number (1 - 14):
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={14}
+                        value={lessonFormData.weekNumber}
+                        onChange={(e) =>
+                          setLessonFormData((prev) => ({ ...prev, weekNumber: parseInt(e.target.value) || 1 }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Class Cohort:
+                      </label>
+                      <select
+                        value={lessonFormData.className}
+                        onChange={(e) =>
+                          setLessonFormData((prev) => ({ ...prev, className: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                      >
+                        {initialClassrooms.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Subject / Course:
+                      </label>
+                      <select
+                        value={lessonFormData.subject}
+                        onChange={(e) =>
+                          setLessonFormData((prev) => ({ ...prev, subject: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                      >
+                        {initialCourses.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Topic: *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Quadratic Equations by Factorization"
+                        value={lessonFormData.topic}
+                        onChange={(e) => setLessonFormData((prev) => ({ ...prev, topic: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Sub-Topic (Optional):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Finding roots of trinomials"
+                        value={lessonFormData.subTopic || ""}
+                        onChange={(e) => setLessonFormData((prev) => ({ ...prev, subTopic: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Behavioral Objectives: * (By the end of the lesson, learners should be able to...)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="1. Define quadratic equations in standard form. 2. Factorize ax^2 + bx + c = 0."
+                      value={lessonFormData.objectives}
+                      onChange={(e) => setLessonFormData((prev) => ({ ...prev, objectives: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Instructional Aids & Teaching Materials:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Whiteboard, geometric models, graphing paper, flashcards"
+                      value={lessonFormData.instructionalMaterials || ""}
+                      onChange={(e) => setLessonFormData((prev) => ({ ...prev, instructionalMaterials: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Introduction / Prior Knowledge Hook:
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Review linear equations and expansion of brackets with interactive questions."
+                      value={lessonFormData.introduction || ""}
+                      onChange={(e) => setLessonFormData((prev) => ({ ...prev, introduction: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Step-by-Step Presentation / Teacher & Student Activities:
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Step 1: Teacher explains standard form ax^2 + bx + c = 0. Step 2: Teacher solves worked example on the board. Step 3: Students work in pairs on guided problem set."
+                      value={lessonFormData.presentationSteps || ""}
+                      onChange={(e) => setLessonFormData((prev) => ({ ...prev, presentationSteps: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Evaluation, Classwork & Homework:
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Classwork: Exercises 1 to 4 on page 82. Homework: Solve questions 5 to 10 for submission on Thursday."
+                      value={lessonFormData.evaluation || ""}
+                      onChange={(e) => setLessonFormData((prev) => ({ ...prev, evaluation: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
+                  <button
+                    type="button"
+                    onClick={() => setShowLessonNoteModal(false)}
+                    className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleSaveLessonNote("DRAFT")}
+                      className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-zinc-700 text-slate-800 dark:text-white font-bold text-xs hover:bg-slate-300 dark:hover:bg-zinc-600 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      Save as Draft
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleSaveLessonNote("SUBMITTED")}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{isPending ? "Submitting..." : "Submit for HOD Approval"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODAL: LEAVE APPLICATION                                                  */}
+          {/* ========================================================================= */}
+          {showLeaveModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                        Staff Leave Application
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">
+                        Formal notice for statutory or medical absence
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-4 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Leave Category:
+                    </label>
+                    <select
+                      value={leaveFormData.leaveType}
+                      onChange={(e) => setLeaveFormData((prev) => ({ ...prev, leaveType: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                    >
+                      <option value="CASUAL">Casual Leave (Short absence)</option>
+                      <option value="SICK">Medical / Sick Leave</option>
+                      <option value="ANNUAL">Annual Leave / Recess</option>
+                      <option value="COMPASSIONATE">Compassionate / Bereavement</option>
+                      <option value="MATERNITY">Maternity Leave</option>
+                      <option value="PATERNITY">Paternity Leave</option>
+                      <option value="STUDY">Academic / Study Leave</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Start Date:
+                      </label>
+                      <input
+                        type="date"
+                        value={leaveFormData.startDate}
+                        onChange={(e) => setLeaveFormData((prev) => ({ ...prev, startDate: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                        Resumption Date:
+                      </label>
+                      <input
+                        type="date"
+                        value={leaveFormData.endDate}
+                        onChange={(e) => setLeaveFormData((prev) => ({ ...prev, endDate: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Nominated Relief Teacher (For classroom coverage):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Mr. Chukwuemeka Eze (English Dept)"
+                      value={leaveFormData.reliefTeacher || ""}
+                      onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reliefTeacher: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 mb-1">
+                      Reason & Academic Handover Notes: *
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Provide details regarding the reason for leave and instructional plans handed over..."
+                      value={leaveFormData.reason}
+                      onChange={(e) => setLeaveFormData((prev) => ({ ...prev, reason: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50 dark:bg-zinc-800/40">
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(false)}
+                    className="px-4 py-2 rounded-xl text-slate-600 dark:text-zinc-300 font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={handleSaveLeaveRequest}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isPending ? "Submitting..." : "Submit Application"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODAL: CHANGE EMAIL                                                       */}
+          {/* ========================================================================= */}
+          {showChangeEmailModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl max-w-xl w-full overflow-hidden relative">
+                <button
+                  type="button"
+                  onClick={() => setShowChangeEmailModal(false)}
+                  className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition z-10 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="p-6">
+                  <ChangeEmailCard
+                    initialEmail={staffProfile?.email || ""}
+                    brandColor="#059669"
+                    schoolDomain={schoolDomain}
+                    isSuperAdmin={false}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tenant Dashboard Footer matching Admin */}
@@ -3488,11 +3478,10 @@ export default function StaffPortalClient({
           <button
             type="button"
             onClick={() => setActiveTab("rosters")}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
-              activeTab === "rosters" || activeTab === "overview"
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${activeTab === "rosters" || activeTab === "overview"
                 ? "text-emerald-600 dark:text-emerald-400 font-bold"
                 : "text-slate-500 dark:text-zinc-400 font-medium"
-            }`}
+              }`}
           >
             <Users className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">Rosters</span>
@@ -3501,11 +3490,10 @@ export default function StaffPortalClient({
           <button
             type="button"
             onClick={() => setActiveTab("attendance")}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
-              activeTab === "attendance"
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${activeTab === "attendance"
                 ? "text-emerald-600 dark:text-emerald-400 font-bold"
                 : "text-slate-500 dark:text-zinc-400 font-medium"
-            }`}
+              }`}
           >
             <CheckSquare className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">Attendance</span>
@@ -3514,11 +3502,10 @@ export default function StaffPortalClient({
           <button
             type="button"
             onClick={() => setActiveTab("gradebook")}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
-              activeTab === "gradebook"
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${activeTab === "gradebook"
                 ? "text-emerald-600 dark:text-emerald-400 font-bold"
                 : "text-slate-500 dark:text-zinc-400 font-medium"
-            }`}
+              }`}
           >
             <Award className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">Grades</span>
@@ -3527,11 +3514,10 @@ export default function StaffPortalClient({
           <button
             type="button"
             onClick={() => setActiveTab("schedule")}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
-              activeTab === "schedule"
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${activeTab === "schedule"
                 ? "text-emerald-600 dark:text-emerald-400 font-bold"
                 : "text-slate-500 dark:text-zinc-400 font-medium"
-            }`}
+              }`}
           >
             <Calendar className="w-5 h-5" />
             <span className="text-[10px] mt-0.5">Schedule</span>

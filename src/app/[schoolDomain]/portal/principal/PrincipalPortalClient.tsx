@@ -253,8 +253,8 @@ export default function PrincipalPortalClient({
   // Auto-expand accordion section containing the active tab
   useEffect(() => {
     const currentGroup = navSections.find((g) => g.items.some((it) => it.id === activeTab));
-    if (currentGroup && expandedSection !== currentGroup.title) {
-      setExpandedSection(currentGroup.title);
+    if (currentGroup) {
+      setExpandedSection((prev) => (prev !== currentGroup.title ? currentGroup.title : prev));
     }
   }, [activeTab, navSections]);
 
