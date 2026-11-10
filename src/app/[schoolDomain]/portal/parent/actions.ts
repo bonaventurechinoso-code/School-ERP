@@ -104,6 +104,7 @@ export interface ParentPortalData {
     name: string;
     subdomain: string;
     logo?: string | null;
+    academicTiers?: Array<{ id: string; name: string; level?: number | null }>;
   };
   parent: ParentProfileData;
   wards: WardData[];
@@ -127,6 +128,10 @@ export async function fetchParentPortalInitialData(
       name: true,
       subdomain: true,
       logo: true,
+      academicTiers: {
+        select: { id: true, name: true, level: true },
+        orderBy: { level: "asc" },
+      },
     },
   });
 
@@ -350,7 +355,7 @@ export async function fetchParentPortalInitialData(
         subjectName: t.course?.name || "General Course",
         subjectCode: t.course?.code || "GEN",
         classroomName: t.classroom?.name || ward.currentClass || "Classroom",
-        teacherName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : "Faculty Educator",
+        teacherName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : "Assigned Teacher",
       })),
       reportCards: wardReports.map((rc) => ({
         id: rc.id,

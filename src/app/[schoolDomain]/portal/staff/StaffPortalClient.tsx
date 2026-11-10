@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { performTenantLogout } from "@/lib/client-logout";
+import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -636,48 +637,19 @@ export default function StaffPortalClient({
     return parts[0].slice(0, 2).toUpperCase();
   }, [staffName]);
 
-  // Resolve active tier object and tertiary indicator
+  // Resolve exact institutional tier terminology strictly bound to the institution
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(schoolName, initialTiers);
+  }, [schoolName, initialTiers]);
+
+  const isTertiary = terminology.isTertiary;
+  const isCreche = terminology.isCreche;
+  const isPrimary = terminology.isPrimary;
+  const isSecondary = terminology.isSecondary;
+
   const activeTierObj = useMemo(() => {
     return initialTiers.find((t) => t.id === selectedTierId) || initialTiers[0];
   }, [initialTiers, selectedTierId]);
-
-  const isTertiary = useMemo(() => {
-    const roleNorm = (staffRole || "").toUpperCase();
-    const tierNorm = (activeTierObj?.name || "").toUpperCase();
-    return (
-      roleNorm.includes("LECTURER") ||
-      roleNorm.includes("PROFESSOR") ||
-      roleNorm.includes("READER") ||
-      roleNorm.includes("DEAN") ||
-      roleNorm.includes("HOD") ||
-      roleNorm.includes("FACULTY") ||
-      tierNorm.includes("UNIVERSITY") ||
-      tierNorm.includes("TERTIARY") ||
-      tierNorm.includes("POLYTECHNIC") ||
-      tierNorm.includes("COLLEGE")
-    );
-  }, [staffRole, activeTierObj]);
-
-  const isCreche = useMemo(() => {
-    const roleNorm = (staffRole || "").toUpperCase();
-    const tierNorm = (activeTierObj?.name || "").toUpperCase();
-    return (
-      roleNorm.includes("CAREGIVER") ||
-      roleNorm.includes("CRECHE") ||
-      roleNorm.includes("NURSERY") ||
-      roleNorm.includes("EARLY YEARS") ||
-      roleNorm.includes("NANNY") ||
-      roleNorm.includes("CRECHE") ||
-      roleNorm.includes("PLAYGROUP") ||
-      roleNorm.includes("KINDERGARTEN") ||
-      tierNorm.includes("CRECHE") ||
-      tierNorm.includes("NURSERY") ||
-      tierNorm.includes("EARLY") ||
-      tierNorm.includes("CRECHE") ||
-      tierNorm.includes("PLAYGROUP") ||
-      tierNorm.includes("KINDERGARTEN")
-    );
-  }, [staffRole, activeTierObj]);
 
   const navSections = useMemo(() => {
     if (isTertiary) {
@@ -1091,7 +1063,7 @@ export default function StaffPortalClient({
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/50 uppercase tracking-wider">
-                            {isTertiary ? "TERTIARY FACULTY / LECTURER" : isCreche ? "EARLY CHILDHOOD CAREGIVER" : "STAFF EDUCATOR"}
+                            {isTertiary ? "TERTIARY FACULTY / LECTURER" : isCreche ? "EARLY CHILDHOOD CAREGIVER" : isPrimary ? "PRIMARY SCHOOL TEACHER" : isSecondary ? "SECONDARY SCHOOL TEACHER" : "STAFF EDUCATOR"}
                           </span>
                         </div>
                       </div>
@@ -2265,7 +2237,9 @@ export default function StaffPortalClient({
                       ? "Maintain pediatric immunization schedules, allergy warning tags, and infant health vital check logs."
                       : isTertiary
                         ? "Structure and publish courseware syllabi, lecture modules, and academic reading lists for faculty appraisal."
-                        : "Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review."}
+                        : isPrimary
+                          ? "Author, structure, and submit weekly teaching lesson plans for Headmaster inspection and academic review."
+                          : "Author, structure, and submit weekly teaching lesson plans for administrative inspection and HOD review."}
                   </p>
                 </div>
                 <button
@@ -2594,7 +2568,7 @@ export default function StaffPortalClient({
                         {staffProfile?.role || staffRole || "Staff Educator"}
                       </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
-                        {staffProfile?.department || "Academic Faculty"}
+                        {staffProfile?.department || (isTertiary ? "Academic Faculty" : isCreche ? "Early Childhood Care" : "Teaching Staff")}
                       </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -2809,20 +2783,22 @@ export default function StaffPortalClient({
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                      {isCreche ? "Parent Circulars & Creche Bulletins" : "Departmental Circulars & Senate Resolutions"}
+                      {isCreche ? "Parent Circulars & Creche Bulletins" : isTertiary ? "Departmental Circulars & Senate Resolutions" : terminology.circularsHeading}
                     </h2>
                     <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                      {isCreche ? "Early Childhood Communications" : "Tertiary Academic Registry"}
+                      {isCreche ? "Early Childhood Communications" : isTertiary ? "Tertiary Academic Registry" : `${terminology.institutionCategory} Administration`}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                     {isCreche
                       ? "Caregiver updates, feeding advisories, pediatric health alerts, and guardian notices."
-                      : "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."}
+                      : isTertiary
+                      ? "Official faculty memos, academic board decisions, moderation directives, and institutional guidelines."
+                      : terminology.circularsSubheading}
                   </p>
                 </div>
                 <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-                  {isCreche ? "Early Care & Nursery Wing" : `Department of ${staffProfile?.department || "Academic Faculty"}`}
+                  {isCreche ? "Early Care & Nursery Wing" : isTertiary ? `Department of ${staffProfile?.department || "Academic Faculty"}` : `${terminology.institutionCategory} Academic Staff`}
                 </span>
               </div>
 
@@ -2845,10 +2821,10 @@ export default function StaffPortalClient({
                 </div>
                 <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    {isCreche ? "Academic Term" : "Current Semester"}
+                    {terminology.currentPeriodLabel}
                   </p>
                   <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                    {isCreche ? "1st Term Care" : "1st Semester"}
+                    {terminology.periodOrdinal(1)}
                   </p>
                 </div>
               </div>
@@ -2887,7 +2863,7 @@ export default function StaffPortalClient({
                     priority: "GENERAL NOTICE",
                     tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
                   },
-                ] : [
+                ] : isTertiary ? [
                   {
                     ref: "SEN/2026/RES/08",
                     date: "October 18, 2026",
@@ -2920,6 +2896,39 @@ export default function StaffPortalClient({
                     priority: "GENERAL CIRCULAR",
                     tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
                   },
+                ] : [
+                  {
+                    ref: "SCH/2026/CIRC/04",
+                    date: "October 18, 2026",
+                    title: terminology.sampleNotice1Title,
+                    body: terminology.sampleNotice1Body,
+                    priority: "HIGH PRIORITY",
+                    tagColor: "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 border-red-200",
+                  },
+                  {
+                    ref: "SCH/2026/MEMO/08",
+                    date: "October 14, 2026",
+                    title: terminology.sampleNotice2Title,
+                    body: terminology.sampleNotice2Body,
+                    priority: "ADMINISTRATIVE",
+                    tagColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200",
+                  },
+                  {
+                    ref: "SCH/2026/EXM/02",
+                    date: "October 09, 2026",
+                    title: "Terminal Examination Question Papers Submission & Vetting",
+                    body: "Class teachers must submit typed or moderated termly examination questions along with marking guides to the Head of Academic Studies.",
+                    priority: "ACTION REQUIRED",
+                    tagColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200",
+                  },
+                  {
+                    ref: "SCH/2026/GEN/15",
+                    date: "September 28, 2026",
+                    title: "Co-curricular Clubs, Sports, and Learner Safety Directives",
+                    body: "All teachers on playground supervision duty must ensure learner safety and monitor sports activities during recess and after-school clubs.",
+                    priority: "GENERAL DIRECTIVE",
+                    tagColor: "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border-slate-200",
+                  },
                 ]).map((circ, idx) => (
                   <div
                     key={idx}
@@ -2945,7 +2954,7 @@ export default function StaffPortalClient({
                       </p>
                     </div>
                     <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                      <span>Authorizing Body: Academic Senate & Registry</span>
+                      <span>Authorizing Body: {terminology.authorizingBody}</span>
                       <span className="font-semibold text-emerald-600 dark:text-emerald-400">Acknowledged</span>
                     </div>
                   </div>

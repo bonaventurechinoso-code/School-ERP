@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { performTenantLogout } from "@/lib/client-logout";
+import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -81,6 +82,13 @@ export default function BursarPortalClient({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
+
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(
+      initialData.school.name,
+      initialData.school.academicTiers
+    );
+  }, [initialData.school.name, initialData.school.academicTiers]);
 
   const toggleSection = (sectionTitle: string) => {
     setExpandedSection((prev) => (prev === sectionTitle ? null : sectionTitle));
@@ -1676,7 +1684,7 @@ export default function BursarPortalClient({
                     Staff Payroll Disbursals
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Faculty salary reconciliations, monthly payslip dispatches, and bank remittance vouchers.
+                    Staff salary reconciliations, monthly payslip dispatches, and bank remittance vouchers.
                   </p>
                 </div>
               </div>
@@ -1686,7 +1694,7 @@ export default function BursarPortalClient({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 dark:bg-zinc-800/50 text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800">
                       <tr>
-                        <th className="py-3 px-4">Faculty Member</th>
+                        <th className="py-3 px-4">{terminology.staffTableHead}</th>
                         <th className="py-3 px-4">Department</th>
                         <th className="py-3 px-4">Scheduled Pay Date</th>
                         <th className="py-3 px-4">Status</th>

@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { performTenantLogout } from "@/lib/client-logout";
+import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -72,6 +73,13 @@ export default function PrincipalPortalClient({
   const toggleSection = (sectionTitle: string) => {
     setExpandedSection((prev) => (prev === sectionTitle ? null : sectionTitle));
   };
+
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(
+      initialData.school.name,
+      initialData.school.academicTiers
+    );
+  }, [initialData.school.name, initialData.school.academicTiers]);
 
   const profileDropdownRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -697,7 +705,7 @@ export default function PrincipalPortalClient({
                       className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs transition shadow-md flex items-center gap-2 cursor-pointer"
                     >
                       <Users className="w-4 h-4" />
-                      <span>Review Faculty</span>
+                      <span>Review {terminology.teachersNoun}</span>
                     </button>
                     <button
                       type="button"
@@ -734,11 +742,11 @@ export default function PrincipalPortalClient({
                   </div>
                 </div>
 
-                {/* 2. Active Faculty Count */}
+                {/* 2. Active Staff Count */}
                 <div className="bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 rounded-2xl p-5 shadow-2xs hover:shadow-md transition">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                      Active Faculty Count
+                      Active {terminology.teachersNoun} Count
                     </span>
                     <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                       <Users className="w-4 h-4" />
@@ -1572,7 +1580,7 @@ export default function PrincipalPortalClient({
                     Staff Directory & Onboarding Status
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Faculty rosters, academic department designations, and executive lifecycle control.
+                    Staff rosters, academic designations, and executive lifecycle control.
                   </p>
                 </div>
               </div>
@@ -1585,7 +1593,7 @@ export default function PrincipalPortalClient({
                     type="text"
                     value={staffSearchQuery}
                     onChange={(e) => setStaffSearchQuery(e.target.value)}
-                    placeholder="Search faculty by name, department, or email..."
+                    placeholder={terminology.staffSearchPlaceholder}
                     className="w-full pl-10 pr-4 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
@@ -1614,7 +1622,7 @@ export default function PrincipalPortalClient({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 dark:bg-zinc-800/50 text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800">
                       <tr>
-                        <th className="py-3 px-4">Faculty Member</th>
+                        <th className="py-3 px-4">{terminology.staffTableHead}</th>
                         <th className="py-3 px-4">Department</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Joined</th>
@@ -1625,7 +1633,7 @@ export default function PrincipalPortalClient({
                       {filteredStaff.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-slate-400">
-                            No faculty members match the selected criteria.
+                            No staff members match the selected criteria.
                           </td>
                         </tr>
                       ) : (
@@ -1766,18 +1774,18 @@ export default function PrincipalPortalClient({
                   Executive Leave Approvals Panel
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Manage faculty absence notifications, statutory leaves, and classroom relief nominations.
+                  Manage staff absence notifications, statutory leaves, and classroom relief nominations.
                 </p>
               </div>
 
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 shadow-2xs space-y-4">
                 <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                  Faculty On Statutory Leave
+                  Staff On Statutory Leave
                 </h3>
                 <div className="divide-y divide-slate-100 dark:divide-zinc-800">
                   {staffList.filter((s) => s.status === "LEAVE").length === 0 ? (
                     <p className="text-xs text-slate-400 py-6 text-center">
-                      No faculty members are currently on authorized leave.
+                      No staff members are currently on authorized leave.
                     </p>
                   ) : (
                     staffList
@@ -2030,7 +2038,7 @@ export default function PrincipalPortalClient({
             }`}
           >
             <Users className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5">Faculty</span>
+            <span className="text-[10px] mt-0.5">{terminology.isTertiary ? "Faculty" : "Staff"}</span>
           </button>
 
           <button

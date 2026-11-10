@@ -75,6 +75,7 @@ export interface PrincipalPortalData {
     name: string;
     subdomain: string;
     logo?: string | null;
+    academicTiers?: Array<{ id: string; name: string; level?: number | null }>;
   };
   principal: PrincipalProfileData;
   metrics: {
@@ -110,6 +111,10 @@ export async function fetchPrincipalPortalInitialData(
       name: true,
       subdomain: true,
       logo: true,
+      academicTiers: {
+        select: { id: true, name: true, level: true },
+        orderBy: { level: "asc" },
+      },
     },
   });
 
@@ -267,7 +272,7 @@ export async function fetchPrincipalPortalInitialData(
     subjectName: t.course?.name || "General Course",
     subjectCode: t.course?.code || "GEN",
     className: t.classroom?.name || "All Classes",
-    teacherName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : "Assigned Faculty",
+    teacherName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : "Assigned Teacher",
   }));
 
   const staffDirectory: StaffDirectoryItem[] = staffList.map((s) => ({
@@ -276,7 +281,7 @@ export async function fetchPrincipalPortalInitialData(
     lastName: s.lastName,
     email: s.email,
     department: s.department?.name || "Academic Division",
-    role: "Faculty Member",
+    role: (s as any).role || "Teacher / Staff Member",
     status: s.status,
     phone: null,
     joinedDate: s.createdAt.toISOString().split("T")[0],

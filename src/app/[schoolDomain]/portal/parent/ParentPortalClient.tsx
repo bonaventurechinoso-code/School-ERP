@@ -35,6 +35,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { performTenantLogout } from "@/lib/client-logout";
+import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -137,6 +138,13 @@ export default function ParentPortalClient({
     }
     return (parts[0]?.[0] || "P").toUpperCase();
   }, [initialData.parent.name]);
+
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(
+      initialData.school.name,
+      initialData.school.academicTiers
+    );
+  }, [initialData.school.name, initialData.school.academicTiers]);
 
   // Sidebar navigation structure strictly adhering to Family RBAC
   const navSections = useMemo(
@@ -467,7 +475,7 @@ export default function ParentPortalClient({
                   {activeTab === "attendance" && "Children's Attendance Records"}
                   {activeTab === "timetable" && "Academic Timetables"}
                   {activeTab === "reportcards" && "Terminal Report Cards"}
-                  {activeTab === "remarks" && "Faculty Behavioral Remarks"}
+                  {activeTab === "remarks" && terminology.behavioralRemarksLabel}
                   {activeTab === "fees" && "School Fee Bills & Invoices"}
                   {activeTab === "proof" && "Upload Proof of Payment"}
                   {activeTab === "noticeboard" && "School Noticeboard & Circulars"}
@@ -874,7 +882,7 @@ export default function ParentPortalClient({
                   </div>
                 </div>
 
-                {/* Campus Circulars */}
+                {/* School Circulars */}
                 <div className="bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 rounded-2xl p-6 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
                     <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
@@ -1131,7 +1139,7 @@ export default function ParentPortalClient({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
                 <div>
                   <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Faculty Behavioral Remarks
+                    {terminology.behavioralRemarksLabel}
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
                     Observations regarding {activeWard.name}&apos;s character, decorum, and team collaboration.

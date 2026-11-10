@@ -33,6 +33,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { performTenantLogout } from "@/lib/client-logout";
+import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
@@ -91,6 +92,13 @@ export default function StudentPortalClient({
     return (parts[0]?.[0] || "S").toUpperCase();
   }, [initialData.student.name]);
 
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(
+      initialData.school.name,
+      initialData.school.academicTiers
+    );
+  }, [initialData.school.name, initialData.school.academicTiers]);
+
   // Sidebar navigation sections strictly adhering to Student RBAC
   const navSections = useMemo(
     () => [
@@ -112,7 +120,7 @@ export default function StudentPortalClient({
           },
           {
             id: "timetable",
-            label: "Class Timetable",
+            label: terminology.timetableLabel,
             icon: Calendar,
             badge: null,
           },
@@ -124,19 +132,19 @@ export default function StudentPortalClient({
           },
           {
             id: "reportcards",
-            label: "Termly Report Cards",
+            label: terminology.reportCardLabel,
             icon: Award,
             badge: initialData.reportCards.length ? `${initialData.reportCards.length}` : null,
           },
         ],
       },
       {
-        title: "Campus Workspace",
+        title: terminology.workspaceTitle,
         icon: Building2,
         items: [
           {
             id: "noticeboard",
-            label: "School Noticeboard",
+            label: terminology.noticesTitle,
             icon: Bell,
             badge: initialData.notices.length ? `${initialData.notices.length}` : null,
           },
@@ -168,6 +176,7 @@ export default function StudentPortalClient({
       initialData.notices.length,
       initialData.learningResources.length,
       initialData.metrics.outstandingFees,
+      terminology,
     ]
   );
 
@@ -405,7 +414,7 @@ export default function StudentPortalClient({
                   type="button"
                   onClick={() => setActiveTab("noticeboard")}
                   className="p-2 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition relative"
-                  title="Campus Notices"
+                  title={terminology.noticesTitle}
                 >
                   <Bell className="w-4 h-4" />
                   {initialData.notices.length > 0 && (
@@ -744,7 +753,7 @@ export default function StudentPortalClient({
                   </div>
                 </div>
 
-                {/* Campus Announcements Widget */}
+                {/* Announcements Widget */}
                 <div className="bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 rounded-2xl p-6 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
                     <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
@@ -1100,7 +1109,7 @@ export default function StudentPortalClient({
                     School Noticeboard
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Official announcements, academic calendars, and campus administrative updates.
+                    {terminology.noticesSubtitle}
                   </p>
                 </div>
               </div>

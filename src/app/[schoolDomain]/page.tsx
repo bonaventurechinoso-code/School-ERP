@@ -196,7 +196,14 @@ export default async function PublicGuestPortalPage({
   const { heroTitle, aboutUs } = generateTierMockData(preciseTier, school.name);
   
   const isDemo = school.subdomain.toLowerCase() === "demo";
-  const demoDescription = "A premium institution dedicated to global research, academic innovation, and professional competency.";
+  const demoDescription =
+    preciseTier === "NURSERY"
+      ? "A nurturing early childhood center dedicated to toddler milestone development, play-based literacy, and dedicated caregiver guidance."
+      : preciseTier === "PRIMARY"
+      ? "A foundational primary institution fostering literacy, numeracy, academic discipline, and future Nigerian leaders."
+      : preciseTier === "SECONDARY"
+      ? "A premier secondary institution preparing students for WAEC, NECO, and JAMB through comprehensive academic and moral discipline."
+      : "A premium institution dedicated to global research, academic innovation, and professional competency.";
   const finalAboutUs = isDemo ? demoDescription : aboutUs;
 
   // Use custom welcome greeting if provided and different from default
@@ -300,7 +307,7 @@ export default async function PublicGuestPortalPage({
               fill
               priority
               className="object-cover" 
-              alt={`${school.name} Campus`} 
+              alt={`${school.name} ${preciseTier === "UNIVERSITY" || preciseTier === "POLYTECHNIC" ? "Campus" : "School Premises"}`} 
             />
             {/* 45% Opacity Dark Overlay for clear campus image visibility and high-contrast text */}
             <div className="absolute inset-0 bg-black/45 z-0 pointer-events-none" />
@@ -425,7 +432,7 @@ export default async function PublicGuestPortalPage({
             <p className="text-sm text-slate-400 max-w-sm mb-6 leading-relaxed">
               {isDemo 
                 ? demoDescription
-                : "Unified institutional portal servicing student academic workspaces, staff operations, and online admissions enrollment."}
+                : `Unified institutional portal servicing ${preciseTier === "PRIMARY" ? "pupil academic records" : preciseTier === "NURSERY" ? "early childhood care and developmental milestones" : "student academic workspaces"}, staff operations, and online admissions enrollment.`}
             </p>
             {!isDemo && (
               <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">

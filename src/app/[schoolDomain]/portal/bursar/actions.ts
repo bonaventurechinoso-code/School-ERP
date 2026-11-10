@@ -107,6 +107,7 @@ export interface BursarPortalData {
     name: string;
     subdomain: string;
     logo?: string | null;
+    academicTiers?: Array<{ id: string; name: string; level?: number | null }>;
   };
   bursar: BursarProfileData;
   metrics: {
@@ -136,6 +137,10 @@ export async function fetchBursarPortalInitialData(
       name: true,
       subdomain: true,
       logo: true,
+      academicTiers: {
+        select: { id: true, name: true, level: true },
+        orderBy: { level: "asc" },
+      },
     },
   });
 
@@ -345,7 +350,7 @@ export async function fetchBursarPortalInitialData(
   const payroll: PayrollDisbursalItem[] = payrollRecords.map((pr) => ({
     id: pr.id,
     staffName: `${pr.staff.firstName} ${pr.staff.lastName}`,
-    staffRole: "Faculty Member",
+    staffRole: (pr.staff as any).role || "Staff Member",
     department: pr.staff.department?.name || "Academic Department",
     amount: pr.amount,
     status: pr.status,

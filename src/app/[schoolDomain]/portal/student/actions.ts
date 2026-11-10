@@ -91,6 +91,7 @@ export interface StudentPortalData {
     name: string;
     subdomain: string;
     logo?: string | null;
+    academicTiers?: Array<{ id: string; name: string; level?: number | null }>;
   };
   student: StudentProfileData;
   metrics: {
@@ -120,6 +121,10 @@ export async function fetchStudentPortalInitialData(
       name: true,
       subdomain: true,
       logo: true,
+      academicTiers: {
+        select: { id: true, name: true, level: true },
+        orderBy: { level: "asc" },
+      },
     },
   });
 
