@@ -1168,8 +1168,42 @@ export default function StaffPortalClient({
           </div>
         </header>
 
+        {/* Mobile Horizontal Quick Navigation Scroller */}
+        <div className="md:hidden bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-3 py-2 overflow-x-auto scrollbar-none flex items-center gap-1.5 shrink-0 sticky top-[57px] z-20 shadow-2xs">
+          {navSections.flatMap((s) => s.items).map((item) => {
+            const isActive = activeTab === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id as any)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+                <span>{item.label}</span>
+                {item.badge && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* High-Density Dashboard Canvas Container */}
-        <div className="p-3.5 sm:p-6 md:p-8 pb-16 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full max-w-full overflow-hidden space-y-6">
+        <div className="p-3.5 sm:p-6 md:p-8 pb-24 md:pb-16 flex-1 text-slate-900 dark:text-zinc-50 max-w-7xl mx-auto w-full max-w-full overflow-hidden space-y-4 sm:space-y-6 min-w-0">
           {/* Access Denied Interception Notice */}
           {isAccessDenied && (
             <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/40 dark:to-amber-950/20 border border-red-200/90 dark:border-red-900/60 shadow-sm flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -3445,6 +3479,73 @@ export default function StaffPortalClient({
             </div>
           </div>
         </footer>
+
+        {/* Mobile Fixed Bottom Navigation Bar */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border-t border-slate-200/90 dark:border-zinc-800/90 px-3 py-1.5 flex items-center justify-around shadow-lg"
+          aria-label="Staff Mobile Bottom Bar"
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab("rosters")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "rosters" || activeTab === "overview"
+                ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Rosters</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("attendance")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "attendance"
+                ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <CheckSquare className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Attendance</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("gradebook")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "gradebook"
+                ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Award className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Grades</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("schedule")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "schedule"
+                ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Schedule</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-500 dark:text-zinc-400 font-medium transition min-w-[56px]"
+          >
+            <Menu className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Menu</span>
+          </button>
+        </nav>
       </main>
 
       {/* Logout Confirmation Modal matching School Admin pattern */}

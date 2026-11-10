@@ -441,27 +441,27 @@ export default function ParentPortalClient({
         <header className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-zinc-800/80 px-4 sm:px-6 py-3 transition-colors shrink-0">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Mobile hamburger & Context indicators */}
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(true)}
-                className="md:hidden p-2 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition"
+                className="md:hidden p-2 text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition shrink-0"
                 aria-label="Open Navigation Sidebar"
               >
                 <Menu className="w-5 h-5" />
               </button>
 
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 shrink-0">
-                    Parent Workspace
+                    Parent
                   </span>
                   <span className="text-slate-400 dark:text-zinc-600 text-xs hidden sm:inline">•</span>
                   <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 truncate hidden sm:inline">
-                    Active Ward: <strong className="text-slate-800 dark:text-zinc-200">{activeWard.name}</strong> ({activeWard.currentClass})
+                    Ward: <strong className="text-slate-800 dark:text-zinc-200">{activeWard.name}</strong> ({activeWard.currentClass})
                   </span>
                 </div>
-                <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate mt-0.5">
+                <h1 className="text-sm sm:text-lg font-black text-slate-900 dark:text-white truncate mt-0.5">
                   {activeTab === "overview" && "Family Overview & Ward Progress"}
                   {activeTab === "attendance" && "Children's Attendance Records"}
                   {activeTab === "timetable" && "Academic Timetables"}
@@ -577,6 +577,40 @@ export default function ParentPortalClient({
           </div>
         </header>
 
+        {/* Mobile Horizontal Quick Navigation Scroller */}
+        <div className="md:hidden bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-3 py-2 overflow-x-auto scrollbar-none flex items-center gap-1.5 shrink-0 sticky top-[57px] z-20 shadow-2xs">
+          {navSections.flatMap((s) => s.items).map((item) => {
+            const isActive = activeTab === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs"
+                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+                <span>{item.label}</span>
+                {item.badge && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                      isActive
+                        ? "bg-white/20 dark:bg-slate-900/20 text-white dark:text-slate-900"
+                        : "bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Global Alert Notification */}
         {proofStatus && (
           <div className="px-4 sm:px-8 pt-4">
@@ -607,7 +641,7 @@ export default function ParentPortalClient({
         )}
 
         {/* Dynamic Canvas Area */}
-        <div className="flex-1 p-4 sm:p-6 md:p-8 space-y-6">
+        <div className="flex-1 p-3.5 sm:p-6 md:p-8 pb-24 md:pb-8 space-y-4 sm:space-y-6 min-w-0">
           {/* ========================================================================= */}
           {/* MULTI-CHILD SELECTOR (REQUIREMENT 4)                                      */}
           {/* ========================================================================= */}
@@ -1523,6 +1557,76 @@ export default function ParentPortalClient({
             </div>
           </div>
         </footer>
+
+        {/* Mobile Fixed Bottom Navigation Bar */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border-t border-slate-200/90 dark:border-zinc-800/90 px-3 py-1.5 flex items-center justify-around shadow-lg"
+          aria-label="Parent Mobile Bottom Bar"
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab("overview")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "overview"
+                ? "text-slate-900 dark:text-white font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Heart className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Overview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("attendance")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "attendance"
+                ? "text-slate-900 dark:text-white font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <CheckSquare className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Attendance</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("reportcards")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] ${
+              activeTab === "reportcards"
+                ? "text-slate-900 dark:text-white font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Award className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Reports</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("fees")}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition min-w-[56px] relative ${
+              activeTab === "fees"
+                ? "text-slate-900 dark:text-white font-bold"
+                : "text-slate-500 dark:text-zinc-400 font-medium"
+            }`}
+          >
+            <Receipt className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Fees</span>
+            {activeWard.metrics.outstandingFees > 0 && (
+              <span className="absolute top-1 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-950" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-500 dark:text-zinc-400 font-medium transition min-w-[56px]"
+          >
+            <Menu className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Menu</span>
+          </button>
+        </nav>
       </main>
 
       {/* Logout Confirmation Modal */}
