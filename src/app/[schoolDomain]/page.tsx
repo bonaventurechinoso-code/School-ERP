@@ -264,7 +264,7 @@ export default async function PublicGuestPortalPage({
                   href={workspaceHref}
                   className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm"
                 >
-                  <span>Enter Workspace</span>
+                  <span>Sign In</span>
                   <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                 </Link>
               </div>
@@ -327,27 +327,6 @@ export default async function PublicGuestPortalPage({
                 <span>Contact Admissions</span>
               </a>
             </div>
-
-            {/* Direct Gateway Badges */}
-            {!isDemo && (
-              <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
-                <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
-                <Link 
-                  href={session ? workspaceHref : `/${school.subdomain}/login`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition shadow-sm font-semibold"
-                >
-                  <span>Enter Workspace</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-                <span className="text-slate-600 hidden sm:inline">•</span>
-                <Link 
-                  href={`/${school.subdomain}/apply`}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition backdrop-blur-xs font-semibold"
-                >
-                  <span>New Applicant Enrollment</span>
-                </Link>
-              </div>
-            )}
           </div>
         </div>
 
@@ -442,10 +421,10 @@ export default async function PublicGuestPortalPage({
             {!isDemo && (
               <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
                 <Link
-                  href={`/${school.subdomain}/login`}
+                  href={session ? workspaceHref : `/${school.subdomain}/login`}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
                 >
-                  <span>Enter Workspace</span>
+                  <span>Sign In</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
