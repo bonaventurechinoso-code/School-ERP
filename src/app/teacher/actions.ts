@@ -413,6 +413,9 @@ export async function getTeacherGradebookData(
   };
 }
 
+import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
+import { getTenantClient } from "@/lib/tenant-prisma";
+
 export async function saveTeacherGrades(
   className: string,
   subject: string,
@@ -423,18 +426,70 @@ export async function saveTeacherGrades(
   const ctx = await getTeacherContext();
   if (!ctx) throw new Error("Unauthorized");
 
+  const tenantDb = getTenantClient(ctx.schoolId);
+
+  // Helper to resolve grade letter
+  function getGradeLetter(total: number): string {
+    if (total >= 75) return "A1";
+    if (total >= 70) return "B2";
+    if (total >= 65) return "B3";
+    if (total >= 60) return "C4";
+    if (total >= 55) return "C5";
+    if (total >= 50) return "C6";
+    if (total >= 45) return "D7";
+    if (total >= 40) return "E8";
+    return "F9";
+  }
+
+  // Resolve or create Course & Exam in tenantDb for broadsheet consistency
+  let examRec: any = null;
+  try {
+    let course = await tenantDb.course.findFirst({
+      where: {
+        schoolId: ctx.schoolId,
+        OR: [{ name: { equals: subject, mode: "insensitive" } }, { id: subject }],
+      },
+    });
+    if (!course) {
+      course = await tenantDb.course.create({
+        data: {
+          schoolId: ctx.schoolId,
+          name: subject,
+          code: subject.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + "101",
+        },
+      });
+    }
+
+    examRec = await tenantDb.exam.findFirst({
+      where: {
+        schoolId: ctx.schoolId,
+        courseId: course.id,
+        semester: term,
+      },
+    });
+    if (!examRec) {
+      examRec = await tenantDb.exam.create({
+        data: {
+          schoolId: ctx.schoolId,
+          courseId: course.id,
+          name: `${subject} (${term})`,
+          semester: term,
+          date: new Date(),
+          maxScore: 100,
+        },
+      });
+    }
+  } catch (e) {
+    console.warn("[saveTeacherGrades] Course/Exam link fallback notice:", e);
+  }
+
   await basePrisma.$transaction(async (tx) => {
     for (const g of grades) {
-      const ca1 = Number(g.ca1) || 0;
-      const ca2 = Number(g.ca2) || 0;
-      const exam = Number(g.exam) || 0;
+      const ca1 = Math.min(20, Math.max(0, Number(g.ca1) || 0));
+      const ca2 = Math.min(20, Math.max(0, Number(g.ca2) || 0));
+      const exam = Math.min(60, Math.max(0, Number(g.exam) || 0));
       const totalScore = ca1 + ca2 + exam;
-
-      let gradeLetter = "F";
-      if (totalScore >= 75) gradeLetter = "A";
-      else if (totalScore >= 65) gradeLetter = "B";
-      else if (totalScore >= 50) gradeLetter = "C";
-      else if (totalScore >= 40) gradeLetter = "P";
+      const gradeLetter = getGradeLetter(totalScore);
 
       // 1. Save to GradeRecord
       await tx.gradeRecord.upsert({
@@ -452,6 +507,7 @@ export async function saveTeacherGrades(
           ca2,
           exam,
           totalScore,
+          updatedAt: new Date(),
         },
         create: {
           schoolId: ctx.schoolId,
@@ -486,6 +542,7 @@ export async function saveTeacherGrades(
           gradeLetter,
           isPassed: totalScore >= 40,
           teacherRemarks: g.remarks || null,
+          updatedAt: new Date(),
         },
         create: {
           schoolId: ctx.schoolId,
@@ -503,10 +560,50 @@ export async function saveTeacherGrades(
           teacherRemarks: g.remarks || null,
         },
       });
+
+      // 3. Mirror into ExamResult if examRec exists
+      if (examRec) {
+        await tx.examResult.upsert({
+          where: {
+            schoolId_examId_studentId: {
+              schoolId: ctx.schoolId,
+              examId: examRec.id,
+              studentId: g.studentId,
+            },
+          },
+          update: {
+            score: totalScore,
+            ca1Score: ca1,
+            ca2Score: ca2,
+            examScore: exam,
+            letterGrade: gradeLetter,
+            remarks: g.remarks || null,
+            updatedAt: new Date(),
+          },
+          create: {
+            schoolId: ctx.schoolId,
+            examId: examRec.id,
+            studentId: g.studentId,
+            score: totalScore,
+            ca1Score: ca1,
+            ca2Score: ca2,
+            examScore: exam,
+            letterGrade: gradeLetter,
+            remarks: g.remarks || null,
+          },
+        }).catch(() => {});
+      }
     }
   });
 
-  revalidatePath("/teacher/gradebook");
+  await invalidateGradingNamespace(ctx.schoolId);
+  try {
+    revalidatePath("/teacher/gradebook");
+    revalidatePath(`/${ctx.schoolSubdomain}/exams`);
+    revalidatePath(`/${ctx.schoolSubdomain}/portal/staff`);
+    revalidatePath(`/${ctx.schoolSubdomain}/report-cards`);
+  } catch {}
+
   return { success: true, count: grades.length };
 }
 

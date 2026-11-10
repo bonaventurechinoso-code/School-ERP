@@ -176,18 +176,22 @@ export default function StaffPortalClient({
 
   const [isPending, startTransition] = useTransition();
 
+  // Resolve exact institutional tier terminology strictly bound to the institution
+  const terminology = useMemo(() => {
+    return resolveInstitutionalTier(schoolName, initialTiers);
+  }, [schoolName, initialTiers]);
+
+  const isTertiary = terminology.isTertiary;
+  const isCreche = terminology.isCreche;
+  const isPrimary = terminology.isPrimary;
+  const isSecondary = terminology.isSecondary;
+
   // Tier & Class Filtering
   const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
   const [selectedClass, setSelectedClass] = useState<string>(
     initialClassrooms[0]?.name || initialStudents[0]?.currentClass || initialStudents[0]?.class || "JSS 1"
   );
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Attendance State & Loading
-  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: string; notes: string }>>({});
-  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
-  const [attendanceSaveMessage, setAttendanceSaveMessage] = useState<string | null>(null);
 
   // Gradebook State & Loading
   const [selectedSubject, setSelectedSubject] = useState<string>(initialCourses[0]?.name || "General Mathematics");
@@ -196,6 +200,51 @@ export default function StaffPortalClient({
   const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
   const [isLoadingGrades, setIsLoadingGrades] = useState(false);
   const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
+
+  // Derived Assigned Subjects & Classes for the teacher (Strict Timetable / Allocation binding)
+  const teacherAssignedSubjects = useMemo(() => {
+    if (initialTimetable && initialTimetable.length > 0) {
+      const subjectSet = new Set<string>();
+      initialTimetable.forEach((t) => {
+        if (t.course?.name) subjectSet.add(t.course.name);
+      });
+      if (subjectSet.size > 0) return Array.from(subjectSet);
+    }
+    return initialCourses.map((c) => c.name);
+  }, [initialTimetable, initialCourses]);
+
+  const teacherAssignedClasses = useMemo(() => {
+    if (initialTimetable && initialTimetable.length > 0) {
+      const classSet = new Set<string>();
+      initialTimetable.forEach((t) => {
+        if (!selectedSubject || t.course?.name?.toLowerCase() === selectedSubject.toLowerCase()) {
+          if (t.classroom?.name) classSet.add(t.classroom.name);
+        }
+      });
+      if (classSet.size > 0) return Array.from(classSet);
+    }
+    return initialClassrooms.map((c) => c.name);
+  }, [initialTimetable, initialClassrooms, selectedSubject]);
+
+  // Ensure selectedSubject is valid in teacherAssignedSubjects
+  useEffect(() => {
+    if (teacherAssignedSubjects.length > 0 && !teacherAssignedSubjects.includes(selectedSubject)) {
+      setSelectedSubject(teacherAssignedSubjects[0]);
+    }
+  }, [teacherAssignedSubjects, selectedSubject]);
+
+  // Ensure selectedClass is valid in teacherAssignedClasses for the chosen subject
+  useEffect(() => {
+    if (teacherAssignedClasses.length > 0 && !teacherAssignedClasses.includes(selectedClass)) {
+      setSelectedClass(teacherAssignedClasses[0]);
+    }
+  }, [teacherAssignedClasses, selectedClass]);
+
+  // Attendance State & Loading
+  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: string; notes: string }>>({});
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
+  const [attendanceSaveMessage, setAttendanceSaveMessage] = useState<string | null>(null);
 
   // Report Card Batch Compilation State
   const [isCompilingReportCards, setIsCompilingReportCards] = useState(false);
@@ -392,9 +441,37 @@ export default function StaffPortalClient({
     });
   };
 
-  // Compute WAEC Grade and Positions
+  // Compute Tier-Aware Grade and Positions
   const gradedMatrix = useMemo(() => {
+    const classLower = (selectedClass || "").toLowerCase();
+    const isEarlyYears =
+      isCreche ||
+      classLower.includes("creche") ||
+      classLower.includes("nursery") ||
+      classLower.includes("kg") ||
+      classLower.includes("kindergarten") ||
+      classLower.includes("reception");
+    const isPrimaryCohort =
+      isPrimary ||
+      classLower.includes("primary") ||
+      classLower.includes("basic") ||
+      classLower.includes("elementary");
+
     function resolveGradeLetter(total: number) {
+      if (isEarlyYears) {
+        if (total >= 75) return { letter: "EE", label: "Exceeding Expectations", color: "text-emerald-500" };
+        if (total >= 60) return { letter: "ME", label: "Meeting Expectations", color: "text-blue-500" };
+        if (total >= 40) return { letter: "DV", label: "Developing", color: "text-amber-500" };
+        return { letter: "EM", label: "Emerging", color: "text-rose-500" };
+      }
+      if (isPrimaryCohort) {
+        if (total >= 75) return { letter: "Distinction", label: "Distinction", color: "text-emerald-500" };
+        if (total >= 65) return { letter: "Very Good", label: "Very Good", color: "text-teal-400" };
+        if (total >= 50) return { letter: "Credit", label: "Credit", color: "text-blue-400" };
+        if (total >= 40) return { letter: "Pass", label: "Pass", color: "text-amber-500" };
+        return { letter: "Fail", label: "Fail", color: "text-rose-500" };
+      }
+      // Secondary School (WAEC / NECO 9-point scale)
       if (total >= 75) return { letter: "A1", label: "Distinction", color: "text-emerald-500" };
       if (total >= 70) return { letter: "B2", label: "Very Good", color: "text-emerald-400" };
       if (total >= 65) return { letter: "B3", label: "Good", color: "text-teal-400" };
@@ -441,7 +518,7 @@ export default function StaffPortalClient({
       ...item,
       position: ranks.get(item.student.id) || "-",
     }));
-  }, [classStudents, gradesMap]);
+  }, [classStudents, gradesMap, selectedClass, isCreche, isPrimary]);
 
   const handleSaveGrades = () => {
     setGradesSaveMessage(null);
@@ -636,16 +713,6 @@ export default function StaffPortalClient({
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return parts[0].slice(0, 2).toUpperCase();
   }, [staffName]);
-
-  // Resolve exact institutional tier terminology strictly bound to the institution
-  const terminology = useMemo(() => {
-    return resolveInstitutionalTier(schoolName, initialTiers);
-  }, [schoolName, initialTiers]);
-
-  const isTertiary = terminology.isTertiary;
-  const isCreche = terminology.isCreche;
-  const isPrimary = terminology.isPrimary;
-  const isSecondary = terminology.isSecondary;
 
   const activeTierObj = useMemo(() => {
     return initialTiers.find((t) => t.id === selectedTierId) || initialTiers[0];
@@ -1668,16 +1735,16 @@ export default function StaffPortalClient({
                 <div className="flex flex-wrap items-center gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                      Class:
+                      Subject (Assigned):
                     </label>
                     <select
-                      value={selectedClass}
-                      onChange={(e) => setSelectedClass(e.target.value)}
+                      value={selectedSubject}
+                      onChange={(e) => setSelectedSubject(e.target.value)}
                       className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
                     >
-                      {initialClassrooms.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
+                      {teacherAssignedSubjects.map((subName) => (
+                        <option key={subName} value={subName}>
+                          {subName}
                         </option>
                       ))}
                     </select>
@@ -1685,16 +1752,16 @@ export default function StaffPortalClient({
 
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                      Subject:
+                      Class:
                     </label>
                     <select
-                      value={selectedSubject}
-                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
                       className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
                     >
-                      {initialCourses.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
+                      {teacherAssignedClasses.map((clsName) => (
+                        <option key={clsName} value={clsName}>
+                          {clsName}
                         </option>
                       ))}
                     </select>
@@ -1785,7 +1852,13 @@ export default function StaffPortalClient({
                         <th className="px-3 py-3.5 text-center w-24 bg-slate-100/60 dark:bg-zinc-800/80">
                           Total (100)
                         </th>
-                        <th className="px-3 py-3.5 text-center w-20">WAEC Grade</th>
+                        <th className="px-3 py-3.5 text-center w-24">
+                          {isCreche || (selectedClass || "").toLowerCase().includes("nursery") || (selectedClass || "").toLowerCase().includes("kg") || (selectedClass || "").toLowerCase().includes("creche")
+                            ? "Milestone"
+                            : isPrimary || (selectedClass || "").toLowerCase().includes("primary") || (selectedClass || "").toLowerCase().includes("basic")
+                              ? "Grade"
+                              : "WAEC Grade"}
+                        </th>
                         <th className="px-3 py-3.5 text-center w-20">Position</th>
                         <th className="px-4 py-3.5">Teacher Remark</th>
                       </tr>

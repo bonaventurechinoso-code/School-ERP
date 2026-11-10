@@ -1,22 +1,34 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { upsertExamResult } from "./actions";
+import { saveBroadsheetScore } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import { formatTierBadgeCode, resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
+import { normalizeTierLevel } from "@/lib/assessmentEngine";
 import {
-  calculateBonaVeeResult,
-  normalizeTierLevel,
-  getGradeRemark,
-  InstitutionalTier,
-} from "@/lib/assessmentEngine";
+  Download,
+  Printer,
+  Edit3,
+  Search,
+  CheckCircle2,
+  X,
+  FileSpreadsheet,
+  Award,
+  Layers,
+  ChevronRight,
+  TrendingUp,
+} from "lucide-react";
 
 type GradingRosterProps = {
   schoolId: string;
   exams: any[];
   students: any[];
   examResults: any[];
+  gradeRecords?: any[];
+  academicRecords?: any[];
+  courses?: any[];
+  classrooms?: any[];
   academicTiers?: any[];
   activeTierName?: string;
 };
@@ -67,17 +79,78 @@ const TIER_CLASSES_MAP: Record<string, string[]> = {
   ],
 };
 
+// Authentic Nigerian Standard Curriculum Subjects by Tier (Used only as fallback when unseeded in DB)
+const STANDARD_TIER_SUBJECTS: Record<string, string[]> = {
+  NURSERY: [
+    "Literacy & Phonics",
+    "Numeracy & Logic",
+    "Sensory & Creative Arts",
+    "Social Habits & Civics",
+    "Health & Physical Dev",
+    "Rhymes & Rhythm",
+  ],
+  PRIMARY: [
+    "English Studies",
+    "Mathematics",
+    "Basic Science & Tech",
+    "Social Studies",
+    "Civic Education",
+    "Cultural & Creative Arts",
+    "Agricultural Science",
+    "Computer Studies / ICT",
+    "Christian Religious Studies",
+    "Physical & Health Education",
+  ],
+  JSS: [
+    "English Language",
+    "Mathematics",
+    "Basic Science",
+    "Basic Technology",
+    "Social Studies",
+    "Civic Education",
+    "Agricultural Science",
+    "Business Studies",
+    "Computer Studies",
+    "Christian Religious Studies",
+    "Home Economics",
+    "Physical & Health Educ",
+    "French Language",
+  ],
+  SSS: [
+    "English Language",
+    "General Mathematics",
+    "Economics",
+    "Civic Education",
+    "Biology",
+    "Physics",
+    "Chemistry",
+    "Government",
+    "Literature-in-English",
+    "Financial Accounting",
+    "Further Mathematics",
+  ],
+  TERTIARY: [
+    "GST 101 - Use of English",
+    "GST 102 - Philosophy & Logic",
+    "MTH 101 - Elementary Mathematics",
+    "PHY 101 - General Physics",
+    "CHM 101 - General Chemistry",
+    "BIO 101 - General Biology",
+    "COS 101 - Intro to Computing",
+  ],
+};
+
 function isNurseryClass(cls: string): boolean {
   const norm = cls.toUpperCase();
   return (
     norm.includes("NURSERY") ||
     norm.includes("CRECHE") ||
-    norm.includes("CRECHE") ||
     norm.includes("CRÈCHE") ||
     norm.includes("KINDERGARTEN") ||
     norm.includes("PRE-SCHOOL") ||
     norm.includes("PRE SCHOOL") ||
-    norm.includes("PLAYGROUP")
+    norm.includes("PLAYGROUP") ||
+    norm.includes("RECEPTION")
   );
 }
 
@@ -130,12 +203,10 @@ function matchesClass(studentClass?: string | null, targetClass?: string): boole
   const t = targetClass.trim().toLowerCase();
   if (s === t) return true;
 
-  // Normalized compact forms: "jss 1" === "jss1"
   const sCompact = s.replace(/\s+/g, "");
   const tCompact = t.replace(/\s+/g, "");
   if (sCompact === tCompact) return true;
 
-  // SSS vs SS matching: "sss 1" === "ss 1"
   const sNorm = sCompact.replace("sss", "ss");
   const tNorm = tCompact.replace("sss", "ss");
   if (sNorm === tNorm) return true;
@@ -153,198 +224,89 @@ function getOrdinalSuffix(rank: number): string {
   return `${rank}th`;
 }
 
-// -------------------------------------------------------------
-// Fallback Clean Mock Student Records per Tier for Instant Testing
-// -------------------------------------------------------------
+function getTermVariants(term: string): string[] {
+  const t = (term || "").trim().toLowerCase();
+  if (t.includes("1") || t.includes("first")) {
+    return ["1st Term", "First Term", "Term 1", "first term", "1st term", "1st Semester"];
+  }
+  if (t.includes("2") || t.includes("second")) {
+    return ["2nd Term", "Second Term", "Term 2", "second term", "2nd term", "2nd Semester"];
+  }
+  if (t.includes("3") || t.includes("third")) {
+    return ["3rd Term", "Third Term", "Term 3", "third term", "3rd term"];
+  }
+  return [term];
+}
 
+// Tier-Specific Nigerian Grading Functions
+function resolveTierGrade(tierCategory: string, score: number): { letter: string; remark: string; badgeColor: string } {
+  if (tierCategory === "NURSERY") {
+    if (score >= 75) return { letter: "EE", remark: "Exceeding Expectations", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 60) return { letter: "ME", remark: "Meeting Expectations", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 40) return { letter: "DV", remark: "Developing", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+    return { letter: "EM", remark: "Emerging", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+  }
+
+  if (tierCategory === "PRIMARY") {
+    if (score >= 75) return { letter: "Distinction", remark: "Distinction", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 65) return { letter: "Very Good", remark: "Very Good", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+    if (score >= 50) return { letter: "Credit", remark: "Credit", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 40) return { letter: "Pass", remark: "Pass", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+    return { letter: "Fail", remark: "Fail", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+  }
+
+  if (tierCategory === "TERTIARY") {
+    if (score >= 70) return { letter: "A", remark: "First Class", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 60) return { letter: "B", remark: "Second Class Upper", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+    if (score >= 50) return { letter: "C", remark: "Second Class Lower", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 45) return { letter: "D", remark: "Third Class", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+    if (score >= 40) return { letter: "E", remark: "Pass", badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300" };
+    return { letter: "F", remark: "Fail", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+  }
+
+  // Default: Secondary School WAEC 9-point scale
+  if (score >= 75) return { letter: "A1", remark: "Distinction", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+  if (score >= 70) return { letter: "B2", remark: "Very Good", badgeColor: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-300" };
+  if (score >= 65) return { letter: "B3", remark: "Good", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+  if (score >= 60) return { letter: "C4", remark: "Credit", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+  if (score >= 55) return { letter: "C5", remark: "Credit", badgeColor: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300 border-blue-300" };
+  if (score >= 50) return { letter: "C6", remark: "Credit", badgeColor: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300" };
+  if (score >= 45) return { letter: "D7", remark: "Pass", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+  if (score >= 40) return { letter: "E8", remark: "Pass", badgeColor: "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300 border-amber-300" };
+  return { letter: "F9", remark: "Fail", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+}
+
+// Fallback Mock Students per Tier for testing when database is unseeded
 const DEFAULT_MOCK_JSS1_STUDENTS = [
-  {
-    id: "mock-jss1-001",
-    firstName: "Chinedu",
-    lastName: "Okonkwo",
-    admissionNumber: "GW/2026/JSS1/001",
-    currentClass: "JSS 1",
-    status: "ENROLLED",
-    tier: { name: "Secondary School" },
-    initialScores: { ca1: "18", ca2: "17", exam: "52" },
-  },
-  {
-    id: "mock-jss1-002",
-    firstName: "Amina",
-    lastName: "Bello",
-    admissionNumber: "GW/2026/JSS1/002",
-    currentClass: "JSS 1",
-    status: "ENROLLED",
-    tier: { name: "Secondary School" },
-    initialScores: { ca1: "16", ca2: "15", exam: "45" },
-  },
-  {
-    id: "mock-jss1-003",
-    firstName: "Folake",
-    lastName: "Adeyemi",
-    admissionNumber: "GW/2026/JSS1/003",
-    currentClass: "JSS 1",
-    status: "ENROLLED",
-    tier: { name: "Secondary School" },
-    initialScores: { ca1: "14", ca2: "16", exam: "38" },
-  },
-  {
-    id: "mock-jss1-004",
-    firstName: "Emeka",
-    lastName: "Nwosu",
-    admissionNumber: "GW/2026/JSS1/004",
-    currentClass: "JSS 1",
-    status: "ENROLLED",
-    tier: { name: "Secondary School" },
-    initialScores: { ca1: "12", ca2: "11", exam: "31" },
-  },
-  {
-    id: "mock-jss1-005",
-    firstName: "Zainab",
-    lastName: "Abubakar",
-    admissionNumber: "GW/2026/JSS1/005",
-    currentClass: "JSS 1",
-    status: "ENROLLED",
-    tier: { name: "Secondary School" },
-    initialScores: { ca1: "9", ca2: "10", exam: "24" },
-  },
+  { id: "mock-jss1-001", firstName: "Chinedu", lastName: "Okonkwo", admissionNumber: "GW/2026/JSS1/001", currentClass: "JSS 1", status: "ENROLLED" },
+  { id: "mock-jss1-002", firstName: "Amina", lastName: "Bello", admissionNumber: "GW/2026/JSS1/002", currentClass: "JSS 1", status: "ENROLLED" },
+  { id: "mock-jss1-003", firstName: "Folake", lastName: "Adeyemi", admissionNumber: "GW/2026/JSS1/003", currentClass: "JSS 1", status: "ENROLLED" },
+  { id: "mock-jss1-004", firstName: "Emeka", lastName: "Nwosu", admissionNumber: "GW/2026/JSS1/004", currentClass: "JSS 1", status: "ENROLLED" },
+  { id: "mock-jss1-005", firstName: "Zainab", lastName: "Abubakar", admissionNumber: "GW/2026/JSS1/005", currentClass: "JSS 1", status: "ENROLLED" },
 ];
 
 const DEFAULT_MOCK_PRIMARY_STUDENTS = [
-  {
-    id: "mock-pri-001",
-    firstName: "Kenechukwu",
-    lastName: "Obi",
-    admissionNumber: "GW/2026/PRI1/001",
-    currentClass: "Primary 1",
-    status: "ENROLLED",
-    tier: { name: "Primary School" },
-    initialScores: { assignment: "9", test: "18", project: "9", exam: "52" },
-  },
-  {
-    id: "mock-pri-002",
-    firstName: "Hauwa",
-    lastName: "Mohammed",
-    admissionNumber: "GW/2026/PRI1/002",
-    currentClass: "Primary 1",
-    status: "ENROLLED",
-    tier: { name: "Primary School" },
-    initialScores: { assignment: "8", test: "16", project: "8", exam: "46" },
-  },
-  {
-    id: "mock-pri-003",
-    firstName: "Babatunde",
-    lastName: "Adeleke",
-    admissionNumber: "GW/2026/PRI1/003",
-    currentClass: "Primary 1",
-    status: "ENROLLED",
-    tier: { name: "Primary School" },
-    initialScores: { assignment: "7", test: "14", project: "7", exam: "40" },
-  },
-  {
-    id: "mock-pri-004",
-    firstName: "Ngozi",
-    lastName: "Eze",
-    admissionNumber: "GW/2026/PRI1/004",
-    currentClass: "Primary 1",
-    status: "ENROLLED",
-    tier: { name: "Primary School" },
-    initialScores: { assignment: "6", test: "12", project: "6", exam: "34" },
-  },
+  { id: "mock-pri-001", firstName: "Kenechukwu", lastName: "Obi", admissionNumber: "GW/2026/PRI1/001", currentClass: "Primary 1", status: "ENROLLED" },
+  { id: "mock-pri-002", firstName: "Hauwa", lastName: "Mohammed", admissionNumber: "GW/2026/PRI1/002", currentClass: "Primary 1", status: "ENROLLED" },
+  { id: "mock-pri-003", firstName: "Babatunde", lastName: "Adeleke", admissionNumber: "GW/2026/PRI1/003", currentClass: "Primary 1", status: "ENROLLED" },
+  { id: "mock-pri-004", firstName: "Ngozi", lastName: "Eze", admissionNumber: "GW/2026/PRI1/004", currentClass: "Primary 1", status: "ENROLLED" },
 ];
 
 const DEFAULT_MOCK_NURSERY_STUDENTS = [
-  {
-    id: "mock-nur-001",
-    firstName: "Somtochukwu",
-    lastName: "Nnamdi",
-    admissionNumber: "GW/2026/NUR1/001",
-    currentClass: "Nursery 1",
-    status: "ENROLLED",
-    tier: { name: "Creche / Nursery" },
-    initialScores: { observation: "90", classwork: "85", affective: "95" },
-  },
-  {
-    id: "mock-nur-002",
-    firstName: "Aisha",
-    lastName: "Ibrahim",
-    admissionNumber: "GW/2026/NUR1/002",
-    currentClass: "Nursery 1",
-    status: "ENROLLED",
-    tier: { name: "Creche / Nursery" },
-    initialScores: { observation: "85", classwork: "80", affective: "85" },
-  },
-  {
-    id: "mock-nur-003",
-    firstName: "David",
-    lastName: "Ojo",
-    admissionNumber: "GW/2026/NUR1/003",
-    currentClass: "Nursery 1",
-    status: "ENROLLED",
-    tier: { name: "Creche / Nursery" },
-    initialScores: { observation: "75", classwork: "70", affective: "80" },
-  },
-  {
-    id: "mock-nur-004",
-    firstName: "Fatima",
-    lastName: "Garba",
-    admissionNumber: "GW/2026/NUR1/004",
-    currentClass: "Nursery 1",
-    status: "ENROLLED",
-    tier: { name: "Creche / Nursery" },
-    initialScores: { observation: "65", classwork: "60", affective: "70" },
-  },
+  { id: "mock-nur-001", firstName: "Somtochukwu", lastName: "Nnamdi", admissionNumber: "GW/2026/NUR1/001", currentClass: "Nursery 1", status: "ENROLLED" },
+  { id: "mock-nur-002", firstName: "Aisha", lastName: "Ibrahim", admissionNumber: "GW/2026/NUR1/002", currentClass: "Nursery 1", status: "ENROLLED" },
+  { id: "mock-nur-003", firstName: "David", lastName: "Ojo", admissionNumber: "GW/2026/NUR1/003", currentClass: "Nursery 1", status: "ENROLLED" },
+  { id: "mock-nur-004", firstName: "Fatima", lastName: "Garba", admissionNumber: "GW/2026/NUR1/004", currentClass: "Nursery 1", status: "ENROLLED" },
 ];
 
-const DEFAULT_MOCK_TERTIARY_STUDENTS = [
-  {
-    id: "mock-tert-001",
-    firstName: "Chinonso",
-    lastName: "Madu",
-    admissionNumber: "GW/2026/UNI/001",
-    currentClass: "100 Level",
-    status: "ENROLLED",
-    tier: { name: "University" },
-    initialScores: { assignment: "9", test: "18", exam: "62" },
-  },
-  {
-    id: "mock-tert-002",
-    firstName: "Zainab",
-    lastName: "Usman",
-    admissionNumber: "GW/2026/UNI/002",
-    currentClass: "100 Level",
-    status: "ENROLLED",
-    tier: { name: "University" },
-    initialScores: { assignment: "8", test: "16", exam: "52" },
-  },
-  {
-    id: "mock-tert-003",
-    firstName: "Olumide",
-    lastName: "Bakare",
-    admissionNumber: "GW/2026/UNI/003",
-    currentClass: "100 Level",
-    status: "ENROLLED",
-    tier: { name: "University" },
-    initialScores: { assignment: "7", test: "14", exam: "44" },
-  },
-  {
-    id: "mock-tert-004",
-    firstName: "Blessing",
-    lastName: "Umeh",
-    admissionNumber: "GW/2026/UNI/004",
-    currentClass: "100 Level",
-    status: "ENROLLED",
-    tier: { name: "University" },
-    initialScores: { assignment: "6", test: "12", exam: "36" },
-  },
-];
-
-// Helper to determine if a score row is completely empty
-function isRowEmpty(scores?: Record<string, string>): boolean {
-  if (!scores) return true;
-  const values = Object.values(scores);
-  if (values.length === 0) return true;
-  return values.every((v) => !v || v.trim() === "");
+interface ScoreModalState {
+  isOpen: boolean;
+  student: any;
+  subject: string;
+  ca1: number;
+  ca2: number;
+  exam: number;
+  remarks: string;
 }
 
 export default function GradingRoster({
@@ -352,6 +314,10 @@ export default function GradingRoster({
   exams,
   students,
   examResults,
+  gradeRecords = [],
+  academicRecords = [],
+  courses = [],
+  classrooms = [],
   academicTiers = [],
   activeTierName: initialActiveTierName = "",
 }: GradingRosterProps) {
@@ -385,7 +351,6 @@ export default function GradingRoster({
   const activeTierCode = formatTierBadgeCode(rawActiveTier);
   const activeTierDisplay = normalizedTier;
 
-  // Derive active tier category for dynamic column shifting
   const tierCategory: "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY" = useMemo(() => {
     if (normalizedTier === "Creche / Nursery") return "NURSERY";
     if (normalizedTier === "Primary School") return "PRIMARY";
@@ -406,6 +371,12 @@ export default function GradingRoster({
       }
     });
 
+    classrooms.forEach((c) => {
+      if (c.name && isClassInTier(c.name, activeTierCode)) {
+        additionalClasses.add(c.name);
+      }
+    });
+
     const result = [...standardClasses];
     additionalClasses.forEach((cls) => {
       if (!result.some((r) => matchesClass(r, cls))) {
@@ -414,9 +385,9 @@ export default function GradingRoster({
     });
 
     return result;
-  }, [activeTierCode, students]);
+  }, [activeTierCode, students, classrooms]);
 
-  // 3. Selected Class State
+  // 3. Selected Class, Term & Academic Session
   const paramClass = searchParams.get("class");
   const [selectedClass, setSelectedClass] = useState<string>(() => {
     if (paramClass) {
@@ -426,14 +397,12 @@ export default function GradingRoster({
     return availableClasses[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
   });
 
-  useEffect(() => {
-    if (paramClass) {
-      const matched = availableClasses.find((c) => matchesClass(c, paramClass));
-      if (matched) setSelectedClass(matched);
-    }
-  }, [paramClass, availableClasses]);
+  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
+  const [academicSession, setAcademicSession] = useState<string>("2026/2027");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Reset selected class on tier switch
+  // Sync selected class on tier switch
   const prevTierCodeRef = useRef(activeTierCode);
   useEffect(() => {
     if (prevTierCodeRef.current !== activeTierCode) {
@@ -443,64 +412,59 @@ export default function GradingRoster({
     }
   }, [activeTierCode]);
 
-  // 4. Exams filtered to active tier
-  const tierExams = useMemo(() => {
-    const matched = exams.filter((e) => {
-      const examTierName = e.course?.tier?.name;
-      if (examTierName) {
-        return formatTierBadgeCode(examTierName) === activeTierCode;
+  // 4. Resolve ALL Subjects for the Class and Tier (Prioritizing DB records, avoiding hardcoding)
+  const classSubjects = useMemo(() => {
+    const subjectsSet = new Set<string>();
+
+    // A. Extract from DB Courses for this tier
+    courses.forEach((c) => {
+      const cTier = c.tier?.name;
+      if (!cTier || formatTierBadgeCode(cTier) === activeTierCode) {
+        if (c.name && c.name.trim()) subjectsSet.add(c.name.trim());
       }
-      return true;
     });
-    if (matched.length > 0) return matched;
-    if (exams.length > 0) return exams;
 
-    const fallbackCourse =
-      tierCategory === "TERTIARY"
-        ? "MTH 101 - General Mathematics"
-        : tierCategory === "NURSERY"
-        ? "Numeracy & Cognitive Skills"
-        : "Mathematics";
+    // B. Extract from DB GradeRecords for this class & term
+    const termVars = getTermVariants(selectedTerm);
+    gradeRecords.forEach((gr) => {
+      if (matchesClass(gr.className, selectedClass) && termVars.includes(gr.term)) {
+        if (gr.subject && gr.subject.trim()) subjectsSet.add(gr.subject.trim());
+      }
+    });
 
-    return [
-      {
-        id: "mock-exam-default",
-        name: tierCategory === "TERTIARY" ? "Semester Assessment" : "Termly Assessment",
-        semester: tierCategory === "TERTIARY" ? "1st Semester" : "First Term",
-        course: {
-          id: "mock-course-default",
-          name: fallbackCourse,
-          tier: { name: activeTierDisplay },
-        },
-      },
-    ];
-  }, [exams, activeTierCode, tierCategory, activeTierDisplay]);
+    // C. Extract from DB AcademicRecords for this class & term
+    academicRecords.forEach((ar) => {
+      if (matchesClass(ar.className, selectedClass) && termVars.includes(ar.term)) {
+        if (ar.subject && ar.subject.trim()) subjectsSet.add(ar.subject.trim());
+      }
+    });
 
-  const [selectedExamId, setSelectedExamId] = useState<string>(() => {
-    return tierExams[0]?.id || exams[0]?.id || "mock-exam-default";
-  });
+    // D. Extract from DB Exams for this tier
+    exams.forEach((e) => {
+      if (e.course?.name && (!e.course.tier?.name || formatTierBadgeCode(e.course.tier.name) === activeTierCode)) {
+        subjectsSet.add(e.course.name.trim());
+      }
+    });
 
-  useEffect(() => {
-    if (tierExams.length > 0 && !tierExams.some((e) => e.id === selectedExamId)) {
-      setSelectedExamId(tierExams[0].id);
+    // If database subjects were found, return sorted unique subjects
+    if (subjectsSet.size > 0) {
+      return Array.from(subjectsSet).sort();
     }
-  }, [tierExams, selectedExamId]);
 
-  const selectedExam = tierExams.find((e) => e.id === selectedExamId) || exams.find((e) => e.id === selectedExamId);
-  const activeSubjectOrCourse = selectedExam?.course?.name || selectedExam?.name || "Mathematics";
+    // Fallback: Standard Nigerian Tier Curriculum if DB is empty
+    const isJss = (selectedClass || "").toUpperCase().includes("JSS") || (selectedClass || "").toUpperCase().includes("JS");
+    const isSss = (selectedClass || "").toUpperCase().includes("SSS") || (selectedClass || "").toUpperCase().includes("SS ");
 
-  // Existing results quick lookup: map[studentId] = result
-  const currentExamResults = useMemo(() => {
-    const map = new Map();
-    examResults.forEach((r) => {
-      if (r.examId === selectedExamId) {
-        map.set(r.studentId, r);
-      }
-    });
-    return map;
-  }, [examResults, selectedExamId]);
+    if (tierCategory === "NURSERY") return STANDARD_TIER_SUBJECTS.NURSERY;
+    if (tierCategory === "PRIMARY") return STANDARD_TIER_SUBJECTS.PRIMARY;
+    if (tierCategory === "TERTIARY") return STANDARD_TIER_SUBJECTS.TERTIARY;
+    if (isSss) return STANDARD_TIER_SUBJECTS.SSS;
+    if (isJss) return STANDARD_TIER_SUBJECTS.JSS;
 
-  // 5. Strict Academic Tier & Class Isolation Filter
+    return STANDARD_TIER_SUBJECTS.JSS;
+  }, [courses, activeTierCode, selectedClass, selectedTerm, gradeRecords, academicRecords, exams, tierCategory]);
+
+  // 5. Filter Students in this Class
   const rawFilteredStudents = useMemo(() => {
     return students.filter((student) => {
       const status = student.status || "ENROLLED";
@@ -520,11 +484,11 @@ export default function GradingRoster({
     });
   }, [students, activeTierCode, selectedClass]);
 
-  const filteredStudents = useMemo(() => {
+  const cohortStudents = useMemo(() => {
     if (rawFilteredStudents.length > 0) {
       return rawFilteredStudents;
     }
-    // Clean mock student data rows per tier when database is empty for testing
+    // Clean mock student data rows per tier when database is empty
     if (tierCategory === "SECONDARY" && (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
       return DEFAULT_MOCK_JSS1_STUDENTS;
     }
@@ -534,13 +498,10 @@ export default function GradingRoster({
     if (tierCategory === "NURSERY") {
       return DEFAULT_MOCK_NURSERY_STUDENTS;
     }
-    if (tierCategory === "TERTIARY") {
-      return DEFAULT_MOCK_TERTIARY_STUDENTS;
-    }
     return rawFilteredStudents;
   }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory]);
 
-  // 6. Assign Permanent, Stable Registration Numbers
+  // Assign Permanent Registration Numbers
   const studentsWithRegNo = useMemo(() => {
     const classCode =
       selectedClass
@@ -553,11 +514,11 @@ export default function GradingRoster({
 
     const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || "GW";
 
-    const stableList = [...filteredStudents].sort((a, b) => {
+    const stableList = [...cohortStudents].sort((a, b) => {
       if (a.admissionNumber && b.admissionNumber) {
         return a.admissionNumber.localeCompare(b.admissionNumber);
       }
-      return a.id.localeCompare(b.id);
+      return (a.lastName || "").localeCompare(b.lastName || "");
     });
 
     return stableList.map((student, stableIndex) => {
@@ -572,202 +533,158 @@ export default function GradingRoster({
         regNo,
       };
     });
-  }, [filteredStudents, selectedClass, tenant?.subdomain]);
+  }, [cohortStudents, selectedClass, tenant?.subdomain]);
 
-  // Compute Initial State Synchronously
-  const computeInitialState = useCallback(() => {
-    const initScores: Record<string, Record<string, string>> = {};
-    const initTotals: Record<string, number> = {};
+  // 6. Fast Score Lookup Engine (Combines GradeRecord, AcademicRecord, ExamResult)
+  const [localScoresOverride, setLocalScoresOverride] = useState<Record<string, { ca1: number; ca2: number; exam: number; total: number; remarks: string }>>({});
 
-    studentsWithRegNo.forEach((student) => {
-      const res = examResults.find(
-        (r) => r.examId === selectedExamId && r.studentId === student.id
+  const termVariants = useMemo(() => getTermVariants(selectedTerm), [selectedTerm]);
+
+  const getStudentSubjectScore = useCallback((studentId: string, subject: string) => {
+    const localKey = `${studentId}__${subject.toLowerCase()}`;
+    if (localScoresOverride[localKey]) {
+      return localScoresOverride[localKey];
+    }
+
+    // A. Check GradeRecord
+    const gr = gradeRecords.find(
+      (r) =>
+        r.studentId === studentId &&
+        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        termVariants.includes(r.term) &&
+        matchesClass(r.className, selectedClass)
+    );
+    if (gr) {
+      const ca1 = Number(gr.ca1) || 0;
+      const ca2 = Number(gr.ca2) || 0;
+      const exam = Number(gr.exam) || 0;
+      const total = Number(gr.totalScore) || ca1 + ca2 + exam;
+      return { ca1, ca2, exam, total, remarks: "" };
+    }
+
+    // B. Check AcademicRecord
+    const ar = academicRecords.find(
+      (r) =>
+        r.studentId === studentId &&
+        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        termVariants.includes(r.term)
+    );
+    if (ar) {
+      const ca1 = Number(ar.test1) || 0;
+      const ca2 = Number(ar.test2) || 0;
+      const exam = Number(ar.finalExam) || 0;
+      const total = Number(ar.totalScore) || ca1 + ca2 + exam;
+      return { ca1, ca2, exam, total, remarks: ar.teacherRemarks || "" };
+    }
+
+    // C. Check ExamResult via Exam
+    const examMatch = exams.find(
+      (e) =>
+        e.course?.name?.toLowerCase() === subject.toLowerCase() &&
+        termVariants.includes(e.semester)
+    );
+    if (examMatch) {
+      const er = examResults.find(
+        (r) => r.examId === examMatch.id && r.studentId === studentId
       );
-      const studentMockScores = (student as any).initialScores || {};
-
-      let rowMap: Record<string, string> = {};
-
-      if (tierCategory === "NURSERY") {
-        rowMap = {
-          observation: res?.ca1Score != null ? String(res.ca1Score) : studentMockScores.observation || "",
-          classwork: res?.ca2Score != null ? String(res.ca2Score) : studentMockScores.classwork || "",
-          affective: res?.examScore != null ? String(res.examScore) : studentMockScores.affective || "",
-        };
-      } else if (tierCategory === "PRIMARY") {
-        rowMap = {
-          assignment: studentMockScores.assignment || (res?.ca1Score != null ? String(Math.min(res.ca1Score, 10)) : ""),
-          test: studentMockScores.test || (res?.ca2Score != null ? String(Math.min(res.ca2Score, 20)) : ""),
-          project: studentMockScores.project || "",
-          exam: res?.examScore != null ? String(res.examScore) : studentMockScores.exam || "",
-        };
-      } else if (tierCategory === "SECONDARY") {
-        rowMap = {
-          ca1: res?.ca1Score != null ? String(res.ca1Score) : studentMockScores.ca1 || "",
-          ca2: res?.ca2Score != null ? String(res.ca2Score) : studentMockScores.ca2 || "",
-          exam: res?.examScore != null ? String(res.examScore) : studentMockScores.exam || "",
-        };
-      } else {
-        // Higher Ed
-        rowMap = {
-          assignment: studentMockScores.assignment || (res?.ca1Score != null ? String(Math.min(res.ca1Score, 10)) : ""),
-          test: studentMockScores.test || (res?.ca2Score != null ? String(Math.min(res.ca2Score, 20)) : ""),
-          exam: res?.examScore != null ? String(res.examScore) : studentMockScores.exam || "",
-        };
-      }
-
-      initScores[student.regNo] = rowMap;
-
-      if (!isRowEmpty(rowMap)) {
-        const computed = calculateBonaVeeResult(activeTierDisplay, rowMap);
-        initTotals[student.regNo] = computed.total;
-      } else {
-        initTotals[student.regNo] = -1; // Screen hyphen empty-row indicator
-      }
-    });
-
-    return { initScores, initTotals };
-  }, [studentsWithRegNo, examResults, selectedExamId, tierCategory, activeTierDisplay]);
-
-  // 7. Input state bound to student.regNo
-  const [scores, setScores] = useState<Record<string, Record<string, string>>>(() => computeInitialState().initScores);
-  const [committedTotals, setCommittedTotals] = useState<Record<string, number>>(() => computeInitialState().initTotals);
-  const [activeInputKey, setActiveInputKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    const { initScores, initTotals } = computeInitialState();
-    setScores(initScores);
-    setCommittedTotals(initTotals);
-  }, [computeInitialState]);
-
-  const getStudentScores = (regNo: string): Record<string, string> => {
-    return scores[regNo] || {};
-  };
-
-  // 8. Interactive Score Input Change Handler with boundary validation
-  const handleScoreChange = (regNo: string, fieldKey: string, value: string, maxVal: number) => {
-    let sanitized = value;
-    if (sanitized !== "") {
-      const num = parseFloat(sanitized);
-      if (!isNaN(num)) {
-        if (num > maxVal) sanitized = String(maxVal);
-        else if (num < 0) sanitized = "0";
+      if (er) {
+        const ca1 = Number(er.ca1Score) || 0;
+        const ca2 = Number(er.ca2Score) || 0;
+        const exam = Number(er.examScore) || 0;
+        const total = Number(er.score) || ca1 + ca2 + exam;
+        return { ca1, ca2, exam, total, remarks: er.remarks || "" };
       }
     }
 
-    setScores((prev) => {
-      const current = prev[regNo] || {};
-      return {
-        ...prev,
-        [regNo]: {
-          ...current,
-          [fieldKey]: sanitized,
-        },
-      };
-    });
-  };
-
-  // 9. Interactive Auto-Calculation on Blur or Enter
-  const handleBlurOrEnter = (regNo: string, student: any, result: any) => {
-    setActiveInputKey(null);
-    const rowScores = scores[regNo] || {};
-
-    if (isRowEmpty(rowScores)) {
-      setCommittedTotals((prev) => ({
-        ...prev,
-        [regNo]: -1,
-      }));
-      return;
+    // Check mock student initial values
+    const mockStudent = cohortStudents.find((s) => s.id === studentId);
+    if (mockStudent && (mockStudent as any).initialScores && subject.toLowerCase().includes("math")) {
+      const init = (mockStudent as any).initialScores;
+      const ca1 = Number(init.ca1 || init.assignment || init.observation) || 0;
+      const ca2 = Number(init.ca2 || init.test || init.classwork) || 0;
+      const exam = Number(init.exam || init.affective) || 0;
+      return { ca1, ca2, exam, total: ca1 + ca2 + exam, remarks: "" };
     }
 
-    const calcResult = calculateBonaVeeResult(activeTierDisplay, rowScores);
-    setCommittedTotals((prev) => ({
-      ...prev,
-      [regNo]: calcResult.total,
-    }));
+    return null;
+  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents]);
 
-    // Secure database update constraint
-    if (selectedExam && !student.id.startsWith("mock-") && !selectedExamId.startsWith("mock-")) {
-      const ca1Num = Number(rowScores.ca1 || rowScores.assignment || rowScores.observation) || undefined;
-      const ca2Num = Number(rowScores.ca2 || rowScores.test || rowScores.classwork) || undefined;
-      const examNum = Number(rowScores.exam || rowScores.affective) || undefined;
+  // 7. Master Broadsheet Computation: One row per student, ALL subjects across
+  const broadsheetData = useMemo(() => {
+    const rows = studentsWithRegNo.map((student) => {
+      let studentTotal = 0;
+      let evaluatedCount = 0;
+      const subjectScores: Record<string, { ca1: number; ca2: number; exam: number; total: number; remarks: string } | null> = {};
 
-      startTransition(() => {
-        upsertExamResult(
-          schoolId,
-          selectedExamId,
-          student.id,
-          calcResult.total,
-          ca1Num,
-          ca2Num,
-          examNum,
-          calcResult.grade,
-          getGradeRemark(calcResult.grade)
-        );
+      classSubjects.forEach((sub) => {
+        const score = getStudentSubjectScore(student.id, sub);
+        subjectScores[sub] = score;
+        if (score && score.total > 0) {
+          studentTotal += score.total;
+          evaluatedCount += 1;
+        }
       });
-    }
-  };
 
-  // 10. Dynamic Ranking Engine based on calculated total score
-  const rankMap = useMemo(() => {
-    const list = studentsWithRegNo.map((s) => {
-      const total = committedTotals[s.regNo] ?? -1;
+      // Broadsheet Average: (Total Marks / (Subjects Count * 100)) * 100
+      const average = classSubjects.length > 0 ? (studentTotal / classSubjects.length) : 0;
+      const tierGrade = resolveTierGrade(tierCategory, average);
+
       return {
-        regNo: s.regNo,
-        totalScore: total,
-        name: `${s.lastName} ${s.firstName}`.toLowerCase(),
+        student,
+        subjectScores,
+        studentTotal,
+        evaluatedCount,
+        average,
+        grade: tierGrade.letter,
+        remark: tierGrade.remark,
+        badgeColor: tierGrade.badgeColor,
       };
     });
 
-    list.sort((a, b) => {
-      if (b.totalScore !== a.totalScore) {
-        return b.totalScore - a.totalScore;
-      }
-      return a.name.localeCompare(b.name);
-    });
-
-    const ranks: Record<string, number> = {};
+    // Rank students by total score / average descending across ALL subjects
+    const sorted = [...rows].sort((a, b) => b.studentTotal - a.studentTotal);
+    const rankMap = new Map<string, string>();
     let currentRank = 1;
-    list.forEach((item, index) => {
-      if (item.totalScore >= 0) {
-        if (index > 0 && item.totalScore < list[index - 1].totalScore) {
+    sorted.forEach((item, index) => {
+      if (item.evaluatedCount > 0) {
+        if (index > 0 && item.studentTotal < sorted[index - 1].studentTotal) {
           currentRank = index + 1;
         }
-        ranks[item.regNo] = currentRank;
+        rankMap.set(item.student.id, getOrdinalSuffix(currentRank));
       } else {
-        ranks[item.regNo] = 0; // Unranked
+        rankMap.set(item.student.id, "—");
       }
     });
 
-    return ranks;
-  }, [studentsWithRegNo, committedTotals]);
+    return sorted.map((row) => ({
+      ...row,
+      position: rankMap.get(row.student.id) || "—",
+    }));
+  }, [studentsWithRegNo, classSubjects, tierCategory, getStudentSubjectScore]);
 
-  // Order students strictly descending by total score
-  const orderedStudents = useMemo(() => {
-    return [...studentsWithRegNo].sort((a, b) => {
-      const scoreA = committedTotals[a.regNo] ?? -1;
-      const scoreB = committedTotals[b.regNo] ?? -1;
-      if (scoreB !== scoreA) {
-        return scoreB - scoreA;
-      }
-      return a.regNo.localeCompare(b.regNo);
-    });
-  }, [studentsWithRegNo, committedTotals]);
+  // Filtered by Search query
+  const filteredBroadsheet = useMemo(() => {
+    if (!searchQuery.trim()) return broadsheetData;
+    const q = searchQuery.toLowerCase();
+    return broadsheetData.filter(
+      (row) =>
+        `${row.student.lastName} ${row.student.firstName}`.toLowerCase().includes(q) ||
+        row.student.regNo.toLowerCase().includes(q)
+    );
+  }, [broadsheetData, searchQuery]);
 
-  // 11. Aggregate Summary Analytics for Footer
+  // Aggregate Analytics for Footer
   const analytics = useMemo(() => {
-    const evaluated = orderedStudents
-      .map((s) => committedTotals[s.regNo])
-      .filter((tot): tot is number => tot !== undefined && tot >= 0);
-
-    const count = evaluated.length;
+    const evaluatedRows = broadsheetData.filter((r) => r.evaluatedCount > 0);
+    const count = evaluatedRows.length;
     if (count === 0) {
       return { count: 0, average: "—", highest: "—", lowest: "—" };
     }
 
-    const sum = evaluated.reduce((acc, curr) => acc + curr, 0);
-    const average = (sum / count).toFixed(1);
-    const highest = Math.max(...evaluated);
-    const lowest = Math.min(...evaluated);
+    const sumAvg = evaluatedRows.reduce((acc, curr) => acc + curr.average, 0);
+    const average = (sumAvg / count).toFixed(1);
+    const highest = Math.max(...evaluatedRows.map((r) => r.average)).toFixed(1);
+    const lowest = Math.min(...evaluatedRows.map((r) => r.average)).toFixed(1);
 
     return {
       count,
@@ -775,35 +692,143 @@ export default function GradingRoster({
       highest: `${highest}%`,
       lowest: `${lowest}%`,
     };
-  }, [orderedStudents, committedTotals]);
+  }, [broadsheetData]);
+
+  // 8. Score Edit Modal State & Actions
+  const [modalState, setModalState] = useState<ScoreModalState>({
+    isOpen: false,
+    student: null,
+    subject: "",
+    ca1: 0,
+    ca2: 0,
+    exam: 0,
+    remarks: "",
+  });
+
+  const handleOpenScoreModal = (student: any, subject: string) => {
+    const currentScore = getStudentSubjectScore(student.id, subject);
+    setModalState({
+      isOpen: true,
+      student,
+      subject,
+      ca1: currentScore?.ca1 || 0,
+      ca2: currentScore?.ca2 || 0,
+      exam: currentScore?.exam || 0,
+      remarks: currentScore?.remarks || "",
+    });
+  };
+
+  const handleSaveModalScore = () => {
+    if (!modalState.student || !modalState.subject) return;
+
+    const ca1 = Math.min(20, Math.max(0, Number(modalState.ca1) || 0));
+    const ca2 = Math.min(20, Math.max(0, Number(modalState.ca2) || 0));
+    const exam = Math.min(60, Math.max(0, Number(modalState.exam) || 0));
+    const total = ca1 + ca2 + exam;
+
+    const localKey = `${modalState.student.id}__${modalState.subject.toLowerCase()}`;
+    setLocalScoresOverride((prev) => ({
+      ...prev,
+      [localKey]: { ca1, ca2, exam, total, remarks: modalState.remarks },
+    }));
+
+    setModalState((prev) => ({ ...prev, isOpen: false }));
+    setToastMessage(`Saved marks for ${modalState.student.firstName} in ${modalState.subject}`);
+    setTimeout(() => setToastMessage(null), 3500);
+
+    // Persist via Server Action
+    startTransition(async () => {
+      await saveBroadsheetScore(schoolId, {
+        studentId: modalState.student.id,
+        className: selectedClass,
+        subject: modalState.subject,
+        term: selectedTerm,
+        academicYear: academicSession,
+        ca1,
+        ca2,
+        exam,
+        totalScore: total,
+        remarks: modalState.remarks,
+      });
+    });
+  };
+
+  // 9. Export Broadsheet to CSV
+  const handleExportCSV = () => {
+    const headers = ["Position", "Student Name", "Admission No", ...classSubjects, "Total Marks", "Average (%)", "Grade", "Remarks"];
+    const rows = broadsheetData.map((row) => {
+      const subjectCols = classSubjects.map((sub) => {
+        const sc = row.subjectScores[sub];
+        return sc ? sc.total : "0";
+      });
+      return [
+        `"${row.position}"`,
+        `"${row.student.lastName}, ${row.student.firstName}"`,
+        `"${row.student.regNo}"`,
+        ...subjectCols,
+        `"${row.studentTotal}"`,
+        `"${row.average.toFixed(1)}%"`,
+        `"${row.grade}"`,
+        `"${row.remark}"`,
+      ].join(",");
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Master_Broadsheet_${selectedClass}_${selectedTerm.replace(/\s+/g, "_")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Top Filter and Context Controls Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-6 z-50 p-4 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-lg flex items-center gap-2 animate-in slide-in-from-top-2">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Broadsheet Control Header */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            Grading Spreadsheet & Roster
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-              {activeTierDisplay}
-            </span>
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Dynamic grading matrix customized for {activeTierDisplay} standards.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                Grading Broadsheet & Roster
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  {activeTierDisplay}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Master terminal broadsheet displaying all assigned subjects across, class averages, grades, and positions.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Toolbar Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Class / Level Selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              {isTertiaryTier ? "Level:" : "Class:"}
+          {/* Class Selector */}
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Class:
             </label>
             <select
-              className="border border-slate-300 dark:border-slate-700 rounded-lg py-1.5 px-3 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {availableClasses.map((cls) => (
                 <option key={cls} value={cls}>
@@ -813,442 +838,405 @@ export default function GradingRoster({
             </select>
           </div>
 
-          {/* Assessment / Exam Selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Assessment:
+          {/* Term Selector */}
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Term:
             </label>
             <select
-              className="border border-slate-300 dark:border-slate-700 rounded-lg py-1.5 px-3 text-sm min-w-[200px] max-w-[320px] bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none truncate"
-              value={selectedExamId}
-              onChange={(e) => setSelectedExamId(e.target.value)}
+              value={selectedTerm}
+              onChange={(e) => setSelectedTerm(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {tierExams.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name} ({e.semester}) - {e.course.name}
-                </option>
-              ))}
+              <option value="1st Term">1st Term</option>
+              <option value="2nd Term">2nd Term</option>
+              <option value="3rd Term">3rd Term</option>
             </select>
+          </div>
+
+          {/* Academic Session */}
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Session:
+            </label>
+            <select
+              value={academicSession}
+              onChange={(e) => setAcademicSession(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="2026/2027">2026/2027</option>
+              <option value="2025/2026">2025/2026</option>
+            </select>
+          </div>
+
+          {/* Actions: Export & Print */}
+          <div className="flex items-center gap-2 pt-4">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+              title="Download Master Broadsheet CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+              title="Print Broadsheet Landscape"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Broadsheet</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Roster Spreadsheet Table */}
-      {orderedStudents.length === 0 ? (
-        <div className="p-12 text-center text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="font-semibold text-base text-slate-700 dark:text-slate-200">
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-1">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Filter ${selectedClass} students...`}
+            className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <span>Subjects: <strong className="text-slate-900 dark:text-white">{classSubjects.length}</strong></span>
+          <span>•</span>
+          <span>Students: <strong className="text-slate-900 dark:text-white">{broadsheetData.length}</strong></span>
+        </div>
+      </div>
+
+      {/* Broadsheet Table */}
+      {filteredBroadsheet.length === 0 ? (
+        <div className="p-12 text-center text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <p className="font-bold text-base text-slate-700 dark:text-slate-200">
             No students found in {selectedClass}
           </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            No enrolled students are currently assigned to {selectedClass} in {activeTierDisplay}.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            No enrolled students match this stream or query.
           </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              {/* 3. DYNAMIC COLUMN SHIFTING: HEADERS */}
-              <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
+            <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
+              {/* TABLE HEADERS */}
+              <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="px-6 py-4 text-left">Student</th>
-                  <th className="px-6 py-4 text-left">Reg No</th>
-                  <th className="px-6 py-4 text-left">
-                    {tierCategory === "TERTIARY" ? "Course" : "Subject"}
+                  <th className="px-3 py-3 text-center w-14 sticky left-0 z-20 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700">
+                    Pos
+                  </th>
+                  <th className="px-4 py-3 text-left sticky left-14 z-20 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 min-w-[180px]">
+                    Student Name
+                  </th>
+                  <th className="px-3 py-3 text-left border-r border-slate-200 dark:border-slate-800 font-mono text-[10px]">
+                    Reg No
                   </th>
 
-                  {/* Dynamic Middle Input Headers */}
-                  {tierCategory === "NURSERY" && (
-                    <>
-                      <th className="px-4 py-4 text-center">Observation</th>
-                      <th className="px-4 py-4 text-center">Classwork</th>
-                      <th className="px-4 py-4 text-center">Affective</th>
-                      <th className="px-4 py-4 text-center">Total</th>
-                      <th className="px-4 py-4 text-center">Position</th>
-                    </>
-                  )}
+                  {/* ALL Subjects Columns */}
+                  {classSubjects.map((sub) => (
+                    <th
+                      key={sub}
+                      className="px-3 py-3 text-center border-r border-slate-200 dark:border-slate-800 min-w-[90px]"
+                      title={sub}
+                    >
+                      <div className="truncate max-w-[120px] font-bold" title={sub}>
+                        {sub}
+                      </div>
+                      <span className="text-[9px] font-normal text-slate-400 block lowercase">
+                        (100 max)
+                      </span>
+                    </th>
+                  ))}
 
-                  {tierCategory === "PRIMARY" && (
-                    <>
-                      <th className="px-4 py-4 text-center">Assignment</th>
-                      <th className="px-4 py-4 text-center">Test</th>
-                      <th className="px-4 py-4 text-center">Project</th>
-                      <th className="px-4 py-4 text-center">Exam</th>
-                      <th className="px-4 py-4 text-center">Total</th>
-                      <th className="px-4 py-4 text-center">Grade</th>
-                      <th className="px-4 py-4 text-center">Position</th>
-                    </>
-                  )}
-
-                  {tierCategory === "SECONDARY" && (
-                    <>
-                      <th className="px-4 py-4 text-center">CA1 (Max 20)</th>
-                      <th className="px-4 py-4 text-center">CA2 (Max 20)</th>
-                      <th className="px-4 py-4 text-center">Termly Exam (Max 60)</th>
-                      <th className="px-4 py-4 text-center">Total (100)</th>
-                      <th className="px-4 py-4 text-center">Grade</th>
-                      <th className="px-4 py-4 text-center">Position</th>
-                    </>
-                  )}
-
-                  {tierCategory === "TERTIARY" && (
-                    <>
-                      <th className="px-4 py-4 text-center">Assignment (10%)</th>
-                      <th className="px-4 py-4 text-center">Test (20%)</th>
-                      <th className="px-4 py-4 text-center">Exam (70%)</th>
-                      <th className="px-4 py-4 text-center">Total (100)</th>
-                      <th className="px-4 py-4 text-center">GP</th>
-                      <th className="px-4 py-4 text-center">Grade</th>
-                    </>
-                  )}
+                  {/* Summary Columns across ALL subjects */}
+                  <th className="px-3 py-3 text-center bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-l border-r border-indigo-200 dark:border-indigo-900 w-20">
+                    Total
+                  </th>
+                  <th className="px-3 py-3 text-center bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-r border-indigo-200 dark:border-indigo-900 w-20">
+                    Average
+                  </th>
+                  <th className="px-3 py-3 text-center bg-slate-100 dark:bg-slate-800/90 border-r border-slate-200 dark:border-slate-800 w-20">
+                    {tierCategory === "NURSERY" ? "Rating" : tierCategory === "PRIMARY" ? "Grade" : "WAEC"}
+                  </th>
+                  <th className="px-4 py-3 text-left min-w-[120px]">
+                    Remark
+                  </th>
                 </tr>
               </thead>
 
-              {/* 3. DYNAMIC COLUMN SHIFTING: BODY ROWS */}
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {orderedStudents.map((student) => {
-                  const result = currentExamResults.get(student.id);
-                  const rowScores = getStudentScores(student.regNo);
-                  const empty = isRowEmpty(rowScores);
+              {/* TABLE BODY */}
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {filteredBroadsheet.map((row) => (
+                  <tr
+                    key={row.student.id}
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    {/* Position */}
+                    <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-600 dark:text-indigo-400 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800">
+                      {row.position}
+                    </td>
 
-                  let totalDisplay = "—";
-                  let gradeDisplay = "—";
-                  let gpDisplay = "—";
+                    {/* Student Name */}
+                    <td className="px-4 py-3 font-bold text-slate-900 dark:text-white sticky left-14 z-10 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800">
+                      {row.student.lastName}, {row.student.firstName}
+                    </td>
 
-                  if (!empty) {
-                    const calc = calculateBonaVeeResult(activeTierDisplay, rowScores);
-                    totalDisplay = String(calc.total);
-                    gradeDisplay = calc.grade;
-                    gpDisplay = calc.gp.toFixed(2);
-                  }
+                    {/* Reg No */}
+                    <td className="px-3 py-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-800">
+                      {row.student.regNo}
+                    </td>
 
-                  const rank = rankMap[student.regNo] || 0;
-                  const rankDisplay = rank > 0 ? getOrdinalSuffix(rank) : "—";
-
-                  return (
-                    <tr
-                      key={student.regNo}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                    >
-                      {/* Column 1: Student */}
-                      <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                        {student.lastName}, {student.firstName}
-                      </td>
-
-                      {/* Column 2: Reg No */}
-                      <td className="px-6 py-4 text-xs font-mono font-medium text-slate-500 dark:text-slate-300 select-none whitespace-nowrap">
-                        {student.regNo}
-                      </td>
-
-                      {/* Column 3: Subject / Course */}
-                      <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                        {activeSubjectOrCourse}
-                      </td>
-
-                      {/* Tier 1: Creche / Nursery */}
-                      {tierCategory === "NURSERY" && (
-                        <>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={rowScores.observation || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "observation", e.target.value, 100)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 100"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={rowScores.classwork || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "classwork", e.target.value, 100)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 100"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={rowScores.affective || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "affective", e.target.value, 100)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 100"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap font-bold text-slate-900 dark:text-white font-mono">
-                            {totalDisplay}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {rankDisplay}
+                    {/* Subject Score Cells */}
+                    {classSubjects.map((sub) => {
+                      const sc = row.subjectScores[sub];
+                      return (
+                        <td
+                          key={sub}
+                          onClick={() => handleOpenScoreModal(row.student, sub)}
+                          className="px-3 py-3 text-center border-r border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 group transition-colors"
+                          title={`Click to edit ${sub} marks for ${row.student.firstName}`}
+                        >
+                          {sc ? (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded font-mono font-bold text-xs ${
+                                sc.total >= 70
+                                  ? "text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : sc.total >= 60
+                                  ? "text-teal-700 bg-teal-50 dark:bg-teal-950/60 dark:text-teal-300"
+                                  : sc.total >= 50
+                                  ? "text-blue-700 bg-blue-50 dark:bg-blue-950/60 dark:text-blue-300"
+                                  : sc.total >= 40
+                                  ? "text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300"
+                                  : "text-rose-700 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300"
+                              }`}
+                            >
+                              {sc.total}
                             </span>
-                          </td>
-                        </>
-                      )}
-
-                      {/* Tier 2: Primary School */}
-                      {tierCategory === "PRIMARY" && (
-                        <>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="10"
-                              value={rowScores.assignment || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "assignment", e.target.value, 10)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-18 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 10"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={rowScores.test || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "test", e.target.value, 20)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-18 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 20"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="10"
-                              value={rowScores.project || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "project", e.target.value, 10)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-18 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 10"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="60"
-                              value={rowScores.exam || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "exam", e.target.value, 60)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 60"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap font-bold text-slate-900 dark:text-white font-mono">
-                            {totalDisplay}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            {gradeDisplay === "—" ? (
-                              <span className="text-slate-400 dark:text-slate-500">—</span>
-                            ) : (
-                              <span className="inline-block px-2 py-0.5 rounded font-black text-xs font-mono bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                {gradeDisplay}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {rankDisplay}
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-600 font-mono text-xs group-hover:text-indigo-500">
+                              —
                             </span>
-                          </td>
-                        </>
-                      )}
+                          )}
+                        </td>
+                      );
+                    })}
 
-                      {/* Tier 3: Secondary School */}
-                      {tierCategory === "SECONDARY" && (
-                        <>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={rowScores.ca1 || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "ca1", e.target.value, 20)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 20"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={rowScores.ca2 || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "ca2", e.target.value, 20)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 20"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="60"
-                              value={rowScores.exam || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "exam", e.target.value, 60)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 60"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap font-bold text-slate-900 dark:text-white font-mono">
-                            {totalDisplay}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            {gradeDisplay === "—" ? (
-                              <span className="text-slate-400 dark:text-slate-500">—</span>
-                            ) : (
-                              <span className="inline-block px-2.5 py-0.5 rounded font-black text-xs font-mono bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                {gradeDisplay}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {rankDisplay}
-                            </span>
-                          </td>
-                        </>
-                      )}
+                    {/* Total Across ALL Subjects */}
+                    <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20 border-l border-r border-indigo-100 dark:border-indigo-950">
+                      {row.evaluatedCount > 0 ? row.studentTotal : "—"}
+                    </td>
 
-                      {/* Tier 4: Higher Education Tiers */}
-                      {tierCategory === "TERTIARY" && (
-                        <>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="10"
-                              value={rowScores.assignment || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "assignment", e.target.value, 10)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 10"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={rowScores.test || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "test", e.target.value, 20)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 20"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="70"
-                              value={rowScores.exam || ""}
-                              onChange={(e) => handleScoreChange(student.regNo, "exam", e.target.value, 70)}
-                              onBlur={() => handleBlurOrEnter(student.regNo, student, result)}
-                              onKeyDown={(e) => e.key === "Enter" && handleBlurOrEnter(student.regNo, student, result)}
-                              className="w-20 mx-auto rounded-lg p-1.5 text-center text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
-                              placeholder="0 - 70"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap font-bold text-slate-900 dark:text-white font-mono">
-                            {totalDisplay}
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <span className="font-extrabold text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                              {gpDisplay}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            {gradeDisplay === "—" ? (
-                              <span className="text-slate-400 dark:text-slate-500">—</span>
-                            ) : (
-                              <span className="inline-block px-2.5 py-0.5 rounded font-black text-xs font-mono bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                {gradeDisplay}
-                              </span>
-                            )}
-                          </td>
-                        </>
+                    {/* Average Across ALL Subjects */}
+                    <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20 border-r border-indigo-100 dark:border-indigo-950">
+                      {row.evaluatedCount > 0 ? `${row.average.toFixed(1)}%` : "—"}
+                    </td>
+
+                    {/* Tier Grade */}
+                    <td className="px-3 py-3 text-center border-r border-slate-100 dark:border-slate-800">
+                      {row.evaluatedCount > 0 ? (
+                        <span className={`inline-block px-2 py-0.5 rounded font-black text-xs font-mono border ${row.badgeColor}`}>
+                          {row.grade}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono">—</span>
                       )}
-                    </tr>
-                  );
-                })}
+                    </td>
+
+                    {/* Remark */}
+                    <td className="px-4 py-3 text-xs font-medium text-slate-600 dark:text-slate-300">
+                      {row.evaluatedCount > 0 ? row.remark : "—"}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {/* 5. AGGREGATE SUMMARY FOOTER GENERATION */}
-          <div className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 p-5 rounded-b-2xl">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Card 1: Class Average Total Score */}
+          {/* AGGREGATE SUMMARY FOOTER GENERATION (Across ALL Subjects) */}
+          <div className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              {/* Card 1: Class Average (ALL Subjects) */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Class Average Total Score
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                  Class Average (All Subjects)
                 </span>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 font-mono">
+                  <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
                     {analytics.average}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    ({analytics.count} evaluated)
+                    ({analytics.count} students)
                   </span>
                 </div>
               </div>
 
-              {/* Card 2: Highest Score in Class */}
+              {/* Card 2: Highest Average */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Highest Score in Class
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                  Highest Overall Average
                 </span>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                     {analytics.highest}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Top Performance
+                    Class Leader
                   </span>
                 </div>
               </div>
 
-              {/* Card 3: Lowest Score in Class */}
+              {/* Card 3: Lowest Average */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Lowest Score in Class
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                  Lowest Overall Average
                 </span>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-rose-600 dark:text-rose-400 font-mono">
+                  <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
                     {analytics.lowest}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Baseline Mark
+                    Academic Baseline
                   </span>
                 </div>
               </div>
+
+              {/* Card 4: Total Subjects Across */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                  Subjects in Broadsheet
+                </span>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
+                    {classSubjects.length}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Tier Curriculum
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Score Modal (CA1, CA2, Exam) */}
+      {modalState.isOpen && modalState.student && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  Enter / Edit Subject Mark
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {modalState.student.lastName}, {modalState.student.firstName} ({modalState.student.regNo})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500 dark:text-slate-400">Subject:</span>
+                <span className="font-black text-slate-900 dark:text-white">{modalState.subject}</span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                    1st CA (20):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={modalState.ca1 || ""}
+                    onChange={(e) => setModalState((prev) => ({ ...prev, ca1: Math.min(20, Math.max(0, Number(e.target.value) || 0)) }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                    2nd CA (20):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={modalState.ca2 || ""}
+                    onChange={(e) => setModalState((prev) => ({ ...prev, ca2: Math.min(20, Math.max(0, Number(e.target.value) || 0)) }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                    Exam (60):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={modalState.exam || ""}
+                    onChange={(e) => setModalState((prev) => ({ ...prev, exam: Math.min(60, Math.max(0, Number(e.target.value) || 0)) }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Total Score Preview */}
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center justify-between text-xs">
+                <span className="font-bold text-indigo-900 dark:text-indigo-200">Total Score (100):</span>
+                <span className="font-mono font-black text-base text-indigo-700 dark:text-indigo-300">
+                  {(Number(modalState.ca1) || 0) + (Number(modalState.ca2) || 0) + (Number(modalState.exam) || 0)} / 100
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                  Teacher Remarks (Optional):
+                </label>
+                <input
+                  type="text"
+                  value={modalState.remarks}
+                  onChange={(e) => setModalState((prev) => ({ ...prev, remarks: e.target.value }))}
+                  placeholder="e.g. Excellent conceptual grasp"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+              <button
+                type="button"
+                onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleSaveModalScore}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+              >
+                {isPending ? "Persisting..." : "Save Score"}
+              </button>
             </div>
           </div>
         </div>

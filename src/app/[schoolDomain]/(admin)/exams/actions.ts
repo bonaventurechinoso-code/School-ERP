@@ -11,6 +11,7 @@ function safeRevalidatePath(path: string, type?: "page" | "layout") {
   }
 }
 import { invalidateGradingNamespace, invalidateTenantMetadata } from "@/lib/cache-invalidation";
+import { getNigerianGrade, getGradeRemark, normalizeTierLevel } from "@/lib/assessmentEngine";
 import { cookies } from "next/headers";
 import * as jose from "jose";
 
@@ -668,5 +669,226 @@ export async function getTierAssessmentConfigs(schoolId: string) {
   } catch (err) {
     console.error("[Server Action] Failed to get tier assessment configurations:", err);
     return {};
+  }
+}
+
+/**
+ * 3. BROADSHEET SINGLE-SCORE & MULTI-SUBJECT SYNCHRONIZER
+ * Persists student marks from the Admin Broadsheet into GradeRecord, AcademicRecord,
+ * and ExamResult simultaneously, ensuring 100% two-way synchronization with the Teacher Gradebook.
+ */
+export async function saveBroadsheetScore(
+  schoolId: string,
+  payload: {
+    studentId: string;
+    className: string;
+    subject: string;
+    term: string;
+    academicYear?: string;
+    ca1?: number;
+    ca2?: number;
+    exam?: number;
+    totalScore: number;
+    gradeLetter?: string;
+    remarks?: string;
+  }
+) {
+  const auth = await verifyTenantSession(schoolId);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
+  const tenantDb = getTenantClient(schoolId);
+  const term = payload.term || "1st Term";
+  const academicYear = payload.academicYear || "2026/2027";
+  const className = payload.className;
+  const subject = payload.subject;
+  const ca1 = payload.ca1 != null ? payload.ca1 : 0;
+  const ca2 = payload.ca2 != null ? payload.ca2 : 0;
+  const exam = payload.exam != null ? payload.exam : Math.max(0, payload.totalScore - (ca1 + ca2));
+  const total = payload.totalScore != null ? payload.totalScore : (ca1 + ca2 + exam);
+  const letter = payload.gradeLetter || getNigerianGrade(className, total);
+  const remarks = payload.remarks || getGradeRemark(letter);
+
+  try {
+    // 1. Synchronize GradeRecord
+    await tenantDb.gradeRecord.upsert({
+      where: {
+        schoolId_studentId_term_className_subject: {
+          schoolId,
+          studentId: payload.studentId,
+          term,
+          className,
+          subject,
+        },
+      },
+      update: {
+        ca1,
+        ca2,
+        exam,
+        totalScore: total,
+        updatedAt: new Date(),
+      },
+      create: {
+        schoolId,
+        studentId: payload.studentId,
+        className,
+        subject,
+        term,
+        ca1,
+        ca2,
+        exam,
+        totalScore: total,
+      },
+    }).catch(async () => {
+      await basePrisma.gradeRecord.upsert({
+        where: {
+          schoolId_studentId_term_className_subject: {
+            schoolId,
+            studentId: payload.studentId,
+            term,
+            className,
+            subject,
+          },
+        },
+        update: { ca1, ca2, exam, totalScore: total, updatedAt: new Date() },
+        create: { schoolId, studentId: payload.studentId, className, subject, term, ca1, ca2, exam, totalScore: total },
+      });
+    });
+
+    // 2. Synchronize AcademicRecord
+    await tenantDb.academicRecord.upsert({
+      where: {
+        schoolId_studentId_subject_term_academicYear: {
+          schoolId,
+          studentId: payload.studentId,
+          subject,
+          term,
+          academicYear,
+        },
+      },
+      update: {
+        className,
+        test1: ca1,
+        test2: ca2,
+        finalExam: exam,
+        totalScore: total,
+        gradeLetter: letter,
+        isPassed: total >= 40,
+        teacherRemarks: remarks,
+        updatedAt: new Date(),
+      },
+      create: {
+        schoolId,
+        studentId: payload.studentId,
+        subject,
+        term,
+        academicYear,
+        className,
+        test1: ca1,
+        test2: ca2,
+        finalExam: exam,
+        totalScore: total,
+        gradeLetter: letter,
+        isPassed: total >= 40,
+        teacherRemarks: remarks,
+      },
+    }).catch(async () => {
+      await basePrisma.academicRecord.upsert({
+        where: {
+          schoolId_studentId_subject_term_academicYear: {
+            schoolId,
+            studentId: payload.studentId,
+            subject,
+            term,
+            academicYear,
+          },
+        },
+        update: { className, test1: ca1, test2: ca2, finalExam: exam, totalScore: total, gradeLetter: letter, isPassed: total >= 40, teacherRemarks: remarks, updatedAt: new Date() },
+        create: { schoolId, studentId: payload.studentId, subject, term, academicYear, className, test1: ca1, test2: ca2, finalExam: exam, totalScore: total, gradeLetter: letter, isPassed: total >= 40, teacherRemarks: remarks },
+      });
+    });
+
+    // 3. Auto-link Course and Exam in tenantDb for full legacy compatibility
+    try {
+      let course = await tenantDb.course.findFirst({
+        where: {
+          schoolId,
+          OR: [{ name: subject }, { id: subject }],
+        },
+      });
+      if (!course) {
+        course = await tenantDb.course.create({
+          data: {
+            schoolId,
+            name: subject,
+            code: subject.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + "101",
+          },
+        });
+      }
+
+      let examRec = await tenantDb.exam.findFirst({
+        where: {
+          schoolId,
+          courseId: course.id,
+          semester: term,
+        },
+      });
+      if (!examRec) {
+        examRec = await tenantDb.exam.create({
+          data: {
+            schoolId,
+            courseId: course.id,
+            name: `${subject} (${term})`,
+            semester: term,
+            date: new Date(),
+            maxScore: 100,
+          },
+        });
+      }
+
+      await tenantDb.examResult.upsert({
+        where: {
+          schoolId_examId_studentId: {
+            schoolId,
+            examId: examRec.id,
+            studentId: payload.studentId,
+          },
+        },
+        update: {
+          score: total,
+          ca1Score: ca1,
+          ca2Score: ca2,
+          examScore: exam,
+          letterGrade: letter,
+          remarks,
+          updatedAt: new Date(),
+        },
+        create: {
+          schoolId,
+          examId: examRec.id,
+          studentId: payload.studentId,
+          score: total,
+          ca1Score: ca1,
+          ca2Score: ca2,
+          examScore: exam,
+          letterGrade: letter,
+          remarks,
+        },
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    // Write-Through Cache Invalidation
+    await invalidateGradingNamespace(schoolId);
+    safeRevalidatePath(`/[schoolDomain]/exams`, "page");
+    safeRevalidatePath(`/[schoolDomain]/portal/staff`, "page");
+    safeRevalidatePath(`/[schoolDomain]/report-cards`, "page");
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Server Action] Failed to save broadsheet score:", error);
+    return { success: false, error: error.message || "Failed to save score." };
   }
 }

@@ -3,6 +3,7 @@
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { compileClassReportCards } from "@/lib/report-card-service";
+import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -319,7 +320,25 @@ export async function saveClassroomAttendance(
 }
 
 /**
+ * Helper to get all term string variants to avoid mismatch between "1st Term" and "First Term"
+ */
+function getTermVariants(term: string): string[] {
+  const t = (term || "").trim().toLowerCase();
+  if (t.includes("1") || t.includes("first")) {
+    return ["1st Term", "First Term", "Term 1", "first term", "1st term"];
+  }
+  if (t.includes("2") || t.includes("second")) {
+    return ["2nd Term", "Second Term", "Term 2", "second term", "2nd term"];
+  }
+  if (t.includes("3") || t.includes("third")) {
+    return ["3rd Term", "Third Term", "Term 3", "third term", "3rd term"];
+  }
+  return [term];
+}
+
+/**
  * 4. Fetch grade records for a cohort, subject, and term
+ * Searches both GradeRecord and AcademicRecord with term-variant resilience.
  */
 export async function fetchClassroomGrades(
   schoolId: string,
@@ -328,18 +347,65 @@ export async function fetchClassroomGrades(
   term: string
 ) {
   try {
-    const grades = await basePrisma.gradeRecord.findMany({
-      where: {
-        schoolId,
-        className,
-        subject,
-        term,
-      },
-    });
+    const termVariants = getTermVariants(term);
+
+    // Fetch from GradeRecord and AcademicRecord in parallel
+    const [gradeRecords, academicRecords] = await Promise.all([
+      basePrisma.gradeRecord.findMany({
+        where: {
+          schoolId,
+          className,
+          subject: { equals: subject, mode: "insensitive" },
+          term: { in: termVariants },
+        },
+      }),
+      basePrisma.academicRecord.findMany({
+        where: {
+          schoolId,
+          className,
+          subject: { equals: subject, mode: "insensitive" },
+          term: { in: termVariants },
+        },
+      }),
+    ]);
+
+    // Map by studentId, prioritizing GradeRecord, with fallback to AcademicRecord
+    const mergedMap = new Map<string, any>();
+
+    for (const ar of academicRecords) {
+      mergedMap.set(ar.studentId, {
+        id: ar.id,
+        studentId: ar.studentId,
+        className: ar.className || className,
+        subject: ar.subject,
+        term: ar.term,
+        ca1: Number(ar.test1) || 0,
+        ca2: Number(ar.test2) || 0,
+        exam: Number(ar.finalExam) || 0,
+        totalScore: Number(ar.totalScore) || ((Number(ar.test1) || 0) + (Number(ar.test2) || 0) + (Number(ar.finalExam) || 0)),
+        teacherRemarks: ar.teacherRemarks || "",
+      });
+    }
+
+    for (const gr of gradeRecords) {
+      const existing = mergedMap.get(gr.studentId);
+      mergedMap.set(gr.studentId, {
+        id: gr.id,
+        studentId: gr.studentId,
+        className: gr.className,
+        subject: gr.subject,
+        term: gr.term,
+        ca1: Number(gr.ca1) || 0,
+        ca2: Number(gr.ca2) || 0,
+        exam: Number(gr.exam) || 0,
+        totalScore: Number(gr.totalScore) || ((Number(gr.ca1) || 0) + (Number(gr.ca2) || 0) + (Number(gr.exam) || 0)),
+        teacherRemarks: existing?.teacherRemarks || "",
+      });
+    }
 
     return {
       success: true,
-      grades,
+      grades: Array.from(mergedMap.values()),
     };
   } catch (error: any) {
     console.error("[fetchClassroomGrades Error]:", error);
@@ -352,7 +418,7 @@ export async function fetchClassroomGrades(
 }
 
 /**
- * 5. Save or update assessment grade records (synced to GradeRecord and AcademicRecord)
+ * 5. Save or update assessment grade records (synced to GradeRecord, AcademicRecord, and ExamResult)
  */
 export async function saveClassroomGrades(
   schoolId: string,
@@ -363,6 +429,8 @@ export async function saveClassroomGrades(
   grades: GradeEntryPayload[]
 ) {
   try {
+    const tenantDb = getTenantClient(schoolId);
+
     // Helper to resolve grade letter
     function getGradeLetter(total: number): string {
       if (total >= 75) return "A1";
@@ -374,6 +442,48 @@ export async function saveClassroomGrades(
       if (total >= 45) return "D7";
       if (total >= 40) return "E8";
       return "F9";
+    }
+
+    // 1. Resolve or create Course & Exam in tenantDb for legacy exam broadsheet consistency
+    let examRec: any = null;
+    try {
+      let course = await tenantDb.course.findFirst({
+        where: {
+          schoolId,
+          OR: [{ name: { equals: subject, mode: "insensitive" } }, { id: subject }],
+        },
+      });
+      if (!course) {
+        course = await tenantDb.course.create({
+          data: {
+            schoolId,
+            name: subject,
+            code: subject.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + "101",
+          },
+        });
+      }
+
+      examRec = await tenantDb.exam.findFirst({
+        where: {
+          schoolId,
+          courseId: course.id,
+          semester: term,
+        },
+      });
+      if (!examRec) {
+        examRec = await tenantDb.exam.create({
+          data: {
+            schoolId,
+            courseId: course.id,
+            name: `${subject} (${term})`,
+            semester: term,
+            date: new Date(),
+            maxScore: 100,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[saveClassroomGrades] Course/Exam link fallback notice:", e);
     }
 
     await basePrisma.$transaction(async (tx) => {
@@ -453,8 +563,47 @@ export async function saveClassroomGrades(
             teacherRemarks: item.teacherRemarks || null,
           },
         });
+
+        // 3. Upsert ExamResult if examRec exists
+        if (examRec) {
+          await tx.examResult.upsert({
+            where: {
+              schoolId_examId_studentId: {
+                schoolId,
+                examId: examRec.id,
+                studentId: item.studentId,
+              },
+            },
+            update: {
+              score: total,
+              ca1Score: ca1,
+              ca2Score: ca2,
+              examScore: exam,
+              letterGrade: letter,
+              remarks: item.teacherRemarks || null,
+              updatedAt: new Date(),
+            },
+            create: {
+              schoolId,
+              examId: examRec.id,
+              studentId: item.studentId,
+              score: total,
+              ca1Score: ca1,
+              ca2Score: ca2,
+              examScore: exam,
+              letterGrade: letter,
+              remarks: item.teacherRemarks || null,
+            },
+          }).catch(() => {});
+        }
       }
     });
+
+    // Invalidate caches & revalidate paths so Admin broadsheet immediately reflects
+    await invalidateGradingNamespace(schoolId);
+    safeRevalidate(`/[schoolDomain]/exams`, "page");
+    safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
+    safeRevalidate(`/[schoolDomain]/report-cards`, "page");
 
     return { success: true, count: grades.length };
   } catch (error: any) {

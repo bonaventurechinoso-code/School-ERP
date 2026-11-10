@@ -58,20 +58,20 @@ export default async function ExamsPage({
   const activeTierName = activeTierObj ? activeTierObj.name : "";
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [courses, exams, students, examResults, rawStaff] = await Promise.all([
+  const [courses, exams, students, examResults, rawStaff, gradeRecords, academicRecords, classrooms] = await Promise.all([
     tenantDb.course.findMany({
       where: {
         schoolId: school.id,
       },
       include: { tier: true },
-    }),
+    }).catch(() => []),
     tenantDb.exam.findMany({
       where: {
         schoolId: school.id,
       },
       include: { course: { include: { tier: true } } },
       orderBy: { date: 'asc' }
-    }),
+    }).catch(() => []),
     tenantDb.student.findMany({
       where: {
         schoolId: school.id,
@@ -80,12 +80,12 @@ export default async function ExamsPage({
       },
       include: { tier: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
-    }),
+    }).catch(() => []),
     tenantDb.examResult.findMany({
       where: {
         schoolId: school.id,
       }
-    }),
+    }).catch(() => []),
     tenantDb.staff.findMany({
       where: {
         schoolId: school.id,
@@ -99,7 +99,19 @@ export default async function ExamsPage({
         },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-    }),
+    }).catch(() => []),
+    tenantDb.gradeRecord.findMany({
+      where: { schoolId: school.id },
+      orderBy: { updatedAt: "desc" },
+    }).catch(() => []),
+    tenantDb.academicRecord.findMany({
+      where: { schoolId: school.id },
+      orderBy: { updatedAt: "desc" },
+    }).catch(() => []),
+    tenantDb.classroom.findMany({
+      where: { schoolId: school.id },
+      orderBy: { name: "asc" },
+    }).catch(() => []),
   ]);
 
   const staff = rawStaff.map((s: any) => ({
@@ -198,6 +210,10 @@ export default async function ExamsPage({
             exams={exams} 
             students={students} 
             examResults={examResults}
+            gradeRecords={gradeRecords}
+            academicRecords={academicRecords}
+            courses={courses}
+            classrooms={classrooms}
             academicTiers={school.academicTiers}
             activeTierName={activeTierName}
           />
