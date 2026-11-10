@@ -192,24 +192,15 @@ export async function fetchParentPortalInitialData(
     });
   }
 
-  // If no parent or linked wards exist (e.g. fresh demo session), provide demo wards for the parent
+  // If no parent or linked wards exist, strictly isolate data (demo tenant gets isolated mock items, production gets empty list)
   if (wardsRaw.length === 0) {
-    // Check if there are students in the tenant to bind as sample wards for verification
-    const sampleStudents = await basePrisma.student.findMany({
-      where: { schoolId, status: { in: ["ENROLLED", "ACTIVE"] } },
-      include: { tier: true },
-      take: 2,
-    });
-
-    if (sampleStudents.length > 0) {
-      wardsRaw = sampleStudents;
-    } else {
+    if (school.subdomain.toLowerCase() === "demo" && !parentEmail) {
       wardsRaw = [
         {
           id: "ward-demo-1",
           firstName: "Chidera",
-          lastName: "Okafor",
-          admissionNumber: "ADM-2026-042",
+          lastName: "Demo",
+          admissionNumber: "ADM-DEMO-042",
           currentClass: "JSS 2 Diamond",
           tier: { name: "Junior Secondary Tier" },
           status: "ENROLLED",
@@ -217,13 +208,15 @@ export async function fetchParentPortalInitialData(
         {
           id: "ward-demo-2",
           firstName: "Somto",
-          lastName: "Okafor",
-          admissionNumber: "ADM-2026-089",
+          lastName: "Demo",
+          admissionNumber: "ADM-DEMO-089",
           currentClass: "Primary 5 Ruby",
           tier: { name: "Elementary Tier" },
           status: "ENROLLED",
         },
       ];
+    } else {
+      wardsRaw = [];
     }
   }
 

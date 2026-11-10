@@ -127,7 +127,7 @@ export async function fetchStudentPortalInitialData(
     throw new Error("School institution not found");
   }
 
-  // 2. Resolve Student by email, userId, admissionNumber, or first enrolled student in tenant
+  // 2. Resolve Student by email, userId, admissionNumber, or demo tenant sample
   let student: any = null;
   if (studentEmailOrLogin) {
     student = await basePrisma.student.findFirst({
@@ -146,8 +146,8 @@ export async function fetchStudentPortalInitialData(
     });
   }
 
-  // Fallback to active student if login identifier not explicitly bound
-  if (!student) {
+  // Demo fallback strictly restricted to demo tenant when no login identifier is provided
+  if (!student && !studentEmailOrLogin && school.subdomain.toLowerCase() === "demo") {
     student = await basePrisma.student.findFirst({
       where: {
         schoolId,
@@ -161,15 +161,15 @@ export async function fetchStudentPortalInitialData(
   }
 
   if (!student) {
-    // Generate graceful mock student profile if tenant has no enrolled learners yet
+    // Generate isolated pending/demo student profile for this specific user - NEVER leak other students' records!
     student = {
-      id: "student-demo",
-      firstName: "Student",
+      id: "unlinked-student",
+      firstName: studentEmailOrLogin ? studentEmailOrLogin.split("@")[0] : "Student",
       lastName: "Learner",
       email: studentEmailOrLogin || "student@school.edu",
-      admissionNumber: "ADM-2026-001",
-      currentClass: "JSS 1 Gold",
-      tier: { name: "Secondary School Tier" },
+      admissionNumber: "PENDING-MATRICULATION",
+      currentClass: "Unassigned Stream",
+      tier: { name: "Academic Tier" },
       status: "ACTIVE",
     };
   }

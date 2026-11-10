@@ -91,23 +91,54 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       });
     }
 
-    if (!currentStaff) {
-      currentStaff = await basePrisma.staff.findFirst({
-        where: { schoolId },
-        include: {
-          department: true,
-          PayrollRecord: {
-            orderBy: { payDate: "desc" },
-          },
-          Timetable: {
-            include: {
-              course: true,
-              classroom: true,
-            },
-            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-          },
-        },
+    if (!currentStaff && staffEmail) {
+      const userRecord = await basePrisma.user.findFirst({
+        where: { schoolId, email: staffEmail },
       });
+      if (userRecord) {
+        currentStaff = await basePrisma.staff.findFirst({
+          where: { schoolId, userId: userRecord.id },
+          include: {
+            department: true,
+            PayrollRecord: {
+              orderBy: { payDate: "desc" },
+            },
+            Timetable: {
+              include: {
+                course: true,
+                classroom: true,
+              },
+              orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+            },
+          },
+        });
+      }
+    }
+
+    // Strictly restrict colleague fallback to the public demo tenant when no staff email is provided
+    if (!currentStaff && !staffEmail) {
+      const schoolEntity = await basePrisma.school.findUnique({
+        where: { id: schoolId },
+        select: { subdomain: true },
+      });
+      if (schoolEntity?.subdomain?.toLowerCase() === "demo") {
+        currentStaff = await basePrisma.staff.findFirst({
+          where: { schoolId },
+          include: {
+            department: true,
+            PayrollRecord: {
+              orderBy: { payDate: "desc" },
+            },
+            Timetable: {
+              include: {
+                course: true,
+                classroom: true,
+              },
+              orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+            },
+          },
+        });
+      }
     }
 
     const [school, classrooms, courses, students, lessonNotes, leaveRequests] = await Promise.all([

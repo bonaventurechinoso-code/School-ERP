@@ -48,19 +48,53 @@ export default async function TenantStudentPortalPage({
         ],
       },
     }),
-    getSession(),
+    getSession(undefined, schoolDomain),
   ]);
 
   if (!school) {
     return notFound();
   }
 
+  // 1. Mandatory Login Authentication Guard
+  if (!session) {
+    redirect(`/${schoolDomain}/login?callbackUrl=${encodeURIComponent(`/${schoolDomain}/portal/student`)}`);
+  }
+
+  // 2. Strict Cross-Tenant Boundary Check
+  const sessionTenant = (session.schoolDomain || "").toLowerCase().trim();
+  const isSuperAdmin = session.role === "SUPER_ADMIN" || Boolean(session.isSuperAdmin);
+  if (!isSuperAdmin && sessionTenant && sessionTenant !== schoolDomain.toLowerCase().trim()) {
+    redirect("/access-denied");
+  }
+
+  // 3. Role-Based Access Control (RBAC) Guard
+  const userRole = (session.role || session.userRole || "").toUpperCase();
+  const isAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN", "PRINCIPAL", "HEADMASTER"].includes(userRole);
+
+  if (userRole !== "STUDENT" && !isAdmin) {
+    if (userRole === "PARENT") {
+      redirect(`/${schoolDomain}/portal/parent`);
+    } else if (userRole === "TEACHER" || userRole === "STAFF") {
+      redirect(`/${schoolDomain}/portal/staff`);
+    } else if (userRole === "BURSAR") {
+      redirect(`/${schoolDomain}/portal/bursar`);
+    } else {
+      redirect(`/${schoolDomain}/login`);
+    }
+  }
+
+  // 4. Force Password Change Guard
   const isDemoTenant = schoolDomain?.toLowerCase() === "demo";
-  if (!isDemoTenant && session?.mustChangePassword) {
+  if (!isDemoTenant && session.mustChangePassword) {
     redirect(`/${schoolDomain}/security/change-password?forced=true`);
   }
 
-  const studentIdentifier = searchParams.studentId || searchParams.loginId || session?.email;
+  // 5. Data Privacy Scoping: Enrolled students only access their own profile.
+  // Admins can inspect a student's portal using studentId/loginId search param.
+  const studentIdentifier = isAdmin
+    ? (searchParams.studentId || searchParams.loginId || session.email)
+    : session.email;
+
   const initialData = await fetchStudentPortalInitialData(school.id, studentIdentifier);
 
   return (

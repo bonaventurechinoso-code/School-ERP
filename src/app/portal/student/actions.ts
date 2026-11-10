@@ -171,8 +171,9 @@ export async function fetchStudentPortalWorkspace(params: {
     }
   }
 
-  // If no specific student found yet, find the first enrolled student in this school/tier or generate realistic tier model
-  if (!dbStudent && resolvedSchool.id) {
+  // Only allow enrolled sample fallback in the explicit demo tenant when no student login ID is provided
+  const isDemoSchool = resolvedSchool.subdomain?.toLowerCase() === "demo";
+  if (!dbStudent && resolvedSchool.id && isDemoSchool && !loginId) {
     try {
       dbStudent = await isolatedDbClient.student.findFirst({
         where: {

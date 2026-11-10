@@ -621,16 +621,22 @@ function LoginPageContent() {
 
       // Respect explicit callback URL if specified and not a login loop
       if (callbackUrl && !callbackUrl.includes("/login")) {
-        router.push(callbackUrl);
-        return;
+        const isRestrictedRole = (rawRole || staffRole || "").toUpperCase() === "STUDENT" || (rawRole || staffRole || "").toUpperCase() === "PARENT";
+        const isAdminPath = /\/(dashboard|finance|students|staff|settings|academics|bursary|admin)(\/|$)/i.test(callbackUrl);
+        if (!(isRestrictedRole && isAdminPath)) {
+          router.push(callbackUrl);
+          return;
+        }
       }
 
       // RBAC role redirect mapping:
-      // super_admin -> /admin
+      // super_admin -> /super-admin
       // school_admin -> /[tenant]/dashboard
-      // teacher -> /[tenant]/staff
-      // student -> /[tenant]/student
-      // parent -> /[tenant]/parent
+      // principal -> /[tenant]/portal/principal
+      // bursar -> /[tenant]/portal/bursar
+      // teacher/staff -> /[tenant]/portal/staff
+      // student -> /[tenant]/portal/student
+      // parent -> /[tenant]/portal/parent
       const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
       if (!isSuperAdmin && !targetCode) {
         const missingSchoolMsg = "School Code is required to access your workspace.";
@@ -642,13 +648,18 @@ function LoginPageContent() {
       }
 
       const effectiveRole = (rawRole || staffRole || "").toUpperCase();
-      if (
+      if (effectiveRole === "BURSAR") {
+        router.push(`/${targetCode}/portal/bursar`);
+      } else if (
+        effectiveRole === "PRINCIPAL" ||
+        effectiveRole === "HEADMASTER" ||
+        effectiveRole === "VICE_PRINCIPAL"
+      ) {
+        router.push(`/${targetCode}/portal/principal`);
+      } else if (
         effectiveRole === "SCHOOL_ADMIN" ||
         effectiveRole === "TENANT_ADMIN" ||
         effectiveRole === "ADMIN" ||
-        effectiveRole === "PRINCIPAL" ||
-        effectiveRole === "HEADMASTER" ||
-        effectiveRole === "BURSAR" ||
         effectiveRole.includes("ADMIN")
       ) {
         router.push(`/${targetCode}/dashboard`);
@@ -660,11 +671,11 @@ function LoginPageContent() {
       ) {
         router.push(`/${targetCode}/portal/staff`);
       } else if (effectiveRole === "STUDENT") {
-        router.push(`/${targetCode}/student`);
+        router.push(`/${targetCode}/portal/student`);
       } else if (effectiveRole === "PARENT") {
-        router.push(`/${targetCode}/parent`);
+        router.push(`/${targetCode}/portal/parent`);
       } else {
-        router.push(`/${targetCode}/dashboard`);
+        router.push(`/${targetCode}/portal`);
       }
     } catch (err: any) {
       setIsSubmitting(false);

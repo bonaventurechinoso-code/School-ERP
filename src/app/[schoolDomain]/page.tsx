@@ -83,6 +83,26 @@ export default async function PublicGuestPortalPage({
 }) {
   const { schoolDomain } = await Promise.resolve(paramsPromise);
   const session = await getSession(undefined, schoolDomain).catch(() => null);
+
+  let workspaceHref = `/${schoolDomain}/portal`;
+  if (session) {
+    const role = (session.role || "").toUpperCase();
+    if (role === "STUDENT") {
+      workspaceHref = `/${schoolDomain}/portal/student`;
+    } else if (role === "PARENT") {
+      workspaceHref = `/${schoolDomain}/portal/parent`;
+    } else if (role === "TEACHER" || role === "STAFF") {
+      workspaceHref = `/${schoolDomain}/portal/staff`;
+    } else if (role === "BURSAR") {
+      workspaceHref = `/${schoolDomain}/portal/bursar`;
+    } else if (role === "PRINCIPAL" || role === "HEADMASTER" || role === "VICE_PRINCIPAL") {
+      workspaceHref = `/${schoolDomain}/portal/principal`;
+    } else if (role === "SUPER_ADMIN") {
+      workspaceHref = `/super-admin`;
+    } else {
+      workspaceHref = `/${schoolDomain}/dashboard`;
+    }
+  }
   let school = null;
   try {
     school = await basePrisma.school.findUnique({
@@ -241,7 +261,7 @@ export default async function PublicGuestPortalPage({
               <div className="flex items-center gap-2 sm:gap-3">
                 <span className="text-xs text-slate-600 hidden md:inline font-medium">{session.email}</span>
                 <Link 
-                  href={`/${school.subdomain}/dashboard`}
+                  href={workspaceHref}
                   className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm"
                 >
                   <span>Enter Workspace</span>
@@ -313,7 +333,7 @@ export default async function PublicGuestPortalPage({
               <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-300 font-medium">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Direct Gateways:</span>
                 <Link 
-                  href={`/${school.subdomain}/login`}
+                  href={session ? workspaceHref : `/${school.subdomain}/login`}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition shadow-sm font-semibold"
                 >
                   <span>Enter Workspace</span>

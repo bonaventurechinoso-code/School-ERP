@@ -61,9 +61,19 @@ export default async function AdminLayout({
     redirect("/trial-expired");
   }
 
-  // 1. ISOLATE STUDENTS FROM ADMINISTRATIVE WORKSPACES
+  // 1. ISOLATE NON-ADMINISTRATIVE ROLES FROM ADMINISTRATIVE WORKSPACES
   if (userRole === "STUDENT") {
     redirect(`/${params.schoolDomain}/portal/student`);
+  }
+  if (userRole === "PARENT") {
+    redirect(`/${params.schoolDomain}/portal/parent`);
+  }
+  if (
+    (userRole === "TEACHER" || userRole === "STAFF") &&
+    !isSuperAdmin &&
+    !["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN", "PRINCIPAL", "HEADMASTER", "VICE_PRINCIPAL"].includes(userRole)
+  ) {
+    redirect(`/${params.schoolDomain}/portal/staff`);
   }
 
   // 2. ENFORCE MANDATORY INITIAL PASSWORD CHANGE (Bypassed conditionally for demo tenant)

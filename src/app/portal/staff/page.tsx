@@ -10,7 +10,12 @@ export default async function StaffPortalPage({
   const searchParams = await searchParamsPromise;
   const session = await getSession();
 
-  let targetDomain = searchParams.schoolDomain || session?.schoolDomain;
+  if (!session) {
+    const loginDomain = searchParams.schoolDomain;
+    redirect(loginDomain ? `/${loginDomain}/login?callbackUrl=/portal/staff` : `/login?callbackUrl=/portal/staff`);
+  }
+
+  let targetDomain = searchParams.schoolDomain || session.schoolDomain;
   if (!targetDomain) {
     const defaultSchool = await basePrisma.school.findFirst({
       where: { isActive: true },

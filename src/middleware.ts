@@ -467,6 +467,90 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // 5b. EDGE RBAC ROLE ISOLATION & WORKSPACE DEFENSE
+  const userRole = (claims.role || "").toUpperCase();
+  const targetTenant = requestedTenant || (claims.schoolDomain || "").toLowerCase().trim() || "greenwood";
+
+  const createRoleRedirect = (targetDestination: string) => {
+    if (lowerPath.startsWith("/api/")) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Role not authorized for this workspace." },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+    const destUrl = getSafeRedirectUrl(targetDestination, req);
+    const redirectResponse = NextResponse.redirect(destUrl);
+    redirectResponse.headers.set("Location", destUrl.pathname + destUrl.search);
+    for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+      redirectResponse.headers.set(k, v);
+    }
+    return redirectResponse;
+  };
+
+  if (lowerPath === "/change-password" || lowerPath.startsWith("/change-password/")) {
+    // Allowed for all authenticated roles
+  } else if (userRole === "STUDENT") {
+    const isAllowedStudentRoute =
+      lowerPath === `/${targetTenant}/portal` ||
+      lowerPath === `/${targetTenant}/portal/student` ||
+      lowerPath.startsWith(`/${targetTenant}/portal/student/`) ||
+      lowerPath === `/${targetTenant}/student` ||
+      lowerPath.startsWith(`/${targetTenant}/student/`) ||
+      lowerPath === "/portal" ||
+      lowerPath === "/portal/student" ||
+      lowerPath.startsWith("/portal/student/") ||
+      lowerPath.startsWith("/api/student/") ||
+      lowerPath.startsWith(`/${targetTenant}/api/student/`);
+
+    if (!isAllowedStudentRoute) {
+      return createRoleRedirect(`/${targetTenant}/portal/student`);
+    }
+  } else if (userRole === "PARENT") {
+    const isAllowedParentRoute =
+      lowerPath === `/${targetTenant}/portal` ||
+      lowerPath === `/${targetTenant}/portal/parent` ||
+      lowerPath.startsWith(`/${targetTenant}/portal/parent/`) ||
+      lowerPath === `/${targetTenant}/parent` ||
+      lowerPath.startsWith(`/${targetTenant}/parent/`) ||
+      lowerPath === "/portal" ||
+      lowerPath === "/portal/parent" ||
+      lowerPath.startsWith("/portal/parent/") ||
+      lowerPath.startsWith("/api/parent/") ||
+      lowerPath.startsWith(`/${targetTenant}/api/parent/`);
+
+    if (!isAllowedParentRoute) {
+      return createRoleRedirect(`/${targetTenant}/portal/parent`);
+    }
+  } else if (userRole === "TEACHER" || userRole === "STAFF") {
+    const isAllowedStaffRoute =
+      lowerPath === `/${targetTenant}/portal` ||
+      lowerPath === `/${targetTenant}/portal/staff` ||
+      lowerPath.startsWith(`/${targetTenant}/portal/staff/`) ||
+      lowerPath === "/portal" ||
+      lowerPath === "/portal/staff" ||
+      lowerPath.startsWith("/portal/staff/") ||
+      lowerPath.startsWith("/api/staff/") ||
+      lowerPath.startsWith(`/${targetTenant}/api/staff/`);
+
+    if (!isAllowedStaffRoute) {
+      return createRoleRedirect(`/${targetTenant}/portal/staff`);
+    }
+  } else if (userRole === "BURSAR") {
+    if (
+      lowerPath.includes("/portal/student") ||
+      lowerPath.includes("/portal/parent")
+    ) {
+      return createRoleRedirect(`/${targetTenant}/portal/bursar`);
+    }
+  } else if (userRole === "PRINCIPAL" || userRole === "HEADMASTER" || userRole === "VICE_PRINCIPAL") {
+    if (
+      lowerPath.includes("/portal/student") ||
+      lowerPath.includes("/portal/parent")
+    ) {
+      return createRoleRedirect(`/${targetTenant}/portal/principal`);
+    }
+  }
+
   // 6. ATTACH REQUEST-SCOPED CONTEXT TO INCOMING REQUEST HEADERS
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", lowerPath);

@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { ShieldAlert, Briefcase, LogOut, ArrowLeft } from "lucide-react";
@@ -45,20 +45,57 @@ export default async function TenantStaffPortalPage({
         },
       },
     }),
-    getSession(),
+    getSession(undefined, schoolDomain),
   ]);
 
   if (!school) {
     return notFound();
   }
 
+  // 1. Mandatory Login Authentication Guard
+  if (!session) {
+    redirect(`/${schoolDomain}/login?callbackUrl=${encodeURIComponent(`/${schoolDomain}/portal/staff`)}`);
+  }
+
+  // 2. Strict Cross-Tenant Boundary Check
+  const sessionTenant = (session.schoolDomain || "").toLowerCase().trim();
+  const isSuperAdmin = session.role === "SUPER_ADMIN" || Boolean(session.isSuperAdmin);
+  if (!isSuperAdmin && sessionTenant && sessionTenant !== schoolDomain.toLowerCase().trim()) {
+    redirect("/access-denied");
+  }
+
+  // 3. Role-Based Access Control (RBAC) Guard
+  const userRole = (session.role || session.userRole || "").toUpperCase();
+  const isStaffAuthorized = [
+    "TEACHER",
+    "STAFF",
+    "INSTRUCTOR",
+    "BURSAR",
+    "PRINCIPAL",
+    "HEADMASTER",
+    "SCHOOL_ADMIN",
+    "TENANT_ADMIN",
+    "SUPER_ADMIN",
+    "ADMIN",
+  ].includes(userRole);
+
+  if (!isStaffAuthorized) {
+    if (userRole === "STUDENT") {
+      redirect(`/${schoolDomain}/portal/student`);
+    } else if (userRole === "PARENT") {
+      redirect(`/${schoolDomain}/portal/parent`);
+    } else {
+      redirect(`/${schoolDomain}/login`);
+    }
+  }
+
+  // 4. Force Password Change Guard
   const isDemoTenant = schoolDomain?.toLowerCase() === "demo";
-  if (!isDemoTenant && session?.mustChangePassword) {
-    const { redirect } = await import("next/navigation");
+  if (!isDemoTenant && session.mustChangePassword) {
     redirect(`/${schoolDomain}/security/change-password?forced=true`);
   }
 
-  const initialData = await fetchStaffPortalInitialData(school.id, session?.email);
+  const initialData = await fetchStaffPortalInitialData(school.id, session.email);
 
   const staffName = initialData.staffProfile
     ? `${initialData.staffProfile.firstName} ${initialData.staffProfile.lastName}`

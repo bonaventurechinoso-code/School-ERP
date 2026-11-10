@@ -23,10 +23,14 @@ export default async function StudentPortalPage({
   const studentLoginId = searchParams.studentId || searchParams.loginId;
 
   const session = await getSession();
-  const targetDomain = schoolDomain || session?.schoolDomain || "york";
-  const isDemoTenant = targetDomain.toLowerCase() === "demo";
-  if (!isDemoTenant && session?.mustChangePassword) {
-    redirect(`/${targetDomain}/security/change-password?forced=true`);
+  if (!session) {
+    const loginDomain = schoolDomain || "login";
+    redirect(loginDomain !== "login" ? `/${loginDomain}/login?callbackUrl=/portal/student` : `/login?callbackUrl=/portal/student`);
+  }
+
+  const targetDomain = schoolDomain || session.schoolDomain;
+  if (targetDomain && targetDomain !== "portal") {
+    redirect(`/${targetDomain}/portal/student`);
   }
 
   // Pass through dynamic tenant connection factory and fetch workspace

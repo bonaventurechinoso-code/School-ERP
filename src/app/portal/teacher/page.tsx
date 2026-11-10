@@ -4,13 +4,12 @@ import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function PortalTeacherRedirectPage() {
   const session = await getSession();
-  let targetDomain = session?.schoolDomain || session?.schoolCode;
+  if (!session) {
+    redirect("/login?callbackUrl=/portal/teacher");
+  }
+  const targetDomain = session.schoolDomain;
   if (!targetDomain) {
-    const defaultSchool = await basePrisma.school.findFirst({
-      where: { isActive: true },
-      select: { subdomain: true },
-    });
-    targetDomain = defaultSchool?.subdomain || "greenwood";
+    redirect("/login");
   }
 
   redirect(`/${targetDomain}/portal/staff`);
