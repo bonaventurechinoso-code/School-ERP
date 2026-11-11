@@ -1437,7 +1437,7 @@ export default function ExamsList({
           <div
             className={`bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full ${
               modalMode === "bulk" && !editingExamId
-                ? "max-w-6xl max-h-[94vh]"
+                ? "max-w-7xl max-h-[94vh]"
                 : "max-w-2xl max-h-[90vh]"
             } overflow-hidden flex flex-col`}
             onClick={(e) => e.stopPropagation()}
@@ -1936,6 +1936,13 @@ export default function ExamsList({
                     className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
                     title="Shared Date"
                   />
+                  <input
+                    type="time"
+                    value={bulkApplyValues.startTime}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, startTime: e.target.value })}
+                    className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    title="Shared Start Time"
+                  />
                   <select
                     value={bulkApplyValues.assessmentType}
                     onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, assessmentType: e.target.value as AssessmentTypeEnum })}
@@ -1955,10 +1962,18 @@ export default function ExamsList({
                       value={bulkApplyValues.duration}
                       onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, duration: Number(e.target.value) })}
                       className="w-16 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
-                      title="Duration in minutes"
+                      title="Shared Duration in minutes"
                     />
                     <span className="text-[11px] text-slate-400">min</span>
                   </div>
+                  <input
+                    type="text"
+                    placeholder="Shared Venue (e.g. Hall A)"
+                    value={bulkApplyValues.venue}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, venue: e.target.value })}
+                    className="w-36 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    title="Shared Venue"
+                  />
                   <select
                     value={bulkApplyValues.invigilatorId}
                     onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, invigilatorId: e.target.value })}
@@ -1983,17 +1998,19 @@ export default function ExamsList({
                 {/* Bulk Rows Table */}
                 <div className="overflow-x-auto overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl flex-1 max-h-[420px]">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-50 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-extrabold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-extrabold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800 text-[11px]">
                       <tr>
-                        <th className="py-2.5 px-3 w-10 text-center">#</th>
-                        <th className="py-2.5 px-3 min-w-[120px]">Class</th>
-                        <th className="py-2.5 px-3 min-w-[160px]">Subject (Filtered)</th>
-                        <th className="py-2.5 px-3 min-w-[100px]">Type</th>
-                        <th className="py-2.5 px-3 min-w-[200px]">Assessment Title</th>
-                        <th className="py-2.5 px-3 min-w-[130px]">Exam Date</th>
-                        <th className="py-2.5 px-3 min-w-[80px]">Duration</th>
-                        <th className="py-2.5 px-3 min-w-[150px]">Invigilator</th>
-                        <th className="py-2.5 px-3 w-20 text-center">Actions</th>
+                        <th className="py-2.5 px-2.5 w-8 text-center">#</th>
+                        <th className="py-2.5 px-2.5 min-w-[110px]">Class</th>
+                        <th className="py-2.5 px-2.5 min-w-[150px]">Subject (Filtered)</th>
+                        <th className="py-2.5 px-2.5 min-w-[85px]">Type</th>
+                        <th className="py-2.5 px-2.5 min-w-[170px]">Assessment Title</th>
+                        <th className="py-2.5 px-2.5 min-w-[125px]">Exam Date</th>
+                        <th className="py-2.5 px-2.5 min-w-[105px]">Time</th>
+                        <th className="py-2.5 px-2.5 min-w-[85px]">Duration</th>
+                        <th className="py-2.5 px-2.5 min-w-[130px]">Venue</th>
+                        <th className="py-2.5 px-2.5 min-w-[130px]">Invigilator</th>
+                        <th className="py-2.5 px-2.5 w-16 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 bg-white dark:bg-slate-900">
@@ -2010,12 +2027,12 @@ export default function ExamsList({
                             }`}
                           >
                             {/* Row Number */}
-                            <td className="py-2 px-3 text-center font-bold text-slate-400">
+                            <td className="py-2 px-2.5 text-center font-bold text-slate-400">
                               {idx + 1}
                             </td>
 
                             {/* Class Dropdown */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <select
                                 value={row.className}
                                 onChange={(e) => handleBulkRowFieldChange(idx, "className", e.target.value)}
@@ -2028,7 +2045,7 @@ export default function ExamsList({
                             </td>
 
                             {/* Subject Dropdown (Filtered strictly by row.className) */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <select
                                 value={row.subject}
                                 onChange={(e) => handleBulkRowFieldChange(idx, "subject", e.target.value)}
@@ -2041,7 +2058,7 @@ export default function ExamsList({
                             </td>
 
                             {/* Assessment Type */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <select
                                 value={row.assessmentType}
                                 onChange={(e) => handleBulkRowFieldChange(idx, "assessmentType", e.target.value as AssessmentTypeEnum)}
@@ -2054,18 +2071,18 @@ export default function ExamsList({
                             </td>
 
                             {/* Title Input */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <input
                                 type="text"
                                 value={row.title}
                                 onChange={(e) => handleBulkRowFieldChange(idx, "title", e.target.value)}
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
                                 placeholder="Exam Title"
                               />
                             </td>
 
                             {/* Date Input */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <input
                                 type="date"
                                 value={row.examDate}
@@ -2074,21 +2091,45 @@ export default function ExamsList({
                               />
                             </td>
 
-                            {/* Duration Input */}
-                            <td className="py-2 px-3">
+                            {/* Time Input */}
+                            <td className="py-2 px-2.5">
                               <input
-                                type="number"
-                                min="15"
-                                max="360"
-                                step="5"
-                                value={row.duration}
-                                onChange={(e) => handleBulkRowFieldChange(idx, "duration", Number(e.target.value))}
-                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 text-center"
+                                type="time"
+                                value={row.startTime || "09:00"}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "startTime", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 font-medium"
+                              />
+                            </td>
+
+                            {/* Duration Input */}
+                            <td className="py-2 px-2.5">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="15"
+                                  max="360"
+                                  step="5"
+                                  value={row.duration}
+                                  onChange={(e) => handleBulkRowFieldChange(idx, "duration", Number(e.target.value))}
+                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 text-center font-medium"
+                                />
+                                <span className="text-[10px] text-slate-400">m</span>
+                              </div>
+                            </td>
+
+                            {/* Venue Input */}
+                            <td className="py-2 px-2.5">
+                              <input
+                                type="text"
+                                placeholder="e.g. Exam Hall A"
+                                value={row.venue}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "venue", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
                               />
                             </td>
 
                             {/* Invigilator Dropdown */}
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2.5">
                               <select
                                 value={row.invigilatorId}
                                 onChange={(e) => handleBulkRowFieldChange(idx, "invigilatorId", e.target.value)}
@@ -2102,7 +2143,7 @@ export default function ExamsList({
                             </td>
 
                             {/* Row Actions */}
-                            <td className="py-2 px-3 text-center">
+                            <td className="py-2 px-2.5 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
