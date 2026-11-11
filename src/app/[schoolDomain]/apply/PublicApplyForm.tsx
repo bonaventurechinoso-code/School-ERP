@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { AcademicTier } from "@prisma/client";
 import { GraduationCap, ArrowRight, Loader2, CheckCircle2, CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatTierLabel } from "@/lib/guestPortalUtils";
 import { NIGERIAN_UNIVERSITY_HIERARCHY, POLYTECHNIC_HIERARCHY, COLLEGE_HIERARCHY } from "@/lib/academicHierarchies";
 import { isClassInTier } from "@/lib/tier-config";
@@ -451,18 +450,15 @@ export default function PublicApplyForm({
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-4 px-3 sm:px-4 max-w-[480px] mx-auto w-full">
       <div className="bg-white text-slate-900 dark:bg-zinc-950 dark:text-slate-50 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 overflow-hidden animate-in fade-in zoom-in-95 duration-300 max-h-[92dvh] overflow-y-auto scrollbar-hide flex flex-col">
-        {/* Header Compact */}
-        <div className="p-4 text-center bg-slate-900 dark:bg-zinc-950 relative transition-colors duration-300">
-          <div className="absolute top-3 right-3">
-            <ThemeToggle />
+        {/* Header */}
+        <div className="pt-6 px-6 pb-2 text-center">
+          <div className="mx-auto w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 shadow-xs bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400">
+            <GraduationCap className="w-5 h-5" />
           </div>
-          <div className="mx-auto w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 shadow-xs bg-white/10 backdrop-blur-xs border border-white/20">
-            <GraduationCap className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-lg sm:text-[22px] font-bold text-white tracking-tight mb-1 break-words">
+          <h1 className="text-lg sm:text-[22px] font-bold text-slate-900 dark:text-white tracking-tight mb-1 break-words">
             Apply to {schoolName}
           </h1>
-          <p className="text-[13px] text-slate-400 dark:text-zinc-400 leading-tight mb-3">
+          <p className="text-[13px] text-slate-500 dark:text-zinc-400 leading-tight mb-1">
             Begin your journey with us by completing this quick inquiry form.
           </p>
         </div>

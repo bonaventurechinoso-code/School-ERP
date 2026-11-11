@@ -3,7 +3,6 @@
 import React, { useState, useTransition, use } from "react";
 import { GraduationCap, ArrowRight, Loader2, CheckCircle, ShieldCheck } from "lucide-react";
 import BackButton from "@/components/ui/BackButton";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function ApplyPage({
   params: paramsPromise,
@@ -125,31 +124,25 @@ export default function ApplyPage({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 p-4 sm:p-6 flex flex-col items-center justify-start">
       {/* TOP BAR WITH BACK BUTTON */}
-      <div className="w-full max-w-2xl flex items-center justify-between mb-3">
+      <div className="w-full max-w-2xl flex items-center mb-3">
         <BackButton />
-        <ThemeToggle />
       </div>
 
       <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-3xl shadow-xl border border-slate-100 dark:border-zinc-800 overflow-hidden">
-        {/* COMPACT TOP BANNER: reduced height (py-4 or h-24), no big pt-20/mt-20 */}
-        <div className="h-24 py-4 px-6 bg-slate-900 dark:bg-zinc-950 flex items-center justify-between border-b border-slate-800">
+        {/* CLEAN FORM HEADER */}
+        <div className="pt-8 px-6 sm:px-8 pb-3 border-b border-slate-100 dark:border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-xs bg-white/10 backdrop-blur-xs border border-white/20 shrink-0">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-xs bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
+              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 Admissions Application
               </h1>
-              <p className="text-slate-300 text-xs truncate max-w-xs sm:max-w-md">
+              <p className="text-slate-500 dark:text-zinc-400 text-xs truncate max-w-xs sm:max-w-md">
                 Complete inquiry for {schoolDomain}
               </p>
             </div>
-          </div>
-
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Secure Portal</span>
           </div>
         </div>
 
