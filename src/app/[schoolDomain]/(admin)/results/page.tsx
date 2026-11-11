@@ -212,3 +212,4 @@ export default async function ResultsPage({
     </div>
   );
 }
+
