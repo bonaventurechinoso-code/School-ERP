@@ -69,7 +69,7 @@ export const BONAVEE_CLASSES_MAP: Record<string, string[]> = {
   ],
 };
 
-// Authentic Nigerian Educational Subjects by Tier
+// Authentic Nigerian Educational Subjects by Class & Tier
 export const NURSERY_SUBJECTS: readonly string[] = [
   "Numeracy / Cognitive Development",
   "Literacy / Phonics",
@@ -80,8 +80,8 @@ export const NURSERY_SUBJECTS: readonly string[] = [
 ];
 
 export const PRIMARY_SUBJECTS: readonly string[] = [
-  "Mathematics",
   "English Studies",
+  "Mathematics",
   "Basic Science & Technology",
   "Social Studies",
   "Civic Education / National Values",
@@ -89,13 +89,31 @@ export const PRIMARY_SUBJECTS: readonly string[] = [
   "Home Economics",
   "Cultural & Creative Arts (CCA)",
   "Computer Studies / ICT",
+  "Physical & Health Education",
+  "Christian Religious Studies",
   "Nigerian History",
-  "Nigerian Language (Yoruba/Igbo/Hausa)",
 ];
 
-export const SECONDARY_SUBJECTS: readonly string[] = [
-  "General Mathematics",
+export const JSS_SUBJECTS: readonly string[] = [
   "English Language",
+  "Mathematics",
+  "Basic Science",
+  "Basic Technology",
+  "Social Studies",
+  "Civic Education",
+  "Agricultural Science",
+  "Business Studies",
+  "Computer Studies / ICT",
+  "Christian Religious Studies",
+  "Home Economics",
+  "Physical & Health Education",
+  "French Language",
+  "Cultural & Creative Arts (CCA)",
+];
+
+export const SSS_SUBJECTS: readonly string[] = [
+  "English Language",
+  "General Mathematics",
   "Civic Education",
   "Biology",
   "Chemistry",
@@ -109,7 +127,11 @@ export const SECONDARY_SUBJECTS: readonly string[] = [
   "Commerce",
   "Data Processing / Marketing",
   "Geography",
+  "Christian Religious Studies",
 ];
+
+// Preserved for backward-compatibility
+export const SECONDARY_SUBJECTS: readonly string[] = SSS_SUBJECTS;
 
 export const HIGHER_ED_COURSES: readonly string[] = [
   "GST 111 - Use of English",
@@ -121,6 +143,118 @@ export const HIGHER_ED_COURSES: readonly string[] = [
   "PHY 101 - General Physics",
   "COS 101 - Introduction to Computer Science",
 ];
+
+export function getEducationalStageForClass(
+  className: string,
+  tierCategory?: string
+): "NURSERY" | "PRIMARY" | "JSS" | "SSS" | "TERTIARY" {
+  const norm = (className || "").toUpperCase().trim();
+
+  // 1. Junior Secondary Check (JSS 1-3, JS 1-3, Junior, Basic 7-9, Grade 7-9)
+  if (
+    norm.includes("JSS") ||
+    norm.includes("J.S.S") ||
+    /\bJS\s*[1-3]\b/.test(norm) ||
+    norm.startsWith("JS") ||
+    norm.includes("JUNIOR") ||
+    norm.includes("BASIC 7") ||
+    norm.includes("BASIC 8") ||
+    norm.includes("BASIC 9") ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9")
+  ) {
+    return "JSS";
+  }
+
+  // 2. Senior Secondary Check (SSS 1-3, SS 1-3, Senior, Grade 10-12)
+  if (
+    norm.includes("SSS") ||
+    norm.includes("S.S.S") ||
+    /\bSS\s*[1-3]\b/.test(norm) ||
+    norm.startsWith("SS") ||
+    norm.includes("SENIOR") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12")
+  ) {
+    return "SSS";
+  }
+
+  // 3. Early Years / Nursery Check
+  if (
+    norm.includes("NURSERY") ||
+    norm.includes("CRECHE") ||
+    norm.includes("CRÈCHE") ||
+    norm.includes("KINDERGARTEN") ||
+    norm.includes("PRE-SCHOOL") ||
+    norm.includes("PRE SCHOOL") ||
+    norm.includes("PLAYGROUP") ||
+    norm.includes("RECEPTION") ||
+    norm.includes("KG")
+  ) {
+    return "NURSERY";
+  }
+
+  // 4. Primary Check
+  if (
+    norm.includes("PRIMARY") ||
+    norm.includes("BASIC") ||
+    norm.includes("ELEMENTARY") ||
+    norm.includes("GRADE") ||
+    /\bP[1-6]\b/.test(norm)
+  ) {
+    return "PRIMARY";
+  }
+
+  // 5. Higher Education / Tertiary
+  if (
+    norm.includes("LEVEL") ||
+    norm.includes("100L") ||
+    norm.includes("200L") ||
+    norm.includes("300L") ||
+    norm.includes("400L") ||
+    norm.includes("500L") ||
+    norm.includes("ND") ||
+    norm.includes("HND") ||
+    norm.includes("NCE")
+  ) {
+    return "TERTIARY";
+  }
+
+  // Fallback to tierCategory
+  const normTier = (tierCategory || "").toUpperCase();
+  if (normTier.includes("NURSERY") || normTier.includes("EARLY")) return "NURSERY";
+  if (normTier.includes("PRIMARY") || normTier.includes("BASIC")) return "PRIMARY";
+  if (normTier.includes("TERTIARY") || normTier.includes("UNIVERSITY") || normTier.includes("POLYTECHNIC") || normTier.includes("COLLEGE")) return "TERTIARY";
+  if (normTier.includes("SECONDARY")) {
+    if (norm.includes("SS")) return "SSS";
+    return "JSS";
+  }
+
+  return "PRIMARY";
+}
+
+export function getSubjectsForClassAndTier(
+  className: string,
+  tierCategory?: string
+): string[] {
+  const stage = getEducationalStageForClass(className, tierCategory);
+  switch (stage) {
+    case "NURSERY":
+      return [...NURSERY_SUBJECTS];
+    case "PRIMARY":
+      return [...PRIMARY_SUBJECTS];
+    case "JSS":
+      return [...JSS_SUBJECTS];
+    case "SSS":
+      return [...SSS_SUBJECTS];
+    case "TERTIARY":
+      return [...HIGHER_ED_COURSES];
+    default:
+      return [...PRIMARY_SUBJECTS];
+  }
+}
 
 export const ASSESSMENT_TYPES = [
   { value: "CA1", label: "CA1 (Continuous Assessment 1)", defaultMax: 20, locked: true },
@@ -204,22 +338,6 @@ export default function ExamsList({
   // 1. Dynamic 'bonavee_classes' array state
   const bonavee_classes = useMemo<string[]>(() => {
     return BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
-  }, [tierCategory]);
-
-  // 2. Dynamic 'bonavee_subjects' array state
-  const bonavee_subjects = useMemo<string[]>(() => {
-    switch (tierCategory) {
-      case "NURSERY":
-        return [...NURSERY_SUBJECTS];
-      case "PRIMARY":
-        return [...PRIMARY_SUBJECTS];
-      case "SECONDARY":
-        return [...SECONDARY_SUBJECTS];
-      case "TERTIARY":
-        return [...HIGHER_ED_COURSES];
-      default:
-        return [...PRIMARY_SUBJECTS];
-    }
   }, [tierCategory]);
 
   // Modal & Notification UI States
@@ -308,10 +426,13 @@ export default function ExamsList({
   }, [initialNormalizedList]);
 
   // Form input states
+  const initialClass = bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+  const initialSubjects = getSubjectsForClassAndTier(initialClass, tierCategory);
+
   const defaultFormData = {
     title: "",
-    className: bonavee_classes[0] || "Primary 1",
-    subject: bonavee_subjects[0] || "Mathematics",
+    className: initialClass,
+    subject: initialSubjects[0] || "Mathematics",
     assessmentType: "CA1" as AssessmentTypeEnum,
     examDate: new Date().toISOString().split("T")[0],
     startTime: "09:00",
@@ -323,16 +444,27 @@ export default function ExamsList({
 
   const [formData, setFormData] = useState(defaultFormData);
 
+  // 2. Dynamic 'bonavee_subjects' array state strictly filtered by selected class and tier
+  const bonavee_subjects = useMemo<string[]>(() => {
+    return getSubjectsForClassAndTier(formData.className, tierCategory);
+  }, [formData.className, tierCategory]);
+
   // Auto-align class and subject selections with active tier
   useEffect(() => {
     if (!bonavee_classes.includes(formData.className) && bonavee_classes.length > 0) {
-      setFormData((prev) => ({ ...prev, className: bonavee_classes[0] }));
+      const fallbackClass = bonavee_classes[0] || "Primary 1";
+      const fallbackSubjects = getSubjectsForClassAndTier(fallbackClass, tierCategory);
+      setFormData((prev) => ({
+        ...prev,
+        className: fallbackClass,
+        subject: fallbackSubjects[0] || "",
+      }));
     }
-  }, [bonavee_classes, formData.className]);
+  }, [bonavee_classes, formData.className, tierCategory]);
 
   useEffect(() => {
     if (!bonavee_subjects.includes(formData.subject) && bonavee_subjects.length > 0) {
-      setFormData((prev) => ({ ...prev, subject: bonavee_subjects[0] }));
+      setFormData((prev) => ({ ...prev, subject: bonavee_subjects[0] || "" }));
     }
   }, [bonavee_subjects, formData.subject]);
 
@@ -357,11 +489,13 @@ export default function ExamsList({
 
   // Open modal in create mode
   const handleOpenCreateModal = () => {
+    const targetClass = bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+    const targetSubjects = getSubjectsForClassAndTier(targetClass, tierCategory);
     setEditingExamId(null);
     setFormData({
       title: "",
-      className: bonavee_classes[0] || "Primary 1",
-      subject: bonavee_subjects[0] || "Mathematics",
+      className: targetClass,
+      subject: targetSubjects[0] || "Mathematics",
       assessmentType: "CA1",
       examDate: new Date().toISOString().split("T")[0],
       startTime: "09:00",
@@ -1005,7 +1139,15 @@ export default function ExamsList({
                   <select
                     required
                     value={formData.className}
-                    onChange={(e) => setFormData({ ...formData, className: e.target.value })}
+                    onChange={(e) => {
+                      const newClass = e.target.value;
+                      const subjectsForClass = getSubjectsForClassAndTier(newClass, tierCategory);
+                      setFormData((prev) => ({
+                        ...prev,
+                        className: newClass,
+                        subject: subjectsForClass.includes(prev.subject) ? prev.subject : (subjectsForClass[0] || ""),
+                      }));
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
                   >
                     {bonavee_classes.map((cls) => (

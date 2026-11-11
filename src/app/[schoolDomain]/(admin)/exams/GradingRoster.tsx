@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { saveBroadsheetScore } from "./actions";
+import { getSubjectsForClassAndTier } from "./ExamsList";
 import { useTenant } from "@/lib/tenant-context";
 import { formatTierBadgeCode, resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 import { normalizeTierLevel } from "@/lib/assessmentEngine";
@@ -412,19 +413,13 @@ export default function GradingRoster({
     }
   }, [activeTierCode]);
 
-  // 4. Resolve ALL Subjects for the Class and Tier (Prioritizing DB records, avoiding hardcoding)
+  // 4. Resolve ALL Subjects for the Class and Tier (Assigned curriculum subjects for Class + Tier)
   const classSubjects = useMemo(() => {
-    const subjectsSet = new Set<string>();
+    // A. Start with all assigned curriculum subjects for the selected class & tier (guarantees all subjects display even with no scores)
+    const standardSubjects = getSubjectsForClassAndTier(selectedClass, tierCategory);
+    const subjectsSet = new Set<string>(standardSubjects);
 
-    // A. Extract from DB Courses for this tier
-    courses.forEach((c) => {
-      const cTier = c.tier?.name;
-      if (!cTier || formatTierBadgeCode(cTier) === activeTierCode) {
-        if (c.name && c.name.trim()) subjectsSet.add(c.name.trim());
-      }
-    });
-
-    // B. Extract from DB GradeRecords for this class & term
+    // B. Include any recorded subjects specifically for this class & term in GradeRecord
     const termVars = getTermVariants(selectedTerm);
     gradeRecords.forEach((gr) => {
       if (matchesClass(gr.className, selectedClass) && termVars.includes(gr.term)) {
@@ -432,37 +427,15 @@ export default function GradingRoster({
       }
     });
 
-    // C. Extract from DB AcademicRecords for this class & term
+    // C. Include any recorded subjects specifically for this class & term in AcademicRecord
     academicRecords.forEach((ar) => {
       if (matchesClass(ar.className, selectedClass) && termVars.includes(ar.term)) {
         if (ar.subject && ar.subject.trim()) subjectsSet.add(ar.subject.trim());
       }
     });
 
-    // D. Extract from DB Exams for this tier
-    exams.forEach((e) => {
-      if (e.course?.name && (!e.course.tier?.name || formatTierBadgeCode(e.course.tier.name) === activeTierCode)) {
-        subjectsSet.add(e.course.name.trim());
-      }
-    });
-
-    // If database subjects were found, return sorted unique subjects
-    if (subjectsSet.size > 0) {
-      return Array.from(subjectsSet).sort();
-    }
-
-    // Fallback: Standard Nigerian Tier Curriculum if DB is empty
-    const isJss = (selectedClass || "").toUpperCase().includes("JSS") || (selectedClass || "").toUpperCase().includes("JS");
-    const isSss = (selectedClass || "").toUpperCase().includes("SSS") || (selectedClass || "").toUpperCase().includes("SS ");
-
-    if (tierCategory === "NURSERY") return STANDARD_TIER_SUBJECTS.NURSERY;
-    if (tierCategory === "PRIMARY") return STANDARD_TIER_SUBJECTS.PRIMARY;
-    if (tierCategory === "TERTIARY") return STANDARD_TIER_SUBJECTS.TERTIARY;
-    if (isSss) return STANDARD_TIER_SUBJECTS.SSS;
-    if (isJss) return STANDARD_TIER_SUBJECTS.JSS;
-
-    return STANDARD_TIER_SUBJECTS.JSS;
-  }, [courses, activeTierCode, selectedClass, selectedTerm, gradeRecords, academicRecords, exams, tierCategory]);
+    return Array.from(subjectsSet);
+  }, [selectedClass, tierCategory, selectedTerm, gradeRecords, academicRecords]);
 
   // 5. Filter Students in this Class
   const rawFilteredStudents = useMemo(() => {
