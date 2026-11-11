@@ -195,6 +195,7 @@ export default async function ExamsPage({
             scheduledExams={scheduledExamsRaw}
             courses={courses} 
             staff={staff}
+            classrooms={classrooms}
             tierName={activeTierName}
           />
         ) : activeTab === "config" ? (

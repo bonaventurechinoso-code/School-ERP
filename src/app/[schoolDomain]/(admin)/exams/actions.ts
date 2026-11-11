@@ -234,6 +234,165 @@ export async function createScheduledExam(
 }
 
 /**
+ * BULK MULTI-TENANT MUTATION ROUTER:
+ * Creates multiple assessment entries in bonavee_scheduled_exams with strict tenant isolation
+ * and mirrors them to Prisma's Exam model in batch. Works globally for all schools.
+ */
+export async function createBulkScheduledExams(
+  schoolId: string,
+  tenantDomain: string,
+  examsData: ScheduledExamPayload[]
+) {
+  const auth = await verifyTenantSession(schoolId);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
+  if (!examsData || examsData.length === 0) {
+    return { success: false, error: "No exam records provided for bulk scheduling." };
+  }
+
+  await ensureScheduledExamsTableExists();
+
+  const tenantDb = getTenantClient(schoolId);
+  const effectiveTenantId = schoolId || tenantDomain;
+  const createdBy = auth.userId || "system-admin";
+
+  try {
+    // Pre-cache courses and staff for rapid processing
+    const [existingCourses, staffList] = await Promise.all([
+      tenantDb.course.findMany({ where: { schoolId }, select: { id: true, name: true } }).catch(() => []),
+      tenantDb.staff.findMany({ where: { schoolId }, select: { id: true, firstName: true, lastName: true } }).catch(() => []),
+    ]);
+
+    const courseMap = new Map<string, string>();
+    existingCourses.forEach((c) => {
+      courseMap.set(c.name.toLowerCase().trim(), c.id);
+      courseMap.set(c.id, c.id);
+    });
+
+    const staffMap = new Map<string, string>();
+    staffList.forEach((s) => {
+      staffMap.set(s.id, `${s.firstName} ${s.lastName}`.trim());
+    });
+
+    const createdExams: any[] = [];
+    const nowTime = Date.now();
+
+    for (let i = 0; i < examsData.length; i++) {
+      const item = examsData[i];
+      const trimmedTitle = (item.title || "").trim();
+      const trimmedSubject = (item.subject || "").trim();
+      const trimmedClass = (item.className || "General Class").trim();
+      const examDateObj = new Date(item.examDate || new Date().toISOString().split("T")[0]);
+
+      if (!trimmedTitle || !trimmedSubject) continue;
+
+      // 1. Resolve or create course in tenantDb
+      let courseId = courseMap.get(trimmedSubject.toLowerCase());
+      if (!courseId) {
+        const cleanCode = trimmedSubject.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + Math.floor(100 + Math.random() * 900);
+        try {
+          const newCourse = await tenantDb.course.create({
+            data: {
+              schoolId,
+              name: trimmedSubject,
+              code: cleanCode,
+            },
+          });
+          courseId = newCourse.id;
+          courseMap.set(trimmedSubject.toLowerCase(), newCourse.id);
+        } catch {
+          const found = await tenantDb.course.findFirst({ where: { schoolId, name: trimmedSubject } });
+          courseId = found?.id;
+        }
+      }
+
+      // 2. Resolve invigilator name
+      let invigilatorName = item.invigilatorName || "";
+      if (item.invigilatorId) {
+        invigilatorName = staffMap.get(item.invigilatorId) || invigilatorName;
+      }
+
+      const scheduledId = `exam-${nowTime}-${i}-${Math.random().toString(36).substring(2, 6)}`;
+      const maxScoreVal = Number(item.maxScore) || (item.assessmentType === "EXAM" ? 60 : 20);
+
+      // 3. Database Insertion Transaction into 'bonavee_scheduled_exams'
+      await basePrisma.$executeRawUnsafe(
+        `INSERT INTO bonavee_scheduled_exams (
+          id, tenant_id, title, class_name, subject, assessment_type,
+          exam_date, start_time, duration, venue, invigilator_id, invigilator_name,
+          max_score, status, created_by, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())`,
+        scheduledId,
+        effectiveTenantId,
+        trimmedTitle,
+        trimmedClass,
+        trimmedSubject,
+        item.assessmentType,
+        examDateObj,
+        item.startTime || "09:00",
+        Number(item.duration) || 60,
+        item.venue?.trim() || "Main Examination Hall",
+        item.invigilatorId || null,
+        invigilatorName || null,
+        maxScoreVal,
+        "published",
+        createdBy
+      );
+
+      // 4. Mirroring to Prisma exam table
+      if (courseId) {
+        await tenantDb.exam.create({
+          data: {
+            id: scheduledId,
+            schoolId,
+            courseId,
+            name: trimmedTitle,
+            semester: `${trimmedClass} - ${item.assessmentType}`,
+            date: examDateObj,
+            maxScore: maxScoreVal,
+          },
+        }).catch((err) => {
+          console.warn("[Prisma Sync Bulk] Exam mirror note:", err?.message);
+        });
+      }
+
+      createdExams.push({
+        id: scheduledId,
+        tenant_id: effectiveTenantId,
+        title: trimmedTitle,
+        class_name: trimmedClass,
+        subject: trimmedSubject,
+        assessment_type: item.assessmentType,
+        exam_date: examDateObj.toISOString(),
+        start_time: item.startTime || "09:00",
+        duration: Number(item.duration) || 60,
+        venue: item.venue?.trim() || "Main Examination Hall",
+        invigilator_id: item.invigilatorId || null,
+        invigilator_name: invigilatorName || null,
+        max_score: maxScoreVal,
+        status: "published",
+        created_by: createdBy,
+      });
+    }
+
+    await invalidateGradingNamespace(schoolId);
+    safeRevalidatePath(`/[schoolDomain]/exams`, "page");
+    safeRevalidatePath(`/[schoolDomain]/assessments`, "page");
+
+    return {
+      success: true,
+      count: createdExams.length,
+      exams: createdExams,
+    };
+  } catch (error: any) {
+    console.error("[Server Action] Bulk scheduling failed:", error);
+    return { success: false, error: error.message || "Bulk exam scheduling failed." };
+  }
+}
+
+/**
  * Update an existing scheduled assessment in bonavee_scheduled_exams
  */
 export async function updateScheduledExam(

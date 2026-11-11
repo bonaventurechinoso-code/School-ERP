@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useMemo, useEffect } from "react";
+import React, { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTenant } from "@/lib/tenant-context";
@@ -25,9 +25,19 @@ import {
   BookOpen,
   Eye,
   EyeOff,
+  Copy,
+  ListPlus,
+  Check,
+  Grid,
+  FileSpreadsheet,
+  Filter,
+  CheckSquare,
+  Square,
+  RefreshCw,
 } from "lucide-react";
 import {
   createScheduledExam,
+  createBulkScheduledExams,
   updateScheduledExam,
   toggleExamPublishStatus,
   deleteScheduledExam,
@@ -265,6 +275,34 @@ export const ASSESSMENT_TYPES = [
 
 type AssessmentTypeEnum = "CA1" | "CA2" | "CA3" | "EXAM";
 
+export type BulkExamRow = {
+  id: string;
+  className: string;
+  subject: string;
+  assessmentType: AssessmentTypeEnum;
+  title: string;
+  examDate: string;
+  startTime: string;
+  duration: number;
+  venue: string;
+  invigilatorId: string;
+  maxScore: number;
+};
+
+export function generateExamTitle(
+  subject: string,
+  className: string,
+  assessmentType: string,
+  term = "1st Term"
+): string {
+  const cleanSub = (subject || "").trim();
+  const cleanClass = (className || "").trim();
+  if (assessmentType === "EXAM") {
+    return `${term} ${cleanSub} Examination`;
+  }
+  return `${term} ${cleanSub} (${cleanClass} - ${assessmentType})`;
+}
+
 type StaffOption = {
   id: string;
   firstName: string;
@@ -303,6 +341,7 @@ type ExamsListProps = {
   scheduledExams?: any[];
   courses?: any[];
   staff?: StaffOption[];
+  classrooms?: any[];
   tierName?: string;
 };
 
@@ -313,6 +352,7 @@ export default function ExamsList({
   scheduledExams = [],
   courses = [],
   staff = [],
+  classrooms = [],
   tierName,
 }: ExamsListProps) {
   const router = useRouter();
@@ -335,10 +375,20 @@ export default function ExamsList({
     );
   }, [tierName, paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
-  // 1. Dynamic 'bonavee_classes' array state
+  // 1. Dynamic 'bonavee_classes' array state combining standard classes & school classrooms
   const bonavee_classes = useMemo<string[]>(() => {
-    return BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
-  }, [tierCategory]);
+    const standard = BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
+    const classSet = new Set<string>(standard);
+    if (Array.isArray(classrooms) && classrooms.length > 0) {
+      classrooms.forEach((c) => {
+        const cName = typeof c === "string" ? c : c?.name;
+        if (cName && typeof cName === "string" && cName.trim()) {
+          classSet.add(cName.trim());
+        }
+      });
+    }
+    return Array.from(classSet);
+  }, [tierCategory, classrooms]);
 
   // Modal & Notification UI States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -487,6 +537,283 @@ export default function ExamsList({
     formData.assessmentType === "CA2" ||
     formData.assessmentType === "EXAM";
 
+  // --- BULK EXAM SCHEDULING SYSTEM (Global for all schools) ---
+  const [modalMode, setModalMode] = useState<"single" | "bulk">("single");
+  const [bulkRows, setBulkRows] = useState<BulkExamRow[]>([]);
+  const [bulkTargetClass, setBulkTargetClass] = useState<string>(bonavee_classes[0] || "JSS 1");
+  const [bulkApplyValues, setBulkApplyValues] = useState<{
+    examDate: string;
+    startTime: string;
+    duration: number;
+    assessmentType: AssessmentTypeEnum;
+    venue: string;
+    invigilatorId: string;
+    termPrefix: string;
+  }>({
+    examDate: new Date().toISOString().split("T")[0],
+    startTime: "09:00",
+    duration: 60,
+    assessmentType: "CA1",
+    venue: "Main Examination Hall",
+    invigilatorId: staff[0]?.id || "",
+    termPrefix: "1st Term",
+  });
+
+  // Multi-Class Matrix Generator State
+  const [showMatrixGenerator, setShowMatrixGenerator] = useState(false);
+  const [matrixSelectedClasses, setMatrixSelectedClasses] = useState<string[]>([]);
+  const [matrixSelectedSubjects, setMatrixSelectedSubjects] = useState<string[]>([]);
+
+  // Create single empty bulk row
+  const createEmptyBulkRow = useCallback((defaultClass?: string): BulkExamRow => {
+    const targetClass = defaultClass || bulkTargetClass || bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+    const validSubs = getSubjectsForClassAndTier(targetClass, tierCategory);
+    const sub = validSubs[0] || "Mathematics";
+    return {
+      id: `row-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      className: targetClass,
+      subject: sub,
+      assessmentType: bulkApplyValues.assessmentType || "CA1",
+      title: generateExamTitle(sub, targetClass, bulkApplyValues.assessmentType || "CA1", bulkApplyValues.termPrefix),
+      examDate: bulkApplyValues.examDate || new Date().toISOString().split("T")[0],
+      startTime: bulkApplyValues.startTime || "09:00",
+      duration: bulkApplyValues.duration || 60,
+      venue: bulkApplyValues.venue || "Main Examination Hall",
+      invigilatorId: bulkApplyValues.invigilatorId || (staff[0]?.id || ""),
+      maxScore: bulkApplyValues.assessmentType === "EXAM" ? 60 : 20,
+    };
+  }, [bulkTargetClass, bonavee_classes, tierCategory, bulkApplyValues, staff]);
+
+  // Bulk duplicate detector
+  const bulkDuplicates = useMemo(() => {
+    const seen = new Map<string, number>();
+    bulkRows.forEach((r) => {
+      const key = `${r.className.toLowerCase().trim()}__${r.subject.toLowerCase().trim()}__${r.assessmentType}__${r.examDate}`;
+      seen.set(key, (seen.get(key) || 0) + 1);
+    });
+    const dupKeys = new Set<string>();
+    seen.forEach((count, key) => {
+      if (count > 1) dupKeys.add(key);
+    });
+    return dupKeys;
+  }, [bulkRows]);
+
+  // Available subjects for matrix generator based on selected classes
+  const matrixAvailableSubjects = useMemo(() => {
+    if (matrixSelectedClasses.length === 0) return [];
+    const set = new Set<string>();
+    matrixSelectedClasses.forEach((cls) => {
+      const subs = getSubjectsForClassAndTier(cls, tierCategory);
+      subs.forEach((s) => set.add(s));
+    });
+    return Array.from(set);
+  }, [matrixSelectedClasses, tierCategory]);
+
+  // Bulk Row Actions
+  const handleAddBulkRow = () => {
+    setBulkRows((prev) => [...prev, createEmptyBulkRow()]);
+  };
+
+  const handleDuplicateBulkRow = (index: number) => {
+    setBulkRows((prev) => {
+      const target = prev[index];
+      if (!target) return prev;
+      const copy: BulkExamRow = {
+        ...target,
+        id: `row-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  };
+
+  const handleDeleteBulkRow = (index: number) => {
+    setBulkRows((prev) => {
+      if (prev.length <= 1) {
+        return [createEmptyBulkRow()];
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleBulkRowFieldChange = <K extends keyof BulkExamRow>(
+    index: number,
+    field: K,
+    value: BulkExamRow[K]
+  ) => {
+    setBulkRows((prev) => {
+      const next = [...prev];
+      const row = { ...next[index] };
+      (row as any)[field] = value;
+
+      // If class changes, ensure subject is valid for the new class
+      if (field === "className") {
+        const validSubs = getSubjectsForClassAndTier(value as string, tierCategory);
+        if (!validSubs.includes(row.subject)) {
+          row.subject = validSubs[0] || "Mathematics";
+        }
+        row.title = generateExamTitle(row.subject, row.className, row.assessmentType, bulkApplyValues.termPrefix);
+      }
+
+      // If subject changes, update title
+      if (field === "subject") {
+        row.title = generateExamTitle(value as string, row.className, row.assessmentType, bulkApplyValues.termPrefix);
+      }
+
+      // If assessment type changes, update title & maxScore
+      if (field === "assessmentType") {
+        const newType = value as AssessmentTypeEnum;
+        row.maxScore = newType === "EXAM" ? 60 : 20;
+        row.title = generateExamTitle(row.subject, row.className, newType, bulkApplyValues.termPrefix);
+      }
+
+      next[index] = row;
+      return next;
+    });
+  };
+
+  // Shortcut 1: Add all subjects for class
+  const handleAddAllSubjectsForClass = (targetClassOverride?: string) => {
+    const targetClass = targetClassOverride || bulkTargetClass || bonavee_classes[0] || "JSS 1";
+    const subjects = getSubjectsForClassAndTier(targetClass, tierCategory);
+    const newRows: BulkExamRow[] = subjects.map((sub, idx) => ({
+      id: `bulk-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      className: targetClass,
+      subject: sub,
+      assessmentType: bulkApplyValues.assessmentType || "CA1",
+      title: generateExamTitle(sub, targetClass, bulkApplyValues.assessmentType || "CA1", bulkApplyValues.termPrefix),
+      examDate: bulkApplyValues.examDate || new Date().toISOString().split("T")[0],
+      startTime: bulkApplyValues.startTime || "09:00",
+      duration: bulkApplyValues.duration || 60,
+      venue: bulkApplyValues.venue || "Main Examination Hall",
+      invigilatorId: bulkApplyValues.invigilatorId || (staff[0]?.id || ""),
+      maxScore: bulkApplyValues.assessmentType === "EXAM" ? 60 : 20,
+    }));
+
+    setBulkRows((prev) => {
+      if (prev.length <= 1 && prev[0]?.subject === "Mathematics" && prev[0]?.title.includes("Mathematics")) {
+        return newRows;
+      }
+      return [...prev, ...newRows];
+    });
+  };
+
+  // Shortcut 2: Apply defaults to all rows
+  const handleApplyToAllRows = () => {
+    setBulkRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        examDate: bulkApplyValues.examDate,
+        startTime: bulkApplyValues.startTime,
+        duration: bulkApplyValues.duration,
+        assessmentType: bulkApplyValues.assessmentType,
+        maxScore: bulkApplyValues.assessmentType === "EXAM" ? 60 : 20,
+        venue: bulkApplyValues.venue,
+        invigilatorId: bulkApplyValues.invigilatorId,
+        title: generateExamTitle(r.subject, r.className, bulkApplyValues.assessmentType, bulkApplyValues.termPrefix),
+      }))
+    );
+  };
+
+  // Shortcut 3: Generate Multi-Class Matrix
+  const handleGenerateMatrixExams = () => {
+    if (matrixSelectedClasses.length === 0 || matrixSelectedSubjects.length === 0) return;
+    const generated: BulkExamRow[] = [];
+    matrixSelectedClasses.forEach((cls) => {
+      const validSubsForClass = getSubjectsForClassAndTier(cls, tierCategory);
+      matrixSelectedSubjects.forEach((sub) => {
+        if (validSubsForClass.includes(sub)) {
+          generated.push({
+            id: `matrix-${Date.now()}-${cls}-${sub}-${Math.random().toString(36).substring(2, 6)}`,
+            className: cls,
+            subject: sub,
+            assessmentType: bulkApplyValues.assessmentType,
+            title: generateExamTitle(sub, cls, bulkApplyValues.assessmentType, bulkApplyValues.termPrefix),
+            examDate: bulkApplyValues.examDate,
+            startTime: bulkApplyValues.startTime,
+            duration: bulkApplyValues.duration,
+            venue: bulkApplyValues.venue,
+            invigilatorId: bulkApplyValues.invigilatorId,
+            maxScore: bulkApplyValues.assessmentType === "EXAM" ? 60 : 20,
+          });
+        }
+      });
+    });
+
+    if (generated.length > 0) {
+      setBulkRows((prev) => {
+        if (prev.length <= 1 && prev[0]?.subject === "Mathematics" && prev[0]?.title.includes("Mathematics")) {
+          return generated;
+        }
+        return [...prev, ...generated];
+      });
+    }
+    setShowMatrixGenerator(false);
+  };
+
+  // Bulk Submit Handler
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError(null);
+    setSuccessMessage(null);
+
+    if (bulkRows.length === 0) {
+      setValidationError("Please add at least one exam row to schedule.");
+      return;
+    }
+
+    for (let i = 0; i < bulkRows.length; i++) {
+      const r = bulkRows[i];
+      if (!r.title.trim()) {
+        setValidationError(`Row #${i + 1} (${r.className} - ${r.subject}) has an empty title.`);
+        return;
+      }
+      if (!r.className) {
+        setValidationError(`Row #${i + 1} has no class selected.`);
+        return;
+      }
+      if (!r.subject) {
+        setValidationError(`Row #${i + 1} has no subject selected.`);
+        return;
+      }
+      if (!r.examDate) {
+        setValidationError(`Row #${i + 1} (${r.title}) has no exam date.`);
+        return;
+      }
+    }
+
+    if (bulkDuplicates.size > 0) {
+      setValidationError("Duplicate assessments detected. Same Class + Subject + Type + Date cannot be scheduled multiple times.");
+      return;
+    }
+
+    const payload: ScheduledExamPayload[] = bulkRows.map((r) => ({
+      title: r.title.trim(),
+      className: r.className,
+      subject: r.subject,
+      assessmentType: r.assessmentType,
+      examDate: r.examDate,
+      startTime: r.startTime || "09:00",
+      duration: Number(r.duration) || 60,
+      venue: r.venue?.trim() || "Main Examination Hall",
+      invigilatorId: r.invigilatorId || undefined,
+      maxScore: Number(r.maxScore) || (r.assessmentType === "EXAM" ? 60 : 20),
+    }));
+
+    startTransition(async () => {
+      const res = await createBulkScheduledExams(schoolId, schoolDomain, payload);
+      if (res.success && res.exams) {
+        setExamList((prev) => [...res.exams, ...prev]);
+        setSuccessMessage(`Successfully scheduled ${res.count} exams!`);
+        setIsModalOpen(false);
+        router.refresh();
+      } else {
+        setValidationError(res.error || "Failed to schedule bulk exams.");
+      }
+    });
+  };
+
   // Open modal in create mode
   const handleOpenCreateModal = () => {
     const targetClass = bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
@@ -504,12 +831,31 @@ export default function ExamsList({
       invigilatorId: staff[0]?.id || "",
       maxScore: 20,
     });
+    setBulkTargetClass(targetClass);
+    if (bulkRows.length === 0) {
+      setBulkRows([
+        {
+          id: `row-${Date.now()}-1`,
+          className: targetClass,
+          subject: targetSubjects[0] || "Mathematics",
+          assessmentType: "CA1",
+          title: generateExamTitle(targetSubjects[0] || "Mathematics", targetClass, "CA1"),
+          examDate: new Date().toISOString().split("T")[0],
+          startTime: "09:00",
+          duration: 60,
+          venue: "Main Examination Hall",
+          invigilatorId: staff[0]?.id || "",
+          maxScore: 20,
+        },
+      ]);
+    }
     setValidationError(null);
     setIsModalOpen(true);
   };
 
   // Open modal in edit mode
   const handleOpenEditModal = (exam: ScheduledExamRecord) => {
+    setModalMode("single");
     setEditingExamId(exam.id);
     const dateFormatted = new Date(exam.exam_date).toISOString().split("T")[0];
     const examType = (
@@ -1085,22 +1431,34 @@ export default function ExamsList({
         </>
       )}
 
-      {/* 1. MODAL COMPONENT ENTRY FORM GATEWAY (Clean Dialog/Modal Wrapper) */}
+      {/* 1. MODAL COMPONENT ENTRY FORM GATEWAY (Clean Dialog/Modal Wrapper with Single & Bulk Modes) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            className={`bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full ${
+              modalMode === "bulk" && !editingExamId
+                ? "max-w-6xl max-h-[94vh]"
+                : "max-w-2xl max-h-[90vh]"
+            } overflow-hidden flex flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <span>{editingExamId ? "Edit Scheduled Assessment" : "Schedule New Assessment"}</span>
+                  <span>
+                    {editingExamId
+                      ? "Edit Scheduled Assessment"
+                      : modalMode === "bulk"
+                      ? "Bulk / Multiple Exam Scheduling"
+                      : "Schedule New Assessment"}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Configure dynamic curriculum parameters, exam seating, and continuous assessment weights.
+                  {modalMode === "bulk" && !editingExamId
+                    ? "Schedule exams across all subjects and classes at once with automatic curriculum filtering."
+                    : "Configure dynamic curriculum parameters, exam seating, and continuous assessment weights."}
                 </p>
               </div>
               <button
@@ -1112,242 +1470,701 @@ export default function ExamsList({
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              {/* Title Field */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Assessment Title <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. First Term Mathematics Examination or CA1 Test"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                />
+            {/* Validation Error Banner */}
+            {validationError && (
+              <div className="mx-6 mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300 shrink-0">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{validationError}</span>
               </div>
+            )}
 
-              {/* Class & Subject Dropdowns */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Class Selection Dropdown ('bonavee_classes' array state) */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Class Selection <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.className}
-                    onChange={(e) => {
-                      const newClass = e.target.value;
-                      const subjectsForClass = getSubjectsForClassAndTier(newClass, tierCategory);
-                      setFormData((prev) => ({
-                        ...prev,
-                        className: newClass,
-                        subject: subjectsForClass.includes(prev.subject) ? prev.subject : (subjectsForClass[0] || ""),
-                      }));
+            {/* Mode Switcher Toggle (Visible when scheduling new exams) */}
+            {!editingExamId && (
+              <div className="px-5 sm:px-6 pt-4 shrink-0">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl max-w-sm">
+                  <button
+                    type="button"
+                    onClick={() => setModalMode("single")}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      modalMode === "single"
+                        ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    Single Exam Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalMode("bulk");
+                      if (bulkRows.length === 0) {
+                        handleAddAllSubjectsForClass();
+                      }
                     }}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      modalMode === "bulk"
+                        ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
                   >
-                    {bonavee_classes.map((cls) => (
-                      <option key={cls} value={cls}>
-                        {cls}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Subject Selection Dropdown ('bonavee_subjects' array state) */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Subject Selection <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.subject}
-                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                  >
-                    {bonavee_subjects.map((sub) => (
-                      <option key={sub} value={sub}>
-                        {sub}
-                      </option>
-                    ))}
-                  </select>
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Bulk / Multiple Exams</span>
+                  </button>
                 </div>
               </div>
+            )}
 
-              {/* Assessment Type & Max Score with Smart Dynamic Hook */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Assessment Type ENUM Mappings */}
+            {/* Body */}
+            {modalMode === "single" || editingExamId ? (
+              /* SINGLE EXAM FORM */
+              <form onSubmit={handleFormSubmit} className="p-6 space-y-4 overflow-y-auto">
+                {/* Title Field */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Assessment Type <span className="text-rose-500">*</span>
+                    Assessment Title <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. First Term Mathematics Examination or CA1 Test"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Class & Subject Dropdowns */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Class Selection Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Class Selection <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.className}
+                      onChange={(e) => {
+                        const newClass = e.target.value;
+                        const subjectsForClass = getSubjectsForClassAndTier(newClass, tierCategory);
+                        setFormData((prev) => ({
+                          ...prev,
+                          className: newClass,
+                          subject: subjectsForClass.includes(prev.subject) ? prev.subject : (subjectsForClass[0] || ""),
+                        }));
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    >
+                      {bonavee_classes.map((cls) => (
+                        <option key={cls} value={cls}>
+                          {cls}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Subject Selection Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Subject Selection <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.subject}
+                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    >
+                      {bonavee_subjects.map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Assessment Type & Max Score */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Assessment Type <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.assessmentType}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          assessmentType: e.target.value as AssessmentTypeEnum,
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    >
+                      {ASSESSMENT_TYPES.map((typeOption) => (
+                        <option key={typeOption.value} value={typeOption.value}>
+                          {typeOption.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Max Score
+                      </label>
+                      {isMaxScoreLocked && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
+                          <Lock className="w-3 h-3" />
+                          <span>Locked for {formData.assessmentType}</span>
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      max="1000"
+                      readOnly={isMaxScoreLocked}
+                      value={formData.maxScore}
+                      onChange={(e) =>
+                        !isMaxScoreLocked &&
+                        setFormData({ ...formData, maxScore: Number(e.target.value) })
+                      }
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none transition-colors ${
+                        isMaxScoreLocked
+                          ? "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                          : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                      }`}
+                    />
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      {formData.assessmentType === "CA1" || formData.assessmentType === "CA2"
+                        ? "Standardized Nigerian CA component capped at 20 marks."
+                        : formData.assessmentType === "EXAM"
+                        ? "Standardized Nigerian terminal examination capped at 60 marks."
+                        : "Custom assessment score allocation."}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Exam Date & Start Time */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Exam Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      required
+                      type="date"
+                      value={formData.examDate}
+                      onChange={(e) => setFormData({ ...formData, examDate: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Start Time
+                    </label>
+                    <input
+                      required
+                      type="time"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Duration & Venue */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Duration (Minutes)
+                    </label>
+                    <input
+                      required
+                      type="number"
+                      min="15"
+                      max="360"
+                      step="5"
+                      value={formData.duration}
+                      onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Venue
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Examination Hall A, Science Lab"
+                      value={formData.venue}
+                      onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Invigilator ID Selection */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                    Invigilator Assignment
                   </label>
                   <select
-                    required
-                    value={formData.assessmentType}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        assessmentType: e.target.value as AssessmentTypeEnum,
-                      })
-                    }
+                    value={formData.invigilatorId}
+                    onChange={(e) => setFormData({ ...formData, invigilatorId: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
                   >
-                    {ASSESSMENT_TYPES.map((typeOption) => (
-                      <option key={typeOption.value} value={typeOption.value}>
-                        {typeOption.label}
+                    <option value="">-- Assign Invigilator (Optional) --</option>
+                    {staff.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.firstName} {st.lastName} ({st.role})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Max Score with Smart Locking Hook */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Max Score
-                    </label>
-                    {isMaxScoreLocked && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
-                        <Lock className="w-3 h-3" />
-                        <span>Locked for {formData.assessmentType}</span>
+                {/* Modal Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={isPending}
+                    type="submit"
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    {isPending
+                      ? editingExamId
+                        ? "Saving Changes..."
+                        : "Scheduling..."
+                      : editingExamId
+                      ? "Update Assessment"
+                      : "Confirm & Schedule"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* BULK / MULTIPLE EXAMS FORM */
+              <form onSubmit={handleBulkSubmit} className="p-5 sm:p-6 flex-1 flex flex-col overflow-hidden space-y-4">
+                {/* Top Shortcuts Bar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                  {/* Left: Quick Class Load */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Quick Populate:</span>
+                    <select
+                      value={bulkTargetClass}
+                      onChange={(e) => setBulkTargetClass(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    >
+                      {bonavee_classes.map((cls) => (
+                        <option key={cls} value={cls}>
+                          {cls}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleAddAllSubjectsForClass()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                      title={`Add all subjects for ${bulkTargetClass}`}
+                    >
+                      <ListPlus className="w-3.5 h-3.5" />
+                      <span>+ Add All Subjects for {bulkTargetClass}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMatrixGenerator(!showMatrixGenerator)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      <Grid className="w-3.5 h-3.5" />
+                      <span>Multi-Class Matrix...</span>
+                    </button>
+                  </div>
+
+                  {/* Right: Row Operations */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddBulkRow}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Row</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkRows([createEmptyBulkRow()])}
+                      className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 font-semibold transition cursor-pointer"
+                      title="Reset table"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Multi-Class Matrix Helper (Collapsible) */}
+                {showMatrixGenerator && (
+                  <div className="p-4 bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900 rounded-xl space-y-3 animate-in fade-in duration-150 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                        <Grid className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <span>Multi-Class × Subjects Matrix Generator</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setShowMatrixGenerator(false)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-purple-800 dark:text-purple-300">
+                      Select target classes and shared subjects to schedule at once (e.g. 3 classes × 2 subjects = 6 exam rows).
+                    </p>
+
+                    {/* Class Selection Badges */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Target Classes:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {bonavee_classes.map((cls) => {
+                          const isSelected = matrixSelectedClasses.includes(cls);
+                          return (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={() => {
+                                setMatrixSelectedClasses((prev) =>
+                                  isSelected ? prev.filter((c) => c !== cls) : [...prev, cls]
+                                );
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                                isSelected
+                                  ? "bg-purple-600 text-white border-purple-600"
+                                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-purple-400"
+                              }`}
+                            >
+                              {isSelected ? "✓ " : "+ "} {cls}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Subject Selection Badges (Filtered by Selected Classes) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Subjects to Schedule:
+                      </label>
+                      {matrixAvailableSubjects.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic">Select at least one class above to view available subjects.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                          {matrixAvailableSubjects.map((sub) => {
+                            const isSelected = matrixSelectedSubjects.includes(sub);
+                            return (
+                              <button
+                                key={sub}
+                                type="button"
+                                onClick={() => {
+                                  setMatrixSelectedSubjects((prev) =>
+                                    isSelected ? prev.filter((s) => s !== sub) : [...prev, sub]
+                                  );
+                                }}
+                                className={`px-2 py-0.5 rounded-md text-[11px] font-medium border transition cursor-pointer ${
+                                  isSelected
+                                    ? "bg-purple-100 text-purple-900 border-purple-400 dark:bg-purple-900/60 dark:text-purple-200 font-bold"
+                                    : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                                }`}
+                              >
+                                {isSelected ? "✓ " : ""} {sub}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Generator Action */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMatrixSelectedSubjects(matrixAvailableSubjects)}
+                          className="text-xs text-purple-700 dark:text-purple-300 underline font-semibold cursor-pointer"
+                        >
+                          Select All Subjects
+                        </button>
+                        <span>&bull;</span>
+                        <button
+                          type="button"
+                          onClick={() => setMatrixSelectedSubjects([])}
+                          className="text-xs text-slate-500 underline cursor-pointer"
+                        >
+                          Clear Subjects
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={matrixSelectedClasses.length === 0 || matrixSelectedSubjects.length === 0}
+                        onClick={handleGenerateMatrixExams}
+                        className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 disabled:opacity-40 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                      >
+                        Generate Matrix ({matrixSelectedClasses.length} Classes × {matrixSelectedSubjects.length} Subjects = {matrixSelectedClasses.length * matrixSelectedSubjects.length} Exams)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Apply To All Rows Toolbar */}
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-100/70 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs shrink-0">
+                  <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] shrink-0">
+                    Quick Set All Rows:
+                  </span>
+                  <input
+                    type="date"
+                    value={bulkApplyValues.examDate}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, examDate: e.target.value })}
+                    className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    title="Shared Date"
+                  />
+                  <select
+                    value={bulkApplyValues.assessmentType}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, assessmentType: e.target.value as AssessmentTypeEnum })}
+                    className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    title="Shared Assessment Type"
+                  >
+                    {ASSESSMENT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.value}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="15"
+                      max="360"
+                      step="5"
+                      value={bulkApplyValues.duration}
+                      onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, duration: Number(e.target.value) })}
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                      title="Duration in minutes"
+                    />
+                    <span className="text-[11px] text-slate-400">min</span>
+                  </div>
+                  <select
+                    value={bulkApplyValues.invigilatorId}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, invigilatorId: e.target.value })}
+                    className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white max-w-[150px] truncate focus:outline-none"
+                    title="Shared Invigilator"
+                  >
+                    <option value="">No Invigilator</option>
+                    {staff.map((st) => (
+                      <option key={st.id} value={st.id}>{st.firstName} {st.lastName}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleApplyToAllRows}
+                    className="ml-auto inline-flex items-center gap-1 px-3 py-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Apply to All Rows</span>
+                  </button>
+                </div>
+
+                {/* Bulk Rows Table */}
+                <div className="overflow-x-auto overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl flex-1 max-h-[420px]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-extrabold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3 min-w-[120px]">Class</th>
+                        <th className="py-2.5 px-3 min-w-[160px]">Subject (Filtered)</th>
+                        <th className="py-2.5 px-3 min-w-[100px]">Type</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">Assessment Title</th>
+                        <th className="py-2.5 px-3 min-w-[130px]">Exam Date</th>
+                        <th className="py-2.5 px-3 min-w-[80px]">Duration</th>
+                        <th className="py-2.5 px-3 min-w-[150px]">Invigilator</th>
+                        <th className="py-2.5 px-3 w-20 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 bg-white dark:bg-slate-900">
+                      {bulkRows.map((row, idx) => {
+                        const subjectsForClass = getSubjectsForClassAndTier(row.className, tierCategory);
+                        const rowKey = `${row.className.toLowerCase().trim()}__${row.subject.toLowerCase().trim()}__${row.assessmentType}__${row.examDate}`;
+                        const isDuplicate = bulkDuplicates.has(rowKey);
+
+                        return (
+                          <tr
+                            key={row.id}
+                            className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
+                              isDuplicate ? "bg-amber-50/60 dark:bg-amber-950/20" : ""
+                            }`}
+                          >
+                            {/* Row Number */}
+                            <td className="py-2 px-3 text-center font-bold text-slate-400">
+                              {idx + 1}
+                            </td>
+
+                            {/* Class Dropdown */}
+                            <td className="py-2 px-3">
+                              <select
+                                value={row.className}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "className", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-xs focus:ring-1 focus:ring-blue-500"
+                              >
+                                {bonavee_classes.map((cls) => (
+                                  <option key={cls} value={cls}>{cls}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Subject Dropdown (Filtered strictly by row.className) */}
+                            <td className="py-2 px-3">
+                              <select
+                                value={row.subject}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "subject", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
+                              >
+                                {subjectsForClass.map((sub) => (
+                                  <option key={sub} value={sub}>{sub}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Assessment Type */}
+                            <td className="py-2 px-3">
+                              <select
+                                value={row.assessmentType}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "assessmentType", e.target.value as AssessmentTypeEnum)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-xs focus:ring-1 focus:ring-blue-500"
+                              >
+                                {ASSESSMENT_TYPES.map((t) => (
+                                  <option key={t.value} value={t.value}>{t.value}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Title Input */}
+                            <td className="py-2 px-3">
+                              <input
+                                type="text"
+                                value={row.title}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "title", e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
+                                placeholder="Exam Title"
+                              />
+                            </td>
+
+                            {/* Date Input */}
+                            <td className="py-2 px-3">
+                              <input
+                                type="date"
+                                value={row.examDate}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "examDate", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
+                              />
+                            </td>
+
+                            {/* Duration Input */}
+                            <td className="py-2 px-3">
+                              <input
+                                type="number"
+                                min="15"
+                                max="360"
+                                step="5"
+                                value={row.duration}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "duration", Number(e.target.value))}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 text-center"
+                              />
+                            </td>
+
+                            {/* Invigilator Dropdown */}
+                            <td className="py-2 px-3">
+                              <select
+                                value={row.invigilatorId}
+                                onChange={(e) => handleBulkRowFieldChange(idx, "invigilatorId", e.target.value)}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="">None Assigned</option>
+                                {staff.map((st) => (
+                                  <option key={st.id} value={st.id}>{st.firstName} {st.lastName}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Row Actions */}
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateBulkRow(idx)}
+                                  className="p-1.5 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                                  title="Duplicate Row"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteBulkRow(idx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                                  title="Delete Row"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Modal Footer with Counter and Confirm */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                  <div className="flex items-center gap-2 text-xs flex-wrap">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      You are about to schedule <strong className="text-blue-600 dark:text-blue-400 font-extrabold">{bulkRows.length}</strong> exams across <strong className="text-slate-900 dark:text-white font-extrabold">{new Set(bulkRows.map(r => r.className)).size}</strong> class(es).
+                    </span>
+                    {bulkDuplicates.size > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Duplicates detected ({bulkDuplicates.size})</span>
                       </span>
                     )}
                   </div>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    max="1000"
-                    readOnly={isMaxScoreLocked}
-                    value={formData.maxScore}
-                    onChange={(e) =>
-                      !isMaxScoreLocked &&
-                      setFormData({ ...formData, maxScore: Number(e.target.value) })
-                    }
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none transition-colors ${
-                      isMaxScoreLocked
-                        ? "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    }`}
-                  />
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    {formData.assessmentType === "CA1" || formData.assessmentType === "CA2"
-                      ? "Standardized Nigerian CA component capped at 20 marks."
-                      : formData.assessmentType === "EXAM"
-                      ? "Standardized Nigerian terminal examination capped at 60 marks."
-                      : "Custom assessment score allocation."}
-                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={isPending || bulkRows.length === 0 || bulkDuplicates.size > 0}
+                      type="submit"
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>
+                        {isPending ? "Scheduling Exams..." : `Confirm & Schedule ${bulkRows.length} Exams`}
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Exam Date & Start Time */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Exam Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    required
-                    type="date"
-                    value={formData.examDate}
-                    onChange={(e) => setFormData({ ...formData, examDate: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Start Time
-                  </label>
-                  <input
-                    required
-                    type="time"
-                    value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Duration & Venue */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Duration (Minutes)
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="15"
-                    max="360"
-                    step="5"
-                    value={formData.duration}
-                    onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Venue
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Examination Hall A, Science Lab"
-                    value={formData.venue}
-                    onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Invigilator ID Selection */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                  Invigilator Assignment
-                </label>
-                <select
-                  value={formData.invigilatorId}
-                  onChange={(e) => setFormData({ ...formData, invigilatorId: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                >
-                  <option value="">-- Assign Invigilator (Optional) --</option>
-                  {staff.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.firstName} {st.lastName} ({st.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Modal Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={isPending}
-                  type="submit"
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md transition cursor-pointer"
-                >
-                  {isPending
-                    ? editingExamId
-                      ? "Saving Changes..."
-                      : "Scheduling..."
-                    : editingExamId
-                    ? "Update Assessment"
-                    : "Confirm & Schedule"}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}
