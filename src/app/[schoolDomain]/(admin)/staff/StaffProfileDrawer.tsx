@@ -769,6 +769,68 @@ export default function StaffProfileDrawer({
                     </select>
                   </div>
                   <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Role / Designation</label>
+                    <select
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
+                    >
+                      <option value="">-- Select Role / Designation --</option>
+                      <optgroup label="Academic & Leadership">
+                        <option value="Principal">Principal</option>
+                        <option value="Vice Principal (Academic)">Vice Principal (Academic)</option>
+                        <option value="Vice Principal (Administration)">Vice Principal (Administration)</option>
+                        <option value="Headmaster / Headmistress">Headmaster / Headmistress</option>
+                        <option value="Assistant Headmaster">Assistant Headmaster</option>
+                        <option value="Head of Department (HOD)">Head of Department (HOD)</option>
+                        <option value="Dean of Studies">Dean of Studies</option>
+                        <option value="Exam Officer">Exam Officer</option>
+                        <option value="Form Teacher">Form Teacher</option>
+                        <option value="Class Teacher">Class Teacher</option>
+                        <option value="Subject Teacher">Subject Teacher</option>
+                        <option value="Early Years Educator">Early Years Educator</option>
+                        <option value="Nursery Caregiver">Nursery Caregiver</option>
+                      </optgroup>
+                      <optgroup label="Administrative & Support">
+                        <option value="Bursar / Accountant">Bursar / Accountant</option>
+                        <option value="Registrar">Registrar</option>
+                        <option value="Administrative Officer">Administrative Officer</option>
+                        <option value="School Secretary">School Secretary</option>
+                        <option value="Guidance Counsellor">Guidance Counsellor</option>
+                        <option value="Librarian">Librarian</option>
+                        <option value="Lab Technologist / Attendant">Lab Technologist / Attendant</option>
+                        <option value="ICT Administrator">ICT Administrator</option>
+                        <option value="School Nurse / Health Officer">School Nurse / Health Officer</option>
+                        <option value="Security / Operations Officer">Security / Operations Officer</option>
+                      </optgroup>
+                      <optgroup label="Higher / Tertiary Institutions">
+                        <option value="Vice Chancellor / Rector / Provost">Vice Chancellor / Rector / Provost</option>
+                        <option value="Dean of Faculty">Dean of Faculty</option>
+                        <option value="Professor">Professor</option>
+                        <option value="Associate Professor / Reader">Associate Professor / Reader</option>
+                        <option value="Senior Lecturer">Senior Lecturer</option>
+                        <option value="Lecturer I">Lecturer I</option>
+                        <option value="Lecturer II">Lecturer II</option>
+                        <option value="Assistant Lecturer">Assistant Lecturer</option>
+                        <option value="Graduate Assistant">Graduate Assistant</option>
+                      </optgroup>
+                      {formData.role && ![
+                        "Principal", "Vice Principal (Academic)", "Vice Principal (Administration)",
+                        "Headmaster / Headmistress", "Assistant Headmaster", "Head of Department (HOD)",
+                        "Dean of Studies", "Exam Officer", "Form Teacher", "Class Teacher",
+                        "Subject Teacher", "Early Years Educator", "Nursery Caregiver",
+                        "Bursar / Accountant", "Registrar", "Administrative Officer", "School Secretary",
+                        "Guidance Counsellor", "Librarian", "Lab Technologist / Attendant",
+                        "ICT Administrator", "School Nurse / Health Officer", "Security / Operations Officer",
+                        "Vice Chancellor / Rector / Provost", "Dean of Faculty", "Professor",
+                        "Associate Professor / Reader", "Senior Lecturer", "Lecturer I", "Lecturer II",
+                        "Assistant Lecturer", "Graduate Assistant"
+                      ].includes(formData.role) && (
+                        <option value={formData.role}>{formData.role} (Current)</option>
+                      )}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block font-semibold text-slate-600 mb-1">Employment Status</label>
                     <select
                       value={formData.status}

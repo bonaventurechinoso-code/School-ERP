@@ -116,7 +116,7 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Assessments, Records & Results",
             href: (domain) => `/${domain}/exams`,
             icon: FileSpreadsheet,
-            matchPaths: ["/report-cards", "/transcripts", "/assessments"],
+            matchPaths: ["/report-cards", "/transcripts", "/assessments", "/results"],
           },
         ],
       },

@@ -395,6 +395,7 @@ export default function GradingRoster({
 
   const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
   const [academicSession, setAcademicSession] = useState<string>("2026/2027");
+  const [passMarkThreshold, setPassMarkThreshold] = useState<number>(50);
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -582,6 +583,33 @@ export default function GradingRoster({
       const average = classSubjects.length > 0 ? (studentTotal / classSubjects.length) : 0;
       const tierGrade = resolveTierGrade(tierCategory, average);
 
+      // Auto-Promotion Decision Logic:
+      let promotionStatus: "PROMOTED" | "PROMOTED ON TRIAL" | "REPEAT" | "—" = "—";
+      let promotionBadge = "";
+      let passedCount = 0;
+
+      if (evaluatedCount > 0) {
+        classSubjects.forEach((sub) => {
+          const sc = subjectScores[sub];
+          if (sc && sc.total >= 40) {
+            passedCount++;
+          }
+        });
+
+        const passRatio = classSubjects.length > 0 ? passedCount / classSubjects.length : 0;
+
+        if (average >= passMarkThreshold && passRatio >= 0.5) {
+          promotionStatus = "PROMOTED";
+          promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
+        } else if (average >= (passMarkThreshold - 10) && passedCount >= Math.floor(classSubjects.length * 0.4)) {
+          promotionStatus = "PROMOTED ON TRIAL";
+          promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+        } else {
+          promotionStatus = "REPEAT";
+          promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+        }
+      }
+
       return {
         student,
         subjectScores,
@@ -591,6 +619,9 @@ export default function GradingRoster({
         grade: tierGrade.letter,
         remark: tierGrade.remark,
         badgeColor: tierGrade.badgeColor,
+        promotionStatus,
+        promotionBadge,
+        passedCount,
       };
     });
 
@@ -613,7 +644,7 @@ export default function GradingRoster({
       ...row,
       position: rankMap.get(row.student.id) || "—",
     }));
-  }, [studentsWithRegNo, classSubjects, tierCategory, getStudentSubjectScore]);
+  }, [studentsWithRegNo, classSubjects, tierCategory, getStudentSubjectScore, passMarkThreshold]);
 
   // Filtered by Search query
   const filteredBroadsheet = useMemo(() => {
@@ -631,19 +662,36 @@ export default function GradingRoster({
     const evaluatedRows = broadsheetData.filter((r) => r.evaluatedCount > 0);
     const count = evaluatedRows.length;
     if (count === 0) {
-      return { count: 0, average: "—", highest: "—", lowest: "—" };
+      return { 
+        count: 0, 
+        average: "—", 
+        highest: "—", 
+        lowest: "—",
+        promotedCount: 0,
+        trialCount: 0,
+        repeatCount: 0,
+        passRate: "—",
+      };
     }
 
     const sumAvg = evaluatedRows.reduce((acc, curr) => acc + curr.average, 0);
     const average = (sumAvg / count).toFixed(2);
     const highest = Math.max(...evaluatedRows.map((r) => r.average)).toFixed(2);
     const lowest = Math.min(...evaluatedRows.map((r) => r.average)).toFixed(2);
+    const promotedCount = evaluatedRows.filter((r) => r.promotionStatus === "PROMOTED").length;
+    const trialCount = evaluatedRows.filter((r) => r.promotionStatus === "PROMOTED ON TRIAL").length;
+    const repeatCount = evaluatedRows.filter((r) => r.promotionStatus === "REPEAT").length;
+    const passRate = `${Math.round(((promotedCount + trialCount) / count) * 100)}%`;
 
     return {
       count,
       average: `${average}%`,
       highest: `${highest}%`,
       lowest: `${lowest}%`,
+      promotedCount,
+      trialCount,
+      repeatCount,
+      passRate,
     };
   }, [broadsheetData]);
 
@@ -771,7 +819,7 @@ export default function GradingRoster({
 
   // 9. Export Broadsheet to CSV
   const handleExportCSV = () => {
-    const headers = ["Position", "Student Name", "Admission No", ...classSubjects, "Total Marks", "Average (%)", "Grade", "Remarks"];
+    const headers = ["Position", "Student Name", "Admission No", ...classSubjects, "Total Marks", "Average (%)", "Grade", "Promotion Status", "Remarks"];
     const rows = broadsheetData.map((row) => {
       const subjectCols = classSubjects.map((sub) => {
         const sc = row.subjectScores[sub];
@@ -785,6 +833,7 @@ export default function GradingRoster({
         `"${row.studentTotal}"`,
         `"${row.average.toFixed(2)}%"`,
         `"${row.grade}"`,
+        `"${row.promotionStatus}"`,
         `"${row.remark}"`,
       ].join(",");
     });
@@ -900,6 +949,23 @@ export default function GradingRoster({
             >
               <option value="2026/2027">2026/2027</option>
               <option value="2025/2026">2025/2026</option>
+            </select>
+          </div>
+
+          {/* Auto-Promotion Benchmark Selector */}
+          <div>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Promotion Benchmark:
+            </label>
+            <select
+              value={passMarkThreshold}
+              onChange={(e) => setPassMarkThreshold(Number(e.target.value) || 50)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value={40}>40% Pass Mark</option>
+              <option value={45}>45% Pass Mark</option>
+              <option value={50}>50% Pass Mark (Standard)</option>
+              <option value={60}>60% Pass Mark (Merit)</option>
             </select>
           </div>
 
@@ -1034,6 +1100,9 @@ export default function GradingRoster({
                   <th className="px-3 py-3 text-center bg-slate-100 dark:bg-slate-800/90 border-r border-slate-200 dark:border-slate-800 w-20">
                     {tierCategory === "NURSERY" ? "Rating" : tierCategory === "PRIMARY" ? "Grade" : "WAEC"}
                   </th>
+                  <th className="px-3 py-3 text-center bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-r border-emerald-200 dark:border-emerald-900 min-w-[130px]">
+                    Auto-Promotion
+                  </th>
                   <th className="px-4 py-3 text-left min-w-[120px]">
                     Remark
                   </th>
@@ -1118,6 +1187,18 @@ export default function GradingRoster({
                       )}
                     </td>
 
+                    {/* Auto-Promotion Decision */}
+                    <td className="px-3 py-3 text-center border-r border-slate-100 dark:border-slate-800">
+                      {row.evaluatedCount > 0 ? (
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-black text-[10px] font-mono border ${row.promotionBadge}`}>
+                          <Award className="w-3 h-3 shrink-0" />
+                          {row.promotionStatus}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono">—</span>
+                      )}
+                    </td>
+
                     {/* Remark */}
                     <td className="px-4 py-3 text-xs font-medium text-slate-600 dark:text-slate-300">
                       {row.evaluatedCount > 0 ? row.remark : "—"}
@@ -1188,6 +1269,37 @@ export default function GradingRoster({
                   <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
                     Curriculum
                   </span>
+                </div>
+              </div>
+
+              {/* Card 5: Auto-Promotion Outcome (Full Width) */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-4 shadow-2xs min-w-0 overflow-hidden col-span-2 lg:col-span-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                      Auto-Promotion Performance ({passMarkThreshold}% Standard Benchmark)
+                    </span>
+                    <div className="mt-1 flex items-baseline gap-2 flex-wrap min-w-0">
+                      <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
+                        {analytics.passRate}
+                      </span>
+                      <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                        Eligible for Progression
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      Promoted: {analytics.promotedCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      On Trial: {analytics.trialCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                      Repeat: {analytics.repeatCount}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

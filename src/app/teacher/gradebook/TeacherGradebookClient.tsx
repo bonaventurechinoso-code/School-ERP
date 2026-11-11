@@ -295,6 +295,7 @@ export function TeacherGradebookClient({
                 <th className="py-3 px-2 text-center w-20">Total (100)</th>
                 <th className="py-3 px-2 text-center w-16">Grade</th>
                 <th className="py-3 px-2 text-center w-16">Rank</th>
+                <th className="py-3 px-2 text-center w-24">Promotion Status</th>
                 <th className="py-3 px-3">Teacher Remarks</th>
               </tr>
             </thead>
@@ -365,6 +366,19 @@ export function TeacherGradebookClient({
                         {item.position}
                       </td>
 
+                      {/* Auto-Promotion Status */}
+                      <td className="py-3 px-2 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                          item.total >= 50
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300"
+                            : item.total >= 40
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300"
+                        }`}>
+                          {item.total >= 50 ? "PROMOTED" : item.total >= 40 ? "TRIAL" : "REPEAT"}
+                        </span>
+                      </td>
+
                       {/* Teacher Remarks */}
                       <td className="py-3 px-3">
                         <input
@@ -380,7 +394,7 @@ export function TeacherGradebookClient({
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400 dark:text-zinc-500">
+                  <td colSpan={10} className="py-10 text-center text-slate-400 dark:text-zinc-500">
                     No students found in {selectedClass}.
                   </td>
                 </tr>

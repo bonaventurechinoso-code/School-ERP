@@ -5,6 +5,7 @@ import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import ExamsList from "./ExamsList";
 import GradingRoster from "./GradingRoster";
 import GradingConfigTab from "./GradingConfigTab";
+import AnnualCompiledSheet from "./AnnualCompiledSheet";
 
 export default async function ExamsPage({ 
   params: paramsPromise, 
@@ -152,12 +153,12 @@ export default async function ExamsPage({
       
       {/* Tabs */}
       <div className="border-b border-slate-200 dark:border-slate-800">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto">
           <a
             href={`/${params.schoolDomain}/exams?tab=exams`}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === "exams"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-bold"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
@@ -167,17 +168,33 @@ export default async function ExamsPage({
             href={`/${params.schoolDomain}/exams?tab=grading`}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === "grading"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-bold"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Grading Roster
+            Grading Broadsheet
+          </a>
+          <a
+            href={`/${params.schoolDomain}/exams?tab=annual`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "annual"
+                ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400 font-bold"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+            }`}
+          >
+            Annual Compiled Sheet
+          </a>
+          <a
+            href={`/${params.schoolDomain}/report-cards`}
+            className="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+          >
+            Report Cards / Result Processing
           </a>
           <a
             href={`/${params.schoolDomain}/exams?tab=config`}
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === "config"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-bold"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
@@ -207,6 +224,22 @@ export default async function ExamsPage({
             schoolDomain={params.schoolDomain}
             initialTierName={activeTierName}
             savedConfigs={savedTierConfigs}
+          />
+        ) : activeTab === "annual" ? (
+          <AnnualCompiledSheet
+            schoolId={school.id}
+            schoolDomain={params.schoolDomain}
+            schoolName={school.name}
+            schoolTier={school.tier}
+            exams={exams}
+            students={students}
+            examResults={examResults}
+            gradeRecords={gradeRecords}
+            academicRecords={academicRecords}
+            courses={courses}
+            classrooms={classrooms}
+            academicTiers={school.academicTiers}
+            activeTierName={activeTierName}
           />
         ) : (
           <GradingRoster 

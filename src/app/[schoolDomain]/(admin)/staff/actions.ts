@@ -61,9 +61,13 @@ export async function ensureStaffMetadataTable() {
         appointment_date TEXT,
         emergency_name TEXT,
         emergency_phone TEXT,
+        designation TEXT,
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    await basePrisma.$executeRawUnsafe(`
+      ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS designation TEXT;
+    `).catch(() => {});
   } catch (err) {
     console.error("[ensureStaffMetadataTable] Table check/create error:", err);
   }
@@ -202,7 +206,7 @@ export async function fetchStaffPaginated(
 
       const enhancedItems = items.map((staff: any) => ({
         ...staff,
-        role: staff.user?.role || "TEACHER",
+        role: metadataMap[staff.id]?.designation || staff.user?.role || "TEACHER",
         metadata: metadataMap[staff.id] || null,
         todayAttendance: staff.StaffAttendance?.[0] || null,
         latestPayroll: staff.PayrollRecord?.[0] || null,
@@ -238,6 +242,13 @@ export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: s
       where: { id: staffId },
       include: {
         department: true,
+        user: {
+          select: {
+            id: true,
+            role: true,
+            email: true,
+          },
+        },
         PayrollRecord: {
           orderBy: { payDate: "desc" },
           take: 12,
@@ -275,6 +286,7 @@ export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: s
       success: true,
       data: {
         ...staff,
+        role: metadata?.designation || staff.user?.role || "TEACHER",
         metadata,
         stats: {
           totalMarked,
@@ -578,9 +590,9 @@ export async function updateStaffProfile(
         staff_id, phone, whatsapp, nin, gender, state_of_origin, lga_of_origin,
         residential_address, qualification, institution, graduation_year,
         trcn_number, trcn_category, trcn_status, specialization, appointment_type,
-        appointment_date, emergency_name, emergency_phone, updated_at
+        appointment_date, emergency_name, emergency_phone, designation, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
       )
       ON CONFLICT (staff_id) DO UPDATE SET
         phone = EXCLUDED.phone,
@@ -601,6 +613,7 @@ export async function updateStaffProfile(
         appointment_date = EXCLUDED.appointment_date,
         emergency_name = EXCLUDED.emergency_name,
         emergency_phone = EXCLUDED.emergency_phone,
+        designation = EXCLUDED.designation,
         updated_at = NOW();
     `,
       staffId,
@@ -621,7 +634,8 @@ export async function updateStaffProfile(
       data.appointmentType || "FULL_TIME",
       data.appointmentDate || null,
       data.emergencyName || null,
-      data.emergencyPhone || null
+      data.emergencyPhone || null,
+      data.role || null
     );
 
     await invalidateStaffNamespace(schoolId);
