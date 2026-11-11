@@ -55,9 +55,8 @@ export function SidebarSkeleton({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
-        isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
-      }`}
+      className={`fixed inset-y-0 left-0 z-40 w-72 sm:w-80 h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-transform duration-300 ease-in-out md:relative md:w-72 md:min-w-[18rem] md:max-w-[18rem] md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
+        }`}
     >
       {/* Consolidated Tenant Card Skeleton */}
       <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between shrink-0">
@@ -234,9 +233,8 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 ${isCollapsed ? "w-72 sm:w-80 md:w-20 md:min-w-[5rem] md:max-w-[5rem]" : "w-72 sm:w-80 md:w-72 md:min-w-[18rem] md:max-w-[18rem]"} h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-all duration-300 ease-in-out md:relative md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${
-        isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
-      }`}
+      className={`fixed inset-y-0 left-0 z-40 ${isCollapsed ? "w-72 sm:w-80 md:w-20 md:min-w-[5rem] md:max-w-[5rem]" : "w-72 sm:w-80 md:w-72 md:min-w-[18rem] md:max-w-[18rem]"} h-screen max-h-screen shrink-0 bg-slate-900/95 dark:bg-zinc-950/95 backdrop-blur-xl border-r border-slate-800/50 text-white flex flex-col transition-all duration-300 ease-in-out md:relative md:h-screen md:max-h-screen md:shrink-0 md:translate-x-0 overflow-hidden select-none ${isSidebarOpen ? "translate-x-0 shadow-2xl z-50" : "-translate-x-full"
+        }`}
     >
       {/* 1. SINGLE, HIGHLY POLISHED TENANT IDENTITY CARD */}
       <div className={`border-b border-slate-800/80 bg-slate-900/80 dark:bg-zinc-950/80 shrink-0 transition-all duration-300 ${isCollapsed ? "p-2.5 sm:p-3" : "p-3.5 sm:p-4"}`}>
@@ -344,11 +342,10 @@ export default function Sidebar({
                         type="button"
                         onClick={() => toggleGroup(item.id)}
                         title={item.label}
-                        className={`w-full flex items-start justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                          anyChildActive
+                        className={`w-full flex items-start justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${anyChildActive
                             ? "bg-indigo-600/15 text-white font-bold"
                             : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
                           <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${anyChildActive ? "text-indigo-400" : "text-slate-400"}`} />
@@ -383,17 +380,15 @@ export default function Sidebar({
                                 href={childHref}
                                 onClick={() => setIsSidebarOpen(false)}
                                 title={child.label}
-                                className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 ${
-                                  isChildActive
+                                className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 ${isChildActive
                                     ? "bg-indigo-600/20 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
                                     : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                                }`}
+                                  }`}
                               >
                                 {ChildIcon && (
                                   <ChildIcon
-                                    className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
-                                      isChildActive ? "text-indigo-400" : "text-slate-500"
-                                    }`}
+                                    className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isChildActive ? "text-indigo-400" : "text-slate-500"
+                                      }`}
                                   />
                                 )}
                                 <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left">
@@ -423,17 +418,15 @@ export default function Sidebar({
                     href={itemHref}
                     onClick={() => setIsSidebarOpen(false)}
                     title={item.label}
-                    className={`flex items-start justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 group active:scale-98 ${
-                      isActive
+                    className={`flex items-start justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 group active:scale-98 ${isActive
                         ? "bg-indigo-600/15 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
                         : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <Icon
-                        className={`w-4 h-4 shrink-0 mt-0.5 transition-colors ${
-                          isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
-                        }`}
+                        className={`w-4 h-4 shrink-0 mt-0.5 transition-colors ${isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
+                          }`}
                       />
                       <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left">
                         {item.label}
