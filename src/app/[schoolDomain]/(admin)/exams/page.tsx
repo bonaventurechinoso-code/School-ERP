@@ -191,11 +191,14 @@ export default async function ExamsPage({
           <ExamsList 
             schoolId={school.id} 
             schoolDomain={params.schoolDomain}
+            schoolName={school.name}
+            schoolTier={school.tier}
             exams={exams} 
             scheduledExams={scheduledExamsRaw}
             courses={courses} 
             staff={staff}
             classrooms={classrooms}
+            academicTiers={school.academicTiers}
             tierName={activeTierName}
           />
         ) : activeTab === "config" ? (
@@ -209,6 +212,8 @@ export default async function ExamsPage({
           <GradingRoster 
             schoolId={school.id} 
             schoolDomain={params.schoolDomain}
+            schoolName={school.name}
+            schoolTier={school.tier}
             exams={exams} 
             students={students} 
             examResults={examResults}

@@ -6,6 +6,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { cache } from "react";
+import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes";
+import { getSubjectsForClassAndTier } from "@/lib/curriculum-data";
 
 export interface TeacherContext {
   staffId: string;
@@ -96,14 +98,50 @@ const resolveTeacherContextMemo = cache(async (): Promise<TeacherContext | null>
     if (t.course?.name) assignedSubjectsSet.add(t.course.name);
   });
 
-  // Fallback defaults if no timetable rows are configured yet
+  // Fallback defaults if no timetable rows are configured yet (strictly scoped to this school's registered tiers & students)
   if (assignedClassesSet.size === 0) {
-    assignedClassesSet.add("JSS 1");
-    assignedClassesSet.add("JSS 2");
+    const enrolledStudents = await basePrisma.student.findMany({
+      where: { schoolId: school.id, status: { in: ["ENROLLED", "ACTIVE"] } },
+      select: { currentClass: true },
+      distinct: ["currentClass"],
+    });
+
+    enrolledStudents.forEach((s) => {
+      if (s.currentClass && s.currentClass.trim()) {
+        assignedClassesSet.add(s.currentClass.trim());
+      }
+    });
+
+    if (assignedClassesSet.size === 0) {
+      const schoolDetails = await basePrisma.school.findUnique({
+        where: { id: school.id },
+        select: { tier: true, academicTiers: { select: { name: true, level: true } } },
+      });
+      const tierClasses = getClassesForSchool({
+        schoolId: school.id,
+        name: school.name,
+        subdomain: school.subdomain,
+        tier: schoolDetails?.tier,
+        academicTiers: schoolDetails?.academicTiers,
+      });
+      tierClasses.allClasses.slice(0, 3).forEach((cls) => assignedClassesSet.add(cls));
+    }
   }
+
   if (assignedSubjectsSet.size === 0) {
-    assignedSubjectsSet.add("Mathematics");
-    assignedSubjectsSet.add("English Language");
+    const schoolCourses = await basePrisma.course.findMany({
+      where: { schoolId: school.id },
+      select: { name: true },
+      take: 6,
+    });
+    schoolCourses.forEach((c) => assignedSubjectsSet.add(c.name));
+
+    if (assignedSubjectsSet.size === 0) {
+      const firstClass = Array.from(assignedClassesSet)[0] || "Primary 1";
+      const clsTier = getTierForClass(firstClass);
+      const subs = getSubjectsForClassAndTier(firstClass, clsTier.category);
+      subs.slice(0, 4).forEach((s) => assignedSubjectsSet.add(s));
+    }
   }
 
   return {

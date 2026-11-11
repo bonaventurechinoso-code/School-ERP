@@ -90,6 +90,7 @@ import {
   getEducationalStageForClass,
   getSubjectsForClassAndTier,
 } from "@/lib/curriculum-data";
+import { getClassesForSchool } from "@/lib/school-tier-classes";
 
 export {
   NURSERY_SUBJECTS,
@@ -173,6 +174,9 @@ type ScheduledExamRecord = {
 type ExamsListProps = {
   schoolId: string;
   schoolDomain?: string;
+  schoolName?: string;
+  schoolTier?: string;
+  academicTiers?: any[];
   exams?: any[];
   scheduledExams?: any[];
   courses?: any[];
@@ -184,6 +188,9 @@ type ExamsListProps = {
 export default function ExamsList({
   schoolId,
   schoolDomain: propSchoolDomain,
+  schoolName,
+  schoolTier,
+  academicTiers,
   exams = [],
   scheduledExams = [],
   courses = [],
@@ -211,20 +218,29 @@ export default function ExamsList({
     );
   }, [tierName, paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
-  // 1. Dynamic 'bonavee_classes' array state combining standard classes & school classrooms
+  // 1. Dynamic 'bonavee_classes' strictly scoped to this school's registered tiers
+  const schoolClassesResult = useMemo(() => {
+    return getClassesForSchool(
+      {
+        schoolId,
+        name: schoolName || (tenant as any)?.name || schoolDomain,
+        subdomain: schoolDomain,
+        tier: schoolTier || (tenant as any)?.tier || (tenant as any)?.preciseTier,
+        academicTiers: academicTiers || (tenant as any)?.academicTiers || [],
+      },
+      {
+        classrooms,
+      }
+    );
+  }, [schoolId, schoolName, schoolDomain, schoolTier, academicTiers, classrooms, tenant]);
+
   const bonavee_classes = useMemo<string[]>(() => {
-    const standard = BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
-    const classSet = new Set<string>(standard);
-    if (Array.isArray(classrooms) && classrooms.length > 0) {
-      classrooms.forEach((c) => {
-        const cName = typeof c === "string" ? c : c?.name;
-        if (cName && typeof cName === "string" && cName.trim()) {
-          classSet.add(cName.trim());
-        }
-      });
+    if (schoolClassesResult.allClasses.length > 0) {
+      return schoolClassesResult.allClasses;
     }
-    return Array.from(classSet);
-  }, [tierCategory, classrooms]);
+    const standard = BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
+    return standard;
+  }, [schoolClassesResult, tierCategory]);
 
   // Modal & Notification UI States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -312,7 +328,7 @@ export default function ExamsList({
   }, [initialNormalizedList]);
 
   // Form input states
-  const initialClass = bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+  const initialClass = schoolClassesResult.defaultClass || bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
   const initialSubjects = getSubjectsForClassAndTier(initialClass, tierCategory);
 
   const defaultFormData = {

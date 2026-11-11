@@ -48,6 +48,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
+import { getClassesForSchool } from "@/lib/school-tier-classes";
 import { performTenantLogout } from "@/lib/client-logout";
 import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -223,8 +224,28 @@ export default function StaffPortalClient({
       });
       if (classSet.size > 0) return Array.from(classSet);
     }
-    return initialClassrooms.map((c) => c.name);
-  }, [initialTimetable, initialClassrooms, selectedSubject]);
+    if (initialClassrooms && initialClassrooms.length > 0) {
+      return initialClassrooms.map((c) => c.name);
+    }
+    // Collect from students enrolled in this school
+    const studentClasses = new Set<string>();
+    if (Array.isArray(initialStudents)) {
+      initialStudents.forEach((s) => {
+        if (s.currentClass && s.currentClass.trim()) {
+          studentClasses.add(s.currentClass.trim());
+        }
+      });
+    }
+    if (studentClasses.size > 0) return Array.from(studentClasses);
+
+    // Fallback to school registered tier classes
+    const schoolTierClasses = getClassesForSchool({
+      subdomain: schoolDomain,
+      name: schoolName,
+      academicTiers: initialTiers,
+    });
+    return schoolTierClasses.allClasses;
+  }, [initialTimetable, initialClassrooms, initialStudents, initialTiers, selectedSubject, schoolDomain, schoolName]);
 
   // Ensure selectedSubject is valid in teacherAssignedSubjects
   useEffect(() => {

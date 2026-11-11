@@ -23,10 +23,17 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
+import {
+  getTierForClass,
+  getClassesForSchool,
+  EducationalTierCategory,
+} from "@/lib/school-tier-classes";
 
 type GradingRosterProps = {
   schoolId: string;
   schoolDomain?: string;
+  schoolName?: string;
+  schoolTier?: string;
   exams: any[];
   students: any[];
   examResults: any[];
@@ -317,6 +324,8 @@ interface ScoreModalState {
 export default function GradingRoster({
   schoolId,
   schoolDomain,
+  schoolName,
+  schoolTier,
   exams,
   students,
   examResults,
@@ -334,95 +343,60 @@ export default function GradingRoster({
 
   const effectiveDomain = schoolDomain || (tenant as any)?.subdomain || "";
   const isDemo = effectiveDomain.toLowerCase().trim() === "demo";
+  const schoolDisplayName = schoolName || (tenant as any)?.name || effectiveDomain || "School";
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [isClearingDemo, setIsClearingDemo] = useState(false);
 
-  // 1. Resolve Active Academic Tier
-  const paramTier = searchParams.get("tier");
-  const cookieTier =
-    typeof document !== "undefined"
-      ? document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("activeTier="))
-          ?.split("=")[1]
-      : null;
-  const decodedCookieTier = cookieTier ? decodeURIComponent(cookieTier) : null;
-  const tenantActiveTier = (tenant as any)?.activeTier;
-  const tenantPreciseTier = tenant.preciseTier;
-
-  const rawActiveTier =
-    paramTier ||
-    decodedCookieTier ||
-    initialActiveTierName ||
-    tenantActiveTier ||
-    tenantPreciseTier ||
-    academicTiers[0]?.name ||
-    "Secondary School";
-
-  const normalizedTier = normalizeTierLevel(rawActiveTier);
-  const activeTierCode = formatTierBadgeCode(rawActiveTier);
-  const activeTierDisplay = normalizedTier;
-
-  const tierCategory: "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY" = useMemo(() => {
-    if (normalizedTier === "Creche / Nursery") return "NURSERY";
-    if (normalizedTier === "Primary School") return "PRIMARY";
-    if (normalizedTier === "Secondary School") return "SECONDARY";
-    return "TERTIARY";
-  }, [normalizedTier]);
-
-  const isTertiaryTier = tierCategory === "TERTIARY";
-
-  // 2. Derive Class Options for Active Tier
-  const availableClasses = useMemo(() => {
-    const standardClasses = TIER_CLASSES_MAP[activeTierCode] || TIER_CLASSES_MAP.SECONDARY;
-    const additionalClasses = new Set<string>();
-
-    students.forEach((s) => {
-      if (s.currentClass && isClassInTier(s.currentClass, activeTierCode)) {
-        additionalClasses.add(s.currentClass);
+  // 1. Resolve Registered School Tiers & Scoped Classes (Single Source of Truth)
+  const schoolClassesResult = useMemo(() => {
+    return getClassesForSchool(
+      {
+        schoolId,
+        name: schoolDisplayName,
+        subdomain: effectiveDomain,
+        tier: schoolTier,
+        academicTiers,
+      },
+      {
+        students,
+        classrooms,
       }
-    });
+    );
+  }, [schoolId, schoolDisplayName, effectiveDomain, schoolTier, academicTiers, students, classrooms]);
 
-    classrooms.forEach((c) => {
-      if (c.name && isClassInTier(c.name, activeTierCode)) {
-        additionalClasses.add(c.name);
-      }
-    });
+  const { groups: classGroups, allClasses: availableClasses, defaultClass: schoolDefaultClass, tierInfo } = schoolClassesResult;
 
-    const result = [...standardClasses];
-    additionalClasses.forEach((cls) => {
-      if (!result.some((r) => matchesClass(r, cls))) {
-        result.push(cls);
-      }
-    });
-
-    return result;
-  }, [activeTierCode, students, classrooms]);
-
-  // 3. Selected Class, Term & Academic Session
+  // 2. Selected Class, Term & Academic Session
   const paramClass = searchParams.get("class");
   const [selectedClass, setSelectedClass] = useState<string>(() => {
     if (paramClass) {
       const matched = availableClasses.find((c) => matchesClass(c, paramClass));
       if (matched) return matched;
     }
-    return availableClasses[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+    return schoolDefaultClass || availableClasses[0] || "Primary 1";
   });
+
+  // Ensure selectedClass remains valid when availableClasses updates
+  useEffect(() => {
+    if (availableClasses.length > 0 && !availableClasses.some((c) => matchesClass(c, selectedClass))) {
+      setSelectedClass(schoolDefaultClass || availableClasses[0]);
+    }
+  }, [availableClasses, schoolDefaultClass, selectedClass]);
+
+  // 3. Dynamic Tier resolution for the SELECTED class (Requirement E: Tier badge follows selected class)
+  const selectedClassTier = useMemo(() => {
+    return getTierForClass(selectedClass);
+  }, [selectedClass]);
+
+  const activeTierDisplay = selectedClassTier.name;
+  const activeTierCode = selectedClassTier.badgeCode;
+  const tierCategory: EducationalTierCategory = selectedClassTier.category;
+  const isTertiaryTier = tierCategory === "TERTIARY";
 
   const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
   const [academicSession, setAcademicSession] = useState<string>("2026/2027");
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Sync selected class on tier switch
-  const prevTierCodeRef = useRef(activeTierCode);
-  useEffect(() => {
-    if (prevTierCodeRef.current !== activeTierCode) {
-      prevTierCodeRef.current = activeTierCode;
-      const newClasses = TIER_CLASSES_MAP[activeTierCode] || TIER_CLASSES_MAP.SECONDARY;
-      setSelectedClass(newClasses[0] || "JSS 1");
-    }
-  }, [activeTierCode]);
 
   // 4. Resolve ALL Subjects for the Class and Tier (Assigned curriculum subjects for Class + Tier)
   const classSubjects = useMemo(() => {
@@ -454,36 +428,31 @@ export default function GradingRoster({
       const status = student.status || "ENROLLED";
       if (status !== "ENROLLED" && status !== "ACTIVE") return false;
 
-      const studentTierName = student.tier?.name;
-      if (studentTierName) {
-        const studentTierCode = formatTierBadgeCode(studentTierName);
-        if (studentTierCode !== activeTierCode) return false;
-      } else if (student.currentClass) {
-        if (!isClassInTier(student.currentClass, activeTierCode)) return false;
-      }
-
+      // Filter by the selected class
       if (!matchesClass(student.currentClass, selectedClass)) return false;
 
       return true;
     });
-  }, [students, activeTierCode, selectedClass]);
+  }, [students, selectedClass]);
 
   const cohortStudents = useMemo(() => {
     if (rawFilteredStudents.length > 0) {
       return rawFilteredStudents;
     }
-    // Clean mock student data rows per tier when database is empty
-    if (tierCategory === "SECONDARY" && (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
-      return DEFAULT_MOCK_JSS1_STUDENTS;
-    }
-    if (tierCategory === "PRIMARY") {
-      return DEFAULT_MOCK_PRIMARY_STUDENTS;
-    }
-    if (tierCategory === "NURSERY") {
-      return DEFAULT_MOCK_NURSERY_STUDENTS;
+    // Clean mock student data rows ONLY for public DEMO tenant
+    if (isDemo) {
+      if (tierCategory === "SECONDARY" && (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
+        return DEFAULT_MOCK_JSS1_STUDENTS;
+      }
+      if (tierCategory === "PRIMARY") {
+        return DEFAULT_MOCK_PRIMARY_STUDENTS;
+      }
+      if (tierCategory === "NURSERY") {
+        return DEFAULT_MOCK_NURSERY_STUDENTS;
+      }
     }
     return rawFilteredStudents;
-  }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory]);
+  }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory, isDemo]);
 
   // Assign Permanent Registration Numbers
   const studentsWithRegNo = useMemo(() => {
@@ -854,20 +823,26 @@ export default function GradingRoster({
             <div>
               <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
                 Grading Broadsheet & Roster
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  {activeTierDisplay}
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${selectedClassTier.badgeColor}`}>
+                  {selectedClassTier.badgeLabel}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Master terminal broadsheet displaying all assigned subjects across, class averages, grades, and positions.
               </p>
+              {/* Admin Verification Label for School Tiers */}
+              <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span>School: <strong className="text-slate-700 dark:text-slate-200">{schoolDisplayName}</strong></span>
+                <span>•</span>
+                <span>Registered Tiers: <strong className="text-indigo-600 dark:text-indigo-400">{tierInfo.tierSummaryLabel}</strong></span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Toolbar Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Class Selector */}
+          {/* Class Selector (Grouped by Tier if multi-tier) */}
           <div>
             <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
               Class:
@@ -877,11 +852,23 @@ export default function GradingRoster({
               onChange={(e) => setSelectedClass(e.target.value)}
               className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {availableClasses.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
+              {classGroups.length > 1 ? (
+                classGroups.map((group) => (
+                  <optgroup key={group.tierCategory} label={group.label}>
+                    {group.classes.map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (
+                availableClasses.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
