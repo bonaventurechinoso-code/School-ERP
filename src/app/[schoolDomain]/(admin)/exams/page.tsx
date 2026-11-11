@@ -208,6 +208,7 @@ export default async function ExamsPage({
         ) : (
           <GradingRoster 
             schoolId={school.id} 
+            schoolDomain={params.schoolDomain}
             exams={exams} 
             students={students} 
             examResults={examResults}

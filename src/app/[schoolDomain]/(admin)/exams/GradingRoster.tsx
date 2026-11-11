@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
-import { saveBroadsheetScore } from "./actions";
+import { useSearchParams, useRouter } from "next/navigation";
+import { saveBroadsheetScore, seedDemoGradingScores, clearDemoGradingScores } from "./actions";
 import { getSubjectsForClassAndTier } from "./ExamsList";
 import { useTenant } from "@/lib/tenant-context";
 import { formatTierBadgeCode, resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
@@ -19,10 +19,14 @@ import {
   Layers,
   ChevronRight,
   TrendingUp,
+  Sparkles,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 
 type GradingRosterProps = {
   schoolId: string;
+  schoolDomain?: string;
   exams: any[];
   students: any[];
   examResults: any[];
@@ -312,6 +316,7 @@ interface ScoreModalState {
 
 export default function GradingRoster({
   schoolId,
+  schoolDomain,
   exams,
   students,
   examResults,
@@ -322,9 +327,15 @@ export default function GradingRoster({
   academicTiers = [],
   activeTierName: initialActiveTierName = "",
 }: GradingRosterProps) {
+  const router = useRouter();
   const tenant = useTenant();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const effectiveDomain = schoolDomain || (tenant as any)?.subdomain || "";
+  const isDemo = effectiveDomain.toLowerCase().trim() === "demo";
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [isClearingDemo, setIsClearingDemo] = useState(false);
 
   // 1. Resolve Active Academic Tier
   const paramTier = searchParams.get("tier");
@@ -655,9 +666,9 @@ export default function GradingRoster({
     }
 
     const sumAvg = evaluatedRows.reduce((acc, curr) => acc + curr.average, 0);
-    const average = (sumAvg / count).toFixed(1);
-    const highest = Math.max(...evaluatedRows.map((r) => r.average)).toFixed(1);
-    const lowest = Math.min(...evaluatedRows.map((r) => r.average)).toFixed(1);
+    const average = (sumAvg / count).toFixed(2);
+    const highest = Math.max(...evaluatedRows.map((r) => r.average)).toFixed(2);
+    const lowest = Math.min(...evaluatedRows.map((r) => r.average)).toFixed(2);
 
     return {
       count,
@@ -666,6 +677,69 @@ export default function GradingRoster({
       lowest: `${lowest}%`,
     };
   }, [broadsheetData]);
+
+  // Demo Tenant Actions: Seed and Clear realistic scores
+  const handleSeedDemoScores = async () => {
+    if (!isDemo || isSeedingDemo) return;
+    setIsSeedingDemo(true);
+    try {
+      const res = await seedDemoGradingScores(schoolId, effectiveDomain);
+      if (res.success) {
+        if (res.records && Array.isArray(res.records)) {
+          const newOverrides: Record<string, { ca1: number; ca2: number; exam: number; total: number; remarks: string }> = {};
+          res.records.forEach((rec: any) => {
+            const tot = rec.totalScore ?? rec.total ?? (rec.ca1 + rec.ca2 + rec.exam);
+            const data = {
+              ca1: rec.ca1,
+              ca2: rec.ca2,
+              exam: rec.exam,
+              total: tot,
+              remarks: rec.remarks || "",
+            };
+            newOverrides[`${rec.studentId}__${rec.subject.toLowerCase()}`] = data;
+            if (rec.mockStudentId) {
+              newOverrides[`${rec.mockStudentId}__${rec.subject.toLowerCase()}`] = data;
+            }
+          });
+          setLocalScoresOverride((prev) => ({ ...prev, ...newOverrides }));
+        }
+        setToastMessage(`Successfully seeded ${res.count || 70} demo grading scores!`);
+        setTimeout(() => setToastMessage(null), 4000);
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to seed demo scores");
+      }
+    } catch (err: any) {
+      console.error("Error seeding demo scores:", err);
+      alert(err.message || "Failed to seed demo scores");
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  };
+
+  const handleClearDemoScores = async () => {
+    if (!isDemo || isClearingDemo) return;
+    if (!confirm("Are you sure you want to clear all seeded demo scores for JSS 1 1st Term? This will reset broadsheet values to empty dashes.")) {
+      return;
+    }
+    setIsClearingDemo(true);
+    try {
+      const res = await clearDemoGradingScores(schoolId, effectiveDomain);
+      if (res.success) {
+        setLocalScoresOverride({});
+        setToastMessage("Seeded demo scores cleared. Broadsheet reset.");
+        setTimeout(() => setToastMessage(null), 4000);
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to clear demo scores");
+      }
+    } catch (err: any) {
+      console.error("Error clearing demo scores:", err);
+      alert(err.message || "Failed to clear demo scores");
+    } finally {
+      setIsClearingDemo(false);
+    }
+  };
 
   // 8. Score Edit Modal State & Actions
   const [modalState, setModalState] = useState<ScoreModalState>({
@@ -740,7 +814,7 @@ export default function GradingRoster({
         `"${row.student.regNo}"`,
         ...subjectCols,
         `"${row.studentTotal}"`,
-        `"${row.average.toFixed(1)}%"`,
+        `"${row.average.toFixed(2)}%"`,
         `"${row.grade}"`,
         `"${row.remark}"`,
       ].join(",");
@@ -842,8 +916,42 @@ export default function GradingRoster({
             </select>
           </div>
 
-          {/* Actions: Export & Print */}
-          <div className="flex items-center gap-2 pt-4">
+          {/* Actions: Export & Print & Demo Seeder */}
+          <div className="flex flex-wrap items-center gap-2 pt-4">
+            {isDemo && (
+              <>
+                <button
+                  type="button"
+                  disabled={isSeedingDemo || isClearingDemo}
+                  onClick={handleSeedDemoScores}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+                  title="Seed 70 Realistic Nigerian Grading Scores (Demo Tenant Only)"
+                >
+                  {isSeedingDemo ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isSeedingDemo ? "Seeding Scores..." : "Seed Demo Scores"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSeedingDemo || isClearingDemo}
+                  onClick={handleClearDemoScores}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                  title="Clear Seeded Scores and Reset Broadsheet (Demo Tenant Only)"
+                >
+                  {isClearingDemo ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isClearingDemo ? "Clearing..." : "Clear Demo Scores"}</span>
+                </button>
+              </>
+            )}
+
             <button
               type="button"
               onClick={handleExportCSV}
@@ -1009,7 +1117,7 @@ export default function GradingRoster({
 
                     {/* Average Across ALL Subjects */}
                     <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20 border-r border-indigo-100 dark:border-indigo-950">
-                      {row.evaluatedCount > 0 ? `${row.average.toFixed(1)}%` : "—"}
+                      {row.evaluatedCount > 0 ? `${row.average.toFixed(2)}%` : "—"}
                     </td>
 
                     {/* Tier Grade */}
