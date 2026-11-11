@@ -524,6 +524,7 @@ export default function SubscriptionClient({
               {previewUrl.includes(".pdf") || previewUrl.startsWith("data:application/pdf") ? (
                 <iframe src={previewUrl} className="w-full h-[400px] rounded-lg" title="PDF Proof" />
               ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={previewUrl}
                   alt="Receipt Preview"

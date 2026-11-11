@@ -551,6 +551,7 @@ export default function PlatformSubscriptionReceiptsTable({
 
                 if (url.startsWith("data:")) {
                   return (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={url}
                       alt="Payment Receipt"
@@ -561,6 +562,7 @@ export default function PlatformSubscriptionReceiptsTable({
 
                 if (url.startsWith("https://")) {
                   return (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={url}
                       crossOrigin="anonymous"

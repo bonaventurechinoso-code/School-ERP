@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -159,31 +159,34 @@ export default function Sidebar({
   }, [tiers, currentTier]);
 
   // Helper to determine active status of items including merged matchPaths
-  const isItemActive = (href: string, exact?: boolean, matchPaths?: string[]) => {
-    const [basePath, queryString] = href.split("?");
-    if (queryString) {
-      const urlParams = new URLSearchParams(queryString);
-      const matchesParams = Array.from(urlParams.entries()).every(
-        ([k, v]) => searchParams.get(k) === v
-      );
-      if (pathname === basePath && matchesParams) return true;
-    } else {
-      if (exact) {
-        if (pathname === basePath || pathname === `${basePath}/`) return true;
+  const isItemActive = useCallback(
+    (href: string, exact?: boolean, matchPaths?: string[]) => {
+      const [basePath, queryString] = href.split("?");
+      if (queryString) {
+        const urlParams = new URLSearchParams(queryString);
+        const matchesParams = Array.from(urlParams.entries()).every(
+          ([k, v]) => searchParams.get(k) === v
+        );
+        if (pathname === basePath && matchesParams) return true;
       } else {
-        if (pathname.startsWith(basePath)) return true;
+        if (exact) {
+          if (pathname === basePath || pathname === `${basePath}/`) return true;
+        } else {
+          if (pathname.startsWith(basePath)) return true;
+        }
       }
-    }
 
-    if (matchPaths && matchPaths.length > 0) {
-      return matchPaths.some((mp) => {
-        const fullMp = `/${schoolDomain}${mp}`;
-        return pathname === fullMp || pathname.startsWith(`${fullMp}/`) || pathname.startsWith(`${fullMp}?`);
-      });
-    }
+      if (matchPaths && matchPaths.length > 0) {
+        return matchPaths.some((mp) => {
+          const fullMp = `/${schoolDomain}${mp}`;
+          return pathname === fullMp || pathname.startsWith(`${fullMp}/`) || pathname.startsWith(`${fullMp}?`);
+        });
+      }
 
-    return false;
-  };
+      return false;
+    },
+    [pathname, searchParams, schoolDomain]
+  );
 
   // Auto-expand group if current path matches any of its children
   useEffect(() => {
@@ -199,7 +202,7 @@ export default function Sidebar({
         }
       });
     });
-  }, [pathname, searchParams, navGroups, schoolDomain]);
+  }, [navGroups, schoolDomain, isItemActive]);
 
   // Responsive collapsible state for desktop (icon-only mode) to maximize canvas in Admissions
   const isAdmissionsModule = Boolean(pathname?.includes("/admissions"));

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo, useRef } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { saveBroadsheetScore } from "./actions";
 import { useTenant } from "@/lib/tenant-context";

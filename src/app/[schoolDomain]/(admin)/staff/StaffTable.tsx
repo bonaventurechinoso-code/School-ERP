@@ -236,6 +236,7 @@ export default function StaffTable({
       setFilterRole(target);
       refreshRoster(undefined, target);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramFilter, paramRole]);
 
   // Drawers & Modals
@@ -530,7 +531,7 @@ export default function StaffTable({
     return () => {
       isMounted = false;
     };
-  }, [createData.role, schoolDomain, departments, tierCategory]);
+  }, [createData.role, schoolDomain, departments, tierCategory, effectiveTier]);
 
   const dynamicAssignmentLabel = useMemo(() => {
     const roleLower = (createData.role || "").toLowerCase();
