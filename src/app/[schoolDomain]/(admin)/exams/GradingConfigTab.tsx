@@ -207,11 +207,11 @@ export default function GradingConfigTab({
                 key={comp.key}
                 className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4.5 space-y-2 hover:border-slate-300 dark:hover:border-slate-600 transition"
               >
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 truncate">
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 truncate min-w-0 flex-1">
                     {comp.label}
                   </label>
-                  <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                  <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 shrink-0">
                     Max: {comp.max}
                   </span>
                 </div>

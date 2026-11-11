@@ -1034,64 +1034,64 @@ export default function GradingRoster({
           </div>
 
           {/* AGGREGATE SUMMARY FOOTER GENERATION (Across ALL Subjects) */}
-          <div className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 p-3.5 sm:p-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Card 1: Class Average (ALL Subjects) */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Class Average (All Subjects)
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-4 shadow-2xs min-w-0 overflow-hidden">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                  Class Average
                 </span>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                <div className="mt-1 flex items-baseline gap-1.5 flex-wrap min-w-0">
+                  <span className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono shrink-0">
                     {analytics.average}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
                     ({analytics.count} students)
                   </span>
                 </div>
               </div>
 
               {/* Card 2: Highest Average */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Highest Overall Average
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-4 shadow-2xs min-w-0 overflow-hidden">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                  Highest Average
                 </span>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                <div className="mt-1 flex items-baseline gap-1.5 flex-wrap min-w-0">
+                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
                     {analytics.highest}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
                     Class Leader
                   </span>
                 </div>
               </div>
 
               {/* Card 3: Lowest Average */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Lowest Overall Average
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-4 shadow-2xs min-w-0 overflow-hidden">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                  Lowest Average
                 </span>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                <div className="mt-1 flex items-baseline gap-1.5 flex-wrap min-w-0">
+                  <span className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 font-mono shrink-0">
                     {analytics.lowest}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Academic Baseline
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                    Baseline
                   </span>
                 </div>
               </div>
 
               {/* Card 4: Total Subjects Across */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 shadow-2xs">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-4 shadow-2xs min-w-0 overflow-hidden">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
                   Subjects in Broadsheet
                 </span>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
+                <div className="mt-1 flex items-baseline gap-1.5 flex-wrap min-w-0">
+                  <span className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 font-mono shrink-0">
                     {classSubjects.length}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Tier Curriculum
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                    Curriculum
                   </span>
                 </div>
               </div>

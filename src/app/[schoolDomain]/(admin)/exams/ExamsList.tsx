@@ -1322,79 +1322,110 @@ export default function ExamsList({
             {examList.map((exam) => (
               <div
                 key={exam.id}
-                className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+                className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 overflow-hidden"
               >
                 {/* Header: Title, Type Badge & Publish Toggle */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span
-                        className={`px-2 py-0.5 text-xs font-bold rounded-md border ${getTypeBadge(
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md border shrink-0 ${getTypeBadge(
                           exam.assessment_type
                         )}`}
                       >
                         {exam.assessment_type}
                       </span>
-                      <h4 className="font-bold text-slate-900 dark:text-white text-base">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base break-words">
                         {exam.title}
                       </h4>
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 font-medium">
-                      <span>{exam.subject}</span>
-                      <span>&bull;</span>
-                      <span>{exam.class_name}</span>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 font-medium truncate">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">{exam.subject}</span>
+                      <span className="shrink-0">&bull;</span>
+                      <span className="shrink-0">{exam.class_name}</span>
                     </div>
                   </div>
 
                   {/* Mobile Status Badge */}
-                  <div className="shrink-0">
+                  <div className="shrink-0 pt-0.5">
                     <button
                       type="button"
                       onClick={() => handleTogglePublish(exam)}
                       disabled={isPending}
                       title={`Click to ${exam.status === "published" ? "unpublish" : "publish"} assessment`}
                       aria-label={`Current status: ${exam.status === "published" ? "Published" : "Unpublished"}. Click to toggle.`}
-                      className={`inline-flex items-center justify-center px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-150 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 ${
+                      className={`inline-flex items-center justify-center px-2 py-1 text-[11px] font-semibold rounded-full border transition-all duration-150 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 ${
                         exam.status === "published"
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
                           : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                       }`}
                     >
                       <span
-                        className={`w-1.5 h-1.5 rounded-full mr-1.5 shrink-0 transition-colors ${
+                        className={`w-1.5 h-1.5 rounded-full mr-1 shrink-0 transition-colors ${
                           exam.status === "published" ? "bg-emerald-500" : "bg-slate-400"
                         }`}
                       />
-                      <span>{exam.status === "published" ? "Published" : "Unpublished"}</span>
+                      <span>{exam.status === "published" ? "Published" : "Draft"}</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Details Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300 border-y border-slate-100 dark:border-slate-800/80 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>
-                      {new Date(exam.exam_date).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                {/* Responsive Card Metrics Tiles (Protected against text collision/overwriting) */}
+                <div className="grid grid-cols-2 gap-2 py-3 border-y border-slate-100 dark:border-slate-800/80 text-xs">
+                  {/* Metric 1: Date */}
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 min-w-0 overflow-hidden">
+                    <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider leading-none">Date</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block mt-0.5">
+                        {new Date(exam.exam_date).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric 2: Time & Duration */}
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 min-w-0 overflow-hidden">
+                    <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider leading-none">Time</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block mt-0.5">
+                        {exam.start_time || "09:00"} ({exam.duration}m)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric 3: Venue */}
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 min-w-0 overflow-hidden">
+                    <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider leading-none">Venue</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block mt-0.5" title={exam.venue}>
+                        {exam.venue || "Exam Hall"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric 4: Max Score */}
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 min-w-0 overflow-hidden">
+                    <Award className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider leading-none">Score</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block mt-0.5">
+                        Max {exam.max_score} pts
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric 5: Invigilator */}
+                  <div className="col-span-2 flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 min-w-0 overflow-hidden">
+                    <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      Invigilator: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{exam.invigilator_name || "Unassigned"}</strong>
                     </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>
-                      {exam.start_time || "09:00"} ({exam.duration}m)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{exam.venue || "Exam Hall"}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span>Max: {exam.max_score} pts</span>
                   </div>
                 </div>
 
@@ -1402,24 +1433,26 @@ export default function ExamsList({
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <Link
                     href={`/${schoolDomain}/exams/${exam.id}/roster`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 rounded-lg hover:bg-blue-100 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 rounded-lg hover:bg-blue-100 transition-colors truncate"
                   >
-                    <span>View Grading Roster</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <span className="truncate">Grading Roster</span>
+                    <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                   </Link>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => handleOpenEditModal(exam)}
-                      className="p-1.5 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 transition-colors"
-                      title="Edit"
+                      className="p-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+                      title="Edit Assessment"
+                      aria-label="Edit assessment"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setDeleteTargetExam(exam)}
-                      className="p-1.5 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 transition-colors"
-                      title="Delete"
+                      className="p-2 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-lg hover:bg-rose-100 transition-colors cursor-pointer"
+                      title="Delete Assessment"
+                      aria-label="Delete assessment"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1988,9 +2021,9 @@ export default function ExamsList({
                   <button
                     type="button"
                     onClick={handleApplyToAllRows}
-                    className="ml-auto inline-flex items-center gap-1 px-3 py-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                    className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer shrink-0 mt-1 sm:mt-0"
                   >
-                    <RefreshCw className="w-3 h-3" />
+                    <RefreshCw className="w-3.5 h-3.5" />
                     <span>Apply to All Rows</span>
                   </button>
                 </div>
@@ -2171,33 +2204,33 @@ export default function ExamsList({
                 </div>
 
                 {/* Modal Footer with Counter and Confirm */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
                   <div className="flex items-center gap-2 text-xs flex-wrap">
                     <span className="font-semibold text-slate-700 dark:text-slate-300">
                       You are about to schedule <strong className="text-blue-600 dark:text-blue-400 font-extrabold">{bulkRows.length}</strong> exams across <strong className="text-slate-900 dark:text-white font-extrabold">{new Set(bulkRows.map(r => r.className)).size}</strong> class(es).
                     </span>
                     {bulkDuplicates.size > 0 && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900">
-                        <AlertCircle className="w-3 h-3" />
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                         <span>Duplicates detected ({bulkDuplicates.size})</span>
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                      className="flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer text-center"
                     >
                       Cancel
                     </button>
                     <button
                       disabled={isPending || bulkRows.length === 0 || bulkDuplicates.size > 0}
                       type="submit"
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                      className="flex-1 sm:flex-initial px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
                       <span>
                         {isPending ? "Scheduling Exams..." : `Confirm & Schedule ${bulkRows.length} Exams`}
                       </span>
