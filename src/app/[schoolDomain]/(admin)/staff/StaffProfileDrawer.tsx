@@ -34,6 +34,8 @@ import {
   Building,
   ArrowRight,
   Search,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   fetchStaffFullProfile,
@@ -233,6 +235,7 @@ export default function StaffProfileDrawer({
 }: StaffProfileDrawerProps) {
   const [activeTab, setActiveTab] = useState<"bio" | "qualifications" | "department" | "payroll">("bio");
   const [isEditing, setIsEditing] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [profileData, setProfileData] = useState<any>(null);
   const [alertMsg, setAlertMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -453,20 +456,22 @@ export default function StaffProfileDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-300"
+        className={`w-full bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-300 animate-in slide-in-from-right ${
+          isMaximized ? "max-w-7xl md:w-[95vw]" : "max-w-2xl"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* TOP HEADER */}
-        <div className="p-6 bg-slate-900 text-white flex-shrink-0">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-2xl font-black shadow-lg border-2 border-indigo-400/30">
+        {/* TOP HEADER - COMPACT BANNER WITH MAXIMIZE */}
+        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex-shrink-0 border-b border-slate-800">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-base sm:text-lg font-black shadow-md border border-indigo-400/30 shrink-0">
                 {profileData?.firstName?.[0]}
                 {profileData?.lastName?.[0]}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-black tracking-tight text-white">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white truncate">
                     {profileData?.firstName} {profileData?.lastName}
                   </h3>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
@@ -477,45 +482,60 @@ export default function StaffProfileDrawer({
                     {profileData?.status}
                   </span>
                 </div>
-                <p className="text-xs text-indigo-200 mt-0.5 font-medium flex items-center gap-2">
-                  <span>{profileData?.role}</span>
-                  <span>•</span>
+                <div className="flex items-center gap-2 text-xs text-indigo-200 mt-0.5 flex-wrap">
+                  <span className="font-medium text-white">{profileData?.role}</span>
+                  <span className="text-slate-500">•</span>
                   <span>{profileData?.department?.name || "Unassigned Dept"}</span>
-                </p>
-                <p className="text-[11px] text-slate-400 font-mono mt-1">
-                  ID: <strong className="text-slate-200">{staffEmployeeId}</strong>
-                </p>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    ID: <strong className="text-slate-200">{staffEmployeeId}</strong>
+                  </span>
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-              aria-label="Close drawer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {/* WINDOW CONTROLS: MAXIMIZE & CLOSE */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsMaximized((prev) => !prev)}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title={isMaximized ? "Minimize Dossier" : "Maximize Dossier"}
+                aria-label={isMaximized ? "Minimize Dossier" : "Maximize Dossier"}
+              >
+                {isMaximized ? <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Close Dossier"
+                aria-label="Close drawer"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </div>
           </div>
 
           {/* ACTION TOOLBAR */}
-          <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center gap-2 mt-2.5 pt-2.5 border-t border-slate-800/80 text-xs">
             <button
               onClick={() => onPrintIdCard && onPrintIdCard(profileData)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg flex items-center gap-1.5 transition"
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg flex items-center gap-1.5 transition text-xs cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5 text-indigo-400" />
               <span>Print ID Card</span>
             </button>
             <button
               onClick={() => onPrintAppointmentLetter && onPrintAppointmentLetter(profileData)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg flex items-center gap-1.5 transition"
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg flex items-center gap-1.5 transition text-xs cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5 text-emerald-400" />
               <span>Appointment Letter</span>
             </button>
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className={`px-3 py-1.5 font-medium rounded-lg flex items-center gap-1.5 transition ml-auto ${
+              className={`px-3 py-1 font-medium rounded-lg flex items-center gap-1.5 transition ml-auto text-xs cursor-pointer ${
                 isEditing
                   ? "bg-amber-500 text-slate-900 font-bold"
                   : "bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -527,7 +547,7 @@ export default function StaffProfileDrawer({
           </div>
 
           {/* TAB STRIP */}
-          <div className="flex items-center gap-1 mt-4 -mb-2 border-b border-slate-800">
+          <div className="flex items-center gap-1 mt-2 -mb-2 border-b border-slate-800 overflow-x-auto">
             {[
               { id: "bio", label: "Bio-Data & Contact" },
               { id: "qualifications", label: "TRCN & Qualifications" },
@@ -537,7 +557,7 @@ export default function StaffProfileDrawer({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-2 text-xs font-bold transition border-b-2 ${
+                className={`px-3 py-1.5 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
                   activeTab === tab.id
                     ? "border-indigo-400 text-white"
                     : "border-transparent text-slate-400 hover:text-slate-200"
