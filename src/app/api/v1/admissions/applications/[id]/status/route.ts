@@ -90,6 +90,10 @@ export async function PATCH(
         },
       });
 
+      const leadDocs = (lead.documents as any) || {};
+      const admissionYear = leadDocs.admissionYear || leadDocs.cohort || String(year);
+      const cohort = leadDocs.cohort || admissionYear;
+
       if (existingStudent) {
         await tierDb.student.update({
           where: { id: existingStudent.id },
@@ -97,7 +101,13 @@ export async function PATCH(
             status: "ENROLLED",
             enrolledAt: new Date(),
             tierId: isolatedTierId,
+            cohort: existingStudent.cohort || cohort,
             currentClass: lead.targetGrade || existingStudent.currentClass,
+            dynamicFields: {
+              ...((existingStudent.dynamicFields as any) || {}),
+              cohort: (existingStudent.dynamicFields as any)?.cohort || existingStudent.cohort || cohort,
+              admissionYear: (existingStudent.dynamicFields as any)?.admissionYear || admissionYear,
+            },
           },
         });
       } else {
@@ -114,7 +124,12 @@ export async function PATCH(
             currentClass: lead.targetGrade || null,
             admissionNumber,
             status: "ENROLLED",
+            cohort,
             enrolledAt: new Date(),
+            dynamicFields: {
+              cohort,
+              admissionYear,
+            },
           },
         });
       }

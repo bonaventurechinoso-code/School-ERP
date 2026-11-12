@@ -127,6 +127,9 @@ export async function POST(req: Request) {
       }
     }
 
+    const finalAdmissionYear = body.admissionYear || String(new Date().getFullYear());
+    const finalCohort = body.cohort || finalAdmissionYear;
+
     // 3. Create Student record linked to User via userId
     const student = await basePrisma.student.create({
       data: {
@@ -138,6 +141,7 @@ export async function POST(req: Request) {
         admissionNumber: finalAdmissionNumber,
         currentClass: currentClass || "JSS 1",
         tierId: finalTierId,
+        cohort: finalCohort,
         parentName: parentName || null,
         parentEmail: parentEmail || null,
         parentPhone: parentPhone || null,
@@ -145,6 +149,10 @@ export async function POST(req: Request) {
         stateOfOrigin: stateOfOrigin || null,
         feeStatus: computedFeeStatus,
         status: "ACTIVE",
+        dynamicFields: {
+          cohort: finalCohort,
+          admissionYear: finalAdmissionYear,
+        },
       },
       include: {
         user: {

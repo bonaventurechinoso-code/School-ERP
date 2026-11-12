@@ -46,7 +46,10 @@ import PromotionModal from "./PromotionModal";
 import { resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
-type StudentWithTier = Student & { tier?: AcademicTier | null };
+type StudentWithTier = Student & { 
+  tier?: AcademicTier | null;
+  cohort?: string | null;
+};
 
 export interface StudentMetricsData {
   totalEnrolled: number;

@@ -326,6 +326,7 @@ export default function PublicApplyForm({
           formData.academicTier || currentTierRecord?.name || tier || "Secondary School";
         const chosenClass = formData.targetClass || formData.targetGrade || "";
 
+        const currentYear = new Date().getFullYear().toString();
         const payload = {
           ...formData,
           schoolDomain,
@@ -338,6 +339,8 @@ export default function PublicApplyForm({
           targetClass: chosenClass,
           targetGrade: chosenClass,
           targetClassCohort: chosenClass,
+          admissionYear: currentYear,
+          cohort: currentYear,
         };
         console.log("[PublicApplyForm] Submitting application payload:", payload);
 

@@ -107,6 +107,7 @@ export async function POST(req: Request) {
       } else {
         const tier = await basePrisma.academicTier.findFirst({ where: { schoolId } });
         if (tier) {
+          const currentYear = String(new Date().getFullYear());
           await basePrisma.student.create({
             data: {
               schoolId,
@@ -116,7 +117,12 @@ export async function POST(req: Request) {
               lastName: lastName?.trim() || "User",
               email: normalizedEmail,
               status: "ENROLLED",
+              cohort: currentYear,
               mustChangePassword: true,
+              dynamicFields: {
+                cohort: currentYear,
+                admissionYear: currentYear,
+              },
             },
           });
         }

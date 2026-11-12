@@ -48,6 +48,10 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
     });
 
     // 2. Create or update Student profile in the isolated tier database
+    const leadDocs = (lead.documents as any) || {};
+    const admissionYear = leadDocs.admissionYear || leadDocs.cohort || String(new Date().getFullYear());
+    const cohort = leadDocs.cohort || admissionYear;
+
     const existingStudent = await tierDb.student.findFirst({
       where: {
         schoolId: school.id,
@@ -65,7 +69,13 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
           status: "ENROLLED",
           enrolledAt: new Date(),
           tierId: isolatedTierId,
+          cohort: existingStudent.cohort || cohort,
           currentClass: lead.targetGrade || existingStudent.currentClass,
+          dynamicFields: {
+            ...((existingStudent.dynamicFields as any) || {}),
+            cohort: (existingStudent.dynamicFields as any)?.cohort || existingStudent.cohort || cohort,
+            admissionYear: (existingStudent.dynamicFields as any)?.admissionYear || admissionYear,
+          },
         },
       });
     } else {
@@ -82,7 +92,12 @@ export async function acceptOfferAction(token: string, schoolDomain: string) {
           currentClass: lead.targetGrade || null,
           admissionNumber,
           status: "ENROLLED",
+          cohort,
           enrolledAt: new Date(),
+          dynamicFields: {
+            cohort,
+            admissionYear,
+          },
         },
       });
     }

@@ -71,6 +71,10 @@ export async function POST(
       },
     });
 
+    const leadDocs = (lead.documents as any) || {};
+    const admissionYear = leadDocs.admissionYear || leadDocs.cohort || String(new Date().getFullYear());
+    const cohort = leadDocs.cohort || admissionYear;
+
     let newStudent;
     if (existingStudent) {
       newStudent = await tierDb.student.update({
@@ -79,7 +83,13 @@ export async function POST(
           status: "ENROLLED",
           enrolledAt: new Date(),
           tierId: isolatedTierId,
+          cohort: existingStudent.cohort || cohort,
           currentClass: lead.targetGrade || existingStudent.currentClass,
+          dynamicFields: {
+            ...((existingStudent.dynamicFields as any) || {}),
+            cohort: (existingStudent.dynamicFields as any)?.cohort || existingStudent.cohort || cohort,
+            admissionYear: (existingStudent.dynamicFields as any)?.admissionYear || admissionYear,
+          },
         },
       });
     } else {
@@ -96,7 +106,12 @@ export async function POST(
           currentClass: lead.targetGrade || null,
           admissionNumber,
           status: "ENROLLED",
+          cohort,
           enrolledAt: new Date(),
+          dynamicFields: {
+            cohort,
+            admissionYear,
+          },
         },
       });
     }

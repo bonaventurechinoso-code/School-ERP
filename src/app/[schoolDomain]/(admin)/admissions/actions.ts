@@ -1427,6 +1427,9 @@ export async function enrollApplicantAction(
     const finalPasswordHash = leadPasswordHash || defaultPasswordHash;
     const isTemporary = !leadPasswordHash;
 
+    const leadAdmissionYear = (leadDocuments as any)?.admissionYear || String(new Date().getFullYear());
+    const leadCohort = (leadDocuments as any)?.cohort || leadAdmissionYear;
+
     let newStudent;
     if (existingStudent) {
       const existingDynamic = (existingStudent.dynamicFields as any) || {};
@@ -1436,10 +1439,13 @@ export async function enrollApplicantAction(
           status: "ENROLLED",
           enrolledAt: new Date(),
           tierId: isolatedTierId,
+          cohort: existingStudent.cohort || leadCohort,
           currentClass: lead.targetGrade || existingStudent.currentClass,
           admissionNumber: existingStudent.admissionNumber || admissionNumber,
           dynamicFields: {
             ...existingDynamic,
+            cohort: existingDynamic.cohort || existingStudent.cohort || leadCohort,
+            admissionYear: existingDynamic.admissionYear || leadAdmissionYear,
             password: existingDynamic.password || finalPasswordHash,
             isTemporaryPassword: existingDynamic.isTemporaryPassword ?? isTemporary,
           },
@@ -1460,8 +1466,11 @@ export async function enrollApplicantAction(
           currentClass: lead.targetGrade || null,
           admissionNumber,
           status: "ENROLLED",
+          cohort: leadCohort,
           enrolledAt: new Date(),
           dynamicFields: {
+            cohort: leadCohort,
+            admissionYear: leadAdmissionYear,
             password: finalPasswordHash,
             isTemporaryPassword: isTemporary,
           },
@@ -3948,6 +3957,11 @@ export async function enrollAdmissionsApplicationAction(payload: {
       }
 
       // Step B: Create or Update Student in target database
+      const appTierData = (application.tierSpecificData as any) || {};
+      const appMeta = (application.metadata as any) || {};
+      const appAdmissionYear = appTierData.admissionYear || appTierData.cohort || appMeta.admissionYear || appMeta.cohort || String(new Date().getFullYear());
+      const appCohort = appAdmissionYear;
+
       let student: any;
       if (existingStudent) {
         student = await tx.student.update({
@@ -3961,6 +3975,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
             currentClass: payload.classArm || application.programId || "Year 1",
             dateOfBirth: application.dateOfBirth,
             status: "ENROLLED",
+            cohort: existingStudent.cohort || appCohort,
             parentName,
             parentEmail,
             parentPhone,
@@ -3970,6 +3985,8 @@ export async function enrollAdmissionsApplicationAction(payload: {
             mustChangePassword: !isApplicantSelfService,
             dynamicFields: {
               ...((existingStudent.dynamicFields as any) || {}),
+              cohort: (existingStudent.dynamicFields as any)?.cohort || existingStudent.cohort || appCohort,
+              admissionYear: (existingStudent.dynamicFields as any)?.admissionYear || appAdmissionYear,
               applicationId: application.id,
               intakeChannel: application.intakeChannel,
               tierSpecificData: application.tierSpecificData,
@@ -3992,6 +4009,7 @@ export async function enrollAdmissionsApplicationAction(payload: {
             currentClass: payload.classArm || application.programId || "Year 1",
             dateOfBirth: application.dateOfBirth,
             status: "ENROLLED",
+            cohort: appCohort,
             parentName,
             parentEmail,
             parentPhone,
@@ -4000,6 +4018,8 @@ export async function enrollAdmissionsApplicationAction(payload: {
             enrolledAt: new Date(),
             mustChangePassword: !isApplicantSelfService,
             dynamicFields: {
+              cohort: appCohort,
+              admissionYear: appAdmissionYear,
               applicationId: application.id,
               intakeChannel: application.intakeChannel,
               tierSpecificData: application.tierSpecificData,

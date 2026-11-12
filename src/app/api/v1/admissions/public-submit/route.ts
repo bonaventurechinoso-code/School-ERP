@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
 
     const effectiveTierId = matchedTier?.id || tierId || school.academicTiers[0]?.id;
     const finalTierName = matchedTier?.name || academicTierName || derivedTierName;
+    const admissionYear = String(data.admissionYear || new Date().getFullYear());
+    const cohort = String(data.cohort || admissionYear);
 
     console.log("[PUBLIC_SUBMIT] Effective submission payload:", {
       applicantName,
@@ -185,6 +187,8 @@ export async function POST(request: NextRequest) {
             academicTier: finalTierName,
             targetClass: effectiveTargetGrade,
             targetClassCohort: effectiveTargetGrade,
+            cohort,
+            admissionYear,
           },
         },
       });
@@ -211,6 +215,8 @@ export async function POST(request: NextRequest) {
             academicTier: finalTierName,
             targetClass: effectiveTargetGrade,
             targetClassCohort: effectiveTargetGrade,
+            cohort,
+            admissionYear,
           },
           logs: [
             {
@@ -423,10 +429,13 @@ export async function POST(request: NextRequest) {
             data: {
               userId: userRecord?.id || existingStudent.userId,
               tierId: effectiveTierId!,
+              cohort: existingStudent.cohort || cohort,
               currentClass: effectiveTargetGrade,
               mustChangePassword: isTemporary,
               dynamicFields: {
                 ...currentFields,
+                cohort: currentFields.cohort || existingStudent.cohort || cohort,
+                admissionYear: currentFields.admissionYear || cohort,
                 password: hashedPassword,
                 isTemporaryPassword: isTemporary,
                 academicTier: finalTierName,
@@ -446,6 +455,7 @@ export async function POST(request: NextRequest) {
               lastName,
               email: accountEmail,
               status: "APPLICANT",
+              cohort,
               currentClass: effectiveTargetGrade,
               parentName: parentName || null,
               parentPhone: parentContact || null,
@@ -453,6 +463,8 @@ export async function POST(request: NextRequest) {
               applicantAt: new Date(),
               mustChangePassword: isTemporary,
               dynamicFields: {
+                cohort,
+                admissionYear,
                 password: hashedPassword,
                 isTemporaryPassword: isTemporary,
                 academicTier: finalTierName,

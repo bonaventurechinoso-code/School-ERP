@@ -203,6 +203,9 @@ export async function POST(
       }
     }
 
+    const finalAdmissionYear = body.admissionYear || String(new Date().getFullYear());
+    const finalCohort = body.cohort || finalAdmissionYear;
+
     // 2. Create Student with userId foreign key linking directly to User.id
     const student = await basePrisma.student.create({
       data: {
@@ -215,9 +218,12 @@ export async function POST(
         admissionNumber: finalAdmissionNumber,
         currentClass: currentClass || null,
         status: "ENROLLED",
+        cohort: finalCohort,
         mustChangePassword: true,
         feeStatus: initialFeeStatus,
         dynamicFields: {
+          cohort: finalCohort,
+          admissionYear: finalAdmissionYear,
           password: hashedPassword,
           isTemporaryPassword: true,
         },

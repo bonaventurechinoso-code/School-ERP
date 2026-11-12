@@ -127,6 +127,8 @@ export async function recordWalkInApplication(payload: {
             gender: gender || existingApp.gender,
             tierSpecificData: {
               ...((existingApp.tierSpecificData as any) || {}),
+              cohort: (existingApp.tierSpecificData as any)?.cohort || String(year),
+              admissionYear: (existingApp.tierSpecificData as any)?.admissionYear || String(year),
               parent: {
                 name: parentName || (existingApp.tierSpecificData as any)?.parent?.name || `${lastName} Family`,
                 phone: parentPhone || phoneNumber || (existingApp.tierSpecificData as any)?.parent?.phone,
@@ -138,6 +140,8 @@ export async function recordWalkInApplication(payload: {
             },
             metadata: {
               ...((existingApp.metadata as any) || {}),
+              cohort: (existingApp.metadata as any)?.cohort || String(year),
+              admissionYear: (existingApp.metadata as any)?.admissionYear || String(year),
               intakeDesk: "Admissions Front Desk",
               registrarName,
               walkInMergedAt: new Date().toISOString(),
@@ -166,6 +170,8 @@ export async function recordWalkInApplication(payload: {
             gender,
             status: "SUBMITTED", // Immediately submitted as payment is settled at the desk
             tierSpecificData: {
+              cohort: String(year),
+              admissionYear: String(year),
               parent: {
                 name: parentName || `${lastName} Family`,
                 phone: parentPhone || phoneNumber,
@@ -176,6 +182,8 @@ export async function recordWalkInApplication(payload: {
               isSelfService: false,
             },
             metadata: {
+              cohort: String(year),
+              admissionYear: String(year),
               intakeDesk: "Admissions Front Desk",
               registrarName,
               passwordHash: hashedPassword,

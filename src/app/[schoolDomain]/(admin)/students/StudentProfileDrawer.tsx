@@ -48,7 +48,10 @@ import {
 } from "./actions";
 import { approvePaymentProof, rejectPaymentProof } from "../finance/verifications/actions";
 
-type StudentWithTier = Student & { tier?: AcademicTier | null };
+type StudentWithTier = Student & { 
+  tier?: AcademicTier | null;
+  cohort?: string | null;
+};
 
 function formatNaira(amount: number): string {
   return `₦${(amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
