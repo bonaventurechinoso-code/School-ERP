@@ -271,6 +271,7 @@ model Student {
   // Bio-Data
   admissionNumber String?
   currentClass    String?
+  cohort          String?
   dateOfBirth     DateTime?
   stateOfOrigin   String?
 

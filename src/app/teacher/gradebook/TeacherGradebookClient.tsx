@@ -19,6 +19,8 @@ interface Student {
   lastName: string;
   admissionNumber?: string | null;
   currentClass?: string | null;
+  cohort?: string | null;
+  dynamicFields?: any;
 }
 
 interface TeacherGradebookClientProps {
@@ -58,9 +60,32 @@ export function TeacherGradebookClient({
   const [selectedClass, setSelectedClass] = useState(initialClass);
   const [selectedSubject, setSelectedSubject] = useState(initialSubject);
   const [selectedTerm, setSelectedTerm] = useState(initialTerm);
+  const [selectedSession, setSelectedSession] = useState(initialAcademicYear || "2026/2027");
+  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
   const [gradesMap, setGradesMap] = useState(initialGradesMap);
   const [isPending, startTransition] = useTransition();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // Compute distinct cohorts present in students list
+  const availableCohorts = useMemo(() => {
+    const cohorts = new Set<string>();
+    students.forEach((s) => {
+      const c = s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "");
+      if (c && /^\d{4}$/.test(String(c).trim())) {
+        cohorts.add(String(c).trim());
+      }
+    });
+    return Array.from(cohorts).sort();
+  }, [students]);
+
+  // Filter students by selectedCohort
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      if (selectedCohort === "ALL") return true;
+      const c = String(s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")).trim();
+      return c === selectedCohort;
+    });
+  }, [students, selectedCohort]);
 
   const handleScoreChange = (
     studentId: string,
@@ -86,7 +111,7 @@ export function TeacherGradebookClient({
 
   // Rank computation
   const rankedStudents = useMemo(() => {
-    const list = students.map((s) => {
+    const list = filteredStudents.map((s) => {
       const g = gradesMap[s.id] || { ca1: 0, ca2: 0, exam: 0, total: 0, remarks: "" };
       return {
         student: s,
@@ -117,7 +142,7 @@ export function TeacherGradebookClient({
       ...item,
       position: rankMap.get(item.student.id) || "-",
     }));
-  }, [students, gradesMap]);
+  }, [filteredStudents, gradesMap]);
 
   // Overall stats
   const totalScores = rankedStudents.map((r) => r.total).filter((t) => t > 0);
@@ -130,7 +155,7 @@ export function TeacherGradebookClient({
   const handleSaveGrades = () => {
     setSaveMessage(null);
     startTransition(async () => {
-      const payload = students.map((s) => {
+      const payload = filteredStudents.map((s) => {
         const g = gradesMap[s.id] || { ca1: 0, ca2: 0, exam: 0, total: 0, remarks: "" };
         return {
           studentId: s.id,
@@ -146,7 +171,7 @@ export function TeacherGradebookClient({
           selectedClass,
           selectedSubject,
           selectedTerm,
-          initialAcademicYear,
+          selectedSession,
           payload
         );
         if (res.success) {
@@ -178,6 +203,14 @@ export function TeacherGradebookClient({
 
         {/* Filter Controls */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Session / Academic Year */}
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold">
+            <span className="text-slate-400 font-bold uppercase text-[10px]">Session:</span>
+            <span className="text-slate-800 dark:text-zinc-200 font-mono font-bold">
+              {selectedSession}
+            </span>
+          </div>
+
           {/* Class Select */}
           <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -192,6 +225,35 @@ export function TeacherGradebookClient({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Cohort Select with Tooltip & Helper Text */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold">
+              <span
+                className="text-slate-400 font-bold uppercase text-[10px] cursor-help"
+                title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+              >
+                COHORT:
+              </span>
+              <select
+                value={selectedCohort}
+                onChange={(e) => setSelectedCohort(e.target.value)}
+                className="bg-transparent text-slate-800 dark:text-zinc-200 focus:outline-hidden cursor-pointer font-bold"
+              >
+                <option value="ALL" className="bg-white dark:bg-zinc-900">
+                  All Cohorts
+                </option>
+                {availableCohorts.map((c) => (
+                  <option key={c} value={c} className="bg-white dark:bg-zinc-900">
+                    Cohort {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="text-[9px] text-slate-400 italic mt-0.5">
+              Cohort = Year group that started together
+            </span>
           </div>
 
           {/* Subject Select */}
@@ -394,8 +456,8 @@ export function TeacherGradebookClient({
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-400 dark:text-zinc-500">
-                    No students found in {selectedClass}.
+                  <td colSpan={10} className="py-10 text-center text-slate-400 dark:text-zinc-500 font-medium">
+                    No students enrolled in {selectedClass} for {selectedSession}. Ask Admin to Bulk Enroll.
                   </td>
                 </tr>
               )}

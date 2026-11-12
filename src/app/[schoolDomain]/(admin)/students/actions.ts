@@ -271,16 +271,35 @@ export async function createStudent(
 
     let finalAdmissionNumber = data.admissionNumber;
     const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
+    const currentDynamic = (data.dynamicFields as any) || {};
+    const admissionYear = currentDynamic?.admissionYear || currentDynamic?.cohort || new Date().getFullYear().toString();
+    const resolvedCohort = String(admissionYear);
+
     if (!finalAdmissionNumber) {
-      const studentCount = await tenantDb.student.count();
+      // Find highest existing sequence for this school + admissionYear
+      const existing = await basePrisma.student.findMany({
+        where: { schoolId },
+        select: { admissionNumber: true },
+      });
+      let maxSeq = 0;
+      existing.forEach((s) => {
+        if (s.admissionNumber) {
+          const parts = s.admissionNumber.split("/");
+          if (parts.length >= 4 && parts[1] === admissionYear) {
+            const num = parseInt(parts[3], 10);
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+        }
+      });
+
       finalAdmissionNumber = generateAdmissionNumber({
         schoolSubdomain: school?.subdomain,
         currentClass: data.currentClass,
-        studentSequence: studentCount + 1,
+        studentSequence: maxSeq + 1,
+        year: parseInt(admissionYear, 10),
       });
     }
 
-    const currentDynamic = (data.dynamicFields as any) || {};
     const userEmail =
       (data.email && data.email.trim().toLowerCase()) ||
       `${finalAdmissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school?.subdomain || "portal"}`;
@@ -324,6 +343,19 @@ export async function createStudent(
       }
     }
 
+    // Phone normalization
+    let cleanPhone = data.parentPhone?.trim();
+    if (cleanPhone) {
+      const digits = cleanPhone.replace(/[^0-9]/g, "");
+      if (digits.startsWith("0") && digits.length === 11) {
+        cleanPhone = `+234${digits.slice(1)}`;
+      } else if (digits.startsWith("234") && digits.length === 13) {
+        cleanPhone = `+${digits}`;
+      } else if (cleanPhone.startsWith("+")) {
+        cleanPhone = `+${digits}`;
+      }
+    }
+
     const createdStudent = await tenantDb.student.create({
       data: {
         schoolId,
@@ -335,8 +367,11 @@ export async function createStudent(
         status: data.status,
         feeStatus: computedFeeStatus,
         mustChangePassword: true,
+        cohort: resolvedCohort,
         dynamicFields: {
           ...currentDynamic,
+          cohort: resolvedCohort,
+          admissionYear,
           password: hashedPassword,
           isTemporaryPassword: true,
         },
@@ -347,7 +382,7 @@ export async function createStudent(
         parentName: data.parentName || null,
         parentOccupation: data.parentOccupation || null,
         parentEmail: data.parentEmail || null,
-        parentPhone: data.parentPhone || null,
+        parentPhone: cleanPhone || null,
         parentWhatsApp: data.parentWhatsApp || null,
         ...timestampData
       }

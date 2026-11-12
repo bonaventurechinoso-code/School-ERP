@@ -21,6 +21,7 @@ export interface ReportCardStudentData {
   term: string;
   academicYear: string;
   tier: string;
+  cohort?: string;
   rank?: number;
   totalStudents?: number;
   overallAverage?: number;
@@ -253,7 +254,7 @@ export default function StudentReportCardModal({
           {/* ========================================================= */}
           {/* 2. STUDENT BIO-DATA & ATTENDANCE PROFILE                  */}
           {/* ========================================================= */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs">
             <div>
               <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
                 Student Full Name
@@ -278,6 +279,21 @@ export default function StudentReportCardModal({
               </span>
               <span className="font-bold text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
                 {studentData.currentClass} ({tierName})
+              </span>
+            </div>
+
+            <div>
+              <span
+                className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block cursor-help"
+                title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+              >
+                COHORT
+              </span>
+              <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
+                {studentData.cohort || (studentData.admissionNumber ? studentData.admissionNumber.split("/")[1] : "2026")}
+              </span>
+              <span className="text-[9px] text-slate-400 italic block">
+                Started together
               </span>
             </div>
 

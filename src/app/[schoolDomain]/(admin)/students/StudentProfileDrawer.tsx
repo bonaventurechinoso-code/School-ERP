@@ -674,6 +674,15 @@ export default function StudentProfileDrawer({
                         <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 block">{student.admissionNumber || "Not Set"}</span>
                       </div>
                       <div>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">COHORT</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 block" title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
+                          {student.cohort || (dynamic as any)?.cohort || (dynamic as any)?.admissionYear || (student.admissionNumber?.split("/")[1]) || "2026"}
+                        </span>
+                        <p className="text-[9px] text-slate-500 mt-0.5">
+                          Cohort = Year group that started together at this school.
+                        </p>
+                      </div>
+                      <div>
                         <span className="text-slate-400 block text-[10px] font-bold uppercase">Date of Birth</span>
                         <span className="font-medium text-slate-800 dark:text-zinc-200 mt-0.5 block">
                           {student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString("en-NG", { dateStyle: "medium" }) : "Unspecified"}

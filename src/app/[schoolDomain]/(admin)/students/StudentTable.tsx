@@ -20,7 +20,30 @@ import {
 } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
-import { User, X, GraduationCap, ShieldAlert, Layers, ArrowRight, CheckCircle2, Lock, Eye, EyeOff } from "lucide-react";
+import { 
+  User, 
+  X, 
+  GraduationCap, 
+  ShieldAlert, 
+  Layers, 
+  ArrowRight, 
+  CheckCircle2, 
+  Lock, 
+  Eye, 
+  EyeOff,
+  FileSpreadsheet,
+  UploadCloud,
+  Printer,
+  Calendar,
+  HelpCircle,
+  TrendingUp,
+  Plus
+} from "lucide-react";
+import ManualStudentGridModal from "./ManualStudentGridModal";
+import BulkEnrollUploadModal from "./BulkEnrollUploadModal";
+import PrintableEnrollmentFormModal from "./PrintableEnrollmentFormModal";
+import PromotionModal from "./PromotionModal";
+import { resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
 type StudentWithTier = Student & { tier?: AcademicTier | null };
@@ -207,6 +230,8 @@ export default function StudentTable({
     parentPhone: "",
     parentEmail: "",
     relationship: "Parent",
+    admissionYear: new Date().getFullYear().toString(),
+    session: "2026/2027",
     password: "",
     confirmPassword: "",
     dynamicFields: {} as Record<string, any> 
@@ -214,6 +239,12 @@ export default function StudentTable({
   const [showStudentPassword, setShowStudentPassword] = useState(false);
   const [showStudentConfirmPassword, setShowStudentConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Bulk Enrollment & Promotion Modals State
+  const [showManualGridModal, setShowManualGridModal] = useState(false);
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [showPrintableModal, setShowPrintableModal] = useState(false);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
   
   const [filterClass, setFilterClass] = useState<string>("ALL");
   const [filterFeeStatus, setFilterFeeStatus] = useState<string>("ALL");
@@ -284,6 +315,8 @@ export default function StudentTable({
       parentPhone: "",
       parentEmail: "",
       relationship: "Parent",
+      admissionYear: new Date().getFullYear().toString(),
+      session: "2026/2027",
       password: "",
       confirmPassword: "",
       dynamicFields: {} 
@@ -311,6 +344,8 @@ export default function StudentTable({
       parentPhone: student.parentPhone || "",
       parentEmail: (student as any).parentEmail || "",
       relationship: (student as any).relationship || "Parent",
+      admissionYear: (student as any).cohort || (parsedFields as any).cohort || (parsedFields as any).admissionYear || (student.admissionNumber?.split("/")[1]) || new Date().getFullYear().toString(),
+      session: (parsedFields as any).session || "2026/2027",
       password: "",
       confirmPassword: "",
       dynamicFields: parsedFields
@@ -371,7 +406,12 @@ export default function StudentTable({
         parentPhone: formData.parentPhone?.trim() || undefined,
         relationship: formData.relationship || "Parent",
         password: formData.password ? formData.password.trim() : undefined,
-        dynamicFields: formData.dynamicFields
+        dynamicFields: {
+          ...formData.dynamicFields,
+          cohort: formData.admissionYear || "2026",
+          admissionYear: formData.admissionYear || "2026",
+          session: formData.session || "2026/2027",
+        }
       };
       
       let res;
@@ -841,25 +881,73 @@ export default function StudentTable({
             </select>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          {/* Method A: Manual Grid Entry (Primary) */}
+          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+            <button
+              onClick={() => setShowManualGridModal(true)}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+              title="Spreadsheet-like grid: type directly from paper registers without CSV"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Add Students Manually</span>
+            </button>
+          )}
+
+          {/* Method B: Bulk Enroll via CSV / Excel */}
+          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+            <button
+              onClick={() => setShowBulkUploadModal(true)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+              title="Upload existing .csv or .xlsx spreadsheets"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Bulk Enroll via CSV / Excel</span>
+            </button>
+          )}
+
+          {/* Method C: Printable Blank Template */}
+          <button
+            onClick={() => setShowPrintableModal(true)}
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-bold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+            title="Print blank landscape physical forms for teachers to fill"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            <span>Print Blank Template</span>
+          </button>
+
+          {/* Promote to Next Session */}
+          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+            <button
+              onClick={() => setShowPromotionModal(true)}
+              className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+              title="Advance all students to next class level for the new session"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Promote Session</span>
+            </button>
+          )}
+
           <button 
             onClick={() => {
               if (filterClass !== "ALL" && filterClass !== "All Classes") setBulkClass(filterClass);
               else setBulkClass(graduatingInfo.primaryClass);
               setShowBulkGraduate(true);
             }}
-            className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center justify-center gap-2"
+            className="px-3 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-xl shadow-xs hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center gap-1.5 text-xs"
           >
-            <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span>{currentBulkLabel}</span>
           </button>
+
           {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
             <button 
               onClick={showForm ? () => setShowForm(false) : openCreateForm}
-              className="w-full sm:w-auto px-4 py-2 text-white font-medium rounded-lg shadow-sm transition"
+              className="px-3.5 py-2 text-white font-bold rounded-xl shadow-xs transition text-xs flex items-center gap-1"
               style={{ backgroundColor: tenant.branding.primaryColor }}
             >
-              Add Student
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Student</span>
             </button>
           )}
         </div>
@@ -968,6 +1056,39 @@ export default function StudentTable({
                       <option value="EXPELLED">Expelled</option>
                       <option value="ALUMNI">Alumni (Graduated)</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Admission Year *</label>
+                    <input 
+                      required 
+                      type="text" 
+                      placeholder="e.g. 2026"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.admissionYear} 
+                      onChange={e => setFormData({...formData, admissionYear: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Academic Session *</label>
+                    <select 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
+                      value={formData.session} 
+                      onChange={e => setFormData({...formData, session: e.target.value})} 
+                    >
+                      <option value="2026/2027">2026/2027</option>
+                      <option value="2025/2026">2025/2026</option>
+                      <option value="2024/2025">2024/2025</option>
+                      <option value="2027/2028">2027/2028</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2 p-3 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+                    <span className="font-bold block">Assigned COHORT: {formData.admissionYear || "2026"} (Auto-Assigned)</span>
+                    <p className="text-[11px] text-indigo-700/90 dark:text-indigo-300 mt-0.5">
+                      Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1289,6 +1410,12 @@ export default function StudentTable({
               <th className="px-6 py-4 font-semibold">Student ID</th>
               <th className="px-6 py-4 font-semibold">Student Name</th>
               <th className="px-6 py-4 font-semibold">Current Class</th>
+              <th className="px-6 py-4 font-semibold">
+                <span className="flex items-center gap-1 cursor-help" title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
+                  COHORT
+                  <HelpCircle className="w-3.5 h-3.5 text-indigo-500" />
+                </span>
+              </th>
               <th className="px-6 py-4 font-semibold">Guardian Name</th>
               <th className="px-6 py-4 font-semibold">Fee Status</th>
               <th className="px-6 py-4 font-semibold">Status</th>
@@ -1298,7 +1425,7 @@ export default function StudentTable({
           <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-slate-500 dark:text-zinc-500 text-base italic">
+                <td colSpan={9} className="px-6 py-12 text-center text-slate-500 dark:text-zinc-500 text-base italic">
                   No students found in the roster.
                 </td>
               </tr>
@@ -1335,6 +1462,9 @@ export default function StudentTable({
                 </td>
                 <td className="px-6 py-4 text-slate-600 dark:text-zinc-300">
                   {student.currentClass || student.tier?.name || "—"}
+                </td>
+                <td className="px-6 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400" title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
+                  {student.cohort || (student.dynamicFields as any)?.cohort || (student.dynamicFields as any)?.admissionYear || (student.admissionNumber?.split("/")[1]) || "2026"}
                 </td>
                 <td className="px-6 py-4 text-slate-500 dark:text-zinc-400">{student.parentName || "—"}</td>
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
@@ -1751,6 +1881,74 @@ export default function StudentTable({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Method A: Manual Grid Entry Modal */}
+      {showManualGridModal && (
+        <ManualStudentGridModal
+          isOpen={showManualGridModal}
+          onClose={() => setShowManualGridModal(false)}
+          onSuccess={async () => {
+            setShowManualGridModal(false);
+            await refreshMetrics();
+            router.refresh();
+          }}
+          schoolId={schoolId}
+          schoolDomain={tenant?.subdomain || "egede"}
+          schoolName={tenant?.name || "Institution"}
+          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          currentSession="2026/2027"
+          availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
+          classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
+        />
+      )}
+
+      {/* Method B: Bulk Enroll via CSV / Excel Upload Modal */}
+      {showBulkUploadModal && (
+        <BulkEnrollUploadModal
+          isOpen={showBulkUploadModal}
+          onClose={() => setShowBulkUploadModal(false)}
+          onSuccess={async () => {
+            setShowBulkUploadModal(false);
+            await refreshMetrics();
+            router.refresh();
+          }}
+          schoolId={schoolId}
+          schoolDomain={tenant?.subdomain || "egede"}
+          schoolName={tenant?.name || "Institution"}
+          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          currentSession="2026/2027"
+          availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
+          classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
+        />
+      )}
+
+      {/* Method C: Printable Blank Template Modal */}
+      {showPrintableModal && (
+        <PrintableEnrollmentFormModal
+          isOpen={showPrintableModal}
+          onClose={() => setShowPrintableModal(false)}
+          schoolName={tenant?.name || "Institution"}
+          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          currentSession="2026/2027"
+          availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
+        />
+      )}
+
+      {/* Promotion to Next Session Modal */}
+      {showPromotionModal && (
+        <PromotionModal
+          isOpen={showPromotionModal}
+          onClose={() => setShowPromotionModal(false)}
+          onSuccess={async () => {
+            setShowPromotionModal(false);
+            await refreshMetrics();
+            router.refresh();
+          }}
+          schoolId={schoolId}
+          availableSessions={["2024/2025", "2025/2026", "2026/2027", "2027/2028"]}
+          currentSession="2026/2027"
+        />
       )}
     </div>
   );

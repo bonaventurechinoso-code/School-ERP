@@ -366,7 +366,10 @@ export default function AnnualBroadsheetClient({
               {/* Class Selector */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <label
+                    className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-help"
+                    title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                  >
                     Class Cohort
                   </label>
                   {isPending && (
@@ -384,6 +387,9 @@ export default function AnnualBroadsheetClient({
                     </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1 italic">
+                  Cohort = Year group that started together
+                </p>
               </div>
 
             </div>
@@ -452,7 +458,12 @@ export default function AnnualBroadsheetClient({
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
                 <Users className="w-4 h-4 text-slate-500" />
-                <span>Enrolled Cohort</span>
+                <span
+                  className="cursor-help"
+                  title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                >
+                  Enrolled Cohort
+                </span>
               </div>
               <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
                 {stats.totalEnrolled}

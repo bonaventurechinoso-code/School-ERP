@@ -21,6 +21,8 @@ interface Student {
   lastName: string;
   admissionNumber?: string | null;
   currentClass?: string | null;
+  cohort?: string | null;
+  dynamicFields?: any;
 }
 
 interface TeacherAttendanceClientProps {
@@ -42,23 +44,46 @@ export function TeacherAttendanceClient({
 }: TeacherAttendanceClientProps) {
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedClass, setSelectedClass] = useState(initialClass);
+  const [selectedSession, setSelectedSession] = useState("2026/2027");
+  const [selectedCohort, setSelectedCohort] = useState("ALL");
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: string; notes: string }>>(
     initialAttendanceMap
   );
   const [isPending, startTransition] = useTransition();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
+  // Available cohorts for selected class
+  const availableCohorts = React.useMemo(() => {
+    const cohorts = new Set<string>();
+    students.forEach((s) => {
+      const c = s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : null);
+      if (c && /^\d{4}$/.test(String(c).trim())) {
+        cohorts.add(String(c).trim());
+      }
+    });
+    return Array.from(cohorts).sort();
+  }, [students]);
+
+  // Filter students by selectedCohort
+  const filteredStudents = React.useMemo(() => {
+    return students.filter((s) => {
+      if (selectedCohort === "ALL") return true;
+      const c = String(s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")).trim();
+      return c === selectedCohort;
+    });
+  }, [students, selectedCohort]);
+
   // Status counters
-  const presentCount = students.filter(
+  const presentCount = filteredStudents.filter(
     (s) => (attendanceMap[s.id]?.status || "PRESENT") === "PRESENT"
   ).length;
-  const lateCount = students.filter(
+  const lateCount = filteredStudents.filter(
     (s) => attendanceMap[s.id]?.status === "LATE"
   ).length;
-  const absentCount = students.filter(
+  const absentCount = filteredStudents.filter(
     (s) => attendanceMap[s.id]?.status === "ABSENT"
   ).length;
-  const excusedCount = students.filter(
+  const excusedCount = filteredStudents.filter(
     (s) => attendanceMap[s.id]?.status === "EXCUSED"
   ).length;
 
@@ -83,8 +108,8 @@ export function TeacherAttendanceClient({
   };
 
   const handleMarkAllPresent = () => {
-    const updated: Record<string, { status: string; notes: string }> = {};
-    students.forEach((s) => {
+    const updated: Record<string, { status: string; notes: string }> = { ...attendanceMap };
+    filteredStudents.forEach((s) => {
       updated[s.id] = {
         status: "PRESENT",
         notes: attendanceMap[s.id]?.notes || "",
@@ -96,7 +121,7 @@ export function TeacherAttendanceClient({
   const handleSave = () => {
     setSaveMessage(null);
     startTransition(async () => {
-      const records = students.map((s) => ({
+      const records = filteredStudents.map((s) => ({
         studentId: s.id,
         status: attendanceMap[s.id]?.status || "PRESENT",
         notes: attendanceMap[s.id]?.notes || undefined,
@@ -115,16 +140,17 @@ export function TeacherAttendanceClient({
   };
 
   const handleExportCSV = () => {
-    if (students.length === 0) return;
-    const headers = ["Student Name", "Admission Number", "Class", "Date", "Status", "Notes"];
-    const rows = students.map((s) => {
+    if (filteredStudents.length === 0) return;
+    const headers = ["Student Name", "Admission Number", "Class", "Cohort", "Date", "Status", "Notes"];
+    const rows = filteredStudents.map((s) => {
       const name = `"${s.lastName}, ${s.firstName}"`;
       const adm = `"${s.admissionNumber || "N/A"}"`;
       const cls = `"${selectedClass}"`;
+      const coh = `"${s.cohort || ""}"`;
       const dt = `"${selectedDate}"`;
       const status = `"${attendanceMap[s.id]?.status || "PRESENT"}"`;
       const notes = `"${(attendanceMap[s.id]?.notes || "").replace(/"/g, '""')}"`;
-      return [name, adm, cls, dt, status, notes].join(",");
+      return [name, adm, cls, coh, dt, status, notes].join(",");
     });
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
@@ -170,6 +196,44 @@ export function TeacherAttendanceClient({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Session Select */}
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={selectedSession}
+              onChange={(e) => setSelectedSession(e.target.value)}
+              className="bg-transparent text-slate-800 dark:text-zinc-200 focus:outline-hidden cursor-pointer"
+            >
+              <option value="2026/2027">2026/2027</option>
+              <option value="2025/2026">2025/2026</option>
+              <option value="2024/2025">2024/2025</option>
+              <option value="2027/2028">2027/2028</option>
+            </select>
+          </div>
+
+          {/* COHORT Select */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold">
+              <span className="text-[10px] uppercase font-bold text-slate-400">COHORT:</span>
+              <select
+                value={selectedCohort}
+                onChange={(e) => setSelectedCohort(e.target.value)}
+                className="bg-transparent text-slate-800 dark:text-zinc-200 focus:outline-hidden cursor-pointer"
+                title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+              >
+                <option value="ALL">All Cohorts</option>
+                {availableCohorts.map((coh) => (
+                  <option key={coh} value={coh}>
+                    Cohort {coh}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="text-[9px] text-slate-400 italic mt-0.5">
+              Cohort = Year group that started together
+            </span>
           </div>
 
           {/* Date Input */}
@@ -297,8 +361,8 @@ export function TeacherAttendanceClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
-              {students.length > 0 ? (
-                students.map((student, idx) => {
+              {filteredStudents.length > 0 ? (
+                filteredStudents.map((student, idx) => {
                   const currentStatus = attendanceMap[student.id]?.status || "PRESENT";
                   const currentNotes = attendanceMap[student.id]?.notes || "";
 
@@ -349,7 +413,7 @@ export function TeacherAttendanceClient({
               ) : (
                 <tr>
                   <td colSpan={5} className="py-10 text-center text-slate-400 dark:text-zinc-500">
-                    No students registered in {selectedClass}.
+                    No students enrolled in {selectedClass} for {selectedSession}. Ask Admin to Bulk Enroll.
                   </td>
                 </tr>
               )}

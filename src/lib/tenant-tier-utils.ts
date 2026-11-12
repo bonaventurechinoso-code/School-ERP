@@ -90,13 +90,14 @@ export function resolveSchoolPrefix(subdomain?: string): string {
   if (!subdomain) return "SCH";
   const sub = subdomain.trim().toUpperCase();
   if (sub === "GREENWOOD") return "GW";
+  if (sub === "EGEDE") return "EGED";
   if (sub.length <= 4) return sub;
-  return sub.substring(0, 3);
+  return sub.substring(0, 4);
 }
 
 /**
- * Resolves a 3-4 letter tier abbreviation for admission number formatting.
- * e.g. "Secondary School" -> "SEC", "Primary School" -> "PRI", "Creche / Nursery" -> "NUR"
+ * Resolves a 3-4 letter tier/class abbreviation for admission number formatting.
+ * e.g. "Primary 1" -> "PRIM", "JSS 1" -> "JSS", "SSS 1" -> "SSS", "Nursery" -> "NUR"
  */
 export function resolveTierCode(tierName?: string | null, className?: string | null): string {
   const combined = `${tierName || ""} ${className || ""}`.toUpperCase().trim();
@@ -104,7 +105,6 @@ export function resolveTierCode(tierName?: string | null, className?: string | n
     combined.includes("CRECHE") ||
     combined.includes("NURSERY") ||
     combined.includes("CRÈCHE") ||
-    combined.includes("CRECHE") ||
     combined.includes("KINDERGARTEN") ||
     combined.includes("PLAYGROUP") ||
     combined.includes("EARLY")
@@ -116,20 +116,17 @@ export function resolveTierCode(tierName?: string | null, className?: string | n
     combined.includes("BASIC") ||
     combined.includes("ELEMENTARY")
   ) {
-    return "PRI";
+    return "PRIM";
+  }
+  if (combined.includes("JSS") || combined.includes("JUNIOR")) {
+    return "JSS";
+  }
+  if (combined.includes("SSS") || combined.includes("SENIOR")) {
+    return "SSS";
   }
   if (
     combined.includes("SECONDARY") ||
-    combined.includes("HIGH SCHOOL") ||
-    combined.includes("JSS") ||
-    combined.includes("SSS") ||
-    combined.includes("SS ") ||
-    combined.includes("GRADE 7") ||
-    combined.includes("GRADE 8") ||
-    combined.includes("GRADE 9") ||
-    combined.includes("GRADE 10") ||
-    combined.includes("GRADE 11") ||
-    combined.includes("GRADE 12")
+    combined.includes("HIGH SCHOOL")
   ) {
     return "SEC";
   }
@@ -159,8 +156,8 @@ export function generateAdmissionNumber(options: {
   const { schoolSubdomain = "SCH", tierName, currentClass, studentSequence, year = new Date().getFullYear() } = options;
   const prefix = resolveSchoolPrefix(schoolSubdomain);
   const tierCode = resolveTierCode(tierName, currentClass);
-  const seq = String(studentSequence).padStart(3, "0");
-  return `${prefix}/${tierCode}/${year}/${seq}`;
+  const seq = String(studentSequence).padStart(4, "0");
+  return `${prefix}/${year}/${tierCode}/${seq}`;
 }
 
 /**

@@ -190,9 +190,11 @@ export default function StaffPortalClient({
   // Tier & Class Filtering
   const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
   const [selectedClass, setSelectedClass] = useState<string>(
-    initialClassrooms[0]?.name || initialStudents[0]?.currentClass || initialStudents[0]?.class || "JSS 1"
+    initialClassrooms[0]?.name || initialStudents[0]?.currentClass || initialStudents[0]?.class || "Primary 1"
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSession, setSelectedSession] = useState<string>("2026/2027");
+  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
 
   // Gradebook State & Loading
   const [selectedSubject, setSelectedSubject] = useState<string>(initialCourses[0]?.name || "General Mathematics");
@@ -322,19 +324,47 @@ export default function StaffPortalClient({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filtered Students for the selected class & search
+  // Distinct cohorts that actually have students in that Class + Session
+  const availableCohorts = useMemo(() => {
+    const cohorts = new Set<string>();
+    initialStudents.forEach((s) => {
+      const sClass = s.currentClass || s.class;
+      if (!selectedClass || sClass?.toLowerCase() === selectedClass.toLowerCase()) {
+        const c =
+          (s as any).cohort ||
+          (s.dynamicFields as any)?.cohort ||
+          (s.dynamicFields as any)?.admissionYear ||
+          (s.admissionNumber ? s.admissionNumber.split("/")[1] : null);
+        if (c && /^\d{4}$/.test(String(c).trim())) {
+          cohorts.add(String(c).trim());
+        }
+      }
+    });
+    return Array.from(cohorts).sort();
+  }, [initialStudents, selectedClass]);
+
+  // Filtered Students for the selected class, session, cohort & search
   const classStudents = useMemo(() => {
     return initialStudents.filter((s) => {
       const studentClass = s.currentClass || s.class;
       const studentReg = s.admissionNumber || s.registrationNumber;
+      const studentCohort = String(
+        (s as any).cohort ||
+        (s.dynamicFields as any)?.cohort ||
+        (s.dynamicFields as any)?.admissionYear ||
+        (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")
+      ).trim();
+
       const matchesClass = !selectedClass || studentClass?.toLowerCase() === selectedClass.toLowerCase();
+      const matchesCohort = selectedCohort === "ALL" || studentCohort === selectedCohort;
       const matchesSearch =
         !searchQuery ||
         `${s.firstName} ${s.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
         studentReg?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesClass && matchesSearch;
+
+      return matchesClass && matchesCohort && matchesSearch;
     });
-  }, [initialStudents, selectedClass, searchQuery]);
+  }, [initialStudents, selectedClass, selectedCohort, searchQuery]);
 
   // Two-Way Sync: Load Attendance when date changes
   useEffect(() => {
@@ -1462,21 +1492,56 @@ export default function StaffPortalClient({
           {/* ========================================================================= */}
           {activeTab === "rosters" && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                {/* Class Stream Filter */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400">Class:</label>
-                  <select
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                    className="px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    {initialClassrooms.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                {/* Class, Session & Cohort Filter */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">Class:</label>
+                    <select
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    >
+                      {teacherAssignedClasses.map((cls) => (
+                        <option key={cls} value={cls}>
+                          {cls}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">Session:</label>
+                    <select
+                      value={selectedSession}
+                      onChange={(e) => setSelectedSession(e.target.value)}
+                      className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    >
+                      <option value="2026/2027">2026/2027</option>
+                      <option value="2025/2026">2025/2026</option>
+                      <option value="2024/2025">2024/2025</option>
+                      <option value="2027/2028">2027/2028</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      COHORT:
+                    </label>
+                    <select
+                      value={selectedCohort}
+                      onChange={(e) => setSelectedCohort(e.target.value)}
+                      className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                    >
+                      <option value="ALL">All Cohorts</option>
+                      {availableCohorts.map((coh) => (
+                        <option key={coh} value={coh}>
+                          Cohort {coh}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Search Bar */}
@@ -1491,6 +1556,11 @@ export default function StaffPortalClient({
                   />
                 </div>
               </div>
+
+              {/* Helper text under COHORT */}
+              <p className="text-[10px] text-slate-500 dark:text-zinc-400 italic -mt-3">
+                Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.
+              </p>
 
               {/* Rosters Table */}
               <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
@@ -1510,6 +1580,11 @@ export default function StaffPortalClient({
                         <th className="px-6 py-3.5">{isCreche ? "Infant / Child Name" : "Student Name"}</th>
                         <th className="px-6 py-3.5">{isCreche ? "Birth Reg / Tag #" : isTertiary ? "Matric / Reg #" : "Admission / Reg #"}</th>
                         <th className="px-6 py-3.5">{isCreche ? "Care Pod / Group" : isTertiary ? "Academic Level" : "Class / Stream"}</th>
+                        <th className="px-6 py-3.5">
+                          <span title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
+                            COHORT
+                          </span>
+                        </th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5">{isCreche ? "Authorized Guardian Phone" : "Guardian Phone"}</th>
                       </tr>
@@ -1517,8 +1592,13 @@ export default function StaffPortalClient({
                     <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                       {classStudents.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                            No students found matching your filters.
+                          <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                            <p className="font-bold text-sm text-slate-700 dark:text-zinc-300">
+                              No students enrolled in {selectedClass} for {selectedSession}.
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                              Ask Admin to Bulk Enroll.
+                            </p>
                           </td>
                         </tr>
                       ) : (
@@ -1532,6 +1612,9 @@ export default function StaffPortalClient({
                             </td>
                             <td className="px-6 py-3.5 text-slate-600 dark:text-zinc-300">
                               {s.currentClass || s.class || selectedClass}
+                            </td>
+                            <td className="px-6 py-3.5 font-mono font-bold text-indigo-600 dark:text-indigo-400" title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
+                              {(s as any).cohort || (s.dynamicFields as any)?.cohort || (s.dynamicFields as any)?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "2026")}
                             </td>
                             <td className="px-6 py-3.5">
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
@@ -1590,21 +1673,61 @@ export default function StaffPortalClient({
 
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                      Cohort:
+                      Class:
                     </label>
                     <select
                       value={selectedClass}
                       onChange={(e) => setSelectedClass(e.target.value)}
                       className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
                     >
-                      {initialClassrooms.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
+                      {teacherAssignedClasses.map((cls) => (
+                        <option key={cls} value={cls}>
+                          {cls}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Session:
+                    </label>
+                    <select
+                      value={selectedSession}
+                      onChange={(e) => setSelectedSession(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      <option value="2026/2027">2026/2027</option>
+                      <option value="2025/2026">2025/2026</option>
+                      <option value="2024/2025">2024/2025</option>
+                      <option value="2027/2028">2027/2028</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      COHORT:
+                    </label>
+                    <select
+                      value={selectedCohort}
+                      onChange={(e) => setSelectedCohort(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                    >
+                      <option value="ALL">All Cohorts</option>
+                      {availableCohorts.map((coh) => (
+                        <option key={coh} value={coh}>
+                          Cohort {coh}
                         </option>
                       ))}
                     </select>
                   </div>
                 </div>
+
+                {/* Cohort helper text */}
+                <p className="text-[10px] text-slate-500 dark:text-zinc-400 italic -mt-1 px-1">
+                  Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.
+                </p>
 
                 <div className="flex flex-wrap items-center gap-2 justify-end">
                   <button
@@ -1665,8 +1788,13 @@ export default function StaffPortalClient({
                     <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                       {classStudents.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
-                            No students in this class register.
+                          <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
+                            <p className="font-bold text-sm text-slate-700 dark:text-zinc-300">
+                              No students enrolled in {selectedClass} for {selectedSession}.
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                              Ask Admin to Bulk Enroll.
+                            </p>
                           </td>
                         </tr>
                       ) : (
@@ -1803,6 +1931,41 @@ export default function StaffPortalClient({
                     </select>
                   </div>
 
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      Session:
+                    </label>
+                    <select
+                      value={selectedSession}
+                      onChange={(e) => setSelectedSession(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      <option value="2026/2027">2026/2027</option>
+                      <option value="2025/2026">2025/2026</option>
+                      <option value="2024/2025">2024/2025</option>
+                      <option value="2027/2028">2027/2028</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
+                      COHORT:
+                    </label>
+                    <select
+                      value={selectedCohort}
+                      onChange={(e) => setSelectedCohort(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                    >
+                      <option value="ALL">All Cohorts</option>
+                      {availableCohorts.map((coh) => (
+                        <option key={coh} value={coh}>
+                          Cohort {coh}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {isLoadingGrades && (
                     <div className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold pt-4">
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1810,6 +1973,11 @@ export default function StaffPortalClient({
                     </div>
                   )}
                 </div>
+
+                {/* Cohort helper text */}
+                <p className="text-[10px] text-slate-500 dark:text-zinc-400 italic -mt-1 px-1">
+                  Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.
+                </p>
 
                 <div className="flex flex-wrap items-center gap-2 justify-end">
                   <button
@@ -1887,8 +2055,13 @@ export default function StaffPortalClient({
                     <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                       {gradedMatrix.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-5 py-12 text-center text-slate-400">
-                            No students found for this class stream.
+                          <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
+                            <p className="font-bold text-sm text-slate-700 dark:text-zinc-300">
+                              No students enrolled in {selectedClass} for {selectedSession}.
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                              Ask Admin to Bulk Enroll.
+                            </p>
                           </td>
                         </tr>
                       ) : (
