@@ -81,8 +81,8 @@ export default async function TenantLayout({
     const isSuperAdmin =
       session &&
       ((session.role || "").toUpperCase() === "SUPER_ADMIN" ||
-        Boolean(session.isSuperAdmin) ||
-        session.email === "bonaventure.chinoso@gmail.com" ||
+        Boolean(session?.isSuperAdmin) ||
+        session?.email === "bonaventure.chinoso@gmail.com" ||
         session.email === "admin@bonaveeict.com.ng");
 
     if (!isSuperAdmin) {
@@ -112,8 +112,8 @@ export default async function TenantLayout({
     const isSuperAdmin =
       session &&
       ((session.role || "").toUpperCase() === "SUPER_ADMIN" ||
-        Boolean(session.isSuperAdmin) ||
-        session.email === "bonaventure.chinoso@gmail.com" ||
+        Boolean(session?.isSuperAdmin) ||
+        session?.email === "bonaventure.chinoso@gmail.com" ||
         session.email === "admin@bonaveeict.com.ng");
 
     if (!isSuperAdmin) {
@@ -206,16 +206,27 @@ export default async function TenantLayout({
   };
 
 
-  if (session) {
+  const isAuthedPortalSession = Boolean(
+    session &&
+    session.userId &&
+    session.role &&
+    session.role !== "GUEST_APPLICANT" &&
+    session.role !== "GUEST" &&
+    session.role !== "APPLICANT"
+  );
+
+  let activeSession = isAuthedPortalSession ? session : null;
+
+  if (activeSession) {
     const isSuper =
-      (session.role || "").toUpperCase() === "SUPER_ADMIN" ||
-      Boolean(session.isSuperAdmin) ||
-      session.email === "bonaventure.chinoso@gmail.com" ||
-      session.email === "admin@bonaveeict.com.ng";
+      (activeSession.role || "").toUpperCase() === "SUPER_ADMIN" ||
+      Boolean(activeSession.isSuperAdmin) ||
+      activeSession.email === "bonaventure.chinoso@gmail.com" ||
+      activeSession.email === "admin@bonaveeict.com.ng";
 
     if (isSuper) {
-      session = {
-        ...session,
+      activeSession = {
+        ...activeSession,
         name: `${school.name} Admin`,
         firstName: `${school.name}`,
         lastName: "Admin",
@@ -223,14 +234,14 @@ export default async function TenantLayout({
       };
     }
 
-    tenantData.userRole = session.role;
-    tenantData.session = session;
-    tenantData.permissions = session.permissions;
-    tenantData.activeTiers = session.activeTiers;
+    tenantData.userRole = activeSession.role;
+    tenantData.session = activeSession;
+    tenantData.permissions = activeSession.permissions;
+    tenantData.activeTiers = activeSession.activeTiers;
   }
 
   return (
-    <SessionProvider session={session}>
+    <SessionProvider session={activeSession}>
       <TenantProvider tenant={tenantData}>
         {children}
       </TenantProvider>

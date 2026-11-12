@@ -329,7 +329,10 @@ export default async function ApplicantUploadPage({
 
   // Allow authorization via active guest applicant or tenant session cookie as fallback
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get("session")?.value || cookieStore.get("accessToken")?.value;
+  const sessionToken =
+    cookieStore.get("applicant_token")?.value ||
+    cookieStore.get("session")?.value ||
+    cookieStore.get("accessToken")?.value;
   let sessionAuthorized = false;
   if (sessionToken) {
     try {

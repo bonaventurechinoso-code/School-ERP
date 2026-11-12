@@ -13,6 +13,7 @@ const AUTH_COOKIE_NAMES = [
   "refreshToken",
   "auth_token",
   "guest_session",
+  "applicant_token",
   "next-auth.session-token",
   "__Secure-next-auth.session-token",
   "next-auth.csrf-token",

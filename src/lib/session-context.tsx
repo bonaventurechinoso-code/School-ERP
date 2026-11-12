@@ -119,6 +119,11 @@ export function SessionProvider({
       if (initialSession.sessionToken) {
         setAuthToken(initialSession.sessionToken, initialSession.sessionToken);
       }
+    } else {
+      setSession(null);
+      setLoading(false);
+      hasFetchedRef.current = true;
+      persistStoredSession(null);
     }
   }, [initialSession]);
 
@@ -175,13 +180,9 @@ export function SessionProvider({
         }
       }
 
-      // If API indicates unauthenticated, verify if storage has a valid session before clearing
-      const stored = getStoredSession();
-      if (stored) {
-        setSession(stored);
-      } else {
-        setSession(null);
-      }
+      // If API indicates unauthenticated, clear session state and browser storage
+      setSession(null);
+      persistStoredSession(null);
       setLoading(false);
     } catch (error) {
       console.warn("[SessionContext] Background session check failed:", error);

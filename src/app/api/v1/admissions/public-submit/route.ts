@@ -577,8 +577,9 @@ export async function POST(request: NextRequest) {
       maxAge: 24 * 60 * 60, // 24 hours
     };
 
-    response.cookies.set("session", guestSessionToken, cookieOptions);
-    response.cookies.set("accessToken", guestSessionToken, cookieOptions);
+    // Isolate guest applicant session to applicant_token and guest_session
+    // Never pollute primary 'session' or 'accessToken' cookies with guest inquiries!
+    response.cookies.set("applicant_token", guestSessionToken, cookieOptions);
     response.cookies.set("guest_session", "true", { ...cookieOptions, httpOnly: false });
     response.cookies.set("activeTier", encodeURIComponent(finalTierName), { ...cookieOptions, httpOnly: false });
 

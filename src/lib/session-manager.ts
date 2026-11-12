@@ -234,30 +234,34 @@ export async function validateDatabaseSession(
     }
 
     if (!dbSession) {
-      // Cryptographic signature has already been verified above with SECRET_KEY.
-      // Fallback to verified JWT claims so missing session rows or DB hiccups don't cause 401s.
+      // If DB session record does not exist (e.g. revoked or deleted upon logout),
+      // strictly reject regular user/staff sessions.
+      // Exception: allow verified SUPER_ADMIN tokens for system fallback.
       const anyPayload = payload as any;
-      const effectiveRole = (guestPayload.userRole as string) || (guestPayload.role as string) || "STAFF";
-      return {
-        userId: (guestPayload.userId as string) || (guestPayload.id as string),
-        email: guestPayload.email as string,
-        tenantId: (guestPayload.tenantId as string) || (guestPayload.schoolId as string) || null,
-        schoolDomain: (guestPayload.schoolDomain as string) || "admin",
-        tenantName: guestPayload.tenantName as string,
-        role: (guestPayload.role as UserRole) || effectiveRole,
-        userRole: effectiveRole,
-        assignedTier: (guestPayload.assignedTier as string) || (guestPayload.activeTiers?.[0] as string) || null,
-        staffRole: guestPayload.staffRole as string,
-        activeTiers: (guestPayload.activeTiers as string[]) || [],
-        permissions: (guestPayload.permissions as string[]) || [],
-        sessionToken: sessionTokenId,
-        sessionId: sessionTokenId,
-        token: token,
-        dbSessionId: sessionTokenId,
-        expiresAt: new Date(Date.now() + SESSION_MAX_AGE_MS),
-        mustChangePassword: Boolean(guestPayload.mustChangePassword),
-        forceChangePassword: Boolean(guestPayload.mustChangePassword),
-      };
+      if (anyPayload.role === "SUPER_ADMIN" || anyPayload.userRole === "SUPER_ADMIN") {
+        return {
+          userId: (anyPayload.userId as string) || (anyPayload.id as string),
+          email: anyPayload.email as string,
+          tenantId: null,
+          schoolDomain: (anyPayload.schoolDomain as string) || "admin",
+          tenantName: anyPayload.tenantName as string,
+          role: "SUPER_ADMIN",
+          userRole: "SUPER_ADMIN",
+          isSuperAdmin: true,
+          assignedTier: null,
+          staffRole: "Super Administrator",
+          activeTiers: [],
+          permissions: ["*"],
+          sessionToken: sessionTokenId,
+          sessionId: sessionTokenId,
+          token: token,
+          dbSessionId: sessionTokenId,
+          expiresAt: new Date(Date.now() + SESSION_MAX_AGE_MS),
+          mustChangePassword: false,
+          forceChangePassword: false,
+        };
+      }
+      return null;
     }
 
     // 3. Validate active status and revocation flag

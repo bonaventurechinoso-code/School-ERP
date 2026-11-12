@@ -27,6 +27,7 @@ export const COOKIES_TO_DELETE = [
   "session",
   "auth_token",
   "guest_session",
+  "applicant_token",
   "next-auth.session-token",
   "__Secure-next-auth.session-token",
   "__Host-next-auth.csrf-token",

@@ -64,6 +64,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 2. HTML Navigation requests: Always fetch live from origin without caching to ensure dynamic auth state is never stale
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const fallbackShell = await caches.match('/');
+        if (fallbackShell) return fallbackShell;
+        return new Response('Network offline. Unable to retrieve live School ERP data.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' })
+        });
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(request)
       .then((networkResponse) => {
