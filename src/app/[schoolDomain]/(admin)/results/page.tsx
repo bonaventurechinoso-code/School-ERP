@@ -79,7 +79,6 @@ export default async function ResultsPage({
           where: {
             schoolId: school.id,
             status: { in: ["ENROLLED", "ACTIVE"] },
-            ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
           },
           include: { tier: true },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],

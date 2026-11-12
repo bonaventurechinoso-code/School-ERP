@@ -171,6 +171,7 @@ export default function AnnualCompiledSheet({
   examResults = [],
   gradeRecords = [],
   academicRecords = [],
+  academicTiers = [],
 }: AnnualCompiledSheetProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -188,14 +189,15 @@ export default function AnnualCompiledSheet({
         name: schoolDisplayName,
         subdomain: effectiveDomain,
         tier: schoolTier,
+        academicTiers,
       },
       {
         students,
       }
     );
-  }, [schoolId, schoolDisplayName, effectiveDomain, schoolTier, students]);
+  }, [schoolId, schoolDisplayName, effectiveDomain, schoolTier, academicTiers, students]);
 
-  const { allClasses: availableClasses, defaultClass: schoolDefaultClass, tierInfo } = schoolClassesResult;
+  const { groups: classGroups, allClasses: availableClasses, defaultClass: schoolDefaultClass, tierInfo } = schoolClassesResult;
 
   const paramClass = searchParams.get("class");
   const [selectedClass, setSelectedClass] = useState<string>(() => {
@@ -598,11 +600,23 @@ export default function AnnualCompiledSheet({
               onChange={(e) => setSelectedClass(e.target.value)}
               className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
-              {availableClasses.map((cls: string) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
+              {classGroups.length > 1 ? (
+                classGroups.map((group) => (
+                  <optgroup key={group.tierCategory} label={group.label}>
+                    {group.classes.map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (
+                availableClasses.map((cls: string) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

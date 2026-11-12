@@ -13,9 +13,15 @@ import {
   Users,
   Search,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import StudentReportCardModal, { ReportCardStudentData } from "./StudentReportCardModal";
+import {
+  getClassesForSchool,
+  getTierForClass,
+  EducationalTierCategory,
+} from "@/lib/school-tier-classes";
 
 // -------------------------------------------------------------
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
@@ -387,9 +393,17 @@ interface StudentScore {
   id: string;
   name: string;
   admissionNumber?: string;
+  currentClass?: string;
+  tier?: string;
   ca1: string;
   ca2: string;
   exam: string;
+  total?: number;
+  overallTotal?: number;
+  overallAverage?: number;
+  subjectsCount?: number;
+  subjects?: any[];
+  isCompiled?: boolean;
   saving?: boolean;
   saved?: boolean;
   error?: string;
@@ -431,80 +445,61 @@ function ReportCardsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const paramTier = searchParams.get("tier");
 
-  // Inherit active tier key directly from global sidebar selection (URL search param, cookie, tenant context, or institution type)
-  const cookieTier = typeof document !== "undefined"
-    ? document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("activeTier="))
-        ?.split("=")[1]
-    : null;
-  const decodedCookieTier = cookieTier ? decodeURIComponent(cookieTier) : null;
-
-  const tenantActiveTier = (tenant as any)?.activeTier;
-  const tenantPreciseTier = tenant.preciseTier;
-  const tenantType = tenant.institutionType;
-
-  const activeTierKey: TierKey = useMemo(() => {
-    return resolveAcademicTierKey(
-      paramTier || decodedCookieTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "UNIVERSITY" : "PRIMARY"),
-      tenantType
+  // 1. Single Source of Truth for School Tiers & Scoped Classes
+  const schoolClassesResult = useMemo(() => {
+    return getClassesForSchool(
+      {
+        schoolId: tenant.id,
+        name: tenant.name,
+        subdomain: tenant.subdomain,
+        tier: tenant.preciseTier || (tenant as any).tier,
+        academicTiers: (tenant as any).academicTiers,
+      }
     );
-  }, [paramTier, decodedCookieTier, tenantActiveTier, tenantPreciseTier, tenantType]);
+  }, [tenant]);
 
-  const academicTier = activeTierKey;
-  const [term, setTerm] = useState("");
-  const [className, setClassName] = useState("");
+  const { groups: classGroups, allClasses: availableClasses, defaultClass: schoolDefaultClass, tierInfo } = schoolClassesResult;
+
+  const [term, setTerm] = useState("1st Term");
+  const [className, setClassName] = useState<string>(() => {
+    return schoolDefaultClass || availableClasses[0] || "Primary 1";
+  });
   const [subject, setSubject] = useState("");
   const [seniorStream, setSeniorStream] = useState<SeniorStreamKey>("ALL");
-  const [isGenerated, setIsGenerated] = useState(false);
-
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [roster, setRoster] = useState<StudentScore[]>([]);
 
-  // Flexible normalized filter completeness check (handles string casing and whitespace cleanly)
-  const isFilterActive = useMemo(() => {
-    const hasTerm = Boolean(term && String(term).trim().length > 0);
-    const hasClass = Boolean(className && String(className).trim().length > 0);
-    const hasSubject = Boolean(subject && String(subject).trim().length > 0);
-    return hasTerm && hasClass && hasSubject;
-  }, [term, className, subject]);
-
-  const hasFilters = Boolean(isGenerated || isFilterActive);
-
-  // Critical Logic Binding: When the global sidebar 'Academic Tier' updates,
-  // automatically reset class, subject, and term selections so they don't carry over into the new tier
-  const prevTierRef = useRef<TierKey>(activeTierKey);
-
+  // Keep className valid when availableClasses updates
   useEffect(() => {
-    if (prevTierRef.current !== activeTierKey) {
-      prevTierRef.current = activeTierKey;
-      setClassName("");
-      setSubject("");
-      setTerm("");
-      setSeniorStream("ALL");
-      setRoster([]);
-      setIsGenerated(false);
+    if (availableClasses.length > 0 && !availableClasses.includes(className)) {
+      setClassName(schoolDefaultClass || availableClasses[0]);
     }
-  }, [activeTierKey]);
+  }, [availableClasses, schoolDefaultClass, className]);
 
-  // Current active class levels for the selected tier
-  const activeClasses = useMemo(() => {
-    return TIER_CLASSES_MAP[academicTier] || TIER_CLASSES_MAP.PRIMARY;
-  }, [academicTier]);
+  // Selected class tier (follows selected class)
+  const selectedTier = useMemo(() => {
+    return getTierForClass(className || schoolDefaultClass);
+  }, [className, schoolDefaultClass]);
 
-  // Compute the exact subjects dynamically based on BOTH Academic Tier AND Selected Class/Level
+  const academicTier: TierKey = selectedTier.category === "NURSERY"
+    ? "NURSERY"
+    : selectedTier.category === "SECONDARY"
+    ? "SECONDARY"
+    : selectedTier.category === "TERTIARY"
+    ? "UNIVERSITY"
+    : "PRIMARY";
+
+  // Compute the exact subjects dynamically based on Tier Category AND Selected Class
   const activeSubjects: string[] = useMemo(() => {
-    if (!className) {
-      return [];
-    }
+    if (!className) return [];
 
-    if (academicTier === "NURSERY") {
+    if (selectedTier.category === "NURSERY") {
       return NURSERY_SUBJECTS;
     }
 
-    if (academicTier === "PRIMARY") {
+    if (selectedTier.category === "PRIMARY") {
       if (isLowerPrimaryClass(className)) {
         return LOWER_PRIMARY_SUBJECTS;
       }
@@ -514,100 +509,63 @@ function ReportCardsContent() {
       return LOWER_PRIMARY_SUBJECTS;
     }
 
-    if (academicTier === "SECONDARY") {
+    if (selectedTier.category === "SECONDARY") {
       if (isJuniorSecondaryClass(className)) {
         return JUNIOR_SECONDARY_SUBJECTS;
       }
       if (isSeniorSecondaryClass(className)) {
-        if (seniorStream === "CORE") {
-          return SENIOR_CORE_SUBJECTS;
-        }
-        if (seniorStream === "SCIENCE") {
-          return [...SENIOR_CORE_SUBJECTS, ...SENIOR_SCIENCE_ADDITIONS];
-        }
-        if (seniorStream === "HUMANITIES") {
-          return [...SENIOR_CORE_SUBJECTS, ...SENIOR_HUMANITIES_ADDITIONS];
-        }
-        if (seniorStream === "COMMERCIAL") {
-          return [...SENIOR_CORE_SUBJECTS, ...SENIOR_COMMERCIAL_ADDITIONS];
-        }
+        if (seniorStream === "CORE") return SENIOR_CORE_SUBJECTS;
+        if (seniorStream === "SCIENCE") return [...SENIOR_CORE_SUBJECTS, ...SENIOR_SCIENCE_ADDITIONS];
+        if (seniorStream === "HUMANITIES") return [...SENIOR_CORE_SUBJECTS, ...SENIOR_HUMANITIES_ADDITIONS];
+        if (seniorStream === "COMMERCIAL") return [...SENIOR_CORE_SUBJECTS, ...SENIOR_COMMERCIAL_ADDITIONS];
         return SENIOR_SECONDARY_ALL_SUBJECTS;
       }
       return JUNIOR_SECONDARY_SUBJECTS;
     }
 
-    if (academicTier === "COLLEGE_OF_EDUCATION") {
-      return COE_SUBJECTS;
-    }
-
-    if (academicTier === "POLYTECHNIC") {
-      return POLYTECHNIC_SUBJECTS;
-    }
-
-    if (academicTier === "UNIVERSITY") {
+    if (selectedTier.category === "TERTIARY") {
       return UNIVERSITY_SUBJECTS;
     }
 
-    if (academicTier === "HIGHER_ED") {
-      if (isCollegeOfEducationClass(className)) {
-        return COE_SUBJECTS;
-      }
-      if (isPolytechnicClass(className)) {
-        return POLYTECHNIC_SUBJECTS;
-      }
-      if (isUniversityClass(className)) {
-        return UNIVERSITY_SUBJECTS;
-      }
-      return UNIVERSITY_SUBJECTS;
-    }
+    return LOWER_PRIMARY_SUBJECTS;
+  }, [selectedTier.category, className, seniorStream]);
 
-    return [];
-  }, [academicTier, className, seniorStream]);
-
-
-
-  // Critical Assurance: When 'Choose Class' changes, immediately clear subject selection
+  // When 'Choose Class' changes, clear subject selection
   const handleClassChange = (newClass: string) => {
     setClassName(newClass);
-    setSubject(""); // Immediately clears previous subject value
-    setIsGenerated(false);
+    setSubject("");
   };
 
-  // Handle Senior Secondary sub-stream toggle
   const handleStreamChange = (stream: SeniorStreamKey) => {
     setSeniorStream(stream);
-    setSubject(""); // Immediately clears previous subject
-    setIsGenerated(false);
+    setSubject("");
   };
 
-  // Fetch roster when all three required filters (term, class, subject) are selected or generation is requested
+  // Immediate automatic fetching whenever class, term, or subject updates
   useEffect(() => {
-    if (isFilterActive && hasFilters) {
-      setIsLoading(true);
-      fetch(
-        `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject).trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
-      )
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.roster) {
-            setRoster(data.roster);
-          }
-        })
-        .catch((err) => console.error("Failed to load roster", err))
-        .finally(() => setIsLoading(false));
-    } else if (!isFilterActive) {
-      setRoster([]);
-      setIsGenerated(false);
-    }
-  }, [term, className, subject, isFilterActive, hasFilters, tenant.id]);
+    const targetClass = className || schoolDefaultClass;
+    if (!targetClass && availableClasses.length === 0) return;
 
-  // Explicit Action: Generate Report Sheets / Cards
-  const handleGenerateReportSheets = () => {
-    if (!isFilterActive) return;
-    setIsGenerated(true);
     setIsLoading(true);
     fetch(
-      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject).trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
+      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term || "1st Term").trim())}&className=${encodeURIComponent(String(targetClass).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.roster) {
+          setRoster(data.roster);
+        }
+      })
+      .catch((err) => console.error("Failed to load roster", err))
+      .finally(() => setIsLoading(false));
+  }, [term, className, subject, schoolDefaultClass, availableClasses.length, tenant.id]);
+
+  // Explicit Action: Generate / Refresh Report Sheets
+  const handleGenerateReportSheets = () => {
+    if (!className || !term) return;
+    setIsLoading(true);
+    fetch(
+      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
     )
       .then((res) => res.json())
       .then((data) => {
@@ -619,7 +577,6 @@ function ReportCardsContent() {
       .finally(() => setIsLoading(false));
   };
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "info" | "error" } | null>(null);
@@ -791,10 +748,10 @@ function ReportCardsContent() {
 
   const isSenior = isSeniorSecondaryClass(className);
   const isTertiaryTier =
-    academicTier === "COLLEGE_OF_EDUCATION" ||
-    academicTier === "POLYTECHNIC" ||
     academicTier === "UNIVERSITY" ||
-    academicTier === "HIGHER_ED";
+    (academicTier as string) === "COLLEGE_OF_EDUCATION" ||
+    (academicTier as string) === "POLYTECHNIC" ||
+    (academicTier as string) === "HIGHER_ED";
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 min-h-screen pb-12">
@@ -819,9 +776,9 @@ function ReportCardsContent() {
               {academicTier === "NURSERY" && "Early Childhood Care (Creche & Nursery)"}
               {academicTier === "PRIMARY" && "9-Year Basic Education (Primary)"}
               {academicTier === "SECONDARY" && "Secondary Education (Junior & Senior)"}
-              {academicTier === "COLLEGE_OF_EDUCATION" && "College of Education (Tertiary NCE)"}
+              {(academicTier as string) === "COLLEGE_OF_EDUCATION" && "College of Education (Tertiary NCE)"}
               {academicTier === "UNIVERSITY" && "University (Undergraduate & Postgraduate)"}
-              {academicTier === "HIGHER_ED" && "Tertiary / Higher Education Module"}
+              {(academicTier as string) === "HIGHER_ED" && "Tertiary / Higher Education Module"}
             </span>
           </span>
         </div>
@@ -869,76 +826,18 @@ function ReportCardsContent() {
                 {isTertiaryTier ? "-- Choose Level / Program --" : "-- Choose Class --"}
               </option>
 
-              {academicTier === "PRIMARY" ? (
-                <>
-                  <optgroup label="Lower Primary (Basic 1 - 3)">
-                    <option value="Primary 1">Primary 1</option>
-                    <option value="Primary 2">Primary 2</option>
-                    <option value="Primary 3">Primary 3</option>
+              {classGroups && classGroups.length > 0 ? (
+                classGroups.map((group) => (
+                  <optgroup key={group.tierCategory} label={group.label}>
+                    {group.classes.map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls}
+                      </option>
+                    ))}
                   </optgroup>
-                  <optgroup label="Upper Primary (Basic 4 - 6)">
-                    <option value="Primary 4">Primary 4</option>
-                    <option value="Primary 5">Primary 5</option>
-                    <option value="Primary 6">Primary 6</option>
-                  </optgroup>
-                </>
-              ) : academicTier === "SECONDARY" ? (
-                <>
-                  <optgroup label="Junior Secondary (JSS 1 - 3)">
-                    <option value="JSS 1">JSS 1</option>
-                    <option value="JSS 2">JSS 2</option>
-                    <option value="JSS 3">JSS 3</option>
-                  </optgroup>
-                  <optgroup label="Senior Secondary (SS 1 - 3)">
-                    <option value="SS 1">SS 1</option>
-                    <option value="SS 2">SS 2</option>
-                    <option value="SS 3">SS 3</option>
-                  </optgroup>
-                </>
-              ) : academicTier === "COLLEGE_OF_EDUCATION" ? (
-                <optgroup label="College of Education (NCE)">
-                  <option value="NCE 1">NCE 1</option>
-                  <option value="NCE 2">NCE 2</option>
-                  <option value="NCE 3">NCE 3</option>
-                </optgroup>
-              ) : academicTier === "POLYTECHNIC" ? (
-                <optgroup label="Polytechnic (ND & HND)">
-                  <option value="ND 1">ND 1</option>
-                  <option value="ND 2">ND 2</option>
-                  <option value="HND 1">HND 1</option>
-                  <option value="HND 2">HND 2</option>
-                </optgroup>
-              ) : academicTier === "UNIVERSITY" ? (
-                <optgroup label="University (Undergraduate & Postgraduate)">
-                  <option value="100 Level">100 Level</option>
-                  <option value="200 Level">200 Level</option>
-                  <option value="300 Level">300 Level</option>
-                  <option value="400 Level">400 Level</option>
-                  <option value="500 Level">500 Level</option>
-                </optgroup>
-              ) : academicTier === "HIGHER_ED" ? (
-                <>
-                  <optgroup label="University (Undergraduate)">
-                    <option value="100 Level">100 Level</option>
-                    <option value="200 Level">200 Level</option>
-                    <option value="300 Level">300 Level</option>
-                    <option value="400 Level">400 Level</option>
-                    <option value="500 Level">500 Level</option>
-                  </optgroup>
-                  <optgroup label="Polytechnic (ND & HND)">
-                    <option value="ND 1">ND 1</option>
-                    <option value="ND 2">ND 2</option>
-                    <option value="HND 1">HND 1</option>
-                    <option value="HND 2">HND 2</option>
-                  </optgroup>
-                  <optgroup label="College of Education (NCE)">
-                    <option value="NCE 1">NCE 1</option>
-                    <option value="NCE 2">NCE 2</option>
-                    <option value="NCE 3">NCE 3</option>
-                  </optgroup>
-                </>
+                ))
               ) : (
-                activeClasses.map((c) => (
+                availableClasses.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -973,9 +872,6 @@ function ReportCardsContent() {
               onChange={(e) => {
                 const val = e.target.value;
                 setSubject(val);
-                if (val && term && className) {
-                  setIsGenerated(true);
-                }
               }}
               disabled={!className}
               className={`w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium ${
@@ -985,9 +881,9 @@ function ReportCardsContent() {
               <option value="">
                 {!className
                   ? "-- Choose Class First --"
-                  : academicTier === "HIGHER_ED"
-                  ? "-- Choose Course --"
-                  : "-- Choose Subject --"}
+                  : isTertiaryTier
+                  ? "-- All Courses (Master Directory) --"
+                  : "-- All Subjects (Master Report Cards Directory) --"}
               </option>
 
               {/* Categorized optgroups for Senior Secondary when All Streams active */}
@@ -1046,53 +942,117 @@ function ReportCardsContent() {
           </div>
         </div>
 
-        {/* Explicit Action Button: Generate Report Sheets / Cards */}
+        {/* Explicit Action Button: Generate / Refresh Report Sheets */}
         <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isFilterActive ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+            <span className={`w-2 h-2 rounded-full ${className && term ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
             <span>
-              {isFilterActive
-                ? `Ready to generate: ${className} • ${term} • ${subject}`
-                : "Select Term, Class, and Subject above to populate class roster"}
+              {className && term
+                ? `Active Class Roster: ${className} • ${term}${subject ? ` • ${subject}` : " • All Subjects"}`
+                : "Select Term and Class above to populate class roster"}
             </span>
           </div>
 
-          <button
-            type="button"
-            id="generate-report-sheets-btn"
-            onClick={handleGenerateReportSheets}
-            disabled={!isFilterActive}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer"
-          >
-            <span>
-              {isTertiaryTier
-                ? "Generate Course Result Sheets →"
-                : academicTier === "SECONDARY"
-                ? "Generate Report Sheets →"
-                : "Generate Report Cards →"}
-            </span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              id="generate-report-sheets-btn"
+              onClick={handleGenerateReportSheets}
+              disabled={!className || !term || isLoading}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              <span>
+                {isTertiaryTier
+                  ? "Refresh Course Sheets"
+                  : academicTier === "SECONDARY"
+                  ? "Refresh Report Sheets"
+                  : "Refresh Report Cards"}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Roster Table or Placeholder */}
-      {!hasFilters ? (
+      {/* Persistent Student Search Input Form & Cohort Statistics Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Search Input */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search student in ${className || "class"} by name or admission number...`}
+            className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition text-slate-900 dark:text-white placeholder:text-slate-400"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Enrollment & Summary Stats */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700">
+            <Users className="w-3.5 h-3.5 text-slate-500" />
+            <span>{stats.totalStudents} Enrolled</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold border border-emerald-200 dark:border-emerald-800">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{stats.compiledCount} Compiled</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200 dark:border-blue-800">
+            <Award className="w-3.5 h-3.5 text-blue-600" />
+            <span>Class Avg: {stats.avgScore}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive Action Feedback Banner */}
+      {actionFeedback && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between text-sm animate-in fade-in duration-300 ${
+          actionFeedback.type === "success"
+            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+            : actionFeedback.type === "error"
+            ? "bg-rose-50 border-rose-200 text-rose-800"
+            : "bg-blue-50 border-blue-200 text-blue-800"
+        }`}>
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <span className="font-medium">{actionFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionFeedback(null)}
+            className="text-xs underline font-semibold hover:opacity-80 ml-4 cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Roster Table or State Views */}
+      {!className || !term ? (
         <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center">
           <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
+            <Users className="w-8 h-8 text-slate-400" />
           </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">Awaiting Selection</h3>
-          <p className="text-slate-500 max-w-md">
-            Please select a {isTertiaryTier ? "semester, level, and course" : "term, class, and subject"} to begin entering student marks.
+          <h3 className="text-xl font-bold text-slate-800 mb-2">Select Class & Term</h3>
+          <p className="text-slate-500 max-w-md text-sm">
+            Please select a class and term above to view student marks and report cards.
           </p>
         </div>
       ) : isLoading ? (
         <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-          <h3 className="text-lg font-bold text-slate-800">Loading Compiled Class Roster...</h3>
-          <p className="text-slate-500 text-sm mt-1">Retrieving continuous assessments and exam marks for {className}.</p>
+          <h3 className="text-lg font-bold text-slate-800">Loading Student Roster...</h3>
+          <p className="text-slate-500 text-sm mt-1">Retrieving continuous assessments and records for {className}.</p>
         </div>
       ) : rankedRoster.length === 0 ? (
         <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center">
@@ -1104,65 +1064,25 @@ function ReportCardsContent() {
             There are currently no active students assigned to {className}. Please select another class or enroll students via the Admissions module.
           </p>
         </div>
+      ) : filteredRoster.length === 0 ? (
+        <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center">
+          <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+            <Search className="w-8 h-8 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">No Matching Students</h3>
+          <p className="text-slate-500 max-w-md text-sm">
+            No students in {className} matched &ldquo;{searchQuery}&rdquo;. Try another search term or click clear.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="mt-4 px-4 py-2 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl hover:bg-blue-100 transition"
+          >
+            Clear Search Filter
+          </button>
+        </div>
       ) : (
         <div className="space-y-5">
-          {/* Automated Batch Summary Header Bar */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200/80">
-                <Users className="w-4 h-4 text-slate-500" />
-                <span>{stats.totalStudents} Enrolled</span>
-              </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/80">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>{stats.compiledCount} Compiled</span>
-              </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200/80">
-                <Clock className="w-4 h-4 text-amber-600" />
-                <span>{stats.pendingCount} Pending Review</span>
-              </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200/80">
-                <Award className="w-4 h-4 text-blue-600" />
-                <span>Class Avg: {stats.avgScore}%</span>
-              </div>
-            </div>
-
-            {/* Quick Filter Search */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search student name or adm #..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
-              />
-            </div>
-          </div>
-
-          {/* Interactive Action Feedback Banner */}
-          {actionFeedback && (
-            <div className={`p-4 rounded-xl border flex items-center justify-between text-sm animate-in fade-in duration-300 ${
-              actionFeedback.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : actionFeedback.type === "error"
-                ? "bg-rose-50 border-rose-200 text-rose-800"
-                : "bg-blue-50 border-blue-200 text-blue-800"
-            }`}>
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 shrink-0" />
-                <span className="font-medium">{actionFeedback.message}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActionFeedback(null)}
-                className="text-xs underline font-semibold hover:opacity-80 ml-4 cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
           {/* Automated Compiled Class Data Grid Table */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -1172,12 +1092,22 @@ function ReportCardsContent() {
                     <th className="px-6 py-4">Position in Class</th>
                     <th className="px-6 py-4">Student Name</th>
                     <th className="px-6 py-4">Admission Number</th>
-                    <th className="px-6 py-4">Continuous Assessment 1 (Max 20)</th>
-                    <th className="px-6 py-4">Continuous Assessment 2 (Max 20)</th>
-                    <th className="px-6 py-4">
-                      {isTertiaryTier ? "Semester Exam (Max 60)" : "Termly Exam (Max 60)"}
-                    </th>
-                    <th className="px-6 py-4">Calculated Total Score</th>
+                    {subject ? (
+                      <>
+                        <th className="px-6 py-4">Continuous Assessment 1 (Max 20)</th>
+                        <th className="px-6 py-4">Continuous Assessment 2 (Max 20)</th>
+                        <th className="px-6 py-4">
+                          {isTertiaryTier ? "Semester Exam (Max 60)" : "Termly Exam (Max 60)"}
+                        </th>
+                        <th className="px-6 py-4">Calculated Score</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-6 py-4">Class & Tier</th>
+                        <th className="px-6 py-4">Assessment Profile</th>
+                        <th className="px-6 py-4">Overall Score / Avg</th>
+                      </>
+                    )}
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
@@ -1225,58 +1155,92 @@ function ReportCardsContent() {
                           </span>
                         </td>
 
-                        {/* CA 1 */}
-                        <td className="px-6 py-4">
-                          <input 
-                            type="number" 
-                            max="20" 
-                            min="0" 
-                            value={student.ca1}
-                            onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
-                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                            placeholder="0 - 20"
-                          />
-                        </td>
+                        {subject ? (
+                          <>
+                            {/* CA 1 */}
+                            <td className="px-6 py-4">
+                              <input 
+                                type="number" 
+                                max="20" 
+                                min="0" 
+                                value={student.ca1}
+                                onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
+                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
+                                placeholder="0 - 20"
+                              />
+                            </td>
 
-                        {/* CA 2 */}
-                        <td className="px-6 py-4">
-                          <input 
-                            type="number" 
-                            max="20" 
-                            min="0" 
-                            value={student.ca2}
-                            onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
-                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                            placeholder="0 - 20"
-                          />
-                        </td>
+                            {/* CA 2 */}
+                            <td className="px-6 py-4">
+                              <input 
+                                type="number" 
+                                max="20" 
+                                min="0" 
+                                value={student.ca2}
+                                onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
+                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
+                                placeholder="0 - 20"
+                              />
+                            </td>
 
-                        {/* Exam */}
-                        <td className="px-6 py-4">
-                          <input 
-                            type="number" 
-                            max="60" 
-                            min="0" 
-                            value={student.exam}
-                            onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
-                            className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                            placeholder="0 - 60"
-                          />
-                        </td>
+                            {/* Exam */}
+                            <td className="px-6 py-4">
+                              <input 
+                                type="number" 
+                                max="60" 
+                                min="0" 
+                                value={student.exam}
+                                onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
+                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
+                                placeholder="0 - 60"
+                              />
+                            </td>
 
-                        {/* Calculated Total Score */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-base text-slate-900 dark:text-white">
-                              {student.total > 0 ? `${student.total}%` : "—"}
-                            </span>
-                            {student.total > 0 && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
-                                {grade.grade}
+                            {/* Calculated Total Score */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-base text-slate-900 dark:text-white">
+                                  {student.total > 0 ? `${student.total}%` : "—"}
+                                </span>
+                                {student.total > 0 && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
+                                    {grade.grade}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            {/* Class & Tier */}
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800">
+                                {className}
                               </span>
-                            )}
-                          </div>
-                        </td>
+                            </td>
+
+                            {/* Assessment Profile */}
+                            <td className="px-6 py-4">
+                              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                {student.isCompiled ? "Continuous Assessments Compiled" : "Assessments Pending"}
+                              </span>
+                            </td>
+
+                            {/* Overall Score / Avg */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-base text-slate-900 dark:text-white">
+                                  {student.total > 0 ? `${student.total}%` : "—"}
+                                </span>
+                                {student.total > 0 && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
+                                    {grade.grade}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        )}
 
                         {/* Status Badge */}
                         <td className="px-6 py-4">
@@ -1359,27 +1323,29 @@ function ReportCardsContent() {
                               <span>PDF</span>
                             </a>
 
-                            <button 
-                              onClick={() => handleSaveGrade(student)}
-                              disabled={student.saving}
-                              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition font-medium text-xs shadow-xs cursor-pointer ${
-                                student.saved 
-                                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                  : "bg-blue-600 text-white hover:bg-blue-700"
-                              } disabled:opacity-50`}
-                            >
-                              {student.saved ? (
-                                <>
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Saved
-                                </>
-                              ) : (
-                                <>
-                                  <Save className="w-3.5 h-3.5" />
-                                  {student.saving ? "Saving..." : "Save Grade"}
-                                </>
-                              )}
-                            </button>
+                            {subject && (
+                              <button 
+                                onClick={() => handleSaveGrade(student)}
+                                disabled={student.saving}
+                                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition font-medium text-xs shadow-xs cursor-pointer ${
+                                  student.saved 
+                                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                    : "bg-blue-600 text-white hover:bg-blue-700"
+                                } disabled:opacity-50`}
+                              >
+                                {student.saved ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Saved
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-3.5 h-3.5" />
+                                    {student.saving ? "Saving..." : "Save Grade"}
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1394,14 +1360,13 @@ function ReportCardsContent() {
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-800">
-                {className} • {term} • {subject}
+                {className} • {term}{subject ? ` • ${subject}` : " • All Subjects"}
               </span>
               <span className="hidden sm:inline text-slate-400 mx-2">•</span>
               <span className="block sm:inline mt-0.5 sm:mt-0 text-xs sm:text-sm text-slate-500">
                 {stats.compiledCount} of {stats.totalStudents} student records ready for publication
               </span>
             </div>
-
             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
               {/* Bulk Export ZIP / PDFs - secondary outline action */}
               <button
