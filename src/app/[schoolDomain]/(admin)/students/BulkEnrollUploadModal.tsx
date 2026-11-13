@@ -23,7 +23,7 @@ import {
 interface BulkEnrollUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (count?: number) => void;
   schoolId: string;
   schoolDomain: string;
   schoolName: string;
@@ -31,6 +31,7 @@ interface BulkEnrollUploadModalProps {
   currentSession: string;
   availableSessions: string[];
   classes: string[];
+  activeTier?: string;
 }
 
 export default function BulkEnrollUploadModal({
@@ -44,6 +45,7 @@ export default function BulkEnrollUploadModal({
   currentSession,
   availableSessions,
   classes,
+  activeTier,
 }: BulkEnrollUploadModalProps) {
   const [session, setSession] = useState<string>(currentSession || "2026/2027");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -62,37 +64,39 @@ export default function BulkEnrollUploadModal({
 
   if (!isOpen) return null;
 
-  // Download CSV Template with exact columns & example rows
+  // Download CSV Template with exact columns & example rows requested
   const handleDownloadTemplate = () => {
     const headers = [
-      "FirstName",
-      "LastName",
-      "MiddleName",
+      "First Name",
+      "Last Name",
       "Gender",
-      "DateOfBirth",
+      "Date of Birth",
       "Class",
-      "Arm",
-      "AdmissionYear",
-      "GuardianName",
-      "GuardianPhone",
-      "GuardianEmail",
-      "PreviousSchool",
+      "Guardian Name",
+      "Guardian Phone",
     ];
 
+    const sampleClass1 = classes && classes.length > 0 ? classes[0] : "Primary 1";
+    const sampleClass2 = classes && classes.length > 1 ? classes[1] : sampleClass1;
+
     const exampleRows = [
-      ["Joseph", "Okonkwo", "", "M", "2019-05-12", "Primary 1", "A", "2026", "Mr Okonkwo", "08030000001", "", ""],
-      ["Emeka", "Okafor", "", "M", "2018-02-10", "Primary 3", "A", "2024", "Mrs Okafor", "08060000002", "", ""],
-      ["Adaeze", "Nnaji", "", "F", "2018-09-01", "Primary 4", "A", "2023", "Mr Nnaji", "08020000003", "", ""],
+      ["Joseph", "Okonkwo", "M", "2019-05-12", sampleClass1, "Mr Okonkwo", "08031234567"],
+      ["Adaeze", "Nnaji", "F", "2018-09-01", sampleClass2, "Mrs Nnaji", "08029876543"],
+      ["Emeka", "Okafor", "M", "2018-02-10", sampleClass1, "Mrs Okafor", "08061112233"],
     ];
 
     const csvContent =
-      headers.join(",") + "\n" + exampleRows.map((r) => r.join(",")).join("\n");
+      headers.join(",") +
+      "\n" +
+      exampleRows
+        .map((r) => r.map((c) => (c.includes(",") ? `"${c}"` : c)).join(","))
+        .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `student_enrollment_template_${schoolDomain}.csv`);
+    link.setAttribute("download", `student_enrollment_template_${schoolDomain || "school"}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -128,56 +132,81 @@ export default function BulkEnrollUploadModal({
         return;
       }
 
-      const rawHeaders = (jsonData[0] as string[]).map((h) => String(h || "").trim().toLowerCase());
+      // Clean headers for resilient keyword matching
+      const rawHeaders = (jsonData[0] as any[]).map((h) =>
+        String(h || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+      );
       const dataRows = jsonData.slice(1);
 
-      // Map columns by position or header name
-      const findColIdx = (aliases: string[], fallbackIdx: number) => {
+      // Map columns by keyword aliases; return -1 if not matched
+      const findColIdx = (aliases: string[], fallbackIdx: number = -1): number => {
         const found = rawHeaders.findIndex((h) => aliases.some((a) => h.includes(a)));
-        return found !== -1 ? found : fallbackIdx;
+        if (found !== -1) return found;
+        return fallbackIdx;
       };
 
-      const cFirst = findColIdx(["first", "firstname"], 0);
-      const cLast = findColIdx(["last", "lastname", "surname"], 1);
-      const cMiddle = findColIdx(["middle", "middlename"], 2);
-      const cGender = findColIdx(["gender", "sex"], 3);
-      const cDob = findColIdx(["dob", "dateofbirth", "birth"], 4);
-      const cClass = findColIdx(["class", "grade"], 5);
-      const cArm = findColIdx(["arm", "stream", "section"], 6);
-      const cYear = findColIdx(["admissionyear", "admission_year", "year", "intake"], 7);
-      const cGuardian = findColIdx(["guardian", "parent", "parentname"], 8);
-      const cPhone = findColIdx(["phone", "guardianphone", "parentphone", "mobile"], 9);
-      const cEmail = findColIdx(["email", "guardianemail"], 10);
-      const cPrev = findColIdx(["previousschool", "previous"], 11);
+      const cFirst = findColIdx(["firstname", "first", "fname"], 0);
+      const cLast = findColIdx(["lastname", "last", "surname", "lname"], 1);
+      const cGender = findColIdx(["gender", "sex"], 2);
+      const cDob = findColIdx(["dateofbirth", "dob", "birth"], 3);
+      const cClass = findColIdx(["class", "grade", "classroom"], 4);
+      const cGuardian = findColIdx(["guardianname", "guardian", "parentname", "parent"], 5);
+      const cPhone = findColIdx(["guardianphone", "phone", "parentphone", "mobile", "tel"], 6);
+
+      // Optional extended columns
+      const cMiddle = findColIdx(["middlename", "middle", "mname"]);
+      const cArm = findColIdx(["arm", "stream", "section"]);
+      const cYear = findColIdx(["admissionyear", "year", "intake", "cohort"]);
+      const cEmail = findColIdx(["guardianemail", "email", "parentemail"]);
+      const cPrev = findColIdx(["previousschool", "previous"]);
 
       const parsedStudents: StudentRowInput[] = dataRows
         .map((row: any) => {
-          const fn = String(row[cFirst] || "").trim();
-          const ln = String(row[cLast] || "").trim();
+          if (!row || !Array.isArray(row)) return null;
+
+          const fn = String(cFirst !== -1 ? row[cFirst] || "" : "").trim();
+          const ln = String(cLast !== -1 ? row[cLast] || "" : "").trim();
           if (!fn && !ln) return null; // Ignore completely blank rows
 
           // Parse DateOfBirth safely if Excel serialized as number
-          let dobStr = String(row[cDob] || "").trim();
-          if (typeof row[cDob] === "number") {
-            const dateObj = XLSX.SSF.parse_date_code(row[cDob]);
-            if (dateObj) {
-              dobStr = `${dateObj.y}-${String(dateObj.m).padStart(2, "0")}-${String(dateObj.d).padStart(2, "0")}`;
+          let dobStr = "";
+          if (cDob !== -1 && row[cDob] !== undefined && row[cDob] !== null) {
+            if (typeof row[cDob] === "number") {
+              const dateObj = XLSX.SSF.parse_date_code(row[cDob]);
+              if (dateObj) {
+                dobStr = `${dateObj.y}-${String(dateObj.m).padStart(2, "0")}-${String(dateObj.d).padStart(2, "0")}`;
+              }
+            } else {
+              dobStr = String(row[cDob]).trim();
             }
           }
+
+          // Resolve intake/admission year from column or active session
+          const yearFromCol = cYear !== -1 ? String(row[cYear] || "").trim() : "";
+          const resolvedYear =
+            yearFromCol || (session ? session.split("/")[0] : new Date().getFullYear().toString());
 
           return {
             firstName: fn,
             lastName: ln,
-            middleName: String(row[cMiddle] || "").trim(),
-            gender: String(row[cGender] || "M").trim().toUpperCase().startsWith("F") ? "F" : "M",
+            middleName: cMiddle !== -1 ? String(row[cMiddle] || "").trim() : "",
+            gender: String(cGender !== -1 ? row[cGender] || "M" : "M")
+              .trim()
+              .toUpperCase()
+              .startsWith("F")
+              ? "F"
+              : "M",
             dateOfBirth: dobStr,
-            currentClass: String(row[cClass] || "").trim(),
-            arm: String(row[cArm] || "").trim(),
-            admissionYear: String(row[cYear] || "").trim(),
-            guardianName: String(row[cGuardian] || "").trim(),
-            guardianPhone: String(row[cPhone] || "").trim(),
-            guardianEmail: String(row[cEmail] || "").trim(),
-            previousSchool: String(row[cPrev] || "").trim(),
+            currentClass: String(cClass !== -1 ? row[cClass] || "" : "").trim(),
+            arm: cArm !== -1 ? String(row[cArm] || "").trim() : "",
+            admissionYear: resolvedYear,
+            guardianName: cGuardian !== -1 ? String(row[cGuardian] || "").trim() : "",
+            guardianPhone: cPhone !== -1 ? String(row[cPhone] || "").trim() : "",
+            guardianEmail: cEmail !== -1 ? String(row[cEmail] || "").trim() : "",
+            previousSchool: cPrev !== -1 ? String(row[cPrev] || "").trim() : "",
           };
         })
         .filter(Boolean) as StudentRowInput[];
@@ -187,9 +216,9 @@ export default function BulkEnrollUploadModal({
         return;
       }
 
-      // Run server validation
+      // Run server validation with tier awareness
       startTransition(async () => {
-        const validation = await validateBulkStudentBatch(schoolId, session, parsedStudents);
+        const validation = await validateBulkStudentBatch(schoolId, session, parsedStudents, activeTier);
         setValidatedRows(validation.rows);
         setValidationStats({
           total: validation.totalCount,
@@ -210,7 +239,7 @@ export default function BulkEnrollUploadModal({
     setParseError(null);
     startTransition(async () => {
       const validRowsToEnroll = validatedRows.filter((r) => r.isValid && !r.isDuplicate);
-      const res = await executeBulkEnrollmentAction(schoolId, session, validRowsToEnroll, true);
+      const res = await executeBulkEnrollmentAction(schoolId, session, validRowsToEnroll, true, activeTier);
 
       if (!res.success) {
         setParseError(res.error || "Failed to enroll students.");
@@ -261,7 +290,12 @@ export default function BulkEnrollUploadModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                if (enrolledResult && enrolledResult.enrolledCount > 0) {
+                  onSuccess(enrolledResult.enrolledCount);
+                }
+                onClose();
+              }}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition"
             >
               <X className="w-5 h-5" />
@@ -522,10 +556,10 @@ export default function BulkEnrollUploadModal({
             <button
               type="button"
               onClick={() => {
-                onSuccess();
+                onSuccess(enrolledResult.enrolledCount);
                 onClose();
               }}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition"
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition cursor-pointer"
             >
               Done &amp; View Student Roster
             </button>

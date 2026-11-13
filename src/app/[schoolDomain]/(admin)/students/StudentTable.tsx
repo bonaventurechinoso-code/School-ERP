@@ -200,6 +200,11 @@ export default function StudentTable({
   const router = useRouter();
   const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  // Administrative enrollment permissions: Allowed for ADMIN, SCHOOL_ADMIN, SUPER_ADMIN, PRINCIPAL, HEADMASTER, REGISTRAR, or unconstrained admin portal users
+  const canManageStudents =
+    !tenant?.userRole ||
+    !["TEACHER", "STUDENT", "PARENT"].includes(tenant.userRole.toUpperCase());
+
   useEffect(() => {
     if (students) {
       setStudentList(students);
@@ -885,27 +890,15 @@ export default function StudentTable({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          {/* Method A: Manual Grid Entry (Primary) */}
-          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
-            <button
-              onClick={() => setShowManualGridModal(true)}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
-              title="Spreadsheet-like grid: type directly from paper registers without CSV"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Add Students Manually</span>
-            </button>
-          )}
-
-          {/* Method B: Bulk Enroll via CSV / Excel */}
-          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+          {/* Method B: Bulk Enrollment / Import Students */}
+          {canManageStudents && (
             <button
               onClick={() => setShowBulkUploadModal(true)}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
-              title="Upload existing .csv or .xlsx spreadsheets"
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+              title="Upload CSV or Excel file to enroll multiple students at once"
             >
-              <UploadCloud className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Bulk Enroll via CSV / Excel</span>
+              <UploadCloud className="w-4 h-4" />
+              <span>Bulk Enrollment</span>
             </button>
           )}
 
@@ -919,8 +912,20 @@ export default function StudentTable({
             <span>Print Blank Template</span>
           </button>
 
+          {/* Method A: Manual Grid Entry */}
+          {canManageStudents && (
+            <button
+              onClick={() => setShowManualGridModal(true)}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-bold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
+              title="Spreadsheet-like grid: type directly from paper registers without CSV"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Manual Entry</span>
+            </button>
+          )}
+
           {/* Promote to Next Session */}
-          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+          {canManageStudents && (
             <button
               onClick={() => setShowPromotionModal(true)}
               className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 shadow-xs transition flex items-center gap-1.5 text-xs cursor-pointer"
@@ -937,17 +942,19 @@ export default function StudentTable({
               else setBulkClass(graduatingInfo.primaryClass);
               setShowBulkGraduate(true);
             }}
-            className="px-3 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-xl shadow-xs hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center gap-1.5 text-xs"
+            className="px-3 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-medium rounded-xl shadow-xs hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center gap-1.5 text-xs cursor-pointer"
+            title={currentBulkLabel}
           >
             <GraduationCap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span>{currentBulkLabel}</span>
           </button>
 
-          {(tenant.userRole === "ADMIN" || tenant.userRole === "REGISTRAR") && (
+          {/* Single Enrollment: Add Student */}
+          {canManageStudents && (
             <button 
               onClick={showForm ? () => setShowForm(false) : openCreateForm}
-              className="px-3.5 py-2 text-white font-bold rounded-xl shadow-xs transition text-xs flex items-center gap-1"
-              style={{ backgroundColor: tenant.branding.primaryColor }}
+              className="px-3.5 py-2 text-white font-bold rounded-xl shadow-xs transition text-xs flex items-center gap-1 cursor-pointer"
+              style={{ backgroundColor: tenant.branding.primaryColor || "#4f46e5" }}
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Student</span>
@@ -1911,8 +1918,16 @@ export default function StudentTable({
         <BulkEnrollUploadModal
           isOpen={showBulkUploadModal}
           onClose={() => setShowBulkUploadModal(false)}
-          onSuccess={async () => {
+          onSuccess={async (count?: number) => {
             setShowBulkUploadModal(false);
+            const countNum = typeof count === "number" ? count : 0;
+            setActionFeedback({
+              type: "success",
+              message: countNum > 0
+                ? `${countNum} students imported successfully.`
+                : "Students imported successfully.",
+            });
+            setTimeout(() => setActionFeedback(null), 7000);
             await refreshMetrics();
             router.refresh();
           }}
@@ -1923,6 +1938,7 @@ export default function StudentTable({
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
           classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
+          activeTier={activeTier}
         />
       )}
 

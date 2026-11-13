@@ -150,7 +150,8 @@ export async function getBulkEnrollmentContext(schoolId: string) {
 export async function validateBulkStudentBatch(
   schoolId: string,
   session: string,
-  rows: StudentRowInput[]
+  rows: StudentRowInput[],
+  tierName?: string
 ): Promise<{
   rows: ValidatedStudentRow[];
   totalCount: number;
@@ -161,8 +162,10 @@ export async function validateBulkStudentBatch(
   const context = await getBulkEnrollmentContext(schoolId);
   const validClasses = new Set(context.classes.map((c) => c.toLowerCase().trim()));
 
+  const tenantDb = await getPrismaClientForTier(schoolId, tierName || "");
+
   // Fetch all existing students in this school for duplicate checking
-  const existingStudents = await basePrisma.student.findMany({
+  const existingStudents = await tenantDb.student.findMany({
     where: { schoolId },
     select: {
       id: true,
@@ -174,7 +177,19 @@ export async function validateBulkStudentBatch(
       currentClass: true,
       cohort: true,
     },
-  });
+  }).catch(() => basePrisma.student.findMany({
+    where: { schoolId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+      parentPhone: true,
+      admissionNumber: true,
+      currentClass: true,
+      cohort: true,
+    },
+  }));
 
   const existingMap = new Map<string, typeof existingStudents[0]>();
   existingStudents.forEach((s) => {
@@ -201,8 +216,13 @@ export async function validateBulkStudentBatch(
     const firstName = (row.firstName || "").trim();
     const lastName = (row.lastName || "").trim();
     const currentClass = (row.currentClass || "").trim();
-    const admissionYear = (row.admissionYear || "").trim();
+    let admissionYear = (row.admissionYear || "").trim();
     const gender = (row.gender || "").trim().toUpperCase();
+
+    // Default admissionYear / cohort to active session start year if omitted in CSV
+    if (!admissionYear) {
+      admissionYear = session ? session.split("/")[0] : new Date().getFullYear().toString();
+    }
 
     // Required fields check
     if (!firstName) errors.push("FirstName is required");
@@ -212,21 +232,19 @@ export async function validateBulkStudentBatch(
     }
     if (!currentClass) {
       errors.push("Class is required");
-    } else {
-      // Validate class belongs to school tier
-      const normClass = currentClass.toLowerCase();
-      // Check exact or loose match (e.g. Primary 1 or Primary 1 - A)
-      const isClassAllowed = Array.from(validClasses).some(
-        (vc) => normClass === vc || normClass.startsWith(vc) || vc.startsWith(normClass)
-      );
+    } else if (validClasses.size > 0) {
+      // Validate class belongs to school tier with flexible formatting
+      const normClass = currentClass.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const isClassAllowed = Array.from(validClasses).some((vc) => {
+        const normVc = vc.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return normClass === normVc || normClass.startsWith(normVc) || normVc.startsWith(normClass);
+      });
       if (!isClassAllowed) {
         errors.push(`${currentClass} not in this school's tier`);
       }
     }
 
-    if (!admissionYear) {
-      errors.push("AdmissionYear required - cannot guess Cohort for repeaters / transfers.");
-    } else if (!/^\d{4}$/.test(admissionYear)) {
+    if (!/^\d{4}$/.test(admissionYear)) {
       errors.push("AdmissionYear must be a 4-digit year (e.g. 2026)");
     }
 
@@ -297,7 +315,8 @@ export async function executeBulkEnrollmentAction(
   schoolId: string,
   session: string,
   students: StudentRowInput[],
-  skipDuplicates: boolean = true
+  skipDuplicates: boolean = true,
+  tierName?: string
 ) {
   try {
     const context = await getBulkEnrollmentContext(schoolId);
@@ -305,7 +324,7 @@ export async function executeBulkEnrollmentAction(
       throw new Error(context.error || "Failed to load school context");
     }
 
-    const validation = await validateBulkStudentBatch(schoolId, session, students);
+    const validation = await validateBulkStudentBatch(schoolId, session, students, tierName);
     const validRows = validation.rows.filter((r) => r.isValid && (!skipDuplicates || !r.isDuplicate));
 
     if (validRows.length === 0) {
@@ -325,17 +344,26 @@ export async function executeBulkEnrollmentAction(
     if (!school) throw new Error("School not found");
 
     const schoolPrefix = resolveSchoolPrefix(school.subdomain);
-    const defaultTier = school.academicTiers[0];
-    if (!defaultTier) throw new Error("School has no configured academic tier");
+    const targetTier = (tierName && school.academicTiers.find((t) =>
+      t.name.toLowerCase() === tierName.toLowerCase() ||
+      t.name.toLowerCase().includes(tierName.toLowerCase())
+    )) || school.academicTiers[0];
+
+    if (!targetTier) throw new Error("School has no configured academic tier");
+
+    const tenantDb = await getPrismaClientForTier(schoolId, targetTier.name);
 
     // Pre-calculate max sequence for each admissionYear to guarantee atomic non-conflicting increment
     const yearSequenceCounters = new Map<string, number>();
 
     // Fetch all existing admission numbers for this school
-    const existingAdmissions = await basePrisma.student.findMany({
+    const existingAdmissions = await tenantDb.student.findMany({
       where: { schoolId },
       select: { admissionNumber: true, cohort: true },
-    });
+    }).catch(() => basePrisma.student.findMany({
+      where: { schoolId },
+      select: { admissionNumber: true, cohort: true },
+    }));
 
     existingAdmissions.forEach((s) => {
       if (s.admissionNumber) {
@@ -358,14 +386,14 @@ export async function executeBulkEnrollmentAction(
     const defaultPasswordHash = await bcrypt.hash("Welcome123", 10);
 
     // Perform database operations in safe transaction
-    await basePrisma.$transaction(async (tx) => {
+    await tenantDb.$transaction(async (tx) => {
       for (const row of validRows) {
-        const admissionYear = row.admissionYear || "2026";
+        const admissionYear = row.admissionYear || (session ? session.split("/")[0] : "2026");
         const currentCounter = yearSequenceCounters.get(admissionYear) || 0;
         const nextSequence = currentCounter + 1;
         yearSequenceCounters.set(admissionYear, nextSequence);
 
-        const classCode = resolveTierCode(defaultTier.name, row.currentClass);
+        const classCode = resolveTierCode(targetTier.name, row.currentClass);
         const seqFormatted = String(nextSequence).padStart(4, "0");
         const regNo = `${schoolPrefix}/${admissionYear}/${classCode}/${seqFormatted}`;
 
@@ -397,7 +425,7 @@ export async function executeBulkEnrollmentAction(
         const student = await tx.student.create({
           data: {
             schoolId,
-            tierId: defaultTier.id,
+            tierId: targetTier.id,
             firstName: row.firstName.trim(),
             lastName: row.lastName.trim(),
             currentClass: resolvedClass,
@@ -420,7 +448,7 @@ export async function executeBulkEnrollmentAction(
           `${regNo.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain}`;
 
         try {
-          await tx.user.upsert({
+          await basePrisma.user.upsert({
             where: { schoolId_email: { schoolId, email: studentPortalEmail } },
             update: {
               firstName: row.firstName.trim(),
