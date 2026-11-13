@@ -3,13 +3,13 @@
 import React, { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Student, AcademicTier } from "@prisma/client";
-import { 
-  createStudent, 
-  updateStudent, 
-  deleteStudent, 
-  updateStudentStatus, 
-  bulkGraduateClass, 
-  bulkGraduateStudents, 
+import {
+  createStudent,
+  updateStudent,
+  deleteStudent,
+  updateStudentStatus,
+  bulkGraduateClass,
+  bulkGraduateStudents,
   fetchStudentsPaginated,
   fetchStudentMetrics,
   toggleStudentSuspension,
@@ -20,16 +20,16 @@ import {
 } from "./actions";
 import { useTenant } from "@/lib/tenant-context";
 import StudentProfileDrawer from "./StudentProfileDrawer";
-import { 
-  User, 
-  X, 
-  GraduationCap, 
-  ShieldAlert, 
-  Layers, 
-  ArrowRight, 
-  CheckCircle2, 
-  Lock, 
-  Eye, 
+import {
+  User,
+  X,
+  GraduationCap,
+  ShieldAlert,
+  Layers,
+  ArrowRight,
+  CheckCircle2,
+  Lock,
+  Eye,
   EyeOff,
   FileSpreadsheet,
   UploadCloud,
@@ -46,7 +46,7 @@ import PromotionModal from "./PromotionModal";
 import { resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 import { getClassesForTier, getTierConfig } from "@/lib/tier-config";
 
-type StudentWithTier = Student & { 
+type StudentWithTier = Student & {
   tier?: AcademicTier | null;
   cohort?: string | null;
 };
@@ -185,8 +185,8 @@ export function getGraduatingClassForTier(
   return { primaryClass: highest, aliases };
 }
 
-export default function StudentTable({ 
-  students, 
+export default function StudentTable({
+  students,
   initialNextCursor,
   initialHasMore,
   schoolId,
@@ -224,12 +224,12 @@ export default function StudentTable({
   const [bulkClass, setBulkClass] = useState("");
   const [repeatingStudentIds, setRepeatingStudentIds] = useState<string[]>([]);
   const [repeaterSearch, setRepeaterSearch] = useState("");
-  const [formData, setFormData] = useState({ 
-    firstName: "", 
-    lastName: "", 
-    email: "", 
-    status: "ENROLLED", 
-    tierId: "", 
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    status: "ENROLLED",
+    tierId: "",
     currentClass: "",
     admissionNumber: "",
     dateOfBirth: "",
@@ -242,7 +242,7 @@ export default function StudentTable({
     session: "2026/2027",
     password: "",
     confirmPassword: "",
-    dynamicFields: {} as Record<string, any> 
+    dynamicFields: {} as Record<string, any>
   });
   const [showStudentPassword, setShowStudentPassword] = useState(false);
   const [showStudentConfirmPassword, setShowStudentConfirmPassword] = useState(false);
@@ -253,7 +253,7 @@ export default function StudentTable({
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [showPrintableModal, setShowPrintableModal] = useState(false);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
-  
+
   const [filterClass, setFilterClass] = useState<string>("ALL");
   const [filterFeeStatus, setFilterFeeStatus] = useState<string>("ALL");
   const [selectedDrawerTab, setSelectedDrawerTab] = useState<"BIO" | "GUARDIAN" | "DOCS" | "LIFECYCLE" | "FINANCE">("BIO");
@@ -287,7 +287,7 @@ export default function StudentTable({
           alumniCount: res.alumniCount,
         }));
       }
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -303,18 +303,18 @@ export default function StudentTable({
 
   const openCreateForm = () => {
     setEditingStudentId(null);
-    const matchingTier = tiers.find(t => 
+    const matchingTier = tiers.find(t =>
       activeTier && (t.name.toLowerCase() === activeTier.toLowerCase() || t.name.toLowerCase().includes(activeTier.toLowerCase()))
     ) || (tiers.length > 0 ? tiers[0] : null);
 
     const initialTierClasses = getClassOptionsForTier(matchingTier?.name, tiers, classrooms);
 
-    setFormData({ 
-      firstName: "", 
-      lastName: "", 
-      email: "", 
-      status: "ENROLLED", 
-      tierId: matchingTier ? matchingTier.id : (tiers.length > 0 ? tiers[0].id : ""), 
+    setFormData({
+      firstName: "",
+      lastName: "",
+      email: "",
+      status: "ENROLLED",
+      tierId: matchingTier ? matchingTier.id : (tiers.length > 0 ? tiers[0].id : ""),
       currentClass: initialTierClasses[0] || (classrooms.length > 0 ? classrooms[0].name : ""),
       admissionNumber: "",
       dateOfBirth: "",
@@ -327,7 +327,7 @@ export default function StudentTable({
       session: "2026/2027",
       password: "",
       confirmPassword: "",
-      dynamicFields: {} 
+      dynamicFields: {}
     });
     setShowForm(true);
   };
@@ -338,10 +338,10 @@ export default function StudentTable({
     if (student.dynamicFields && typeof student.dynamicFields === "object") {
       parsedFields = student.dynamicFields;
     }
-    setFormData({ 
-      firstName: student.firstName, 
-      lastName: student.lastName, 
-      email: student.email || "", 
+    setFormData({
+      firstName: student.firstName,
+      lastName: student.lastName,
+      email: student.email || "",
       status: student.status,
       tierId: student.tierId,
       currentClass: student.currentClass || "",
@@ -421,14 +421,14 @@ export default function StudentTable({
           session: formData.session || "2026/2027",
         }
       };
-      
+
       let res;
       if (editingStudentId) {
         res = await updateStudent(schoolId, editingStudentId, payload, activeTier);
       } else {
         res = await createStudent(schoolId, payload, activeTier);
       }
-      
+
       if (res?.error) {
         setErrorMsg(res.error);
       } else {
@@ -739,7 +739,7 @@ export default function StudentTable({
   const getDynamicFieldsForTier = (tierId: string) => {
     const tier = tiers.find(t => t.id === tierId);
     if (!tier) return [];
-    
+
     const name = tier.name.toLowerCase();
     if (name.includes("creche") || name.includes("nursery")) {
       return [
@@ -785,11 +785,10 @@ export default function StudentTable({
       {actionFeedback && (
         <div
           role="status"
-          className={`p-4 rounded-xl text-sm font-bold flex items-center justify-between border animate-in fade-in slide-in-from-top-2 duration-300 ${
-            actionFeedback.type === "success"
+          className={`p-4 rounded-xl text-sm font-bold flex items-center justify-between border animate-in fade-in slide-in-from-top-2 duration-300 ${actionFeedback.type === "success"
               ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
               : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -841,11 +840,10 @@ export default function StudentTable({
               <a
                 key={t.id}
                 href={`?tier=${encodeURIComponent(t.name)}`}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  isActive
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive
                     ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200 dark:border-zinc-700"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
+                  }`}
               >
                 {t.name}
               </a>
@@ -858,7 +856,7 @@ export default function StudentTable({
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           <div className="flex items-center gap-2">
             <label htmlFor="filter-by-class" className="text-xs font-bold uppercase text-slate-500 dark:text-zinc-400">Class:</label>
-            <select 
+            <select
               id="filter-by-class"
               className="border border-slate-300 dark:border-zinc-700 rounded-xl p-2 text-xs font-semibold bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 min-w-[140px]"
               value={filterClass}
@@ -936,7 +934,7 @@ export default function StudentTable({
             </button>
           )}
 
-          <button 
+          <button
             onClick={() => {
               if (filterClass !== "ALL" && filterClass !== "All Classes") setBulkClass(filterClass);
               else setBulkClass(graduatingInfo.primaryClass);
@@ -951,7 +949,7 @@ export default function StudentTable({
 
           {/* Single Enrollment: Add Student */}
           {canManageStudents && (
-            <button 
+            <button
               onClick={showForm ? () => setShowForm(false) : openCreateForm}
               className="px-3.5 py-2 text-white font-bold rounded-xl shadow-xs transition text-xs flex items-center gap-1 cursor-pointer"
               style={{ backgroundColor: tenant.branding.primaryColor || "#4f46e5" }}
@@ -966,7 +964,7 @@ export default function StudentTable({
       {/* Slide-Over Administrative Side Panel for Edit / Create */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm animate-in fade-in" onClick={() => setShowForm(false)}>
-          <div 
+          <div
             className="w-full max-w-2xl bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-100 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
             onClick={(e) => e.stopPropagation()}
           >
@@ -985,8 +983,8 @@ export default function StudentTable({
                   </p>
                 </div>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowForm(false)}
                 className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition"
               >
@@ -1014,17 +1012,17 @@ export default function StudentTable({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Assigned Academic Tier *</label>
-                    <select 
+                    <select
                       required
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.tierId} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.tierId}
                       onChange={e => {
                         const newTierId = e.target.value;
                         const newTier = tiers.find(t => t.id === newTierId);
                         const newTierClasses = getClassOptionsForTier(newTier?.name, tiers, classrooms);
                         setFormData({
-                          ...formData, 
-                          tierId: newTierId, 
+                          ...formData,
+                          tierId: newTierId,
                           currentClass: newTierClasses[0] || "",
                           dynamicFields: {}
                         });
@@ -1039,10 +1037,10 @@ export default function StudentTable({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Classroom / Grade *</label>
-                    <select 
+                    <select
                       className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
-                      value={formData.currentClass} 
-                      onChange={e => setFormData({...formData, currentClass: e.target.value})}
+                      value={formData.currentClass}
+                      onChange={e => setFormData({ ...formData, currentClass: e.target.value })}
                     >
                       <option value="">Select Class...</option>
                       {formClassOptions.map(c => (
@@ -1053,10 +1051,10 @@ export default function StudentTable({
 
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Lifecycle Status</label>
-                    <select 
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.status} 
-                      onChange={e => setFormData({...formData, status: e.target.value})}
+                    <select
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.status}
+                      onChange={e => setFormData({ ...formData, status: e.target.value })}
                     >
                       <option value="ENROLLED">Enrolled (Active)</option>
                       <option value="PROSPECT">Prospect</option>
@@ -1070,22 +1068,22 @@ export default function StudentTable({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Admission Year *</label>
-                    <input 
-                      required 
-                      type="text" 
+                    <input
+                      required
+                      type="text"
                       placeholder="e.g. 2026"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.admissionYear} 
-                      onChange={e => setFormData({...formData, admissionYear: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.admissionYear}
+                      onChange={e => setFormData({ ...formData, admissionYear: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Academic Session *</label>
-                    <select 
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.session} 
-                      onChange={e => setFormData({...formData, session: e.target.value})} 
+                    <select
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.session}
+                      onChange={e => setFormData({ ...formData, session: e.target.value })}
                     >
                       <option value="2026/2027">2026/2027</option>
                       <option value="2025/2026">2025/2026</option>
@@ -1115,65 +1113,65 @@ export default function StudentTable({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">First Name *</label>
-                    <input 
-                      required 
-                      type="text" 
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.firstName} 
-                      onChange={e => setFormData({...formData, firstName: e.target.value})} 
+                    <input
+                      required
+                      type="text"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.firstName}
+                      onChange={e => setFormData({ ...formData, firstName: e.target.value })}
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Last Name *</label>
-                    <input 
-                      required 
-                      type="text" 
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.lastName} 
-                      onChange={e => setFormData({...formData, lastName: e.target.value})} 
+                    <input
+                      required
+                      type="text"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.lastName}
+                      onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Student Email</label>
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       placeholder="student@school.org"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.email} 
-                      onChange={e => setFormData({...formData, email: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.email}
+                      onChange={e => setFormData({ ...formData, email: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Admission Number</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="e.g., ADM-2026-001"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.admissionNumber} 
-                      onChange={e => setFormData({...formData, admissionNumber: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.admissionNumber}
+                      onChange={e => setFormData({ ...formData, admissionNumber: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Date of Birth</label>
-                    <input 
-                      type="date" 
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.dateOfBirth} 
-                      onChange={e => setFormData({...formData, dateOfBirth: e.target.value})} 
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.dateOfBirth}
+                      onChange={e => setFormData({ ...formData, dateOfBirth: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">State / Region of Origin</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="e.g. Lagos, Anambra, Ontario"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.stateOfOrigin} 
-                      onChange={e => setFormData({...formData, stateOfOrigin: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.stateOfOrigin}
+                      onChange={e => setFormData({ ...formData, stateOfOrigin: e.target.value })}
                     />
                   </div>
                 </div>
@@ -1192,13 +1190,13 @@ export default function StudentTable({
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
                       Guardian / Parent Full Name <span className="text-rose-500">*</span>
                     </label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="e.g., Ike Mmadu"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.parentName} 
-                      onChange={e => setFormData({...formData, parentName: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.parentName}
+                      onChange={e => setFormData({ ...formData, parentName: e.target.value })}
                     />
                   </div>
 
@@ -1206,13 +1204,13 @@ export default function StudentTable({
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
                       Parent Email (Real Gmail) <span className="text-rose-500">*</span>
                     </label>
-                    <input 
+                    <input
                       type="email"
                       required
                       placeholder="parent@gmail.com"
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.parentEmail} 
-                      onChange={e => setFormData({...formData, parentEmail: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.parentEmail}
+                      onChange={e => setFormData({ ...formData, parentEmail: e.target.value })}
                     />
                   </div>
 
@@ -1220,13 +1218,13 @@ export default function StudentTable({
                     <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">
                       Parent Phone Number <span className="text-rose-500">*</span>
                     </label>
-                    <input 
+                    <input
                       type="tel"
                       required
                       placeholder="+234..."
-                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500" 
-                      value={formData.parentPhone} 
-                      onChange={e => setFormData({...formData, parentPhone: e.target.value})} 
+                      className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
+                      value={formData.parentPhone}
+                      onChange={e => setFormData({ ...formData, parentPhone: e.target.value })}
                     />
                   </div>
 
@@ -1237,7 +1235,7 @@ export default function StudentTable({
                     <select
                       className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
                       value={formData.relationship || "Parent"}
-                      onChange={e => setFormData({...formData, relationship: e.target.value})}
+                      onChange={e => setFormData({ ...formData, relationship: e.target.value })}
                     >
                       <option value="Father">Father</option>
                       <option value="Mother">Mother</option>
@@ -1262,7 +1260,7 @@ export default function StudentTable({
                       <div key={field.key}>
                         <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">{field.label}</label>
                         {field.type === "select" ? (
-                          <select 
+                          <select
                             className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
                             value={formData.dynamicFields[field.key] || ""}
                             onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
@@ -1273,8 +1271,8 @@ export default function StudentTable({
                             ))}
                           </select>
                         ) : (
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
                             value={formData.dynamicFields[field.key] || ""}
                             onChange={(e) => handleDynamicFieldChange(field.key, e.target.value)}
@@ -1303,12 +1301,12 @@ export default function StudentTable({
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Create Account Password</label>
                       <div className="relative">
-                        <input 
+                        <input
                           type={showStudentPassword ? "text" : "password"}
                           placeholder="Leave blank for Welcome123"
                           className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pr-10 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
                           value={formData.password}
-                          onChange={e => setFormData({...formData, password: e.target.value})}
+                          onChange={e => setFormData({ ...formData, password: e.target.value })}
                         />
                         <button
                           type="button"
@@ -1323,12 +1321,12 @@ export default function StudentTable({
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-zinc-400 mb-1">Confirm Password</label>
                       <div className="relative">
-                        <input 
+                        <input
                           type={showStudentConfirmPassword ? "text" : "password"}
                           placeholder="Confirm password"
                           className="w-full border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 pr-10 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-indigo-500"
                           value={formData.confirmPassword}
-                          onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                          onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
                         />
                         <button
                           type="button"
@@ -1343,20 +1341,17 @@ export default function StudentTable({
 
                   {(formData.password.length > 0 || formData.confirmPassword.length > 0) && (
                     <div className="flex flex-wrap items-center gap-3 text-xs pt-1">
-                      <span className={`inline-flex items-center gap-1 font-semibold ${
-                        formData.password.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
-                      }`}>
+                      <span className={`inline-flex items-center gap-1 font-semibold ${formData.password.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                        }`}>
                         {formData.password.length >= 8 ? "✓" : "•"} Min. 8 characters
                       </span>
-                      <span className={`inline-flex items-center gap-1 font-semibold ${
-                        (/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
-                      }`}>
+                      <span className={`inline-flex items-center gap-1 font-semibold ${(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                        }`}>
                         {(/[a-zA-Z]/.test(formData.password) && /[0-9]/.test(formData.password)) ? "✓" : "•"} Alphanumeric
                       </span>
                       {formData.confirmPassword.length > 0 && (
-                        <span className={`inline-flex items-center gap-1 font-semibold ${
-                          formData.password === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 font-semibold ${formData.password === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                          }`}>
                           {formData.password === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
                         </span>
                       )}
@@ -1368,14 +1363,14 @@ export default function StudentTable({
 
             {/* Sticky Drawer Footer */}
             <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 flex items-center justify-end gap-3">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 text-sm font-semibold transition"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 form="student-edit-form"
                 disabled={isPending}
                 type="submit"
@@ -1392,8 +1387,8 @@ export default function StudentTable({
       {filteredStudents.length > 0 && (
         <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-slate-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
           <label className="flex items-center gap-2.5 cursor-pointer">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
               checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0}
               onChange={toggleSelectAll}
@@ -1410,8 +1405,8 @@ export default function StudentTable({
           <thead className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-xs uppercase tracking-wider">
             <tr>
               <th className="px-6 py-4 w-12">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                   checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0}
                   onChange={toggleSelectAll}
@@ -1441,14 +1436,14 @@ export default function StudentTable({
               </tr>
             )}
             {filteredStudents.map((student) => (
-              <tr 
-                key={student.id} 
+              <tr
+                key={student.id}
                 className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
                 onClick={() => setSelectedStudent(student)}
               >
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                     checked={selectedIds.includes(student.id)}
                     onChange={() => toggleSelect(student.id)}
@@ -1457,7 +1452,7 @@ export default function StudentTable({
                 <td className="px-6 py-4 font-mono text-sm text-slate-600 dark:text-zinc-400">
                   {student.admissionNumber || "N/A"}
                 </td>
-                <td 
+                <td
                   className="px-6 py-4 font-medium text-slate-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   onClick={() => setSelectedStudent(student)}
                 >
@@ -1484,15 +1479,14 @@ export default function StudentTable({
                       setSelectedDrawerTab("FINANCE");
                       setSelectedStudent(student);
                     }}
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1.5 hover:opacity-90 shadow-2xs ${
-                      student.feeStatus === "PAID"
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1.5 hover:opacity-90 shadow-2xs ${student.feeStatus === "PAID"
                         ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                         : student.feeStatus === "PENDING_VERIFICATION"
-                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
-                        : student.feeStatus === "PARTIAL"
-                        ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
-                        : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                    }`}
+                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
+                          : student.feeStatus === "PARTIAL"
+                            ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                            : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                      }`}
                     title="Click to view full financial ledger"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -1500,7 +1494,7 @@ export default function StudentTable({
                   </button>
                 </td>
                 <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                  <select 
+                  <select
                     disabled={isPending}
                     value={student.status}
                     onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
@@ -1518,7 +1512,7 @@ export default function StudentTable({
                 </td>
                 <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                   <div className="inline-flex items-center gap-1.5">
-                    <button 
+                    <button
                       onClick={() => setSelectedStudent(student)}
                       className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition flex items-center gap-1"
                       title="View KYC & Health Profile"
@@ -1526,25 +1520,24 @@ export default function StudentTable({
                       <User className="w-3 h-3 text-indigo-500" />
                       <span>KYC</span>
                     </button>
-                    <button 
+                    <button
                       disabled={isPending}
                       onClick={() => openEditForm(student)}
                       className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/60 transition"
                     >
                       Edit
                     </button>
-                    <button 
+                    <button
                       disabled={isPending}
                       onClick={() => handleToggleSuspend(student)}
-                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${
-                        student.status === "SUSPENDED"
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${student.status === "SUSPENDED"
                           ? "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
                           : "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
-                      }`}
+                        }`}
                     >
                       {student.status === "SUSPENDED" ? "Reinstate" : "Suspend"}
                     </button>
-                    <button 
+                    <button
                       disabled={isPending}
                       onClick={() => handleDelete(student.id)}
                       className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
@@ -1568,16 +1561,16 @@ export default function StudentTable({
           </div>
         ) : (
           filteredStudents.map((student) => (
-            <div 
-              key={student.id} 
+            <div
+              key={student.id}
               className="p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-3 transition-shadow hover:shadow-md w-full max-w-full overflow-hidden"
             >
               {/* Card Header: Checkbox, Name, and Status Selector */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="pt-0.5">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="rounded border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                       checked={selectedIds.includes(student.id)}
                       onChange={() => toggleSelect(student.id)}
@@ -1598,15 +1591,14 @@ export default function StudentTable({
                           setSelectedDrawerTab("FINANCE");
                           setSelectedStudent(student);
                         }}
-                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1 ${
-                          student.feeStatus === "PAID"
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1 ${student.feeStatus === "PAID"
                             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                             : student.feeStatus === "PENDING_VERIFICATION"
-                            ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
-                            : student.feeStatus === "PARTIAL"
-                            ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
-                            : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                        }`}
+                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse"
+                              : student.feeStatus === "PARTIAL"
+                                ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                                : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                          }`}
                         title="Click to view & audit fees"
                       >
                         <span className="w-1 h-1 rounded-full bg-current"></span>
@@ -1618,7 +1610,7 @@ export default function StudentTable({
 
                 {/* Status Dropdown */}
                 <div className="shrink-0">
-                  <select 
+                  <select
                     disabled={isPending}
                     value={student.status}
                     onChange={(e) => handleUpdateStatus(student.id, e.target.value)}
@@ -1664,7 +1656,7 @@ export default function StudentTable({
 
               {/* Action Buttons Row */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/60 w-full">
-                <button 
+                <button
                   onClick={() => setSelectedStudent(student)}
                   className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                 >
@@ -1672,25 +1664,24 @@ export default function StudentTable({
                 </button>
 
                 <div className="flex items-center gap-1.5">
-                  <button 
+                  <button
                     disabled={isPending}
                     onClick={() => openEditForm(student)}
                     className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/60 transition"
                   >
                     Edit
                   </button>
-                  <button 
+                  <button
                     disabled={isPending}
                     onClick={() => handleToggleSuspend(student)}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${
-                      student.status === "SUSPENDED"
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition ${student.status === "SUSPENDED"
                         ? "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
                         : "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
-                    }`}
+                      }`}
                   >
                     {student.status === "SUSPENDED" ? "Reinstate" : "Suspend"}
                   </button>
-                  <button 
+                  <button
                     disabled={isPending}
                     onClick={() => handleDelete(student.id)}
                     className="px-2.5 py-1 text-xs font-medium rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition"
@@ -1734,8 +1725,8 @@ export default function StudentTable({
       </div>
 
       {selectedStudent && (
-        <StudentProfileDrawer 
-          student={selectedStudent} 
+        <StudentProfileDrawer
+          student={selectedStudent}
           schoolId={schoolId}
           tiers={tiers}
           activeTier={activeTier}
@@ -1743,7 +1734,7 @@ export default function StudentTable({
           onClose={() => {
             setSelectedStudent(null);
             setSelectedDrawerTab("BIO");
-          }} 
+          }}
           onStudentUpdated={(updated) => {
             setSelectedStudent(updated);
             setStudentList((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
@@ -1835,11 +1826,10 @@ export default function StudentTable({
                         return (
                           <label
                             key={student.id}
-                            className={`flex items-center justify-between p-1.5 rounded-md text-xs cursor-pointer transition ${
-                              isChecked
+                            className={`flex items-center justify-between p-1.5 rounded-md text-xs cursor-pointer transition ${isChecked
                                 ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 font-semibold"
                                 : "hover:bg-slate-100 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-2 truncate">
                               <input
@@ -1866,7 +1856,7 @@ export default function StudentTable({
             )}
 
             <div className="flex gap-2 sm:gap-3 justify-end pt-2 border-t border-slate-100 dark:border-zinc-800">
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setShowBulkGraduate(false);
@@ -1877,16 +1867,16 @@ export default function StudentTable({
               >
                 Cancel
               </button>
-              <button 
+              <button
                 disabled={isPending}
                 onClick={selectedIds.length > 0 ? handleBulkGraduate : handleExecuteTermEndPromotion}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20 disabled:opacity-50 transition text-sm flex items-center gap-2"
               >
-                {isPending 
-                  ? "Processing..." 
-                  : selectedIds.length > 0 
-                  ? "Confirm Graduation" 
-                  : "Execute Term-End Promotion"}
+                {isPending
+                  ? "Processing..."
+                  : selectedIds.length > 0
+                    ? "Confirm Graduation"
+                    : "Execute Term-End Promotion"}
               </button>
             </div>
           </div>
