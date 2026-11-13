@@ -36,7 +36,7 @@ export interface ValidatedStudentRow extends StudentRowInput {
 /**
  * Normalizes phone numbers to standard Nigerian international format +234...
  */
-export function normalizeNigerianPhone(phone?: string): string | undefined {
+function normalizeNigerianPhone(phone?: string): string | undefined {
   if (!phone) return undefined;
   const digits = phone.replace(/[^0-9]/g, "");
   if (!digits) return undefined;
@@ -63,7 +63,7 @@ export function normalizeNigerianPhone(phone?: string): string | undefined {
 /**
  * Resolves current session and surrounding sessions
  */
-export function getDefaultAcademicSessions(): { currentSession: string; sessions: string[] } {
+function getDefaultAcademicSessions(): { currentSession: string; sessions: string[] } {
   const currentYear = new Date().getFullYear();
   // Academic sessions: 2026/2027, etc.
   const currentSession = `${currentYear}/${currentYear + 1}`;
@@ -477,7 +477,7 @@ export async function executeBulkEnrollmentAction(
 /**
  * Progression Map helper: Calculates the next class level in Nigerian standard progression
  */
-export function getNextClassProgression(currentClass: string): { nextClass: string; isGraduated: boolean } {
+function getNextClassProgression(currentClass: string): { nextClass: string; isGraduated: boolean } {
   const norm = currentClass.trim().toLowerCase();
 
   // Primary Progression

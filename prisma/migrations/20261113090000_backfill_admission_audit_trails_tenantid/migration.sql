@@ -23,3 +23,4 @@ ALTER TABLE "admission_audit_trails" ADD COLUMN IF NOT EXISTS "schoolId" TEXT NO
 
 -- Ensure cohort column exists on Student table
 ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "cohort" TEXT;
+
