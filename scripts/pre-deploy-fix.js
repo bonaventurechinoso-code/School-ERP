@@ -16,12 +16,14 @@ async function preDeployFix() {
   try {
     // 1. Check if _prisma_migrations table exists
     const checkMigrationsTable = await prisma.$queryRawUnsafe(`
-      SELECT 1 FROM information_schema.tables WHERE table_name = '_prisma_migrations';
+      SELECT 1 FROM information_schema.tables 
+      WHERE table_name = '_prisma_migrations' 
+        AND table_schema = current_schema();
     `).catch(() => []);
 
     if (!checkMigrationsTable || checkMigrationsTable.length === 0) {
-      console.error('[PRE_DEPLOY_FIX] Table _prisma_migrations does not exist, exiting 1');
-      process.exit(1);
+      console.log('[PRE_DEPLOY_FIX] Table _prisma_migrations does not exist yet. Passing to prisma migrate deploy.');
+      process.exit(0);
     }
 
     // 2. Check for migration 20260923163000_remove_paystack_add_manual_payment
@@ -95,15 +97,6 @@ async function preDeployFix() {
       }
       console.log('[PRE_DEPLOY_FIX] admission_audit_trails tenantId backfilled and verified (0 NULLs).');
     }
-
-    // 4. Ensure Student cohort column exists
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "cohort" TEXT;
-    `).catch((err) => {
-      console.error('[PRE_DEPLOY_FIX] Failed ensuring Student.cohort column exists:', err);
-      process.exit(1);
-    });
-    console.log('[PRE_DEPLOY_FIX] Student.cohort column verified.');
 
     console.log('[PRE_DEPLOY_FIX] Pre-deploy fix complete. Exiting 0.');
   } catch (err) {
