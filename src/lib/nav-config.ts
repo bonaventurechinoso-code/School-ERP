@@ -56,7 +56,6 @@ export interface NavGroupConfig {
  * 4 Distinct, Elegant Parent Accordion Folders:
  * - 📂 Academic Engine
  *   * Dashboard Overview
- *   * Subjects & Timetables
  *   * Attendance Tracking
  *   * Assessments, Records & Results
  * - 📂 People Management
@@ -91,13 +90,6 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             exact: true,
           },
           {
-            id: "subjects-timetables",
-            label: "Subjects & Timetables",
-            href: (domain) => `/${domain}/subjects`,
-            icon: BookOpen,
-            matchPaths: ["/timetable", "/scheduling?tab=timetable"],
-          },
-          {
             id: "attendance-tracking",
             label: "Attendance Tracking",
             href: (domain) => `/${domain}/scheduling?tab=attendance`,
@@ -109,7 +101,15 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Assessments, Records & Results",
             href: (domain) => `/${domain}/exams`,
             icon: FileSpreadsheet,
-            matchPaths: ["/report-cards", "/transcripts", "/assessments", "/results"],
+            matchPaths: [
+              "/report-cards",
+              "/transcripts",
+              "/assessments",
+              "/results",
+              "/subjects",
+              "/timetable",
+              "/scheduling?tab=timetable",
+            ],
           },
         ],
       },
