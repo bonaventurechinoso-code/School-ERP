@@ -10,9 +10,9 @@
     "clean-db": "node -e \"const {PrismaClient}=require('@prisma/client');(async()=>{const p=new PrismaClient(); await p.$executeRawUnsafe('DELETE FROM \\\"User\\\"'); await p.$executeRawUnsafe('DELETE FROM \\\"School\\\" WHERE slug IS NULL'); console.log('cleaned'); await p.$disconnect()})()\"",
     "build": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\" && next build",
     "build:local": "prisma generate && next build",
-    "build:render": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\" && npx prisma generate && node scripts/pre-deploy-fix.js && npx prisma migrate deploy && next build",
+    "build:render": "rm -rf .next && npx prisma generate && next build",
     "demo:setup": "node scripts/init-demo-db.js",
-    "start": "node scripts/fix-all-tiers.js && node scripts/init-superadmin.js && node scripts/init-demo-db.js && next start",
+    "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push"
   },

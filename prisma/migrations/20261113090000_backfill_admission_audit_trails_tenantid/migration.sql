@@ -18,9 +18,6 @@ END $$;
 -- Stage C: Make tenantId required only after all rows are guaranteed non-null
 ALTER TABLE "admission_audit_trails" ALTER COLUMN "tenantId" SET NOT NULL;
 
--- Ensure schoolId compatibility column exists on admission_audit_trails
-ALTER TABLE "admission_audit_trails" ADD COLUMN IF NOT EXISTS "schoolId" TEXT NOT NULL DEFAULT '';
-
 -- Ensure cohort column exists on Student table
 ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "cohort" TEXT;
 

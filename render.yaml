@@ -4,8 +4,9 @@ services:
     runtime: node
     branch: main
     autoDeploy: true
-    buildCommand: npm install && npx prisma generate && node scripts/pre-deploy-fix.js && npx prisma migrate deploy && npm run build
-    startCommand: npm run start
+    buildCommand: npm install && npx prisma generate && npm run build
+    preDeployCommand: node scripts/pre-deploy-fix.js && npx prisma migrate deploy
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
