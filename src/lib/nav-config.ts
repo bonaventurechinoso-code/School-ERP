@@ -1,7 +1,6 @@
 import { ComponentType } from "react";
 import {
   LayoutDashboard,
-  Building2,
   BookOpen,
   Calendar,
   GraduationCap,
@@ -57,7 +56,6 @@ export interface NavGroupConfig {
  * 4 Distinct, Elegant Parent Accordion Folders:
  * - 📂 Academic Engine
  *   * Dashboard Overview
- *   * Classes & Sections
  *   * Subjects & Timetables
  *   * Attendance Tracking
  *   * Assessments, Records & Results
@@ -93,12 +91,6 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             exact: true,
           },
           {
-            id: "classes-sections",
-            label: "Classes & Sections",
-            href: (domain) => `/${domain}/classes`,
-            icon: Building2,
-          },
-          {
             id: "subjects-timetables",
             label: "Subjects & Timetables",
             href: (domain) => `/${domain}/subjects`,
@@ -110,6 +102,7 @@ export const TENANT_NAV_GROUPS: NavGroupConfig[] = [
             label: "Attendance Tracking",
             href: (domain) => `/${domain}/scheduling?tab=attendance`,
             icon: Calendar,
+            matchPaths: ["/scheduling?tab=attendance", "/scheduling?tab=classes", "/classes"],
           },
           {
             id: "assessments-records-results",
@@ -580,12 +573,6 @@ export function getTenantNavigation(
         id: "academic-records",
         title: "ACADEMICS & EXAMINATIONS",
         items: [
-          {
-            id: "classes-sections",
-            label: "Classes & Sections",
-            href: (d) => `/${d}/classes`,
-            icon: Building2,
-          },
           {
             id: "assessments-results",
             label: "Assessments, Records & Results",
