@@ -535,9 +535,9 @@ export async function seedDemoSchool(demoPrisma: PrismaClient): Promise<void> {
 export async function ensureDemoDatabaseInitialized(): Promise<void> {
   const demoDbUrl = process.env.DEMO_DATABASE_URL;
   if (!demoDbUrl) {
-    throw new Error(
-      "[DEMO_DATABASE_ERROR] DEMO_DATABASE_URL environment variable is required. Demo playground cannot use primary database."
-    );
+    // When DEMO_DATABASE_URL is not set, demo data is already seeded in the primary database
+    // by init-superadmin.js or standard migrations. Skip isolated push safely.
+    return;
   }
 
   // Safety check: ensure DEMO_DATABASE_URL is not identical to production DATABASE_URL

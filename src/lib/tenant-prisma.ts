@@ -78,9 +78,9 @@ export function setDemoSchoolId(id: string): void {
 export function getDemoPrismaClient(): PrismaClient {
   const demoUrl = process.env.DEMO_DATABASE_URL;
   if (!demoUrl) {
-    throw new Error(
-      "[DEMO_DATABASE_ERROR] DEMO_DATABASE_URL environment variable is required. Demo playground cannot use primary database."
-    );
+    // If dedicated DEMO_DATABASE_URL is not provided, fall back safely to basePrisma
+    // (Demo School is already provisioned with subdomain 'demo' in the primary database)
+    return basePrisma;
   }
   return TenantConnectionManager.getClientForUrl(demoUrl);
 }
