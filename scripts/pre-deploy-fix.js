@@ -15,6 +15,30 @@ async function fixDatabase(connectionUrl, dbLabel) {
   });
 
   try {
+    // 0. Ensure PlatformEarnings table exists (prevents migration 20260923163000 from crashing if ever run)
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "PlatformEarnings" (
+        "id" TEXT NOT NULL,
+        "tenantId" TEXT,
+        "grossAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "platformFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "schoolNet" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "reference" TEXT NOT NULL,
+        "source" TEXT NOT NULL DEFAULT 'manual',
+        "settlementDestination" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "PlatformEarnings_pkey" PRIMARY KEY ("id")
+      );
+    `).catch((err) => {
+      console.warn(`[PRE_DEPLOY_FIX] [${dbLabel}] Notice on PlatformEarnings table check:`, err.message);
+    });
+
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "PlatformEarnings_reference_key" ON "PlatformEarnings"("reference");
+    `).catch((err) => {
+      console.warn(`[PRE_DEPLOY_FIX] [${dbLabel}] Notice on PlatformEarnings index check:`, err.message);
+    });
+
     // 1. Check if _prisma_migrations table exists
     const checkMigrationsTable = await prisma.$queryRawUnsafe(`
       SELECT 1 FROM information_schema.tables 
@@ -23,7 +47,7 @@ async function fixDatabase(connectionUrl, dbLabel) {
     `).catch(() => []);
 
     if (!checkMigrationsTable || checkMigrationsTable.length === 0) {
-      console.log(`[PRE_DEPLOY_FIX] Table _prisma_migrations does not exist yet in ${dbLabel}. Passing to prisma migrate deploy.`);
+      console.log(`[PRE_DEPLOY_FIX] Table _prisma_migrations does not exist yet in ${dbLabel}.`);
       return;
     }
 
@@ -95,7 +119,7 @@ async function runPreDeploy() {
     process.exit(1);
   }
 
-  // 1. Fix and migrate primary DATABASE_URL
+  // 1. Fix and migrate primary DATABASE_URL (production)
   await fixDatabase(process.env.DATABASE_URL, 'DATABASE_URL (Production)');
   try {
     console.log('[PRE_DEPLOY_FIX] Running prisma migrate deploy for DATABASE_URL...');
@@ -109,23 +133,35 @@ async function runPreDeploy() {
     process.exit(1);
   }
 
-  // 2. Fix and migrate DEMO_DATABASE_URL (if configured)
+  // 2. Synchronize DEMO_DATABASE_URL (isolated sandbox playground)
   if (process.env.DEMO_DATABASE_URL) {
-    await fixDatabase(process.env.DEMO_DATABASE_URL, 'DEMO_DATABASE_URL (Demo Playground)');
-    try {
-      console.log('[PRE_DEPLOY_FIX] Running prisma migrate deploy for DEMO_DATABASE_URL...');
-      execSync('npx prisma migrate deploy', {
-        stdio: 'inherit',
-        env: { ...process.env, DATABASE_URL: process.env.DEMO_DATABASE_URL },
-      });
-      console.log('[PRE_DEPLOY_FIX] Successfully migrated DEMO_DATABASE_URL.');
-    } catch (err) {
-      console.error('[PRE_DEPLOY_FIX] Failed migrating DEMO_DATABASE_URL:', err.message);
-      process.exit(1);
+    if (process.env.DEMO_DATABASE_URL === process.env.DATABASE_URL) {
+      console.warn('[PRE_DEPLOY_FIX] DEMO_DATABASE_URL is identical to DATABASE_URL. Skipping separate demo sync.');
+    } else {
+      console.log('[PRE_DEPLOY_FIX] Synchronizing schema for DEMO_DATABASE_URL via prisma db push...');
+      try {
+        // Use db push to apply full modern schema directly, avoiding historical migration drift on fresh demo DB
+        execSync('npx prisma db push --accept-data-loss --skip-generate', {
+          stdio: 'inherit',
+          env: { ...process.env, DATABASE_URL: process.env.DEMO_DATABASE_URL },
+        });
+        console.log('[PRE_DEPLOY_FIX] Successfully pushed schema to DEMO_DATABASE_URL.');
+
+        // Initialize / verify demo tenant and seeded records
+        console.log('[PRE_DEPLOY_FIX] Verifying demo seed data...');
+        execSync('node scripts/init-demo-db.js', {
+          stdio: 'inherit',
+          env: process.env,
+        });
+        console.log('[PRE_DEPLOY_FIX] Demo database is fully synchronized and seeded.');
+      } catch (err) {
+        console.error('[PRE_DEPLOY_FIX] Error during DEMO_DATABASE_URL synchronization:', err.message);
+        // Do not crash production web server deploy if demo playground sync had an issue
+      }
     }
   }
 
-  console.log('[PRE_DEPLOY_FIX] All database migrations completed successfully. Exiting 0.');
+  console.log('[PRE_DEPLOY_FIX] All pre-deploy database operations completed successfully. Exiting 0.');
   process.exit(0);
 }
 
