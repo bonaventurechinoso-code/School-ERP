@@ -7,6 +7,7 @@ import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/secur
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStaffNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 import { sendStaffEnrollmentConfirmationEmail } from "@/lib/mail";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/permissions";
@@ -31,6 +32,32 @@ export async function resolveSchoolId(schoolIdentifier: string): Promise<string>
     select: { id: true },
   });
   return school?.id || schoolIdentifier;
+}
+
+/**
+ * Resolves both schoolId and subdomain safely for tenant-specific cache and path revalidation
+ */
+export async function resolveSchoolInfo(schoolIdentifier: string): Promise<{ schoolId: string; subdomain: string }> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
+  if (isUuid) {
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolIdentifier },
+      select: { id: true, subdomain: true },
+    });
+    return {
+      schoolId: schoolIdentifier,
+      subdomain: school?.subdomain || "",
+    };
+  }
+
+  const school = await basePrisma.school.findUnique({
+    where: { subdomain: schoolIdentifier },
+    select: { id: true, subdomain: true },
+  });
+  return {
+    schoolId: school?.id || schoolIdentifier,
+    subdomain: school?.subdomain || schoolIdentifier,
+  };
 }
 
 import { toCanonicalRole } from "./helpers";
@@ -340,7 +367,7 @@ export async function createStaff(
   }
 ) {
   try {
-    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
 
@@ -531,7 +558,7 @@ export async function updateStaffProfile(
   }
 ) {
   try {
-    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
 
@@ -639,7 +666,18 @@ export async function updateStaffProfile(
     );
 
     await invalidateStaffNamespace(schoolId);
+    if (subdomain) {
+      clearL1TenantCache(subdomain);
+      safeRevalidate(`/${subdomain}/staff`, "page");
+      safeRevalidate(`/${subdomain}/staff`, "layout");
+      safeRevalidate(`/${subdomain}/portal/staff`, "page");
+      safeRevalidate(`/${subdomain}/portal/staff`, "layout");
+      safeRevalidate(`/${subdomain}/dashboard`, "page");
+    }
+    safeRevalidate(`/teacher/profile`, "page");
+    safeRevalidate(`/teacher`, "page");
     safeRevalidate(`/[schoolDomain]/staff`, "page");
+    safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[updateStaffProfile] Error:", error);
@@ -660,7 +698,7 @@ export async function updateStaff(
 
 export async function deleteStaff(schoolIdentifier: string, staffId: string) {
   try {
-    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     
     await tenantDb.staff.delete({
@@ -675,7 +713,18 @@ export async function deleteStaff(schoolIdentifier: string, staffId: string) {
     }
 
     await invalidateStaffNamespace(schoolId);
+    if (subdomain) {
+      clearL1TenantCache(subdomain);
+      safeRevalidate(`/${subdomain}/staff`, "page");
+      safeRevalidate(`/${subdomain}/staff`, "layout");
+      safeRevalidate(`/${subdomain}/portal/staff`, "page");
+      safeRevalidate(`/${subdomain}/portal/staff`, "layout");
+      safeRevalidate(`/${subdomain}/dashboard`, "page");
+    }
+    safeRevalidate(`/teacher/profile`, "page");
+    safeRevalidate(`/teacher`, "page");
     safeRevalidate(`/[schoolDomain]/staff`, "page");
+    safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[deleteStaff] Failed to delete staff:", error);
@@ -689,7 +738,7 @@ export async function updateStaffStatus(
   newStatus: string
 ) {
   try {
-    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     const data: any = { status: newStatus };
     
@@ -717,7 +766,18 @@ export async function updateStaffStatus(
     });
 
     await invalidateStaffNamespace(schoolId);
+    if (subdomain) {
+      clearL1TenantCache(subdomain);
+      safeRevalidate(`/${subdomain}/staff`, "page");
+      safeRevalidate(`/${subdomain}/staff`, "layout");
+      safeRevalidate(`/${subdomain}/portal/staff`, "page");
+      safeRevalidate(`/${subdomain}/portal/staff`, "layout");
+      safeRevalidate(`/${subdomain}/dashboard`, "page");
+    }
+    safeRevalidate(`/teacher/profile`, "page");
+    safeRevalidate(`/teacher`, "page");
     safeRevalidate(`/[schoolDomain]/staff`, "page");
+    safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[updateStaffStatus] Error:", error);
@@ -905,7 +965,7 @@ export async function deletePayrollVoucherAction(
   voucherId: string
 ) {
   try {
-    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
 
     await tenantDb.payrollRecord.delete({
@@ -913,7 +973,18 @@ export async function deletePayrollVoucherAction(
     });
 
     await invalidateStaffNamespace(schoolId);
+    if (subdomain) {
+      clearL1TenantCache(subdomain);
+      safeRevalidate(`/${subdomain}/staff`, "page");
+      safeRevalidate(`/${subdomain}/staff`, "layout");
+      safeRevalidate(`/${subdomain}/portal/staff`, "page");
+      safeRevalidate(`/${subdomain}/portal/staff`, "layout");
+      safeRevalidate(`/${subdomain}/dashboard`, "page");
+    }
+    safeRevalidate(`/teacher/profile`, "page");
+    safeRevalidate(`/teacher`, "page");
     safeRevalidate(`/[schoolDomain]/staff`, "page");
+    safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[deletePayrollVoucherAction] Error:", error);

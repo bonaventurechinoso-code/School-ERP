@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { resolveSchoolPrefix, resolveTierCode } from "@/lib/tenant-tier-utils";
 import { getClassesForTier } from "@/lib/tier-config";
+import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 
 export interface StudentRowInput {
   id?: string;
@@ -451,10 +453,16 @@ export async function executeBulkEnrollmentAction(
     });
 
     try {
+      await invalidateStudentNamespace(schoolId);
+      clearL1TenantCache(school.subdomain);
+      clearL1TenantCache(schoolId);
       revalidatePath(`/${school.subdomain}/students`);
+      revalidatePath(`/${school.subdomain}/students`, "page");
       revalidatePath(`/${school.subdomain}/portal/staff`);
+      revalidatePath(`/${school.subdomain}/portal/staff`, "page");
       revalidatePath(`/teacher/attendance`);
       revalidatePath(`/teacher/gradebook`);
+      revalidatePath(`/teacher/students`);
     } catch {}
 
     return {
@@ -651,10 +659,16 @@ export async function executeSessionPromotionAction(
     });
 
     try {
+      await invalidateStudentNamespace(schoolId);
+      clearL1TenantCache(school.subdomain);
+      clearL1TenantCache(schoolId);
       revalidatePath(`/${school.subdomain}/students`);
+      revalidatePath(`/${school.subdomain}/students`, "page");
       revalidatePath(`/${school.subdomain}/portal/staff`);
+      revalidatePath(`/${school.subdomain}/portal/staff`, "page");
       revalidatePath(`/teacher/attendance`);
       revalidatePath(`/teacher/gradebook`);
+      revalidatePath(`/teacher/students`);
     } catch {}
 
     return {

@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import * as jose from "jose";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
-import { cacheAside, buildCacheKey } from "@/lib/cache";
+import { cacheAside, buildCacheKey, clearL1TenantCache } from "@/lib/cache";
 import { executeCursorPagination, CursorPaginationResult } from "@/lib/pagination";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
@@ -510,6 +510,16 @@ export async function createStudent(
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
+    const targetSchool = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { subdomain: true },
+    });
+    if (targetSchool?.subdomain) {
+      clearL1TenantCache(targetSchool.subdomain);
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`, "page");
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`, "layout");
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`);
+    }
 
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true };
@@ -554,6 +564,16 @@ export async function updateStudent(
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
+    const targetSchool = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { subdomain: true },
+    });
+    if (targetSchool?.subdomain) {
+      clearL1TenantCache(targetSchool.subdomain);
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`, "page");
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`, "layout");
+      safeRevalidatePath(`/${targetSchool.subdomain}/students`);
+    }
 
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
     return { success: true };
