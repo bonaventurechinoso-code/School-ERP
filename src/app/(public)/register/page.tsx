@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock, Eye, EyeOff } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
@@ -367,23 +366,15 @@ export default function RegisterTenantPage() {
         
         {/* Header */}
         <div className="relative z-10 px-5 pt-4 pb-4 md:px-8 md:py-6 text-white bg-slate-900 transition-colors duration-300">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-2">
-            <div className="flex items-center gap-2">
-              <Image
-                src="/img/business-logo.png"
-                alt="School ERP"
-                width={24}
-                height={24}
-                className="w-6 h-6 object-contain rounded-md"
-              />
-              <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
-            </div>
-            <Link
-              href="/"
-              className="text-xs md:text-sm font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1 w-fit mt-1 md:mt-0"
-            >
-              &larr; Back to Home
-            </Link>
+          <div className="flex items-center gap-2 mb-2">
+            <Image
+              src="/img/business-logo.png"
+              alt="School ERP"
+              width={24}
+              height={24}
+              className="w-6 h-6 object-contain rounded-md"
+            />
+            <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
           </div>
           <h1 className="text-2xl font-bold">
             {isConfiguring 
