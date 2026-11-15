@@ -819,13 +819,13 @@ export default function TenantsDirectoryPage() {
 
             <div className="mt-4">
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Type <span className="font-mono text-rose-600 font-bold">{schoolToDelete.name}</span> to confirm:
+                Type <span className="font-mono text-rose-600 font-bold">{schoolToDelete.name}</span> or <span className="font-mono text-rose-600 font-bold">DELETE</span> to confirm:
               </label>
               <input
                 type="text"
                 value={deleteConfirmationInput}
                 onChange={(e) => setDeleteConfirmationInput(e.target.value)}
-                placeholder="Type school name exactly..."
+                placeholder={`Type "${schoolToDelete.name}" or DELETE...`}
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
               />
             </div>
@@ -840,7 +840,10 @@ export default function TenantsDirectoryPage() {
               </button>
               <button
                 type="button"
-                disabled={deleteConfirmationInput.trim() !== schoolToDelete.name}
+                disabled={
+                  deleteConfirmationInput.trim() !== schoolToDelete.name &&
+                  deleteConfirmationInput.trim() !== "DELETE"
+                }
                 onClick={handleDeleteSchool}
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-colors"
               >

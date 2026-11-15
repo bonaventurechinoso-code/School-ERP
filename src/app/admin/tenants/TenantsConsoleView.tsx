@@ -316,37 +316,28 @@ export default function TenantsConsoleView({
     }
   };
 
-  const handleConfirmSoftDelete = async () => {
+  const handleConfirmHardDelete = async () => {
     if (!tenantToDelete || deleteConfirmText.trim() !== "DELETE") return;
     const id = tenantToDelete.id;
     setIsDeleting(true);
     try {
+      // Execute permanent hard delete everywhere in production database
       const delRes = await fetch(`/api/super-admin/tenants/${id}`, {
         method: "DELETE",
       }).catch(() => null);
 
       if (!delRes || !delRes.ok) {
         await fetch(`/api/super-admin/tenants/${id}/status`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: "INACTIVE",
-            isDeleted: true,
-            reason: "Soft-deleted by Super Admin",
-          }),
+          method: "DELETE",
         }).catch(() => null);
       }
 
-      addSoftDeletedId(id);
-      if (tenantToDelete.subdomain) {
-        addSoftDeletedId(tenantToDelete.subdomain);
-      }
-
+      setTenants((prev) => prev.filter((t) => t.id !== id && t.subdomain !== tenantToDelete.subdomain));
       setTenantToDelete(null);
       setDeleteConfirmText("");
       await fetchTenants();
     } catch (err) {
-      console.error("[TenantsConsoleView] Soft delete error:", err);
+      console.error("[TenantsConsoleView] Hard delete error:", err);
     } finally {
       setIsDeleting(false);
     }
@@ -908,31 +899,38 @@ export default function TenantsConsoleView({
         </div>
       </div>
 
-      {/* SOFT-DELETE CONFIRMATION MODAL */}
+      {/* HARD-DELETE PERMANENT CONFIRMATION MODAL */}
       {tenantToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-red-200 dark:border-red-900/50 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Confirm Soft-Delete
+                  Permanently Delete School Tenant
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Delete {tenantToDelete.name}? This will soft-delete tenant. Type DELETE to confirm.
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-0.5">
+                  Warning: Irreversible hard delete in production DB
                 </p>
               </div>
             </div>
 
+            <div className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-100 dark:border-rose-900/40">
+              Permanently deleting <strong className="text-slate-900 dark:text-white font-bold">{tenantToDelete.name}</strong> will completely remove all students, staff, attendance, grades, finances, and tenant database records everywhere from the production database.
+            </div>
+
             <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-1.5">
+                Type <span className="font-mono text-red-600 dark:text-red-400 font-bold">DELETE</span> to confirm permanent purge:
+              </label>
               <input
                 type="text"
                 value={deleteConfirmText}
                 onChange={(e) => setDeleteConfirmText(e.target.value)}
                 placeholder="Type DELETE to confirm"
-                className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500 font-mono"
               />
             </div>
 
@@ -943,17 +941,17 @@ export default function TenantsConsoleView({
                   setTenantToDelete(null);
                   setDeleteConfirmText("");
                 }}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-50 cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={deleteConfirmText.trim() !== "DELETE" || isDeleting}
-                onClick={handleConfirmSoftDelete}
-                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-xs font-bold transition cursor-pointer"
+                onClick={handleConfirmHardDelete}
+                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
               >
-                {isDeleting ? "Deleting..." : "Confirm Delete"}
+                {isDeleting ? "Permanently Deleting..." : "Permanently Delete Tenant"}
               </button>
             </div>
           </div>

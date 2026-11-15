@@ -470,6 +470,16 @@ export function registerTenantInStore(tenant: SchoolTenant): SchoolTenant {
   }
 }
 
+export function removeTenantFromStore(idOrSubdomain: string): void {
+  if (!idOrSubdomain) return;
+  const norm = idOrSubdomain.toLowerCase().trim();
+  if (typeof globalThis !== "undefined" && globalThis.__registeredTenantsStore) {
+    globalThis.__registeredTenantsStore = globalThis.__registeredTenantsStore.filter(
+      (s) => s.id.toLowerCase() !== norm && (s.subdomain || "").toLowerCase() !== norm
+    );
+  }
+}
+
 export function getTrialDaysLeft(trialEndsAt?: string): string {
   if (!trialEndsAt) return "14d left";
   const diffMs = new Date(trialEndsAt).getTime() - Date.now();

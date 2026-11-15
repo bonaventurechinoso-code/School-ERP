@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { clearTenantCache, notifyTenantAdmins } from "@/lib/tenant-status";
+import { hardDeleteTenant } from "@/lib/tenant-service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,39 +33,17 @@ async function handleStatusUpdate(
     const newExpiry = new Date();
     newExpiry.setFullYear(newExpiry.getFullYear() + 1);
 
-    // 1. SOFT DELETE
+    // 1. HARD DELETE: Permanently purge tenant everywhere in the database
     if (isDeleted) {
-      try {
-        await prisma.tenant.updateMany({
-          where: { OR: [{ id: tenantId }, { subdomain: tenantId }] },
-          data: {
-            status: "DELETED",
-            isActive: false,
-            isSuspended: true,
-            suspendedAt: now,
-            suspendedReason: reason || "Soft-deleted by Super Admin",
-          },
-        });
-      } catch (e) {
-        console.error("[Tenant Status] Error soft-deleting Tenant:", e);
-      }
-
-      try {
-        await prisma.school.updateMany({
-          where: { OR: [{ id: tenantId }, { subdomain: tenantId }] },
-          data: {
-            status: "DELETED",
-            isActive: false,
-            isSuspended: true,
-            deletedAt: now,
-          },
-        });
-      } catch (e) {
-        console.error("[Tenant Status] Error soft-deleting School:", e);
-      }
-
-      await clearTenantCache(tenantId);
-      return NextResponse.json({ success: true, status: "DELETED", isActive: false });
+      const result = await hardDeleteTenant(tenantId);
+      return NextResponse.json({
+        success: true,
+        message: "Tenant permanently deleted everywhere in the database.",
+        status: "DELETED",
+        isHardDeleted: true,
+        isActive: false,
+        data: result,
+      });
     }
 
     // 2. REACTIVATE
@@ -216,8 +195,24 @@ export async function DELETE(
   req: NextRequest | Request,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
-  const resolvedParams = await Promise.resolve(params);
-  return handleStatusUpdate(req, resolvedParams);
+  try {
+    const resolvedParams = await Promise.resolve(params);
+    const tenantId = resolvedParams.id;
+    const result = await hardDeleteTenant(tenantId);
+    return NextResponse.json({
+      success: true,
+      message: "Tenant permanently deleted everywhere in the database.",
+      status: "DELETED",
+      isHardDeleted: true,
+      data: result,
+    });
+  } catch (err: any) {
+    console.error("[Tenant Status DELETE] Hard delete error:", err);
+    return NextResponse.json(
+      { error: err?.message || "Failed to permanently delete tenant" },
+      { status: 500 }
+    );
+  }
 }
 
 export const PATCH = async (

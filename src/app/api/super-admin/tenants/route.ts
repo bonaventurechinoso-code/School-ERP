@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { getSchoolsStore } from "@/app/dashboard/super-admin/mock-data";
 import { ensureEgedeAndDemoRestored } from "@/lib/tenant-status";
+import { hardDeleteTenant } from "@/lib/tenant-service";
 
 export const dynamic = "force-dynamic";
 
@@ -292,6 +293,41 @@ export async function GET(req: NextRequest) {
     console.error("[SuperAdmin:Tenants GET] Error:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to retrieve tenants list" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const body = await req.json().catch(() => ({}));
+    const id =
+      searchParams.get("id") ||
+      searchParams.get("tenantId") ||
+      body?.id ||
+      body?.tenantId ||
+      body?.subdomain;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Tenant identifier is required" },
+        { status: 400 }
+      );
+    }
+
+    const result = await hardDeleteTenant(id);
+    return NextResponse.json({
+      success: true,
+      message: "Tenant permanently deleted everywhere in the database.",
+      status: "DELETED",
+      isHardDeleted: true,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("[SuperAdmin:Tenants DELETE] Error:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to permanently delete tenant" },
       { status: 500 }
     );
   }
