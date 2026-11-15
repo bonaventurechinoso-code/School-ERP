@@ -361,41 +361,48 @@ export default function RegisterTenantPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-4 sm:py-8 px-3 sm:px-6 lg:px-8 overflow-y-auto">
+      <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
         
         {/* Header */}
-        <div className="relative z-10 px-5 pt-4 pb-4 md:px-8 md:py-6 text-white bg-slate-900 transition-colors duration-300">
-          <div className="flex items-center gap-2 mb-2">
-            <Image
-              src="/img/business-logo.png"
-              alt="School ERP"
-              width={24}
-              height={24}
-              className="w-6 h-6 object-contain rounded-md"
-            />
-            <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+        <div className="relative z-10 px-5 py-4 sm:px-8 sm:py-5 text-white bg-slate-900 transition-colors duration-300">
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-2">
+              <Image
+                src="/img/business-logo.png"
+                alt="School ERP"
+                width={24}
+                height={24}
+                className="w-6 h-6 object-contain rounded-md"
+              />
+              <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+            </div>
+            {!isConfiguring && (
+              <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                <span>Step {step} of 2</span>
+              </div>
+            )}
           </div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-xl sm:text-2xl font-bold">
             {isConfiguring 
               ? "Configuring secure school portal..." 
               : "Register Your School"}
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
             {isConfiguring ? (
               <span className="text-blue-400 font-medium flex items-center gap-1.5">
                 <Loader2 className="w-4 h-4 animate-spin" /> Synchronizing SSL handshake & reverse proxy
               </span>
             ) : (
-              `Step ${step} of 2: ${step === 1 ? "Institutional Identity" : "Academic Tier Allocation"}`
+              step === 1 ? "Institutional Identity & Administrator Setup" : "Academic Tier Allocation"
             )}
           </p>
         </div>
 
         {/* Body */}
-        <div className="p-5 md:p-8">
+        <div className="p-4 sm:p-6 md:p-8 flex-1 flex flex-col">
           {errorMsg && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-700 rounded-xl text-sm font-medium">
+            <div className="mb-5 p-3.5 sm:p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-xl text-xs sm:text-sm font-medium">
               {errorMsg}
             </div>
           )}
@@ -419,21 +426,21 @@ export default function RegisterTenantPage() {
               </div>
 
               <div>
-                <h3 className="text-xl font-bold text-slate-900">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
                   Configuring secure school portal...
                 </h3>
-                <p className="text-slate-500 text-sm mt-1.5 max-w-md mx-auto">
+                <p className="text-slate-500 dark:text-zinc-400 text-sm mt-1.5 max-w-md mx-auto">
                   {configuringStatusText}
                 </p>
               </div>
 
               {/* Real-time Status Card & Checklist */}
-              <div className="max-w-md mx-auto bg-slate-50 rounded-2xl p-5 border border-slate-200 text-left space-y-3.5">
+              <div className="max-w-md mx-auto bg-slate-50 dark:bg-zinc-800/60 rounded-2xl p-5 border border-slate-200 dark:border-zinc-700 text-left space-y-3.5">
                 <div className="flex items-center gap-3 text-xs">
                   <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 stroke-[3]" />
                   </div>
-                  <span className="text-slate-800 font-medium">Database tenant schema & isolated boundary written</span>
+                  <span className="text-slate-800 dark:text-zinc-200 font-medium">Database tenant schema & isolated boundary written</span>
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
@@ -446,38 +453,38 @@ export default function RegisterTenantPage() {
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     )}
                   </div>
-                  <span className={sslVerified ? "text-slate-800 font-medium" : "text-blue-700 font-medium"}>
+                  <span className={sslVerified ? "text-slate-800 dark:text-zinc-200 font-medium" : "text-blue-700 dark:text-blue-400 font-medium"}>
                     Reverse proxy automated SSL certificate generation
                   </span>
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-400"
+                    sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 dark:bg-zinc-700 text-slate-400 dark:text-zinc-400"
                   }`}>
                     {sslVerified ? (
                       <Check className="w-3 h-3 stroke-[3]" />
                     ) : (
-                      <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                      <div className="w-2 h-2 rounded-full bg-slate-400 dark:bg-zinc-400"></div>
                     )}
                   </div>
-                  <span className={sslVerified ? "text-slate-800 font-medium" : "text-slate-400 font-medium"}>
+                  <span className={sslVerified ? "text-slate-800 dark:text-zinc-200 font-medium" : "text-slate-400 dark:text-zinc-400 font-medium"}>
                     Internal HTTPS ping check & SNI handshake verification
                   </span>
                 </div>
               </div>
 
               {/* Progress Feedback */}
-              <div className="max-w-md mx-auto text-xs text-slate-400 flex items-center justify-between px-1">
+              <div className="max-w-md mx-auto text-xs text-slate-400 dark:text-zinc-400 flex items-center justify-between px-1">
                 <span>Handshake synchronization</span>
                 <span className="font-mono">{elapsedSeconds}s elapsed</span>
               </div>
 
               {/* Direct Zero-SSL Fallback Link if user needs instant entry */}
               <div className="pt-2 max-w-md mx-auto">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between text-left">
+                <div className="p-3 bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs text-slate-600 dark:text-zinc-300 flex items-center justify-between text-left">
                   <span className="truncate pr-2">
-                    Target: <span className="font-mono font-semibold text-slate-900">{registrationData?.subdomainUrl || (formData.subdomain ? `${formData.subdomain}.${rootDisplay}` : "Direct Portal")}</span>
+                    Target: <span className="font-mono font-semibold text-slate-900 dark:text-white">{registrationData?.subdomainUrl || (formData.subdomain ? `${formData.subdomain}.${rootDisplay}` : "Direct Portal")}</span>
                   </span>
                   <a 
                     href={`/login?school=${encodeURIComponent(registrationData?.subdomain || formData.subdomain)}`}
@@ -486,7 +493,7 @@ export default function RegisterTenantPage() {
                       const slug = registrationData?.subdomain || formData.subdomain;
                       window.location.href = `/login?school=${encodeURIComponent(slug)}`;
                     }}
-                    className="text-blue-600 hover:text-blue-800 font-semibold flex-shrink-0 cursor-pointer"
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold flex-shrink-0 cursor-pointer"
                   >
                     Direct Route &rarr;
                   </a>
@@ -502,247 +509,285 @@ export default function RegisterTenantPage() {
             <>
               {/* STEP 1: INSTITUTIONAL IDENTITY FORM */}
               {step === 1 && (
-                <form onSubmit={handleNextStep} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">School Name *</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                      placeholder="e.g. Greenwood Academy"
-                      value={formData.schoolName} 
-                      onChange={e => setFormData({...formData, schoolName: e.target.value})} 
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Desired URL Slug *</label>
-                    <div className="flex">
-                      <span className="inline-flex items-center px-4 rounded-l-xl border border-r-0 border-slate-300 bg-slate-50 text-slate-500 sm:text-sm font-mono">
-                        {rootDisplay}/
-                      </span>
-                      <input 
-                        required
-                        type="text" 
-                        className="flex-1 min-w-0 block w-full border border-slate-300 rounded-none rounded-r-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono"
-                        placeholder="greenwood"
-                        value={formData.subdomain} 
-                        onChange={e => setFormData({...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "")})} 
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Internal Subdomain: <span className="font-mono text-blue-600">{formData.subdomain || "your-school"}.{rootDisplay}</span>
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Admin Email *</label>
-                    <input 
-                      required
-                      name="adminEmail"
-                      type="email" 
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                      placeholder="admin@school.edu"
-                      value={formData.adminEmail} 
-                      onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
-                    />
-                  </div>
-
-                  {/* Admin Password & Confirm Password Setup Right Under Admin Email */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label htmlFor="adminPassword" className="block text-sm font-semibold text-slate-700 mb-1">
-                        Admin Password *
-                      </label>
-                      <div className="relative">
+                <form onSubmit={handleNextStep} className="space-y-4 sm:space-y-5 flex-1 flex flex-col justify-between">
+                  <div className="space-y-4 sm:space-y-5">
+                    {/* Row 1: School Name & Desired URL Slug */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          School Name *
+                        </label>
                         <input 
                           required
-                          id="adminPassword"
-                          name="adminPassword"
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Min. 8 characters"
-                          className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                          value={formData.adminPassword}
-                          onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
+                          type="text" 
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          placeholder="e.g. Greenwood Academy"
+                          value={formData.schoolName} 
+                          onChange={e => setFormData({...formData, schoolName: e.target.value})} 
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
                       </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700 mb-1">
-                        Confirm Password *
-                      </label>
-                      <div className="relative">
-                        <input 
-                          required
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type={showConfirmPassword ? "text" : "password"}
-                          placeholder="Confirm password"
-                          className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                          value={formData.confirmPassword}
-                          onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Real-time Validation & Password Strength Meter */}
-                  <div className="space-y-3 pt-1">
-                    {/* Visual Strength Meter Bar */}
-                    {formData.adminPassword.length > 0 && (
-                      <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-700">Password Strength:</span>
-                          <span className={`px-2 py-0.5 rounded-md font-bold text-xs border ${strength?.badge || "bg-slate-100 text-slate-500 border-slate-200"}`}>
-                            {strength ? strength.level : "Too Short"}
+                      
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          Desired URL Slug *
+                        </label>
+                        <div className="flex">
+                          <span className="inline-flex items-center px-3 sm:px-4 rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
+                            {rootDisplay}/
                           </span>
+                          <input 
+                            required
+                            type="text" 
+                            className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none rounded-r-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            placeholder="greenwood"
+                            value={formData.subdomain} 
+                            onChange={e => setFormData({...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "")})} 
+                          />
                         </div>
-                        {/* 3-Segment Progress Bar */}
-                        <div className="grid grid-cols-3 gap-1.5 h-1.5 w-full">
-                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 1 ? strength.color : "bg-slate-200"}`} />
-                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 2 ? strength.color : "bg-slate-200"}`} />
-                          <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 3 ? strength.color : "bg-slate-200"}`} />
-                        </div>
-                        {strength?.level === "Weak" && (
-                          <p className="text-[11px] text-amber-700 pt-0.5">
-                            Meets minimum requirements. You can register now, or strengthen it anytime.
-                          </p>
-                        )}
+                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 mt-1 truncate">
+                          Internal Subdomain: <span className="font-mono text-blue-600 dark:text-blue-400">{formData.subdomain || "your-school"}.{rootDisplay}</span>
+                        </p>
                       </div>
-                    )}
-
-                    {/* Enterprise Password Rules Checklist */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
-                        hasMinLength ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {hasMinLength ? "✓" : "•"} Min. 8 characters
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
-                        hasUppercase ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {hasUppercase ? "✓" : "•"} 1 Uppercase (A-Z)
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
-                        hasNumber ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {hasNumber ? "✓" : "•"} 1 Digit (0-9)
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 transition-colors ${
-                        hasSpecial ? "text-emerald-600 font-semibold" : "text-slate-400"
-                      }`}>
-                        {hasSpecial ? "✓" : "•"} 1 Symbol (!@#$)
-                      </span>
                     </div>
 
-                    {/* Password Match Indicator */}
-                    {formData.confirmPassword.length > 0 && (
-                      <div className="text-xs">
-                        <span className={`inline-flex items-center gap-1 font-semibold ${
-                          formData.adminPassword === formData.confirmPassword ? "text-emerald-600" : "text-amber-600"
+                    {/* Row 2: Admin Email & Contact Phone */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          Admin Email *
+                        </label>
+                        <input 
+                          required
+                          name="adminEmail"
+                          type="email" 
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          placeholder="admin@school.edu"
+                          value={formData.adminEmail} 
+                          onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          Contact Phone
+                        </label>
+                        <input 
+                          type="tel" 
+                          name="contactPhone"
+                          inputMode="numeric" 
+                          pattern="[0-9+]*" 
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          placeholder="+234 800 000 0000"
+                          value={formData.contactPhone} 
+                          onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 3: Admin Password & Confirm Password */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                      <div>
+                        <label htmlFor="adminPassword" className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          Admin Password *
+                        </label>
+                        <div className="relative">
+                          <input 
+                            required
+                            id="adminPassword"
+                            name="adminPassword"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Min. 8 characters"
+                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            value={formData.adminPassword}
+                            onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                          Confirm Password *
+                        </label>
+                        <div className="relative">
+                          <input 
+                            required
+                            id="confirmPassword"
+                            name="confirmPassword"
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Confirm password"
+                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            value={formData.confirmPassword}
+                            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                          >
+                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Validation & Password Strength Meter */}
+                    <div className="space-y-2 pt-0.5">
+                      {/* Visual Strength Meter Bar */}
+                      {formData.adminPassword.length > 0 && (
+                        <div className="space-y-1.5 p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-700 dark:text-zinc-300">Password Strength:</span>
+                            <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${strength?.badge || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:border-zinc-600"}`}>
+                              {strength ? strength.level : "Too Short"}
+                            </span>
+                          </div>
+                          {/* 3-Segment Progress Bar */}
+                          <div className="grid grid-cols-3 gap-1.5 h-1.5 w-full">
+                            <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 1 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
+                            <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 2 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
+                            <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 3 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
+                          </div>
+                          {strength?.level === "Weak" && (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-0.5">
+                              Meets minimum requirements. You can register now, or strengthen it anytime.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Enterprise Password Rules Checklist */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                          hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
                         }`}>
-                          {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                          {hasMinLength ? "✓" : "•"} Min. 8 chars
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                          hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                        }`}>
+                          {hasUppercase ? "✓" : "•"} 1 Uppercase
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                          hasNumber ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                        }`}>
+                          {hasNumber ? "✓" : "•"} 1 Digit
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                          hasSpecial ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                        }`}>
+                          {hasSpecial ? "✓" : "•"} 1 Symbol
                         </span>
                       </div>
-                    )}
+
+                      {/* Password Match Indicator */}
+                      {formData.confirmPassword.length > 0 && (
+                        <div className="text-xs">
+                          <span className={`inline-flex items-center gap-1 font-semibold ${
+                            formData.adminPassword === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                          }`}>
+                            {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Contact Phone</label>
-                    <input 
-                      type="tel" 
-                      name="contactPhone"
-                      inputMode="numeric" 
-                      pattern="[0-9+]*" 
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                      placeholder="+1 (555) 000-0000"
-                      value={formData.contactPhone} 
-                      onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-4">
-                    <button type="submit" className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-sm">
-                      Next Step &rarr;
+                  {/* Sticky Action Footer */}
+                  <div className="sticky bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-20 shadow-lg sm:shadow-none">
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      <span>Secure institutional setup</span>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium sm:hidden">
+                      Step 1 of 2
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
+                    >
+                      <span>Next Step: Select Tiers</span>
+                      <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 </form>
               )}
 
-              {/* STEP 2: ACADEMIC TIER ALLOCATION & ADMIN CREDENTIALS */}
+              {/* STEP 2: ACADEMIC TIER ALLOCATION */}
               {step === 2 && (
-                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900 mb-1">Academic Tier Allocation</h3>
-                    <p className="text-slate-600 text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {availableTiers.map(tier => {
-                      const isSelected = selectedTiers.includes(tier.id);
-                      return (
-                        <div 
-                          key={tier.id}
-                          onClick={() => handleTierToggle(tier.id)}
-                          className={`cursor-pointer p-4 md:p-5 rounded-2xl border-2 transition-all duration-200 flex items-start gap-3.5 ${
-                            isSelected ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm"
-                          }`}
-                        >
-                          <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
-                            isSelected ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"
-                          }`}>
-                            {isSelected && (
-                              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
+                    <div className="mb-4">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">Academic Tier Allocation</h3>
+                      <p className="text-slate-600 dark:text-zinc-400 text-xs sm:text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                      {availableTiers.map(tier => {
+                        const isSelected = selectedTiers.includes(tier.id);
+                        return (
+                          <div 
+                            key={tier.id}
+                            onClick={() => handleTierToggle(tier.id)}
+                            className={`cursor-pointer p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 flex items-start gap-3 ${
+                              isSelected 
+                                ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-500" 
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/50 hover:border-blue-300 dark:hover:border-zinc-700 hover:shadow-sm"
+                            }`}
+                          >
+                            <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition ${
+                              isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-700"
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`font-bold truncate text-sm ${isSelected ? "text-blue-900 dark:text-blue-200" : "text-slate-800 dark:text-zinc-100"}`}>{tier.label}</h4>
+                              <p className={`text-xs mt-0.5 leading-tight ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-slate-500 dark:text-zinc-400"}`}>{tier.desc}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className={`font-bold truncate text-sm md:text-base ${isSelected ? "text-blue-900" : "text-slate-800"}`}>{tier.label}</h4>
-                            <p className={`text-xs mt-0.5 leading-tight ${isSelected ? "text-blue-700" : "text-slate-500"}`}>{tier.desc}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className="flex justify-between pt-6 border-t border-slate-100">
+                  {/* Sticky Action Footer */}
+                  <div className="sticky bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-20 shadow-lg sm:shadow-none">
                     <button 
+                      type="button"
                       onClick={() => { setStep(1); setErrorMsg(""); }}
-                      className="px-4 md:px-6 py-3 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition"
+                      className="px-4 sm:px-6 py-2.5 sm:py-3 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-semibold rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition text-sm cursor-pointer"
                       disabled={isSubmitting}
                     >
                       &larr; Back
                     </button>
                     <button 
+                      type="button"
                       onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      className="px-4 md:px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      disabled={isSubmitting || selectedTiers.length === 0}
+                      className="flex-1 sm:flex-initial px-6 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
-                          Configuring Secure Portal...
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Configuring Portal...</span>
                         </>
                       ) : (
-                        "Complete Registration"
+                        <>
+                          <span>Complete Registration</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
                       )}
                     </button>
                   </div>
