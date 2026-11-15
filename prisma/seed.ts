@@ -59,7 +59,7 @@ async function main() {
   }).catch(() => {});
 
   const schoolsConfig = [
-    { name: "Demo School", subdomain: "demo", slug: "demo", tiers: ["Creche / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
+    { name: "Apex International Academy", subdomain: "demo", slug: "demo", tiers: ["Creche / Nursery", "Primary School", "Secondary School", "Higher Institution / University"] },
     { name: "Trial Sandbox Academy", subdomain: "sandbox", slug: "sandbox", tiers: ["Creche / Nursery", "Primary School", "Secondary School"] },
   ]
 

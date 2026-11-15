@@ -636,7 +636,7 @@ export default function LandingPage() {
                     }}
                     className="hover:text-blue-400 transition-colors"
                   >
-                    Demo School Environment
+                    Apex International Academy (Demo)
                   </Link>
                 </li>
                 <li><Link href="/portal/student" className="hover:text-blue-400 transition-colors">Student Learning Portal</Link></li>

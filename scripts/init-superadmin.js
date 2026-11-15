@@ -143,7 +143,7 @@ async function initSuperAdmin() {
         if (!demoSchool) {
           demoSchool = await prisma.school.create({
             data: {
-              name: 'Demo School',
+              name: 'Apex International Academy',
               subdomain: 'demo',
               slug: 'demo',
               tier: 'TERTIARY',
@@ -151,11 +151,11 @@ async function initSuperAdmin() {
               isActive: true,
             },
           });
-          console.log('[INIT_SUPERADMIN] Created Demo School:', demoSchool.id);
+          console.log('[INIT_SUPERADMIN] Created Apex International Academy:', demoSchool.id);
         } else {
           await prisma.school.update({
             where: { id: demoSchool.id },
-            data: { status: 'ACTIVE', isActive: true, deletedAt: null },
+            data: { name: 'Apex International Academy', status: 'ACTIVE', isActive: true, deletedAt: null },
           });
         }
 

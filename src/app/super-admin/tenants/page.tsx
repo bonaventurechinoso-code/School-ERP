@@ -152,7 +152,7 @@ export default function SuperAdminTenantsPage() {
         const normalized: SuperAdminTenantRow[] = rows
           .filter((r: any) => {
             if (r.isDeleted || String(r.status || "").toUpperCase() === "DELETED" || r.deletedAt) return false;
-            if ((r.subdomain || "").toLowerCase() !== "demo" && (deletedIds.has(r.id) || deletedIds.has(r.subdomain))) {
+            if (deletedIds.has(r.id) || deletedIds.has(r.subdomain)) {
               return false;
             }
             return true;

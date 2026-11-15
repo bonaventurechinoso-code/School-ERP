@@ -78,7 +78,7 @@ export async function createDatabaseSession(params: CreateSessionParams): Promis
   const effectiveRole = params.userRole || params.role;
 
   // Auto-Expire Inactive Sessions: Automatically delete any session with lastActive > 30 days ago on every login
-  cleanupInactiveSessions(params.userId).catch(() => {});
+  cleanupInactiveSessions(params.userId).catch(() => { });
 
   // 1. Create authoritative database record
   try {
@@ -172,7 +172,7 @@ export async function validateDatabaseSession(
       if (!token) {
         token = headerList.get("x-session-token");
       }
-    } catch {}
+    } catch { }
   }
 
   if (!token) return null;
@@ -261,6 +261,35 @@ export async function validateDatabaseSession(
           forceChangePassword: false,
         };
       }
+
+      if (anyPayload.isDemo || anyPayload.schoolDomain === "demo" || anyPayload.tenantSlug === "demo") {
+        return {
+          userId: (anyPayload.userId as string) || "demo-admin-staff",
+          email: (anyPayload.email as string) || "demo.admin@schoolerp.local",
+          tenantId: (anyPayload.tenantId as string) || "demo",
+          schoolDomain: "demo",
+          tenantName: (anyPayload.tenantName as string) || "Apex International Academy",
+          role: "TENANT_ADMIN",
+          userRole: "TENANT_ADMIN",
+          isDemo: true,
+          assignedTier: "Primary School",
+          staffRole: "School Administrator",
+          activeTiers: anyPayload.activeTiers || [
+            "Creche / Nursery",
+            "Primary School",
+            "Secondary School",
+            "Higher Institution / University",
+          ],
+          permissions: ["*"],
+          sessionToken: sessionTokenId,
+          sessionId: sessionTokenId,
+          token: token,
+          dbSessionId: sessionTokenId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          mustChangePassword: false,
+          forceChangePassword: false,
+        };
+      }
       return null;
     }
 
@@ -278,7 +307,7 @@ export async function validateDatabaseSession(
       basePrisma.session.update({
         where: { id: dbSession.id },
         data: { isRevoked: true },
-      }).catch(() => {});
+      }).catch(() => { });
       return null;
     }
 
@@ -304,7 +333,7 @@ export async function validateDatabaseSession(
           lastActiveAt: now,
           expiresAt: newExpiresAt,
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     // 7. Check authoritative User table for current mustChangePassword flag (bypassed for demo tenant)
@@ -336,7 +365,7 @@ export async function validateDatabaseSession(
           if (fallbackUser) {
             mustChangePassword = Boolean(fallbackUser.mustChangePassword);
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -391,7 +420,7 @@ export async function revokeDatabaseSession(sessionTokenOrCookie?: string | null
       try {
         const cookieStore = await cookies();
         token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-      } catch {}
+      } catch { }
     }
 
     if (token) {
@@ -405,7 +434,7 @@ export async function revokeDatabaseSession(sessionTokenOrCookie?: string | null
           (payload.token as string) ||
           (payload.id as string) ||
           token;
-      } catch {}
+      } catch { }
 
       await basePrisma.session.updateMany({
         where: {
@@ -418,7 +447,7 @@ export async function revokeDatabaseSession(sessionTokenOrCookie?: string | null
     try {
       const cookieStore = await cookies();
       cookieStore.delete(SESSION_COOKIE_NAME);
-    } catch {}
+    } catch { }
     return true;
   } catch (err) {
     console.error("[AUTH_REVOKE_ERROR]: Error revoking database session:", err);
@@ -463,11 +492,11 @@ export async function cleanupInactiveSessions(userId?: string): Promise<void> {
 
     await basePrisma.session.deleteMany({
       where: sessionWhere,
-    }).catch(() => {});
+    }).catch(() => { });
 
     await basePrisma.refreshToken.deleteMany({
       where: refreshWhere,
-    }).catch(() => {});
+    }).catch(() => { });
   } catch {
     // Fail safely
   }

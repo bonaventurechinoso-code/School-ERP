@@ -351,12 +351,12 @@ export async function createTenantWithAdmin(
         mustChange,
         isTemp
       );
-    } catch {}
+    } catch { }
 
     // I. Optional schema boundary creation
     try {
       await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${canonicalSlug}";`);
-    } catch {}
+    } catch { }
 
     return { school, user, staff };
   });
@@ -435,7 +435,7 @@ export async function createTenantWithAdmin(
         tiers: effectiveTiers,
       },
     });
-  } catch {}
+  } catch { }
 
   // Soft warning / recommendation email for weak-but-valid passwords on self-registration
   const isWeak = isWeakPassword(effectivePassword);
@@ -530,12 +530,12 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
 
   // 2. Clear all L1/L2 Redis caches and in-memory global store
   for (const sub of subdomains) {
-    await clearTenantCache(sub).catch(() => {});
-    await invalidateTenantMetadata(sub).catch(() => {});
+    await clearTenantCache(sub).catch(() => { });
+    await invalidateTenantMetadata(sub).catch(() => { });
     removeTenantFromStore(sub);
   }
   for (const id of allTargetIds) {
-    await clearTenantCache(id).catch(() => {});
+    await clearTenantCache(id).catch(() => { });
     removeTenantFromStore(id);
   }
 
@@ -544,42 +544,42 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
     schoolId: primarySchool?.id || cleanId,
     schoolName: targetName,
     subdomain: primarySubdomain,
-  }).catch(() => {});
+  }).catch(() => { });
 
   // 4. Exhaustive hard purge of all associated child data across database
   let purgedCount = 0;
 
   // Academic and student child records
-  await basePrisma.studentAttendance.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.staffAttendance.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.studentParent.deleteMany({ where: { student: { schoolId: { in: schoolIds } } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.gradeRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.reportCard.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.academicRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.examResult.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.exam.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.timetable.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.notice.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.messageLog.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.admissionLead.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.paymentProof.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.payment.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.invoice.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.feeTemplate.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.transaction.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.payrollRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.student.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.staff.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.course.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.classroom.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.department.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.tenantTierDatabase.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.academicTier.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.passwordResetToken.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.refreshToken.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.subscription.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.schoolPayment.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.user.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => {});
+  await basePrisma.studentAttendance.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.staffAttendance.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.studentParent.deleteMany({ where: { student: { schoolId: { in: schoolIds } } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.gradeRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.reportCard.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.academicRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.examResult.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.exam.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.timetable.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.notice.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.messageLog.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.admissionLead.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.paymentProof.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.payment.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.invoice.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.feeTemplate.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.transaction.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.payrollRecord.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.student.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.staff.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.course.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.classroom.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.department.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.tenantTierDatabase.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.academicTier.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.passwordResetToken.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.refreshToken.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.subscription.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.schoolPayment.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.user.deleteMany({ where: { schoolId: { in: schoolIds } } }).then(() => purgedCount++).catch(() => { });
 
   // Tenant model dependencies & wallets
   await basePrisma.walletTransaction.deleteMany({
@@ -589,7 +589,7 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
         { wallet: { tenant: { subdomain: { in: subdomains } } } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => {});
+  }).then(() => purgedCount++).catch(() => { });
 
   await basePrisma.wallet.deleteMany({
     where: {
@@ -598,34 +598,34 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
         { tenant: { subdomain: { in: subdomains } } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => {});
+  }).then(() => purgedCount++).catch(() => { });
 
-  await basePrisma.tenantCampus.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.tenantFeatureFlag.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.tenantNotification.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.tenantSubscriptionPayment.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.tenantPaymentSettings.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
-  await basePrisma.subscriptionPayment.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => {});
+  await basePrisma.tenantCampus.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.tenantFeatureFlag.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.tenantNotification.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.tenantSubscriptionPayment.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.tenantPaymentSettings.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
+  await basePrisma.subscriptionPayment.deleteMany({ where: { tenantId: { in: allTargetIds } } }).then(() => purgedCount++).catch(() => { });
 
   // Raw database tables (security, sessions, and exams)
   for (const sId of schoolIds) {
     try {
       await basePrisma.$executeRawUnsafe(`DELETE FROM bonavee_user_security WHERE school_id = $1`, sId);
-    } catch {}
+    } catch { }
   }
   for (const id of allTargetIds) {
     try {
       await basePrisma.$executeRawUnsafe(`DELETE FROM bonavee_scheduled_exams WHERE tenant_id = $1`, id);
-    } catch {}
+    } catch { }
     try {
       await basePrisma.$executeRawUnsafe(`DELETE FROM bonavee_database_sessions WHERE tenant_id = $1`, id);
-    } catch {}
+    } catch { }
   }
 
   // Drop isolated PostgreSQL tenant schemas if present
   for (const sub of subdomains) {
     const cleanSub = sub.replace(/[^a-z0-9_-]/gi, "").toLowerCase();
-    if (cleanSub && cleanSub !== "public" && cleanSub !== "demo") {
+    if (cleanSub && cleanSub !== "public") {
       try {
         await basePrisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "tenant_${cleanSub}" CASCADE;`);
       } catch (dropErr) {
@@ -642,7 +642,7 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
         { subdomain: { in: subdomains } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => {});
+  }).then(() => purgedCount++).catch(() => { });
 
   await basePrisma.tenant.deleteMany({
     where: {
@@ -651,7 +651,7 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
         { subdomain: { in: subdomains } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => {});
+  }).then(() => purgedCount++).catch(() => { });
 
   // 6. Record authoritative Audit Log
   await basePrisma.auditLog.create({
@@ -672,7 +672,7 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
         timestamp: new Date().toISOString(),
       },
     },
-  }).catch(() => {});
+  }).catch(() => { });
 
   return {
     success: true,

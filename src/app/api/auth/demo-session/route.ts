@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
+import * as jose from "jose";
 import { getDemoPrismaClient } from "@/lib/tenant-prisma";
 import { getDefaultPermissionsForRole } from "@/lib/auth";
 import { createDatabaseSession } from "@/lib/session-manager";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 import { ensureDemoDatabaseInitialized } from "@/lib/demo-db-initializer";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 
 const DEMO_SUBDOMAIN = "demo";
 const DEMO_SCHOOL_NAME = "Apex International Academy";
 const DEMO_ADMIN_EMAIL = "demo.admin@schoolerp.local";
+
+const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +52,7 @@ async function getOrProvisionDemoTenant() {
         trialStartDate: null,
         trialEndDate: null,
         isPublicPortalEnabled: true,
-        welcomeGreeting: "Welcome to Demo School! Explore administrative workflows freely in demo mode.",
+        welcomeGreeting: `Welcome to ${DEMO_SCHOOL_NAME}! Explore administrative workflows freely in demo mode.`,
         academicTiers: {
           create: [
             { name: "Creche / Nursery", level: 1 },
@@ -60,6 +65,15 @@ async function getOrProvisionDemoTenant() {
           create: [{ name: "Academic Administration" }],
         },
       },
+      include: {
+        academicTiers: { orderBy: { level: "asc" } },
+        staff: { include: { user: true } },
+      },
+    });
+  } else if (demoSchool.name !== DEMO_SCHOOL_NAME) {
+    demoSchool = await demoPrisma.school.update({
+      where: { id: demoSchool.id },
+      data: { name: DEMO_SCHOOL_NAME },
       include: {
         academicTiers: { orderBy: { level: "asc" } },
         staff: { include: { user: true } },
@@ -93,12 +107,15 @@ async function getOrProvisionDemoTenant() {
           trialEndsAt: null,
         },
       });
-    } else if (!existingDemoTenant.isDemo || existingDemoTenant.isTrial) {
+    } else {
       await demoPrisma.tenant.update({
         where: { id: existingDemoTenant.id },
         data: {
+          schoolName: DEMO_SCHOOL_NAME,
+          subdomain: DEMO_SUBDOMAIN,
           isDemo: true,
           isTrial: false,
+          status: "ACTIVE",
           subscriptionStatus: "ACTIVE",
           trialEndsAt: null,
         },
@@ -274,7 +291,7 @@ function resolveDemoRedirectUrl(req: Request): URL {
 
 /**
  * GET handler: Public users clicking "Explore Demo Environment".
- * Routes to /demo/dashboard with X-Demo-Mode: DEMO MODE header.
+ * Routes to /demo/dashboard with X-Demo-Mode: DEMO MODE header and SSO token.
  */
 export async function GET(req: Request) {
   try {
@@ -301,12 +318,34 @@ export async function GET(req: Request) {
       tierNames
     );
 
-    // Redirect safely using canonical host resolution (never internal container host:port)
-    const redirectUrl = resolveDemoRedirectUrl(req);
-    const response = NextResponse.redirect(redirectUrl);
+    const ssoToken = await new jose.SignJWT({
+      userId: staffId || "demo-admin-staff",
+      email: staffEmail || DEMO_ADMIN_EMAIL,
+      tenantId: demoSchool.id,
+      tenantSlug: DEMO_SUBDOMAIN,
+      schoolDomain: DEMO_SUBDOMAIN,
+      tenantName: DEMO_SCHOOL_NAME,
+      role: "TENANT_ADMIN",
+      userRole: "TENANT_ADMIN",
+      staffRole: "School Administrator",
+      activeTiers: tierNames,
+      permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+      sessionToken,
+      isDemo: true,
+      type: "demo_sso",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(SECRET_KEY);
 
-    // Enforce relative Location header so user's browser stays on whatever domain they accessed the app from
-    response.headers.set("Location", "/demo/dashboard");
+    const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const forwardedProto = req.headers.get("x-forwarded-proto");
+    const targetTenantUrl = buildTenantUrl(DEMO_SUBDOMAIN, forwardedHost, "/dashboard", forwardedProto);
+    const redirectUrl = `${targetTenantUrl}?sso_token=${ssoToken}`;
+
+    const response = NextResponse.redirect(new URL(redirectUrl));
+
     response.headers.set("X-Demo-Mode", "DEMO MODE");
 
     response.cookies.set("session", sessionToken, {
@@ -362,17 +401,43 @@ export async function POST(req: Request) {
       tierNames
     );
 
+    const ssoToken = await new jose.SignJWT({
+      userId: staffId || "demo-admin-staff",
+      email: staffEmail || DEMO_ADMIN_EMAIL,
+      tenantId: demoSchool.id,
+      tenantSlug: DEMO_SUBDOMAIN,
+      schoolDomain: DEMO_SUBDOMAIN,
+      tenantName: DEMO_SCHOOL_NAME,
+      role: "TENANT_ADMIN",
+      userRole: "TENANT_ADMIN",
+      staffRole: "School Administrator",
+      activeTiers: tierNames,
+      permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
+      sessionToken,
+      isDemo: true,
+      type: "demo_sso",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(SECRET_KEY);
+
+    const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const forwardedProto = req.headers.get("x-forwarded-proto");
+    const targetTenantUrl = buildTenantUrl(DEMO_SUBDOMAIN, forwardedHost, "/dashboard", forwardedProto);
+    const redirectUrl = `${targetTenantUrl}?sso_token=${ssoToken}`;
+
     const response = NextResponse.json({
       success: true,
-      message: "Demo session initialized.",
+      message: `Demo session initialized for ${DEMO_SCHOOL_NAME}.`,
       tenant: {
         id: demoSchool.id,
-        name: demoSchool.name,
+        name: DEMO_SCHOOL_NAME,
         subdomain: DEMO_SUBDOMAIN,
         isDemo: true,
       },
       role: "TENANT_ADMIN",
-      redirectUrl: "/demo/dashboard",
+      redirectUrl: redirectUrl,
     });
 
     response.headers.set("X-Demo-Mode", "DEMO MODE");
