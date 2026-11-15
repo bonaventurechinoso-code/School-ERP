@@ -115,6 +115,7 @@ export default function SuperAdminTenantsPage() {
   const [tenants, setTenants] = useState<SuperAdminTenantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Soft-delete modal state
@@ -241,6 +242,27 @@ export default function SuperAdminTenantsPage() {
     } finally {
       setTogglingId(null);
     }
+  };
+
+  const handleViewAsTenant = async (tenant: SuperAdminTenantRow) => {
+    setImpersonatingId(tenant.id);
+    try {
+      const res = await fetch(`/api/super-admin/tenants/${tenant.id}/impersonate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data?.success && data?.redirectUrl) {
+        window.open(data.redirectUrl, "_blank");
+        return;
+      }
+    } catch (err) {
+      console.warn("Impersonation API fetch failed:", err);
+    } finally {
+      setImpersonatingId(null);
+    }
+    // Fallback: apex legacy path redirect will mint SSO token via middleware
+    window.open(`/${tenant.subdomain}/dashboard`, "_blank");
   };
 
   const handleConfirmHardDelete = async () => {
@@ -641,15 +663,14 @@ export default function SuperAdminTenantsPage() {
                               <Copy className="w-3 h-3" />
                             )}
                           </button>
-                          <Link
-                            href={tenantUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          <button
+                            type="button"
+                            onClick={() => handleViewAsTenant(tenant)}
+                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                             title="Open Tenant Dashboard"
                           >
                             <ExternalLink className="w-3 h-3" />
-                          </Link>
+                          </button>
                         </div>
                       </td>
 
@@ -704,20 +725,15 @@ export default function SuperAdminTenantsPage() {
                       {/* ACTIONS COLUMN (3 BUTTONS: VIEW AS TENANT, SUSPEND/REACTIVATE, DELETE) */}
                       <td className="py-4 px-5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/${tenant.subdomain}/dashboard`}
-                            onClick={() => {
-                              fetch(`/api/super-admin/tenants/${tenant.id}/status`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ action: "IMPERSONATE" }),
-                              }).catch(() => null);
-                            }}
-                            className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
-                            title={`Switch to ${tenant.name} tenant context`}
+                          <button
+                            type="button"
+                            disabled={impersonatingId === tenant.id}
+                            onClick={() => handleViewAsTenant(tenant)}
+                            className="text-blue-600 hover:bg-blue-50 border border-blue-200/80 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                            title={`Open ${tenant.name} dashboard without credentials`}
                           >
-                            <span>View as Tenant</span>
-                          </Link>
+                            <span>{impersonatingId === tenant.id ? "Opening..." : "View as Tenant"}</span>
+                          </button>
 
                           {tenant.status === "ACTIVE" ? (
                             <button
@@ -825,12 +841,14 @@ export default function SuperAdminTenantsPage() {
 
                   {/* 3 Action Buttons in Flex Wrap with full mobile support */}
                   <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 pt-1 w-full">
-                    <Link
-                      href={`/${tenant.subdomain}/dashboard`}
-                      className="flex-1 sm:flex-none min-w-[120px] justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition text-center whitespace-nowrap"
+                    <button
+                      type="button"
+                      disabled={impersonatingId === tenant.id}
+                      onClick={() => handleViewAsTenant(tenant)}
+                      className="flex-1 sm:flex-none min-w-[120px] justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition text-center whitespace-nowrap cursor-pointer disabled:opacity-50"
                     >
-                      <span>View as Tenant</span>
-                    </Link>
+                      <span>{impersonatingId === tenant.id ? "Opening..." : "View as Tenant"}</span>
+                    </button>
 
                     {tenant.status === "ACTIVE" ? (
                       <button

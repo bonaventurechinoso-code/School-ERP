@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as jose from "jose";
 import { prisma } from "@/lib/prisma";
 import { createDatabaseSession } from "@/lib/session-manager";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
+
+const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
 
 export async function POST(
   req: NextRequest,
@@ -9,36 +14,28 @@ export async function POST(
   try {
     const { id } = await params;
 
-    const tenant = await prisma.tenant.findUnique({
-      where: { id },
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [{ id }, { subdomain: id }, { slug: id }],
+      },
     });
 
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
 
-    if (tenant.status === "SUSPENDED") {
-      return NextResponse.json(
-        { error: "Cannot impersonate a suspended tenant. Reactivate the tenant first." },
-        { status: 400 }
-      );
-    }
-
-    if (!tenant.isImpersonationAllowed) {
-      return NextResponse.json(
-        { error: "Administrative impersonation is disabled for this tenant." },
-        { status: 403 }
-      );
-    }
+    // Platform Owner Super Admin has the authoritative right to access ANY tenant dashboard
+    // through the SaaS layer without restriction (even if suspended or impersonation is toggled).
 
     // 1. Generate an authoritative database session bound to the tenant domain
     const session = await createDatabaseSession({
       userId: `sa-impersonate-${tenant.id}`,
-      email: tenant.adminEmail,
+      email: tenant.adminEmail || "superadmin@bonaveeict.com.ng",
       tenantId: tenant.id,
       schoolDomain: tenant.subdomain,
       tenantName: tenant.schoolName,
-      role: "ADMIN",
+      role: "SUPER_ADMIN",
+      userRole: "SUPER_ADMIN",
       staffRole: "SUPER_ADMIN_IMPERSONATOR",
       activeTiers: Array.isArray(tenant.institutionTypes)
         ? (tenant.institutionTypes as string[])
@@ -64,7 +61,34 @@ export async function POST(
       },
     });
 
-    const redirectUrl = `/${tenant.subdomain}`;
+    // 3. Issue cross-subdomain SSO handshake token
+    const ssoToken = await new jose.SignJWT({
+      userId: `sa-impersonate-${tenant.id}`,
+      email: tenant.adminEmail || "superadmin@bonaveeict.com.ng",
+      tenantId: tenant.id,
+      tenantSlug: tenant.subdomain,
+      schoolDomain: tenant.subdomain,
+      tenantName: tenant.schoolName,
+      role: "SUPER_ADMIN",
+      userRole: "SUPER_ADMIN",
+      staffRole: "SUPER_ADMIN_IMPERSONATOR",
+      activeTiers: Array.isArray(tenant.institutionTypes)
+        ? (tenant.institutionTypes as string[])
+        : ["PRIMARY", "SECONDARY"],
+      permissions: ["*"],
+      sessionToken: session.sessionToken,
+      isSuperAdmin: true,
+      type: "super_admin_sso",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(SECRET_KEY);
+
+    const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const protoHeader = req.headers.get("x-forwarded-proto");
+    const tenantSubdomainUrl = buildTenantUrl(tenant.subdomain, hostHeader, "/dashboard", protoHeader);
+    const redirectUrl = `${tenantSubdomainUrl}?sso_token=${ssoToken}`;
 
     return NextResponse.json({
       success: true,

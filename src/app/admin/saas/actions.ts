@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import * as jose from "jose";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PLANS } from "@/lib/saas-plans";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 
 export async function seedBaselinePlans() {
   try {
@@ -143,23 +146,24 @@ export async function updateTenantPlan(tenantId: string, newPlanId: string) {
 
 export async function impersonateTenant(tenantId: string) {
   try {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [{ id: tenantId }, { subdomain: tenantId }, { slug: tenantId }],
+      },
+    });
     if (!tenant) return { success: false, error: "Tenant not found" };
-    if (tenant.status === "SUSPENDED") {
-      return { success: false, error: "Cannot impersonate a suspended tenant" };
-    }
-    if (!tenant.isImpersonationAllowed) {
-      return { success: false, error: "Impersonation is disabled by tenant security settings" };
-    }
 
+    // Platform Owner Super Admin has the right to access ANY tenant dashboard,
+    // including suspended tenants or tenants with custom security settings.
     const { createDatabaseSession } = await import("@/lib/session-manager");
-    await createDatabaseSession({
+    const sessionResult = await createDatabaseSession({
       userId: `sa-impersonate-${tenant.id}`,
-      email: tenant.adminEmail,
+      email: tenant.adminEmail || "superadmin@bonaveeict.com.ng",
       tenantId: tenant.id,
       schoolDomain: tenant.subdomain,
       tenantName: tenant.schoolName,
-      role: "ADMIN",
+      role: "SUPER_ADMIN",
+      userRole: "SUPER_ADMIN",
       staffRole: "SUPER_ADMIN_IMPERSONATOR",
       activeTiers: Array.isArray(tenant.institutionTypes)
         ? (tenant.institutionTypes as string[])
@@ -180,16 +184,42 @@ export async function impersonateTenant(tenantId: string) {
       },
     });
 
-    const BASE_PLATFORM_URL = (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.BASE_URL ||
-      "https://bonaveeict.com.ng"
-    ).replace(/\/$/, "");
+    const jwtSecret = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
+    const secretKey = new TextEncoder().encode(jwtSecret);
+
+    const ssoToken = await new jose.SignJWT({
+      userId: `sa-impersonate-${tenant.id}`,
+      email: tenant.adminEmail || "superadmin@bonaveeict.com.ng",
+      tenantId: tenant.id,
+      tenantSlug: tenant.subdomain,
+      schoolDomain: tenant.subdomain,
+      tenantName: tenant.schoolName,
+      role: "SUPER_ADMIN",
+      userRole: "SUPER_ADMIN",
+      staffRole: "SUPER_ADMIN_IMPERSONATOR",
+      activeTiers: Array.isArray(tenant.institutionTypes)
+        ? (tenant.institutionTypes as string[])
+        : ["PRIMARY", "SECONDARY"],
+      permissions: ["*"],
+      sessionToken: sessionResult.sessionToken,
+      isSuperAdmin: true,
+      type: "super_admin_sso",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(secretKey);
+
+    const headerList = await headers();
+    const hostHeader = headerList.get("x-forwarded-host") || headerList.get("host");
+    const protoHeader = headerList.get("x-forwarded-proto");
+    const tenantSubdomainUrl = buildTenantUrl(tenant.subdomain, hostHeader, "/dashboard", protoHeader);
+    const redirectUrl = `${tenantSubdomainUrl}?sso_token=${ssoToken}`;
 
     return {
       success: true,
-      message: `Impersonating ${tenant.schoolName}...`,
-      redirectUrl: `${BASE_PLATFORM_URL}/${tenant.subdomain}/dashboard`,
+      message: `Accessing ${tenant.schoolName} dashboard as Super Admin...`,
+      redirectUrl,
     };
   } catch (err: any) {
     console.error("[impersonateTenant error]:", err);

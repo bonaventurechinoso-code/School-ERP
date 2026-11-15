@@ -367,6 +367,70 @@ export async function middleware(req: NextRequest) {
   if (hostInfo.subdomain) {
     const subdomain = hostInfo.subdomain;
 
+    // Handle Super Admin Cross-Subdomain SSO Handshake
+    const ssoToken = req.nextUrl.searchParams.get("sso_token");
+    if (ssoToken) {
+      try {
+        const { payload } = await jose.jwtVerify(ssoToken, SECRET_KEY);
+        const isSuperAdmin = payload.isSuperAdmin === true || payload.role === "SUPER_ADMIN";
+        const tokenType = payload.type;
+        if (isSuperAdmin && (tokenType === "super_admin_sso" || !tokenType)) {
+          const sessionTokenId =
+            (payload.sessionToken as string) ||
+            `sa-sso-${Date.now()}`;
+
+          const sessionJwt = await new jose.SignJWT({
+            jti: sessionTokenId,
+            sessionToken: sessionTokenId,
+            sessionId: sessionTokenId,
+            id: sessionTokenId,
+            token: sessionTokenId,
+            userId: (payload.userId as string) || `sa-impersonate-${subdomain}`,
+            email: (payload.email as string) || "superadmin@bonaveeict.com.ng",
+            tenantId: (payload.tenantId as string) || subdomain,
+            schoolDomain: subdomain,
+            tenantName: (payload.tenantName as string) || subdomain,
+            role: "SUPER_ADMIN",
+            userRole: "SUPER_ADMIN",
+            staffRole: "SUPER_ADMIN_IMPERSONATOR",
+            activeTiers: (payload.activeTiers as string[]) || ["PRIMARY", "SECONDARY"],
+            permissions: ["*"],
+            isSuperAdmin: true,
+          })
+            .setProtectedHeader({ alg: "HS256" })
+            .setIssuedAt()
+            .setExpirationTime(Math.floor(Date.now() / 1000) + 30 * 60)
+            .sign(SECRET_KEY);
+
+          const cleanUrl = new URL(req.nextUrl.pathname, req.url);
+          req.nextUrl.searchParams.forEach((val, key) => {
+            if (key !== "sso_token") {
+              cleanUrl.searchParams.set(key, val);
+            }
+          });
+
+          const isProd = process.env.NODE_ENV === "production";
+          const redirectResponse = NextResponse.redirect(cleanUrl, 307);
+          const cookieOpts = {
+            httpOnly: true,
+            secure: isProd,
+            sameSite: "lax" as const,
+            path: "/",
+            maxAge: 30 * 60,
+          };
+          redirectResponse.cookies.set("session", sessionJwt, cookieOpts);
+          redirectResponse.cookies.set("accessToken", sessionJwt, cookieOpts);
+
+          for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+            redirectResponse.headers.set(k, v);
+          }
+          return redirectResponse;
+        }
+      } catch (ssoErr) {
+        console.error("[SSO Handshake Error]:", ssoErr);
+      }
+    }
+
     // A. Reserved subdomains (e.g. www, admin, api, app, portal, support, mail, blog, bonaveeict, test)
     if (isReservedSubdomain(subdomain)) {
       const notFoundUrl = new URL("/portal-not-found", req.url);
@@ -577,6 +641,29 @@ export async function middleware(req: NextRequest) {
     const targetUrl = buildTenantUrl(targetSlug, hostHeader, remainingPath, protoHeader);
     const redirectUrl = new URL(targetUrl);
     redirectUrl.search = req.nextUrl.search;
+
+    // Check if the current user on the apex platform is an authenticated Super Admin
+    const claims = await extractAndVerifyToken(req);
+    if (claims && (claims.isSuperAdmin || claims.role === "SUPER_ADMIN")) {
+      const ssoToken = await new jose.SignJWT({
+        userId: claims.userId,
+        email: "superadmin@bonaveeict.com.ng",
+        role: "SUPER_ADMIN",
+        userRole: "SUPER_ADMIN",
+        isSuperAdmin: true,
+        tenantSlug: targetSlug,
+        sessionToken: claims.sessionToken,
+        type: "super_admin_sso",
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(SECRET_KEY);
+
+      redirectUrl.searchParams.set("sso_token", ssoToken);
+      return NextResponse.redirect(redirectUrl, 307);
+    }
+
     return NextResponse.redirect(redirectUrl, 308);
   }
 

@@ -580,18 +580,10 @@ export default function SaasAdminDashboard({
   };
 
   const handleImpersonate = (tenant: TenantItem) => {
-    if (tenant.status === "SUSPENDED") {
-      showToast("error", "Cannot impersonate a suspended tenant");
-      return;
-    }
-    if (!tenant.isImpersonationAllowed) {
-      showToast("error", "Impersonation is disabled by tenant security policy");
-      return;
-    }
     startTransition(async () => {
       const res = await impersonateTenant(tenant.id);
       if (res.success && res.redirectUrl) {
-        showToast("success", res.message || `Impersonating ${tenant.schoolName}`);
+        showToast("success", res.message || `Opening ${tenant.schoolName} dashboard`);
         window.open(res.redirectUrl, "_blank");
       } else {
         showToast("error", res.error || "Impersonation failed");
