@@ -62,22 +62,69 @@ export async function POST(req: Request) {
     // the demo testing playground from production tenant tables.
     // =========================================================================
     const rawSchoolLower = explicitSchool.toLowerCase();
+    const isDemoLoginAttempt =
+      rawSchoolLower === "demo" ||
+      rawSchoolLower === "demo-school" ||
+      normalizedEmail === "demo.admin@schoolerp.local" ||
+      normalizedEmail === "headmaster@demo.edu.ng";
+
     if (
-      (rawSchoolLower === "demo" || rawSchoolLower === "demo-school" || normalizedEmail === "headmaster@demo.edu.ng") &&
-      normalizedEmail === "headmaster@demo.edu.ng" &&
-      (password === "Password123" || password === "Password123#")
+      isDemoLoginAttempt &&
+      (normalizedEmail === "demo.admin@schoolerp.local" || normalizedEmail === "headmaster@demo.edu.ng") &&
+      (password === "Password123" || password === "Password123#" || password === "Password123!" || password === "Password@123")
     ) {
       try {
-        const realDemoSchool = await basePrisma.school.findFirst({
+        let realDemoSchool = await basePrisma.school.findFirst({
           where: { OR: [{ subdomain: "demo" }, { slug: "demo" }] },
           include: { academicTiers: { orderBy: { level: "asc" } } }
         });
-        if (realDemoSchool) {
-          const realDemoUser = await basePrisma.user.findFirst({
-            where: { email: "headmaster@demo.edu.ng" }
+        if (!realDemoSchool) {
+          realDemoSchool = await basePrisma.school.create({
+            data: {
+              name: "Apex International Academy",
+              subdomain: "demo",
+              slug: "demo",
+              status: "ACTIVE",
+              isActive: true,
+              academicTiers: {
+                create: [
+                  { name: "Creche / Nursery", level: 1 },
+                  { name: "Primary School", level: 2 },
+                  { name: "Secondary School", level: 3 },
+                  { name: "Higher Institution / University", level: 4 },
+                ],
+              },
+            },
+            include: { academicTiers: { orderBy: { level: "asc" } } }
           });
+        }
+        if (realDemoSchool) {
+          let realDemoUser = await basePrisma.user.findFirst({
+            where: {
+              OR: [
+                { email: normalizedEmail },
+                { email: "demo.admin@schoolerp.local" },
+                { email: "headmaster@demo.edu.ng" },
+              ],
+            },
+          });
+          if (!realDemoUser) {
+            const demoHash = await bcrypt.hash("Password123!", 10);
+            realDemoUser = await basePrisma.user.create({
+              data: {
+                schoolId: realDemoSchool.id,
+                email: normalizedEmail,
+                firstName: "Demo",
+                lastName: "Administrator",
+                role: "SCHOOL_ADMIN",
+                passwordHash: demoHash,
+                mustChangePassword: false,
+                status: "ACTIVE",
+              },
+            });
+          }
           if (realDemoUser) {
-            const activeTiers = realDemoSchool.academicTiers?.map((t: any) => t.name) || ["Creche / Nursery", "Primary School", "Secondary School"];
+            const activeTiers = realDemoSchool.academicTiers?.map((t: any) => t.name) || ["Creche / Nursery", "Primary School", "Secondary School", "Higher Institution / University"];
             const permissions = getDefaultPermissionsForRole(realDemoUser.role as UserRole);
             const distinctSessionToken = crypto.randomUUID();
             const accessToken = await signAccessToken({
@@ -90,7 +137,7 @@ export async function POST(req: Request) {
               activeTiers,
               schoolDomain: realDemoSchool.subdomain || "demo",
               tenantSlug: realDemoSchool.subdomain || "demo",
-              tenantName: realDemoSchool.name || "Demo School",
+              tenantName: realDemoSchool.name || "Apex International Academy",
               email: normalizedEmail,
               isSuperAdmin: false,
               mustChangePassword: false,
@@ -110,7 +157,7 @@ export async function POST(req: Request) {
                 email: normalizedEmail,
                 tenantId: realDemoSchool.id,
                 schoolDomain: realDemoSchool.subdomain || "demo",
-                tenantName: realDemoSchool.name || "Demo School",
+                tenantName: realDemoSchool.name || "Apex International Academy",
                 role: realDemoUser.role,
                 userRole: realDemoUser.role,
                 assignedTier: activeTiers[0] || "Secondary School",
@@ -141,7 +188,7 @@ export async function POST(req: Request) {
               staffRole: realDemoUser.role,
               schoolDomain: realDemoSchool.subdomain || "demo",
               tenantSlug: realDemoSchool.subdomain || "demo",
-              tenantName: realDemoSchool.name || "Demo School",
+              tenantName: realDemoSchool.name || "Apex International Academy",
               activeTiers,
               permissions,
               mustChangePassword: false,

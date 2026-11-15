@@ -52,9 +52,9 @@ export const authOptions: NextAuthOptions = {
         // the demo testing playground from production tenant tables.
         // =========================================================================
         if (
-          (rawSchoolLower === "demo" || rawSchoolLower === "demo-school" || normalizedEmail === "headmaster@demo.edu.ng") &&
-          normalizedEmail === "headmaster@demo.edu.ng" &&
-          (rawPassword === "Password123" || rawPassword === "Password123#")
+          (rawSchoolLower === "demo" || rawSchoolLower === "demo-school" || normalizedEmail === "demo.admin@schoolerp.local" || normalizedEmail === "headmaster@demo.edu.ng") &&
+          (normalizedEmail === "demo.admin@schoolerp.local" || normalizedEmail === "headmaster@demo.edu.ng") &&
+          (rawPassword === "Password123" || rawPassword === "Password123#" || rawPassword === "Password123!" || rawPassword === "Password@123")
         ) {
           try {
             const realDemoSchool = await basePrisma.school.findFirst({
@@ -79,7 +79,7 @@ export const authOptions: NextAuthOptions = {
                   assignedTier: activeTiers[0] || "Secondary School",
                   tenantId: realDemoSchool.id,
                   schoolDomain: realDemoSchool.subdomain || "demo",
-                  tenantName: realDemoSchool.name || "Demo School",
+                  tenantName: realDemoSchool.name || "Apex International Academy",
                   activeTiers,
                   permissions,
                   mustChangePassword: false,
@@ -96,15 +96,15 @@ export const authOptions: NextAuthOptions = {
           return {
             id: "demo-headmaster-user-001",
             userId: "demo-headmaster-user-001",
-            email: "headmaster@demo.edu.ng",
-            name: "Demo Headmaster",
+            email: "demo.admin@schoolerp.local",
+            name: "Demo Administrator",
             role: "SCHOOL_ADMIN",
             userRole: "SCHOOL_ADMIN",
             staffRole: "Headmaster / Administrator",
             assignedTier: "Secondary School",
             tenantId: "demo",
             schoolDomain: "demo",
-            tenantName: "Demo Evaluation Academy",
+            tenantName: "Apex International Academy",
             activeTiers,
             permissions,
             mustChangePassword: false,

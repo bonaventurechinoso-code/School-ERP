@@ -139,36 +139,108 @@ export async function getCachedSchool(subdomain: string) {
     ttlSeconds: normalizedDomain === "demo" ? 300 : 3600, // 5 min for demo, 1 hour for standard
     fetchFn: async () => {
       try {
-        if (normalizedDomain === "demo" && process.env.DEMO_DATABASE_URL) {
-          const { ensureDemoDatabaseInitialized } = await import("./demo-db-initializer");
-          await ensureDemoDatabaseInitialized().catch(() => {});
-          const { getDemoPrismaClient, setDemoSchoolId } = await import("./tenant-prisma");
-          const demoPrisma = getDemoPrismaClient();
+        if (normalizedDomain === "demo") {
+          try {
+            const { getDemoPrismaClient, setDemoSchoolId, basePrisma } = await import("./tenant-prisma");
+            const demoPrisma = getDemoPrismaClient();
 
-          const demoRecord = await demoPrisma.school.findFirst({
-            where: {
-              OR: [
-                { subdomain: { equals: "demo", mode: "insensitive" } },
-                { slug: { equals: "demo", mode: "insensitive" } },
-              ],
-            },
-            include: {
-              academicTiers: {
-                orderBy: { level: "asc" },
+            let demoRecord = await demoPrisma.school.findFirst({
+              where: {
+                OR: [
+                  { subdomain: { equals: "demo", mode: "insensitive" } },
+                  { slug: { equals: "demo", mode: "insensitive" } },
+                ],
               },
-            },
-          });
+              include: {
+                academicTiers: { orderBy: { level: "asc" } },
+              },
+            });
 
-          if (demoRecord) {
-            setDemoSchoolId(demoRecord.id);
+            // If not found in demoPrisma, check basePrisma
+            if (!demoRecord && demoPrisma !== basePrisma) {
+              demoRecord = await basePrisma.school.findFirst({
+                where: {
+                  OR: [
+                    { subdomain: { equals: "demo", mode: "insensitive" } },
+                    { slug: { equals: "demo", mode: "insensitive" } },
+                  ],
+                },
+                include: {
+                  academicTiers: { orderBy: { level: "asc" } },
+                },
+              });
+            }
+
+            // If not found, auto-provision Apex International Academy
+            if (!demoRecord) {
+              demoRecord = await demoPrisma.school.create({
+                data: {
+                  name: "Apex International Academy",
+                  subdomain: "demo",
+                  slug: "demo",
+                  status: "ACTIVE",
+                  subscriptionStatus: "ACTIVE",
+                  isActive: true,
+                  isBanned: false,
+                  isPublicPortalEnabled: true,
+                  welcomeGreeting: "Welcome to Apex International Academy! Explore administrative workflows freely in demo mode.",
+                  academicTiers: {
+                    create: [
+                      { name: "Creche / Nursery", level: 1 },
+                      { name: "Primary School", level: 2 },
+                      { name: "Secondary School", level: 3 },
+                      { name: "Higher Institution / University", level: 4 },
+                    ],
+                  },
+                },
+                include: {
+                  academicTiers: { orderBy: { level: "asc" } },
+                },
+              });
+            } else if (demoRecord.name !== "Apex International Academy") {
+              demoRecord = await demoPrisma.school.update({
+                where: { id: demoRecord.id },
+                data: { name: "Apex International Academy", status: "ACTIVE", isActive: true },
+                include: {
+                  academicTiers: { orderBy: { level: "asc" } },
+                },
+              });
+            }
+
+            if (demoRecord) {
+              setDemoSchoolId(demoRecord.id);
+              return {
+                ...demoRecord,
+                name: "Apex International Academy",
+                isActive: true,
+                isSuspended: false,
+                status: "ACTIVE",
+                subscriptionStatus: "ACTIVE",
+                academicTiers: demoRecord.academicTiers || [],
+              };
+            }
+          } catch (demoFetchErr) {
+            console.error("[CACHE] Error fetching/provisioning demo school:", demoFetchErr);
+            // Fallback virtual demo record so demo is NEVER 404 / tenant_not_found
             return {
-              ...demoRecord,
+              id: "demo-school-fixed-id",
+              name: "Apex International Academy",
+              subdomain: "demo",
+              slug: "demo",
               isActive: true,
               isSuspended: false,
               status: "ACTIVE",
               subscriptionStatus: "ACTIVE",
-              academicTiers: demoRecord.academicTiers || [],
-            };
+              subscriptionPlan: "ENTERPRISE",
+              subscriptionExpiresAt: null,
+              logo: null,
+              academicTiers: [
+                { id: "tier-creche", name: "Creche / Nursery", level: 1 },
+                { id: "tier-primary", name: "Primary School", level: 2 },
+                { id: "tier-secondary", name: "Secondary School", level: 3 },
+                { id: "tier-higher", name: "Higher Institution / University", level: 4 },
+              ],
+            } as any;
           }
         }
 

@@ -40,7 +40,7 @@ export default function AIChatWidget() {
   const params = useParams();
   const schoolDomain = (params?.schoolDomain as string) || "demo";
 
-  let tenantName = "Demo School";
+  let tenantName = "Apex International Academy";
   let tenantRole = "";
   let schoolId = "";
 

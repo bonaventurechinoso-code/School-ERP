@@ -26,6 +26,26 @@ async function getOrProvisionDemoTenant() {
   await ensureDemoDatabaseInitialized();
   const demoPrisma = getDemoPrismaClient();
 
+  // Purge any lingering legacy Demo School
+  await demoPrisma.school.deleteMany({
+    where: {
+      OR: [
+        { id: "b8864963-5f77-4e6b-a859-9b9defa5b6bb" },
+        { name: "Demo School" },
+      ],
+    },
+  }).catch(() => {});
+
+  await demoPrisma.tenant.deleteMany({
+    where: {
+      OR: [
+        { id: "cmvmpetxa0000d0i0kstf3idu" },
+        { schoolName: "Demo School" },
+        { adminEmail: "headmaster@demo.edu.ng" },
+      ],
+    },
+  }).catch(() => {});
+
   let demoSchool = await demoPrisma.school.findFirst({
     where: {
       OR: [

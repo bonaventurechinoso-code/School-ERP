@@ -249,6 +249,10 @@ export function generateSlugFromName(name: string): string {
 /**
  * Builds the canonical full tenant portal URL:
  * https://[slug].bonaveeict.com.ng/[path]
+ * 
+ * Note: Render only supports wildcard SSL on custom domains (*.bonaveeict.com.ng).
+ * Subdomains on *.onrender.com do not exist in DNS, so onrender.com hostnames
+ * must resolve to bonaveeict.com.ng in production.
  */
 export function buildTenantUrl(
   slug: string,
@@ -259,7 +263,18 @@ export function buildTenantUrl(
   const info = parseHostInfo(hostHeader, protoHeader);
   const cleanSlug = slug.toLowerCase().trim();
   const normalizedPath = path ? (path.startsWith("/") ? path : `/${path}`) : "";
-  const portSuffix = info.port && info.baseDomain === "localhost" ? `:${info.port}` : "";
 
-  return `${info.protocol}://${cleanSlug}.${info.baseDomain}${portSuffix}${normalizedPath}`;
+  // 1. Local development environment
+  if (info.baseDomain === "localhost" || info.hostname.includes("localhost") || info.hostname === "127.0.0.1") {
+    const portSuffix = info.port ? `:${info.port}` : ":3000";
+    return `http://${cleanSlug}.localhost${portSuffix}${normalizedPath}`;
+  }
+
+  // 2. Production: Render service or custom domain
+  let targetDomain = info.baseDomain;
+  if (!targetDomain || targetDomain.includes("onrender.com")) {
+    targetDomain = "bonaveeict.com.ng";
+  }
+
+  return `https://${cleanSlug}.${targetDomain}${normalizedPath}`;
 }

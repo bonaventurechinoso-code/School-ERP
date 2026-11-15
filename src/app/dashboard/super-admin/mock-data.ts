@@ -221,7 +221,7 @@ export const INITIAL_SCHOOLS: SchoolTenant[] = [
   },
   {
     id: "sch-demo",
-    name: "Demo School",
+    name: "Apex International Academy",
     code: "DEMO001",
     subdomain: "demo",
     tier: "Free",

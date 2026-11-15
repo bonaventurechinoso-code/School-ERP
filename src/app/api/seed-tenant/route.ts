@@ -5,11 +5,16 @@ export async function GET() {
   try {
     const demoSchool = await basePrisma.school.upsert({
       where: { subdomain: "demo" },
-      update: {},
+      update: {
+        name: "Apex International Academy",
+        status: "ACTIVE",
+        isActive: true,
+      },
       create: {
-        name: "Demo School",
+        name: "Apex International Academy",
         subdomain: "demo",
         slug: "demo",
+        status: "ACTIVE",
         isActive: true,
       },
     });

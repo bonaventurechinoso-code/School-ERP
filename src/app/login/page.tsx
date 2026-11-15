@@ -368,8 +368,8 @@ function LoginPageContent() {
   }, [resolvedSubdomain]);
 
   // Demo Tenant Evaluation & Verified Seed Credentials
-  const DEMO_EMAIL = "headmaster@demo.edu.ng";
-  const DEMO_PASSWORD = "Password123";
+  const DEMO_EMAIL = "demo.admin@schoolerp.local";
+  const DEMO_PASSWORD = "Password123!";
   const DEMO_SCHOOL_CODE = "demo";
 
   const isDemoTenant =
@@ -711,7 +711,7 @@ function LoginPageContent() {
       rawTenantName.toLowerCase() === "localhost" ||
       rawTenantName.toLowerCase() === "root" ||
       rawTenantName.toLowerCase() === "default"
-      ? (resolvedSubdomain?.toLowerCase() === "demo" ? "Demo School" : "")
+      ? (resolvedSubdomain?.toLowerCase() === "demo" ? "Apex International Academy" : "")
       : rawTenantName;
 
   return (

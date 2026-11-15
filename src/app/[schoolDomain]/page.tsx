@@ -218,7 +218,7 @@ export default async function PublicGuestPortalPage({
 
   // Use custom welcome greeting if provided and different from default
   const finalHeroTitle = isDemo
-    ? "Welcome to Demo School"
+    ? "Welcome to Apex International Academy"
     : ((school.welcomeGreeting && school.welcomeGreeting !== "Welcome to our institution!") 
       ? school.welcomeGreeting 
       : heroTitle);

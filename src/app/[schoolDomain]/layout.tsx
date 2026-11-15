@@ -136,7 +136,7 @@ export default async function TenantLayout({
   const cookieStore = await cookies();
   const activeTierCookie = cookieStore.get("activeTier")?.value;
 
-  const tiers = school.academicTiers || [];
+  const tiers = (school.academicTiers || []) as any[];
   let isHigherEd = tiers.some(tier =>
     tier.name.toUpperCase().includes("UNIVERSITY") ||
     tier.name.toUpperCase().includes("POLYTECHNIC") ||

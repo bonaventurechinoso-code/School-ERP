@@ -18,7 +18,7 @@ async function cleanDemo() {
     await basePrisma.school.update({
       where: { id: primary.id },
       data: {
-        name: "Demo School",
+        name: "Apex International Academy",
         subdomain: "demo",
         slug: "demo",
         status: "ACTIVE",
@@ -55,7 +55,7 @@ async function cleanDemo() {
       await basePrisma.tenant.update({
         where: { id: primaryTenant.id },
         data: {
-          schoolName: "Demo School",
+          schoolName: "Apex International Academy",
           subdomain: "demo",
           status: "ACTIVE",
           subscriptionStatus: "Active",

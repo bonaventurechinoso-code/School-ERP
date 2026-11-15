@@ -563,6 +563,65 @@ export async function middleware(req: NextRequest) {
     const claims = await extractAndVerifyToken(req);
 
     if (!claims || !claims.userId) {
+      // Demo Environment Auto-Entry: never lock demo visitors behind credentials
+      if (subdomain === "demo") {
+        const sessionTokenId = `demo-auto-${Date.now()}`;
+        const sessionJwt = await new jose.SignJWT({
+          jti: sessionTokenId,
+          sessionToken: sessionTokenId,
+          sessionId: sessionTokenId,
+          id: sessionTokenId,
+          token: sessionTokenId,
+          userId: "demo-admin-staff",
+          email: "demo.admin@schoolerp.local",
+          tenantId: "demo",
+          schoolDomain: "demo",
+          tenantName: "Apex International Academy",
+          role: "TENANT_ADMIN",
+          userRole: "TENANT_ADMIN",
+          staffRole: "School Administrator",
+          activeTiers: [
+            "Creche / Nursery",
+            "Primary School",
+            "Secondary School",
+            "Higher Institution / University",
+          ],
+          permissions: ["*"],
+          isDemo: true,
+        })
+          .setProtectedHeader({ alg: "HS256" })
+          .setIssuedAt()
+          .setExpirationTime(Math.floor(Date.now() / 1000) + 24 * 60 * 60)
+          .sign(SECRET_KEY);
+
+        const targetPath = pathname === "/" || pathname === "/login" ? "/dashboard" : pathname;
+        const autoLoginUrl = new URL(targetPath, req.url);
+        autoLoginUrl.search = req.nextUrl.search;
+        const autoResponse = NextResponse.redirect(autoLoginUrl, 307);
+        const isProd = process.env.NODE_ENV === "production";
+        const cookieOpts = {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: "lax" as const,
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        };
+        autoResponse.cookies.set("session", sessionJwt, cookieOpts);
+        autoResponse.cookies.set("accessToken", sessionJwt, cookieOpts);
+        autoResponse.cookies.set("activeTier", "Primary School", {
+          httpOnly: false,
+          secure: isProd,
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+
+        for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+          autoResponse.headers.set(k, v);
+        }
+        return autoResponse;
+      }
+
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("callbackUrl", pathname);
       const redirectResponse = NextResponse.redirect(loginUrl);

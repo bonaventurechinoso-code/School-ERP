@@ -159,10 +159,15 @@ async function initSuperAdmin() {
           });
         }
 
-        const demoHash = await bcrypt.hash('Password123', 10);
+        const demoHash = await bcrypt.hash('Password123!', 10);
+        // Purge legacy headmaster@demo.edu.ng user
+        await prisma.user.deleteMany({
+          where: { email: { in: ['headmaster@demo.edu.ng', 'headmaster@demo.schoolerp.local'] } },
+        }).catch(() => {});
+
         const existingDemoUser = await prisma.user.findFirst({
           where: {
-            email: { equals: 'headmaster@demo.edu.ng', mode: 'insensitive' },
+            email: { equals: 'demo.admin@schoolerp.local', mode: 'insensitive' },
           },
         });
 
@@ -173,25 +178,25 @@ async function initSuperAdmin() {
               schoolId: demoSchool.id,
               passwordHash: demoHash,
               status: 'ACTIVE',
-              role: 'PRINCIPAL',
+              role: 'SCHOOL_ADMIN',
               mustChangePassword: false,
             },
           });
-          console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) synchronized.');
+          console.log('[INIT_SUPERADMIN] Demo Admin (demo.admin@schoolerp.local) synchronized.');
         } else {
           await prisma.user.create({
             data: {
-              email: 'headmaster@demo.edu.ng',
+              email: 'demo.admin@schoolerp.local',
               firstName: 'Demo',
-              lastName: 'Headmaster',
+              lastName: 'Administrator',
               passwordHash: demoHash,
-              role: 'PRINCIPAL',
+              role: 'SCHOOL_ADMIN',
               schoolId: demoSchool.id,
               status: 'ACTIVE',
               mustChangePassword: false,
             },
           });
-          console.log('[INIT_SUPERADMIN] Demo Headmaster (headmaster@demo.edu.ng) created.');
+          console.log('[INIT_SUPERADMIN] Demo Admin (demo.admin@schoolerp.local) created.');
         }
       } catch (demoErr) {
         console.warn('[INIT_SUPERADMIN] Demo sync notice:', demoErr.message);

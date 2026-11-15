@@ -857,13 +857,38 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
       await reactivateTenant(egedeTargetId, { silent: true });
     }
 
-    // 3. Restore Demo School (b8864963-5f77-4e6b-a859-9b9defa5b6bb / cmvmpetxa0000d0i0kstf3idu)
+    // 3. Ensure Demo School is strictly "Apex International Academy" and purge legacy "Demo School"
     const now = new Date();
     const future30Days = new Date(now.getTime() + THIRTY_DAYS_MS);
+
+    // Clean up any remaining legacy "Demo School" rows
+    await prisma.school
+      .deleteMany({
+        where: {
+          OR: [
+            { id: "b8864963-5f77-4e6b-a859-9b9defa5b6bb" },
+            { name: "Demo School" },
+          ],
+        },
+      })
+      .catch(() => {});
+
+    await prisma.tenant
+      .deleteMany({
+        where: {
+          OR: [
+            { id: "cmvmpetxa0000d0i0kstf3idu" },
+            { schoolName: "Demo School" },
+            { adminEmail: "headmaster@demo.edu.ng" },
+          ],
+        },
+      })
+      .catch(() => {});
 
     await prisma.school.upsert({
       where: { subdomain: "demo" },
       update: {
+        name: "Apex International Academy",
         status: "ACTIVE",
         isActive: true,
         isBanned: false,
@@ -874,8 +899,7 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
         isPublicPortalEnabled: true,
       },
       create: {
-        id: "b8864963-5f77-4e6b-a859-9b9defa5b6bb",
-        name: "Demo School",
+        name: "Apex International Academy",
         subdomain: "demo",
         slug: "demo",
         status: "ACTIVE",
@@ -894,6 +918,7 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
     await prisma.tenant.upsert({
       where: { subdomain: "demo" },
       update: {
+        schoolName: "Apex International Academy",
         status: "ACTIVE",
         subscriptionStatus: "ACTIVE",
         suspendedReason: null,
@@ -906,10 +931,9 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
         trialEndsAt: future30Days,
       },
       create: {
-        id: "cmvmpetxa0000d0i0kstf3idu",
-        schoolName: "Demo School",
+        schoolName: "Apex International Academy",
         subdomain: "demo",
-        adminEmail: "headmaster@demo.edu.ng",
+        adminEmail: "demo.admin@schoolerp.local",
         contactPhone: "+234 800 000 0000",
         institutionTypes: ["Primary School", "Secondary School"],
         tier: "PRIMARY",
