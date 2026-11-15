@@ -75,7 +75,7 @@ export default function ForgotPasswordFormClient({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-indigo-100 relative">
+    <div className="min-h-screen w-full bg-slate-50 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto selection:bg-indigo-100 relative">
       {/* Floating Error Toast Notification (0px Layout Shift) */}
       {errorMsg && (
         <div
@@ -106,7 +106,7 @@ export default function ForgotPasswordFormClient({
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-slate-300/20 rounded-full blur-3xl" />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-md mx-auto my-auto relative z-10">
         {/* Brand Header */}
         <div className="flex items-center justify-center gap-3 mb-6">
           <div className="h-10 w-10 rounded-xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center p-1.5 overflow-hidden">

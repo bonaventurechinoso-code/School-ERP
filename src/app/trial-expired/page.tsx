@@ -4,12 +4,12 @@ import { AlertTriangle, ArrowRight, ShieldAlert, Sparkles } from "lucide-react";
 
 export default function TrialExpiredPage() {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen w-full bg-slate-950 flex flex-col justify-start py-6 sm:py-12 px-4 sm:px-6 relative overflow-y-auto">
       {/* Dynamic Background Accents */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative z-10 max-w-lg w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-xl text-center">
+      <div className="relative z-10 max-w-lg w-full mx-auto my-auto bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl text-center">
         {/* Warning Icon Badge */}
         <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-6 shadow-inner">
           <AlertTriangle className="w-8 h-8 text-amber-400" />

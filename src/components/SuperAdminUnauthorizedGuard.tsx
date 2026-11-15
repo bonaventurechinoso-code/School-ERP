@@ -73,7 +73,7 @@ export default function SuperAdminUnauthorizedGuard({
   }, [router, userRole]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-zinc-950 flex flex-col items-center justify-center p-6 text-slate-900 dark:text-white relative">
+    <div className="min-h-screen w-full bg-[#F8FAFC] dark:bg-zinc-950 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 text-slate-900 dark:text-white relative overflow-y-auto">
       {/* Floating Toast Notification Overlay */}
       {showToast && (
         <div
@@ -99,7 +99,7 @@ export default function SuperAdminUnauthorizedGuard({
       )}
 
       {/* Main Container Card */}
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 shadow-xl shadow-slate-900/5 text-center relative overflow-hidden">
+      <div className="w-full max-w-md mx-auto my-auto bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 text-center relative overflow-hidden">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/80 text-red-600 dark:text-red-400 mb-5">
           <ShieldAlert className="w-8 h-8" />
         </div>

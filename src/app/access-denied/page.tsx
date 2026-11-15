@@ -11,11 +11,13 @@ export default async function AccessDeniedPage({
   const message = searchParams.message;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-4">
-      <AccessDeniedFallback
-        role={role}
-        message={message}
-      />
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto">
+      <div className="my-auto w-full">
+        <AccessDeniedFallback
+          role={role}
+          message={message}
+        />
+      </div>
     </div>
   );
 }

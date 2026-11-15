@@ -81,12 +81,12 @@ export default async function AdmissionsTrackIndexPage({
 
   // 4. Default Interactive Lookup Form
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full mb-3 text-left">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto">
+      <div className="max-w-md w-full mx-auto mb-3 text-left">
         <BackButton />
       </div>
 
-      <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200 dark:border-zinc-800 text-center">
+      <div className="max-w-md w-full mx-auto my-auto bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-10 shadow-xl border border-slate-200 dark:border-zinc-800 text-center">
         <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
           <Search className="w-8 h-8" />
         </div>

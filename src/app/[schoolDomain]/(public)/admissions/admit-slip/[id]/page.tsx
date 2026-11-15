@@ -33,11 +33,11 @@ export default async function PublicAdmitSlipPage({
 
   if (!school) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
-        <div className="max-w-md w-full mb-3 text-left">
+      <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto bg-slate-50 dark:bg-zinc-950">
+        <div className="max-w-md w-full mx-auto mb-3 text-left">
           <BackButton />
         </div>
-        <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 text-center">
+        <div className="max-w-md w-full mx-auto my-auto bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 text-center">
           <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-slate-800 dark:text-zinc-100">Institution Not Found</h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-2">
@@ -111,11 +111,11 @@ export default async function PublicAdmitSlipPage({
 
   if (!lead) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
-        <div className="max-w-md w-full mb-3 text-left">
+      <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto bg-slate-50 dark:bg-zinc-950">
+        <div className="max-w-md w-full mx-auto mb-3 text-left">
           <BackButton />
         </div>
-        <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 text-center animate-in fade-in">
+        <div className="max-w-md w-full mx-auto my-auto bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 text-center animate-in fade-in">
           <SearchX className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-slate-800 dark:text-zinc-100">Admit Slip Not Found</h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-2">

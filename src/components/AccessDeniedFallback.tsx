@@ -38,8 +38,8 @@ export default function AccessDeniedFallback({
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 border border-red-200 dark:border-red-950/80 rounded-3xl p-8 sm:p-10 shadow-xl shadow-red-500/5 text-center relative overflow-hidden">
+    <div className="w-full flex items-center justify-center p-2 sm:p-4">
+      <div className="w-full max-w-lg bg-white dark:bg-zinc-900 border border-red-200 dark:border-red-950/80 rounded-3xl p-6 sm:p-10 shadow-xl shadow-red-500/5 text-center relative overflow-hidden">
         {/* Glow Accent */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />

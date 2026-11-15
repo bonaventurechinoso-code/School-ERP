@@ -801,8 +801,8 @@ function LoginPageContent() {
       {/* 2. RIGHT PANEL (Pristine Solid White Card - w-full md:w-[40%])            */}
       {/* Pristine white surface, border-slate-100, shadow-2xl, rounded-2xl         */}
       {/* ========================================================================= */}
-      <div className="w-full md:w-[40%] min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 relative">
-        <div className="w-full max-w-[420px] mx-auto bg-white border border-slate-100 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
+      <div className="w-full md:w-[40%] min-h-screen flex flex-col justify-start md:justify-center p-4 sm:p-6 md:p-8 relative overflow-y-auto">
+        <div className="w-full max-w-[420px] mx-auto my-auto bg-white border border-slate-100 shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6">
 
           {/* Header & Dynamic Branding Extraction */}
           <div className="space-y-1.5">

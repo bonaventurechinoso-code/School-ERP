@@ -39,8 +39,8 @@ export default async function ChangePasswordPage({
   const brandColor = (school as any)?.branding?.primaryColor || "#4f46e5";
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 selection:bg-indigo-900">
-      <div className="w-full max-w-xl">
+    <div className="min-h-screen w-full bg-slate-900 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto selection:bg-indigo-900">
+      <div className="w-full max-w-xl mx-auto my-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
             <Image

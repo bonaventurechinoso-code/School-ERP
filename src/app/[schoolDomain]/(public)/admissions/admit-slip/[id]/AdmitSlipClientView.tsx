@@ -38,9 +38,9 @@ export default function AdmitSlipClientView({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col items-center justify-center p-4 sm:p-8">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-6 sm:py-10 px-3 sm:px-6 overflow-y-auto">
       {/* Top action bar - Hidden during print */}
-      <div className="print:hidden mb-6 w-full max-w-2xl flex items-center justify-between gap-3">
+      <div className="print:hidden mb-6 w-full max-w-2xl mx-auto flex items-center justify-between gap-3">
         <Link
           href={`/${schoolDomain}`}
           className="px-4 py-2 bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold rounded-xl text-xs sm:text-sm hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center gap-2"
@@ -58,7 +58,7 @@ export default function AdmitSlipClientView({
       </div>
 
       {/* Visual Template matching AdmissionsPipeline exactly */}
-      <div className="w-full max-w-2xl bg-white border-2 border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
+      <div className="w-full max-w-2xl mx-auto my-auto bg-white border-2 border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
         {/* Header */}
         <div className="text-center border-b-2 border-slate-800 pb-4">
           <h2 className="text-2xl font-black uppercase text-slate-900">{schoolName}</h2>

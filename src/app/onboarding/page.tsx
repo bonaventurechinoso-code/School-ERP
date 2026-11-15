@@ -14,8 +14,8 @@ function OnboardingContent() {
     .join(" ");
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-12">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
+    <div className="min-h-screen w-full bg-slate-950 text-white flex flex-col justify-start items-center px-4 py-6 sm:py-12 overflow-y-auto">
+      <div className="w-full max-w-xl mx-auto my-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden">
         {/* Glow backdrop */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>

@@ -118,8 +118,8 @@ export default async function ApplyPage({
   const brandColor = (school as any).branding?.primaryColor || "#0f172a";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 py-12 bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-300">
-      <div className="w-full max-w-3xl">
+    <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-3 sm:px-6 overflow-y-auto bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-300">
+      <div className="w-full max-w-3xl mx-auto my-auto">
         <PublicApplyForm 
           schoolName={school.name}
           schoolDomain={school.subdomain}

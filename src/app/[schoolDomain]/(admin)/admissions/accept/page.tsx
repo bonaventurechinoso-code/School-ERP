@@ -52,8 +52,8 @@ export default function AcceptOfferPage() {
 
   if (statusMessage === "SUCCESS") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-2xl w-full bg-white rounded-2xl shadow-sm border border-green-200 p-12 text-center animate-in fade-in zoom-in-95">
+      <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto bg-slate-50">
+        <div className="max-w-2xl w-full mx-auto my-auto bg-white rounded-2xl shadow-sm border border-green-200 p-8 sm:p-12 text-center animate-in fade-in zoom-in-95">
           <div className="mx-auto w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
             <CheckCircle className="w-10 h-10" />
           </div>
@@ -69,8 +69,8 @@ export default function AcceptOfferPage() {
 
   if (statusMessage === "DECLINED") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-2xl w-full bg-white rounded-2xl shadow-sm border border-red-200 p-12 text-center animate-in fade-in zoom-in-95">
+      <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto bg-slate-50">
+        <div className="max-w-2xl w-full mx-auto my-auto bg-white rounded-2xl shadow-sm border border-red-200 p-8 sm:p-12 text-center animate-in fade-in zoom-in-95">
           <div className="mx-auto w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
             <XCircle className="w-10 h-10" />
           </div>
@@ -84,8 +84,8 @@ export default function AcceptOfferPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-3xl w-full bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="min-h-screen w-full bg-slate-50 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto">
+      <div className="max-w-3xl w-full mx-auto my-auto bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="bg-slate-900 px-8 py-10 text-center text-white">
           <div className="mx-auto w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-sm">
             <GraduationCap className="w-8 h-8 text-white" />

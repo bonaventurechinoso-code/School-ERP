@@ -242,8 +242,8 @@ export default function PublicAdmissionsPortalClient({
   // SUCCESS COMPLETION SCREEN
   if (submissionResult) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-6 font-sans">
-        <div className="max-w-lg w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+      <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto font-sans">
+        <div className="max-w-lg w-full mx-auto my-auto bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-6">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-300 rounded-2xl flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-10 h-10" />
           </div>

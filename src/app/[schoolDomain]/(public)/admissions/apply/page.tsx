@@ -72,11 +72,11 @@ export default function ApplyPage({
     const finalTrackUrl = `/${schoolDomain}/admissions/track/${encodeURIComponent(submittedAppNo || "")}`;
 
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 p-4 py-8 flex flex-col items-center justify-center">
-        <div className="w-full max-w-xl text-left mb-3">
+      <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 p-4 py-6 sm:py-10 flex flex-col justify-start overflow-y-auto">
+        <div className="w-full max-w-xl mx-auto mb-3 text-left">
           <BackButton />
         </div>
-        <div className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 p-6 sm:p-8 text-center animate-in fade-in">
+        <div className="w-full max-w-xl mx-auto my-auto bg-white dark:bg-zinc-900 rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 p-6 sm:p-8 text-center animate-in fade-in">
           <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4">
             <CheckCircle className="w-8 h-8" />
           </div>

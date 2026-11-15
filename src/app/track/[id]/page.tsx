@@ -22,11 +22,11 @@ export default async function GenericTrackPage({
 
   if (!register) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
-        <div className="max-w-md w-full mb-3 text-left">
+      <div className="min-h-screen w-full flex flex-col justify-start py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto bg-slate-50 dark:bg-zinc-950">
+        <div className="max-w-md w-full mx-auto mb-3 text-left">
           <BackButton />
         </div>
-        <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-lg border border-slate-200 dark:border-zinc-800 text-center animate-in fade-in">
+        <div className="max-w-md w-full mx-auto my-auto bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl shadow-lg border border-slate-200 dark:border-zinc-800 text-center animate-in fade-in">
           <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <SearchX className="w-8 h-8" />
           </div>
