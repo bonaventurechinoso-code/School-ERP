@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import * as jose from "jose";
 import { getToken } from "next-auth/jwt";
+import {
+  parseHostInfo,
+  isReservedSubdomain,
+  buildTenantUrl,
+} from "@/lib/tenant-resolver";
 
 const JWT_SECRET = process.env.JWT_SECRET_KEY || "fallback-secret-for-development-do-not-use-in-prod";
 const SECRET_KEY = new TextEncoder().encode(JWT_SECRET);
@@ -21,6 +26,7 @@ const PUBLIC_ROOT_PATHS = new Set([
   "admit-slip",
   "track",
   "apply",
+  "portal-not-found",
 ]);
 
 // Public tenant sub-actions (e.g. /{schoolDomain}/login, /{schoolDomain}/apply, etc.)
@@ -52,6 +58,10 @@ const SYSTEM_PREFIXES = new Set([
   "tenant-admin",
   "change-password",
   "unauthorized",
+  "portal-not-found",
+  "favicon.ico",
+  "uploads",
+  "img",
 ]);
 
 const AUTH_COOKIES_TO_CLEAR = [
@@ -336,8 +346,207 @@ function getSafeRedirectUrl(targetPath: string, req: NextRequest): URL {
 }
 
 export async function middleware(req: NextRequest) {
+  const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const protoHeader = req.headers.get("x-forwarded-proto");
+  const hostInfo = parseHostInfo(hostHeader, protoHeader);
   const pathname = req.nextUrl.pathname;
   const lowerPath = pathname.toLowerCase();
+
+  // 0. WWW CANONICAL REDIRECT -> APEX DOMAIN (Requirement 2)
+  if (hostInfo.isWww) {
+    const targetPort = hostInfo.port && hostInfo.baseDomain === "localhost" ? `:${hostInfo.port}` : "";
+    const apexUrl = new URL(
+      `${hostInfo.protocol}://${hostInfo.baseDomain}${targetPort}${pathname}${req.nextUrl.search}`
+    );
+    return NextResponse.redirect(apexUrl, 301);
+  }
+
+  // =========================================================================
+  // SUBDOMAIN ROUTING (e.g. [tenant-slug].bonaveeict.com.ng)
+  // =========================================================================
+  if (hostInfo.subdomain) {
+    const subdomain = hostInfo.subdomain;
+
+    // A. Reserved subdomains (e.g. www, admin, api, app, portal, support, mail, blog, bonaveeict, test)
+    if (isReservedSubdomain(subdomain)) {
+      const notFoundUrl = new URL("/portal-not-found", req.url);
+      return NextResponse.rewrite(notFoundUrl);
+    }
+
+    // B. Super-admin paths accessed on a tenant subdomain redirect to the canonical platform apex
+    if (isSuperAdminPath(lowerPath)) {
+      const apexSuperAdminUrl = new URL(
+        pathname,
+        `${hostInfo.protocol}://${hostInfo.baseDomain}${hostInfo.port && hostInfo.baseDomain === "localhost" ? ":" + hostInfo.port : ""}`
+      );
+      apexSuperAdminUrl.search = req.nextUrl.search;
+      return NextResponse.redirect(apexSuperAdminUrl, 307);
+    }
+
+    // C. Redundant slug in path on subdomain (e.g. https://testdemo.bonaveeict.com.ng/testdemo/dashboard -> /dashboard)
+    if (lowerPath === `/${subdomain}` || lowerPath.startsWith(`/${subdomain}/`)) {
+      const cleanPath = lowerPath.replace(new RegExp(`^/${subdomain}`), "") || "/";
+      const cleanUrl = new URL(cleanPath, req.url);
+      cleanUrl.search = req.nextUrl.search;
+      return NextResponse.redirect(cleanUrl, 307);
+    }
+
+    // D. API routes & static assets on subdomain pass through with injected tenant context
+    if (
+      lowerPath.startsWith("/api/") ||
+      lowerPath.startsWith("/_next") ||
+      lowerPath.startsWith("/img") ||
+      lowerPath.startsWith("/uploads") ||
+      /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2|pdf)$/i.test(lowerPath)
+    ) {
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-pathname", lowerPath);
+      requestHeaders.set("x-tenant-slug", subdomain);
+      requestHeaders.set("x-is-subdomain", "true");
+      requestHeaders.set("x-tenant-host", hostInfo.rawHost);
+
+      const response = NextResponse.next({
+        request: { headers: requestHeaders },
+      });
+      return response;
+    }
+
+    // E. Map page request into App Router tenant tree: src/app/[schoolDomain]/*
+    const effectiveTenantPath = `/${subdomain}${pathname === "/" ? "" : pathname}`;
+    const effectiveLowerPath = effectiveTenantPath.toLowerCase();
+
+    // E1. Public tenant routes (e.g. /, /login, /apply, /admissions/track, etc.)
+    if (isPublicRoute(effectiveTenantPath, req)) {
+      const rewriteUrl = new URL(effectiveTenantPath, req.url);
+      rewriteUrl.search = req.nextUrl.search;
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-pathname", pathname);
+      requestHeaders.set("x-tenant-slug", subdomain);
+      requestHeaders.set("x-is-subdomain", "true");
+      requestHeaders.set("x-tenant-host", hostInfo.rawHost);
+
+      return NextResponse.rewrite(rewriteUrl, {
+        request: { headers: requestHeaders },
+      });
+    }
+
+    // E2. Protected tenant routes -> verify authentication
+    const claims = await extractAndVerifyToken(req);
+
+    if (!claims || !claims.userId) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      const redirectResponse = NextResponse.redirect(loginUrl);
+      for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+        redirectResponse.headers.set(k, v);
+      }
+      for (const cookieName of AUTH_COOKIES_TO_CLEAR) {
+        redirectResponse.cookies.delete(cookieName);
+      }
+      return redirectResponse;
+    }
+
+    // E3. Tenant Isolation Check (Requirement 5): Never allow cross-tenant access by changing subdomain
+    const userDomain = (claims.schoolDomain || "").toLowerCase().trim();
+    const userTenantId = (claims.tenantId || "").trim();
+
+    if (!claims.isSuperAdmin && userDomain !== subdomain && userTenantId !== subdomain) {
+      const deniedUrl = new URL("/access-denied", req.url);
+      const redirectResponse = NextResponse.redirect(deniedUrl);
+      redirectResponse.headers.set("Location", "/access-denied");
+      for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+        redirectResponse.headers.set(k, v);
+      }
+      return redirectResponse;
+    }
+
+    // E4. Suspension check
+    if (claims.isSuspended && !claims.isSuperAdmin) {
+      const loginUrl = new URL(`/login?error=suspended&code=${subdomain}`, req.url);
+      const redirectResponse = NextResponse.redirect(loginUrl);
+      for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+        redirectResponse.headers.set(k, v);
+      }
+      return redirectResponse;
+    }
+
+    // E5. Edge RBAC Role Isolation on Subdomain
+    const userRole = (claims.role || "").toUpperCase();
+    const createSubdomainRoleRedirect = (targetDestination: string) => {
+      const destUrl = new URL(targetDestination, req.url);
+      const redirectResponse = NextResponse.redirect(destUrl);
+      for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+        redirectResponse.headers.set(k, v);
+      }
+      return redirectResponse;
+    };
+
+    if (lowerPath === "/change-password" || lowerPath.startsWith("/change-password/")) {
+      // Allowed
+    } else if (userRole === "STUDENT") {
+      const isAllowedStudentRoute =
+        lowerPath === "/portal" ||
+        lowerPath === "/portal/student" ||
+        lowerPath.startsWith("/portal/student/") ||
+        lowerPath === "/student" ||
+        lowerPath.startsWith("/student/");
+      if (!isAllowedStudentRoute) {
+        return createSubdomainRoleRedirect("/portal/student");
+      }
+    } else if (userRole === "PARENT") {
+      const isAllowedParentRoute =
+        lowerPath === "/portal" ||
+        lowerPath === "/portal/parent" ||
+        lowerPath.startsWith("/portal/parent/") ||
+        lowerPath === "/parent" ||
+        lowerPath.startsWith("/parent/");
+      if (!isAllowedParentRoute) {
+        return createSubdomainRoleRedirect("/portal/parent");
+      }
+    } else if (userRole === "TEACHER" || userRole === "STAFF") {
+      const isAllowedStaffRoute =
+        lowerPath === "/portal" ||
+        lowerPath === "/portal/staff" ||
+        lowerPath.startsWith("/portal/staff/");
+      if (!isAllowedStaffRoute) {
+        return createSubdomainRoleRedirect("/portal/staff");
+      }
+    } else if (userRole === "BURSAR") {
+      if (lowerPath.includes("/portal/student") || lowerPath.includes("/portal/parent")) {
+        return createSubdomainRoleRedirect("/portal/bursar");
+      }
+    } else if (userRole === "PRINCIPAL" || userRole === "HEADMASTER" || userRole === "VICE_PRINCIPAL") {
+      if (lowerPath.includes("/portal/student") || lowerPath.includes("/portal/parent")) {
+        return createSubdomainRoleRedirect("/portal/principal");
+      }
+    }
+
+    // E6. Rewrite verified authorized request to internal Next.js tenant route
+    const rewriteUrl = new URL(effectiveTenantPath, req.url);
+    rewriteUrl.search = req.nextUrl.search;
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-pathname", pathname);
+    requestHeaders.set("x-user-id", claims.userId);
+    requestHeaders.set("x-user-role", claims.role);
+    if (claims.tenantId) requestHeaders.set("x-tenant-id", claims.tenantId);
+    requestHeaders.set("x-tenant-slug", subdomain);
+    requestHeaders.set("x-is-subdomain", "true");
+    requestHeaders.set("x-tenant-host", hostInfo.rawHost);
+    if (claims.sessionToken) requestHeaders.set("x-session-token", claims.sessionToken);
+    requestHeaders.set("x-is-super-admin", claims.isSuperAdmin ? "true" : "false");
+
+    const response = NextResponse.rewrite(rewriteUrl, {
+      request: { headers: requestHeaders },
+    });
+    for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
+      response.headers.set(k, v);
+    }
+    return response;
+  }
+
+  // =========================================================================
+  // APEX / CANONICAL PLATFORM DOMAIN ROUTING (bonaveeict.com.ng)
+  // =========================================================================
 
   // Super-admin login route: rewrite cleanly to /login?type=super-admin
   if (lowerPath === "/super-admin/login" || lowerPath === "/admin/login") {
@@ -345,6 +554,30 @@ export async function middleware(req: NextRequest) {
     loginUrl.search = req.nextUrl.search;
     loginUrl.searchParams.set("type", "super-admin");
     return NextResponse.rewrite(loginUrl);
+  }
+
+  // BACKWARDS COMPATIBILITY REDIRECT (Requirement 4):
+  // Check if request is a legacy path-based tenant route: bonaveeict.com.ng/[slug]/...
+  // Redirect to https://[slug].bonaveeict.com.ng/...
+  const segments = lowerPath.replace(/^\/+/, "").split("/").filter(Boolean);
+  const firstSegment = segments[0]?.toLowerCase() || "";
+  const isSystemOrPublicRoot =
+    segments.length === 0 ||
+    SYSTEM_PREFIXES.has(firstSegment) ||
+    PUBLIC_ROOT_PATHS.has(firstSegment) ||
+    lowerPath.startsWith("/_next") ||
+    lowerPath.startsWith("/img") ||
+    lowerPath.startsWith("/uploads") ||
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|txt|xml|woff|woff2|pdf)$/i.test(lowerPath);
+
+  if (!isSystemOrPublicRoot && segments.length >= 1) {
+    const targetSlug = firstSegment;
+    const remainingSegments = segments.slice(1);
+    const remainingPath = remainingSegments.length > 0 ? "/" + remainingSegments.join("/") : "";
+    const targetUrl = buildTenantUrl(targetSlug, hostHeader, remainingPath, protoHeader);
+    const redirectUrl = new URL(targetUrl);
+    redirectUrl.search = req.nextUrl.search;
+    return NextResponse.redirect(redirectUrl, 308);
   }
 
   // 1. Allow unauthenticated access ONLY to explicitly public routes
@@ -355,15 +588,11 @@ export async function middleware(req: NextRequest) {
   // 2. Strict request-scoped token verification (runs for ALL protected routes including /super-admin/*)
   const claims = await extractAndVerifyToken(req);
 
-  // Parse path for tenant scoping
-  const segments = lowerPath.replace(/^\/+/, "").split("/").filter(Boolean);
-  const firstSegment = segments[0]?.toLowerCase() || "";
   const isTenantRoute = segments.length >= 2 && !SYSTEM_PREFIXES.has(firstSegment);
   const requestedTenant = isTenantRoute ? firstSegment : null;
 
-  // 3. UNAUTHENTICATED ACCESS ATTEMPT
+  // 3. UNAUTHENTICATED ACCESS ATTEMPT ON APEX
   if (!claims || !claims.userId) {
-    // API endpoints return 401 with strict no-cache headers
     if (lowerPath.startsWith("/api/")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Active authentication session required." },
@@ -371,7 +600,6 @@ export async function middleware(req: NextRequest) {
       );
     }
 
-    // Page endpoints redirect to /[tenant]/login or /login with strict no-cache headers
     const targetLoginPath = requestedTenant
       ? `/${requestedTenant}/login`
       : "/login";
@@ -389,7 +617,6 @@ export async function middleware(req: NextRequest) {
       redirectResponse.headers.set(k, v);
     }
 
-    // Immediately expire invalid or stale cookies
     for (const cookieName of AUTH_COOKIES_TO_CLEAR) {
       redirectResponse.cookies.delete(cookieName);
     }
@@ -429,8 +656,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 5. TENANT ISOLATION CHECK:
-  // Non-super-admins cannot access another tenant's workspace
+  // 5. TENANT ISOLATION CHECK ON APEX
   if (requestedTenant && !claims.isSuperAdmin) {
     if (claims.isSuspended) {
       if (lowerPath.startsWith("/api/")) {
@@ -467,7 +693,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 5b. EDGE RBAC ROLE ISOLATION & WORKSPACE DEFENSE
+  // 5b. EDGE RBAC ROLE ISOLATION & WORKSPACE DEFENSE ON APEX
   const userRole = (claims.role || "").toUpperCase();
   const targetTenant = requestedTenant || (claims.schoolDomain || "").toLowerCase().trim() || "greenwood";
 

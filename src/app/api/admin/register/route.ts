@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { ensureSecurityTables, hashPassword, validatePasswordStrength } from "@/lib/security-service";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { createTenantWithAdmin } from "@/lib/tenant-service";
+import { isReservedSubdomain, buildTenantUrl } from "@/lib/tenant-resolver";
 
 const execAsync = util.promisify(exec);
 
@@ -52,8 +53,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Format subdomain (lowercase, remove spaces/special chars)
-    const formattedSubdomain = subdomain.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    // Format subdomain (lowercase, allow hyphens, remove spaces/special chars)
+    const formattedSubdomain = subdomain
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
 
     if (!formattedSubdomain) {
       return NextResponse.json(
@@ -62,12 +68,35 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if subdomain is unique
-    const existingSchool = await basePrisma.school.findUnique({
-      where: { subdomain: formattedSubdomain },
-    });
+    if (isReservedSubdomain(formattedSubdomain)) {
+      return NextResponse.json(
+        { error: `The subdomain "${formattedSubdomain}" is reserved for platform operations.` },
+        { status: 400 }
+      );
+    }
 
-    if (existingSchool) {
+    // Check if subdomain is unique across School and Tenant models
+    const [existingSchool, existingTenant] = await Promise.all([
+      basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: formattedSubdomain, mode: "insensitive" } },
+            { slug: { equals: formattedSubdomain, mode: "insensitive" } },
+          ],
+          deletedAt: null,
+        },
+      }),
+      basePrisma.tenant.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: formattedSubdomain, mode: "insensitive" } },
+            { slug: { equals: formattedSubdomain, mode: "insensitive" } },
+          ],
+        },
+      }),
+    ]);
+
+    if (existingSchool || existingTenant) {
       return NextResponse.json(
         { error: "This URL slug is already taken. Please choose another." },
         { status: 409 }
@@ -114,11 +143,15 @@ export async function POST(request: Request) {
       });
     }
 
+    const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host");
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+
     return NextResponse.json({
       success: true,
       message: "Tenant successfully provisioned.",
       tenant: school,
-      redirectUrl: `/${formattedSubdomain}/dashboard`
+      subdomainUrl: buildTenantUrl(formattedSubdomain, hostHeader, "", proto),
+      redirectUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
     });
 
   } catch (error: any) {

@@ -4,6 +4,7 @@ import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "./ad
 import { sendSchoolRegistrationSuccessEmail, sendPasswordRecommendationEmail } from "./mail";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 import { logAuditEvent } from "./audit-logger";
+import { isReservedSubdomain } from "./tenant-resolver";
 
 export interface CreateTenantWithAdminParams {
   slug: string;
@@ -120,10 +121,21 @@ export async function createTenantWithAdmin(
 ): Promise<TenantWithAdminResult> {
   const { slug, name, adminEmail, adminPassword, contactPhone, tiers = [], tertiaryType } = params;
 
-  // 1. Validation & normalization
-  const canonicalSlug = (slug || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  // 1. Validation & normalization (allows lowercase alphanumeric and hyphens)
+  const canonicalSlug = (slug || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   if (!canonicalSlug) {
-    throw new Error("Invalid school code or URL slug. Only lowercase alphanumeric characters are allowed.");
+    throw new Error("Invalid school code or URL slug. Only lowercase alphanumeric characters and hyphens are allowed.");
+  }
+
+  // Reserved subdomain protection
+  if (isReservedSubdomain(canonicalSlug)) {
+    throw new Error(`The URL slug "${canonicalSlug}" is reserved by the platform. Please choose another.`);
   }
 
   const trimmedName = (name || "").trim();
@@ -141,18 +153,28 @@ export async function createTenantWithAdmin(
     throw new Error("Administrative password must be at least 8 characters long.");
   }
 
-  // 2. Slug uniqueness check
-  const existingSchool = await basePrisma.school.findFirst({
-    where: {
-      OR: [
-        { subdomain: { equals: canonicalSlug, mode: "insensitive" } },
-        { slug: { equals: canonicalSlug, mode: "insensitive" } },
-      ],
-      deletedAt: null,
-    },
-  });
+  // 2. Slug uniqueness check across School and Tenant models
+  const [existingSchool, existingTenant] = await Promise.all([
+    basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: canonicalSlug, mode: "insensitive" } },
+          { slug: { equals: canonicalSlug, mode: "insensitive" } },
+        ],
+        deletedAt: null,
+      },
+    }),
+    basePrisma.tenant.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: canonicalSlug, mode: "insensitive" } },
+          { slug: { equals: canonicalSlug, mode: "insensitive" } },
+        ],
+      },
+    }),
+  ]);
 
-  if (existingSchool) {
+  if (existingSchool || existingTenant) {
     throw new Error(`The URL slug "${canonicalSlug}" is already taken. Please choose another.`);
   }
 
@@ -203,6 +225,32 @@ export async function createTenantWithAdmin(
         collectionMode: "MANUAL_BANK_TRANSFER",
       },
     });
+
+    // A2. Synchronize Tenant model record (stores slug and customDomain: null)
+    try {
+      await tx.tenant.upsert({
+        where: { subdomain: canonicalSlug },
+        update: {
+          schoolName: trimmedName,
+          adminEmail: normalizedEmail,
+          slug: canonicalSlug,
+          customDomain: null,
+          status: "ACTIVE",
+        },
+        create: {
+          schoolName: trimmedName,
+          subdomain: canonicalSlug,
+          slug: canonicalSlug,
+          customDomain: null,
+          adminEmail: normalizedEmail,
+          contactPhone: contactPhone?.trim() || "",
+          institutionTypes: effectiveTiers,
+          status: "ACTIVE",
+        },
+      });
+    } catch (tErr) {
+      console.warn("[TENANT_SERVICE_RECORD_SYNC]:", tErr);
+    }
 
     // B. Academic tiers
     for (let i = 0; i < effectiveTiers.length; i++) {

@@ -66,7 +66,7 @@ export default async function TenantLayout({
 
   if (!school) {
     // School domain not recognised — redirect cleanly to login with a surfaceable error
-    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
+    return notFound();
   }
 
   // SUSPENSION ENFORCEMENT: Block access to protected tenant routes if institution is suspended/inactive

@@ -60,6 +60,12 @@ export default function RegisterTenantPage() {
     confirmPassword: "",
   });
 
+  const [isSubdomainManuallyEdited, setIsSubdomainManuallyEdited] = useState(false);
+  const [slugChecking, setSlugChecking] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [slugSuggested, setSlugSuggested] = useState<string | null>(null);
+  const checkSlugTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -87,27 +93,112 @@ export default function RegisterTenantPage() {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      if (checkSlugTimerRef.current) clearTimeout(checkSlugTimerRef.current);
     };
   }, []);
 
-  // 1. After all 3 checks = true, IMMEDIATELY redirect:
+  const handleSchoolNameChange = (name: string) => {
+    setFormData(prev => {
+      const updated = { ...prev, schoolName: name };
+      if (!isSubdomainManuallyEdited) {
+        // Auto-generate clean slug from school name (lowercase, spaces to -)
+        const autoSlug = name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9\s-]/g, "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "");
+        updated.subdomain = autoSlug;
+      }
+      return updated;
+    });
+  };
+
+  const handleSubdomainChange = (val: string) => {
+    setIsSubdomainManuallyEdited(true);
+    const cleaned = val
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-");
+    setFormData(prev => ({ ...prev, subdomain: cleaned }));
+  };
+
+  const handleApplySuggestion = (suggested: string) => {
+    setIsSubdomainManuallyEdited(true);
+    setFormData(prev => ({ ...prev, subdomain: suggested }));
+  };
+
+  // Debounced real-time slug availability check
+  useEffect(() => {
+    const slug = formData.subdomain.trim();
+    if (!slug || slug.length < 2) {
+      setSlugAvailable(null);
+      setSlugSuggested(null);
+      setSlugChecking(false);
+      return;
+    }
+
+    if (checkSlugTimerRef.current) clearTimeout(checkSlugTimerRef.current);
+
+    setSlugChecking(true);
+    checkSlugTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tenants/check-slug?slug=${encodeURIComponent(slug)}`);
+        const data = await res.json();
+        if (data.available) {
+          setSlugAvailable(true);
+          setSlugSuggested(null);
+        } else {
+          setSlugAvailable(false);
+          setSlugSuggested(data.suggested || null);
+        }
+      } catch {
+        setSlugAvailable(null);
+      } finally {
+        setSlugChecking(false);
+      }
+    }, 350);
+
+    return () => {
+      if (checkSlugTimerRef.current) clearTimeout(checkSlugTimerRef.current);
+    };
+  }, [formData.subdomain]);
+
+  // Derive target login URL on the tenant's dedicated subdomain
+  const getSubdomainLoginUrl = (slug?: string) => {
+    const effectiveSlug = slug || registrationData?.subdomain || formData.subdomain;
+    if (!effectiveSlug) return "/login";
+    if (typeof window !== "undefined") {
+      const proto = window.location.protocol;
+      const host = window.location.host;
+      if (host.includes("localhost")) {
+        return `${proto}//${effectiveSlug}.localhost:3000/login`;
+      }
+    }
+    return `https://${effectiveSlug}.${rootDisplay}/login`;
+  };
+
+  // 1. After all 3 checks = true, IMMEDIATELY redirect to subdomain login:
   useEffect(() => {
     if (sslVerified) {
       const slug = registrationData?.subdomain || formData.subdomain;
-      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+      window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl(slug);
     }
-  }, [sslVerified, registrationData?.subdomain, formData.subdomain]);
+  }, [sslVerified, registrationData, formData.subdomain]);
 
   // 2. Add safety timeout so it NEVER spins more than 5 seconds:
   useEffect(() => {
     if (isConfiguring) {
       const slug = registrationData?.subdomain || formData.subdomain;
       const t = setTimeout(() => {
-        window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+        window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl(slug);
       }, 5000);
       return () => clearTimeout(t);
     }
-  }, [isConfiguring, registrationData?.subdomain, formData.subdomain]);
+  }, [isConfiguring, registrationData, formData.subdomain]);
 
   const availableTiers = [
     { id: "NURSERY", label: "Creche / Nursery", desc: "Ages 0-4" },
@@ -195,6 +286,10 @@ export default function RegisterTenantPage() {
         setErrorMsg("Please fill in all required fields including password.");
         return;
       }
+      if (slugAvailable === false) {
+        setErrorMsg("The requested subdomain is unavailable or reserved. Please choose another or click the suggested alternative.");
+        return;
+      }
       if (!hasMinLength || !hasUppercase || !hasNumber || !hasSpecial) {
         setErrorMsg("Admin password must be at least 8 characters long and contain at least 1 uppercase letter, 1 number, and 1 special character.");
         return;
@@ -253,9 +348,9 @@ export default function RegisterTenantPage() {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
 
-            // Execute secure redirect immediately
+            // Execute secure redirect immediately to tenant subdomain
             const slug = data.subdomain || formData.subdomain;
-            window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+            window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
             return;
           }
         }
@@ -273,7 +368,7 @@ export default function RegisterTenantPage() {
         setConfiguringStatusText("SSL generation bound. Ready to access.");
         setSslVerified(true);
         const slug = data.subdomain || formData.subdomain;
-        window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+        window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
       }
     };
 
@@ -282,7 +377,7 @@ export default function RegisterTenantPage() {
       setSslVerified(true);
       setConfiguringStatusText("SSL certificate verified! Redirecting to secure school dashboard...");
       const slug = data.subdomain || formData.subdomain;
-      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+      window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
       return;
     }
 
@@ -487,11 +582,10 @@ export default function RegisterTenantPage() {
                     Target: <span className="font-mono font-semibold text-slate-900 dark:text-white">{registrationData?.subdomainUrl || (formData.subdomain ? `${formData.subdomain}.${rootDisplay}` : "Direct Portal")}</span>
                   </span>
                   <a 
-                    href={`/login?school=${encodeURIComponent(registrationData?.subdomain || formData.subdomain)}`}
+                    href={registrationData?.subdomainLoginUrl || getSubdomainLoginUrl()}
                     onClick={(e) => {
                       e.preventDefault();
-                      const slug = registrationData?.subdomain || formData.subdomain;
-                      window.location.href = `/login?school=${encodeURIComponent(slug)}`;
+                      window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl();
                     }}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold flex-shrink-0 cursor-pointer"
                   >
@@ -523,29 +617,59 @@ export default function RegisterTenantPage() {
                           className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="e.g. Greenwood Academy"
                           value={formData.schoolName} 
-                          onChange={e => setFormData({...formData, schoolName: e.target.value})} 
+                          onChange={e => handleSchoolNameChange(e.target.value)} 
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
-                          Desired URL Slug *
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300">
+                            Institutional Subdomain *
+                          </label>
+                          {slugChecking ? (
+                            <span className="text-[11px] text-blue-500 font-medium flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" /> Checking...
+                            </span>
+                          ) : slugAvailable === true ? (
+                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                              <Check className="w-3 h-3 stroke-[3]" /> Available
+                            </span>
+                          ) : slugAvailable === false ? (
+                            <span className="text-[11px] text-rose-600 dark:text-rose-400 font-bold">
+                              Taken / Reserved
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="flex">
-                          <span className="inline-flex items-center px-3 sm:px-4 rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
-                            {rootDisplay}/
+                          <span className="inline-flex items-center px-2.5 sm:px-3 rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
+                            https://
                           </span>
                           <input 
                             required
                             type="text" 
-                            className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none rounded-r-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                             placeholder="greenwood"
                             value={formData.subdomain} 
-                            onChange={e => setFormData({...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "")})} 
+                            onChange={e => handleSubdomainChange(e.target.value)} 
                           />
+                          <span className="inline-flex items-center px-2.5 sm:px-3 rounded-r-xl border border-l-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
+                            .{rootDisplay}
+                          </span>
                         </div>
+                        {slugSuggested && (
+                          <div className="mt-1.5 flex items-center gap-2 text-xs">
+                            <span className="text-slate-500 dark:text-zinc-400">Alternative:</span>
+                            <button
+                              type="button"
+                              onClick={() => handleApplySuggestion(slugSuggested)}
+                              className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-100 dark:hover:bg-blue-900 transition cursor-pointer"
+                            >
+                              Use {slugSuggested}
+                            </button>
+                          </div>
+                        )}
                         <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 mt-1 truncate">
-                          Internal Subdomain: <span className="font-mono text-blue-600 dark:text-blue-400">{formData.subdomain || "your-school"}.{rootDisplay}</span>
+                          Full Portal URL: <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">https://{formData.subdomain || "your-school"}.{rootDisplay}</span>
                         </p>
                       </div>
                     </div>

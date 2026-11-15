@@ -17,6 +17,7 @@ import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 import { recordTenantCreated, sendSuperAdminTenantRegistrationEmail } from "@/lib/admin-notifications";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
 import { createTenantWithAdmin } from "@/lib/tenant-service";
+import { isReservedSubdomain, buildTenantUrl } from "@/lib/tenant-resolver";
 
 const VALID_TIERS = [
   'Creche',
@@ -87,8 +88,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Format subdomain (lowercase, remove spaces/special chars)
-    const formattedSubdomain = subdomain.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    // Format subdomain (lowercase, allow hyphens, remove spaces/special chars)
+    const formattedSubdomain = subdomain
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
 
     if (!formattedSubdomain) {
       return NextResponse.json(
@@ -97,14 +103,48 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if subdomain is unique
-    const existingSchool = await basePrisma.school.findUnique({
-      where: { subdomain: formattedSubdomain },
-    });
-
-    if (existingSchool) {
+    // Reserved Subdomain Check
+    if (isReservedSubdomain(formattedSubdomain)) {
       return NextResponse.json(
-        { error: "This URL slug is already taken. Please choose another.", code: "SUBDOMAIN_TAKEN" },
+        {
+          error: `The subdomain "${formattedSubdomain}" is reserved for platform operations. Please choose another.`,
+          code: "RESERVED_SLUG",
+          suggested: `${formattedSubdomain}-school`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if subdomain is unique across School and Tenant tables
+    const [existingSchool, existingTenant] = await Promise.all([
+      basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: formattedSubdomain, mode: "insensitive" } },
+            { slug: { equals: formattedSubdomain, mode: "insensitive" } },
+          ],
+          deletedAt: null,
+        },
+        select: { id: true, subdomain: true, slug: true },
+      }),
+      basePrisma.tenant.findFirst({
+        where: {
+          OR: [
+            { subdomain: { equals: formattedSubdomain, mode: "insensitive" } },
+            { slug: { equals: formattedSubdomain, mode: "insensitive" } },
+          ],
+        },
+        select: { id: true, subdomain: true, slug: true },
+      }),
+    ]);
+
+    if (existingSchool || existingTenant) {
+      return NextResponse.json(
+        {
+          error: "This URL slug is already taken. Please choose another.",
+          code: "SUBDOMAIN_TAKEN",
+          suggested: `${formattedSubdomain}-2`,
+        },
         { status: 409 }
       );
     }
@@ -322,14 +362,14 @@ export async function POST(request: Request) {
         adminEmail,
         sslReady: sslSyncResult.sslReady,
         targetFqdn: sslSyncResult.targetFqdn,
-        portalUrl: `/${combinedSubdomain}`,
-        subdomainUrl: `${proto}://${combinedSubdomain}.${rootDomain}`,
-        fullDirectPortalUrl: `${proto}://${rootDomain}/${combinedSubdomain}`,
-        loginUrl: `/${combinedSubdomain}/login`,
-        subdomainLoginUrl: `${proto}://${combinedSubdomain}.${rootDomain}/login`,
-        dashboardUrl: `/${combinedSubdomain}/dashboard`,
-        subdomainDashboardUrl: `${proto}://${combinedSubdomain}.${rootDomain}/dashboard`,
-        redirectUrl: `/${combinedSubdomain}/dashboard`,
+        portalUrl: buildTenantUrl(combinedSubdomain, hostHeader, "", proto),
+        subdomainUrl: buildTenantUrl(combinedSubdomain, hostHeader, "", proto),
+        fullDirectPortalUrl: buildTenantUrl(combinedSubdomain, hostHeader, "", proto),
+        loginUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/login", proto),
+        subdomainLoginUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/login", proto),
+        dashboardUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto),
+        subdomainDashboardUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto),
+        redirectUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto),
         sessionToken: sessionResult.sessionToken,
         token: sessionResult.cookieToken,
         sessionPayload: {
@@ -410,14 +450,14 @@ export async function POST(request: Request) {
       adminEmail,
       sslReady: sslSyncResult.sslReady,
       targetFqdn: sslSyncResult.targetFqdn,
-      portalUrl: `/${formattedSubdomain}`,
-      subdomainUrl: `${proto}://${formattedSubdomain}.${rootDomain}`,
-      fullDirectPortalUrl: `${proto}://${rootDomain}/${formattedSubdomain}`,
-      loginUrl: `/${formattedSubdomain}/login`,
-      subdomainLoginUrl: `${proto}://${formattedSubdomain}.${rootDomain}/login`,
-      dashboardUrl: `/${formattedSubdomain}/dashboard`,
-      subdomainDashboardUrl: `${proto}://${formattedSubdomain}.${rootDomain}/dashboard`,
-      redirectUrl: `/${formattedSubdomain}/dashboard`,
+      portalUrl: buildTenantUrl(formattedSubdomain, hostHeader, "", proto),
+      subdomainUrl: buildTenantUrl(formattedSubdomain, hostHeader, "", proto),
+      fullDirectPortalUrl: buildTenantUrl(formattedSubdomain, hostHeader, "", proto),
+      loginUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/login", proto),
+      subdomainLoginUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/login", proto),
+      dashboardUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
+      subdomainDashboardUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
+      redirectUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
       sessionToken: sessionResult.sessionToken,
       token: sessionResult.cookieToken,
       sessionPayload: {
