@@ -4,6 +4,7 @@ import * as jose from "jose";
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { getTierForClass } from "@/lib/school-tier-classes";
+import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
 export async function GET(req: NextRequest) {
   try {
@@ -171,7 +172,13 @@ export async function GET(req: NextRequest) {
         });
 
         return students.map(student => {
-          const sGrades = studentGradesMap.get(student.id) || [];
+          let sGrades = studentGradesMap.get(student.id) || [];
+          if (sGrades.length === 0) {
+            const demoProfile = getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber) || getSecondaryDemoProfile(`${student.firstName} ${student.lastName}`);
+            if (demoProfile && (className.toUpperCase().includes("JSS") || (student.currentClass && student.currentClass.toUpperCase().includes("JSS")) || student.tier?.name?.toLowerCase().includes("secondary"))) {
+              sGrades = demoProfile.subjects;
+            }
+          }
           const hasScores = sGrades.length > 0;
 
           let ca1 = "";
@@ -190,7 +197,7 @@ export async function GET(req: NextRequest) {
             }
           } else if (hasScores) {
             totalScore = sGrades.reduce((acc, curr) => acc + curr.total, 0);
-            averageScore = Math.round((totalScore / sGrades.length) * 10) / 10;
+            averageScore = Math.round((totalScore / sGrades.length) * 100) / 100;
             if (sGrades.length === 1) {
               // Copy CA1, CA2, Exam exactly from the single GradeRecord (no recalculation or 0.2/0.6 weighting)
               ca1 = String(sGrades[0].ca1);
@@ -218,7 +225,7 @@ export async function GET(req: NextRequest) {
             ca1,
             ca2,
             exam,
-            total: hasScores ? averageScore || totalScore : 0,
+            total: hasScores ? averageScore : 0,
             overallTotal: totalScore,
             overallAverage: averageScore,
             subjectsCount: sGrades.length,

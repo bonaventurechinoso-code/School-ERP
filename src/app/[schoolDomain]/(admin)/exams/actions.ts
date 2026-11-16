@@ -13,6 +13,7 @@ function safeRevalidatePath(path: string, type?: "page" | "layout") {
   }
 }
 import { invalidateGradingNamespace, invalidateTenantMetadata } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 import { getNigerianGrade, getGradeRemark, normalizeTierLevel } from "@/lib/assessmentEngine";
 import { cookies } from "next/headers";
 import * as jose from "jose";
@@ -1339,6 +1340,8 @@ export async function seedDemoGradingScores(schoolId: string, schoolDomain: stri
     }
 
     // 7. Invalidate caches and revalidate paths
+    clearL1TenantCache(effectiveSchoolId);
+    clearL1TenantCache(effectiveSchoolId);
     await invalidateGradingNamespace(effectiveSchoolId);
     safeRevalidatePath(`/[schoolDomain]/exams`, "page");
     safeRevalidatePath(`/[schoolDomain]/report-cards`, "page");
@@ -1435,6 +1438,7 @@ export async function clearDemoGradingScores(schoolId: string, schoolDomain: str
       },
     });
 
+    clearL1TenantCache(effectiveSchoolId);
     await invalidateGradingNamespace(effectiveSchoolId);
     safeRevalidatePath(`/[schoolDomain]/exams`, "page");
     safeRevalidatePath(`/[schoolDomain]/report-cards`, "page");

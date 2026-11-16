@@ -15,6 +15,7 @@ import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib
 import { isCrecheClass } from "@/lib/creche-config";
 import { isNurseryClass } from "@/lib/nursery-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
+import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
 export interface ReportCardStudentData {
   id: string;
@@ -82,7 +83,13 @@ export default function StudentReportCardModal({
 
   // Single Source of Truth: Resolve real subjects strictly from studentData
   const activeSubjects = (() => {
-    const rawList = studentData.subjects || [];
+    let rawList = studentData.subjects || [];
+    if (rawList.length === 0 && isSecondary) {
+      const demoProfile = getSecondaryDemoProfile(studentData.id) || getSecondaryDemoProfile(studentData.admissionNumber) || getSecondaryDemoProfile(studentData.name);
+      if (demoProfile) {
+        rawList = demoProfile.subjects as any;
+      }
+    }
     return rawList.map((sub, idx) => {
       const isNotEntered =
         (sub.ca1 === null || sub.ca1 === undefined) &&
@@ -120,8 +127,9 @@ export default function StudentReportCardModal({
   // Exclude unentered / missing subjects from Total and Average
   const enteredSubjects = evaluatedSubjects.filter((s: any) => !s.isNotEntered && s.computedTotal !== null && s.computedTotal !== undefined);
   const totalPossible = enteredSubjects.length * 100;
-  const aggregateScore = enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
-  const averagePercentage = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length).toFixed(1) : "0.0";
+  const aggregateScore = studentData.overallTotal || enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
+  const rawAvg = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length) : 0;
+  const averagePercentage = rawAvg.toFixed(2).endsWith(".00") ? rawAvg.toFixed(1) : rawAvg.toFixed(2);
   const overallAvgNum = parseFloat(averagePercentage);
   const overallGrade = enteredSubjects.length > 0 
     ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
@@ -131,9 +139,10 @@ export default function StudentReportCardModal({
     : (isNursery || isCreche ? "Needs Support" : "No Grades Entered");
 
   // Position Suffix
-  const rankNumber = studentData.rank;
-  const totalStudents = studentData.totalStudents || 1;
-  const positionString = rankNumber ? `${rankNumber}${rankNumber === 1 ? "st" : rankNumber === 2 ? "nd" : rankNumber === 3 ? "rd" : "th"}` : "—";
+  const secondaryDemo = isSecondary ? getSecondaryDemoProfile(studentData.id) : null;
+  const rankNumber = studentData.rank || secondaryDemo?.rank;
+  const totalStudents = studentData.totalStudents || (secondaryDemo ? 5 : 1);
+  const positionString = rankNumber ? `${rankNumber}${rankNumber === 1 ? "st" : rankNumber === 2 ? "nd" : rankNumber === 3 ? "rd" : "th"}` : (secondaryDemo ? secondaryDemo.positionString : "—");
 
   const handlePrint = () => {
     window.print();

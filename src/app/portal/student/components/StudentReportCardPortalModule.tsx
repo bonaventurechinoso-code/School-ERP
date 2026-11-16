@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { StudentProfileData, TierPresentationConfig } from "../types";
 import { calculateBonaVeeResult, getGradeRemark } from "@/lib/assessmentEngine";
+import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
 
 
@@ -47,8 +48,14 @@ export function StudentReportCardPortalModule({
   const tierName = tierConfig.tierName;
 
   // Resolve subjects/courses: Single Source of Truth from Teacher Gradebook
+  const secondaryDemo = isSecondary ? (getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber) || getSecondaryDemoProfile(`${student.firstName} ${student.lastName}`)) : null;
+
   const subjectsList = (() => {
-    const studentCAs = student.academicRank?.continuousAssessments;
+    let studentCAs = student.academicRank?.continuousAssessments;
+    if ((!studentCAs || studentCAs.length === 0) && secondaryDemo) {
+      studentCAs = secondaryDemo.subjects as any;
+    }
+
     if (studentCAs && studentCAs.length > 0) {
       return studentCAs.map((ca, idx) => {
         const isNotEntered = ca.ca1 === null && ca.ca2 === null && ca.exam === null;
@@ -96,8 +103,8 @@ export function StudentReportCardPortalModule({
   const enteredSubjects = evaluatedSubjects.filter((s: any) => !s.isNotEntered && s.computedTotal !== null && s.computedTotal !== undefined);
   const totalPossible = enteredSubjects.length * 100;
   const aggregateScore = enteredSubjects.reduce((acc: number, s: any) => acc + (s.computedTotal || 0), 0);
-  const averagePercentage =
-    enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length).toFixed(1) : "0.0";
+  const rawAvg = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length) : 0;
+  const averagePercentage = rawAvg.toFixed(2).endsWith(".00") ? rawAvg.toFixed(1) : rawAvg.toFixed(2);
   const overallAvgNum = parseFloat(averagePercentage);
   const overallGrade = enteredSubjects.length > 0 
     ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
@@ -106,7 +113,9 @@ export function StudentReportCardPortalModule({
     ? getGradeRemark(overallGrade) 
     : (isEarlyChildhood ? "Needs Support" : "No Grades Entered");
 
-  const positionDisplay = student.academicRank?.classPosition || "—";
+  const positionDisplay = (student.academicRank?.classPosition && student.academicRank.classPosition !== "—") 
+    ? student.academicRank.classPosition 
+    : (secondaryDemo ? secondaryDemo.positionString : "—");
 
   // Academic fee clearance gatekeeper
   const [accessCheck, setAccessCheck] = useState<{

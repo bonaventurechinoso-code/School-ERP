@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition, useMemo, useRef, useCallback
 import { useSearchParams, useRouter } from "next/navigation";
 import { saveBroadsheetScore, seedDemoGradingScores, clearDemoGradingScores } from "./actions";
 import { getSubjectsForClassAndTier } from "./ExamsList";
+import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 import { useTenant } from "@/lib/tenant-context";
 import { formatTierBadgeCode, resolveSchoolPrefix } from "@/lib/tenant-tier-utils";
 import { normalizeTierLevel } from "@/lib/assessmentEngine";
@@ -549,6 +550,21 @@ export default function GradingRoster({
         const exam = Number(er.examScore) || 0;
         const total = Number(er.score) || ca1 + ca2 + exam;
         return { ca1, ca2, exam, total, remarks: er.remarks || "" };
+      }
+    }
+
+    // Check canonical secondary demo profile
+    const demoProfile = getSecondaryDemoProfile(studentId);
+    if (demoProfile && (tierCategory === "SECONDARY" || matchesClass(selectedClass, "JSS 1"))) {
+      const match = demoProfile.subjects.find((s) => s.subject.toLowerCase() === subject.toLowerCase());
+      if (match) {
+        return {
+          ca1: match.ca1,
+          ca2: match.ca2,
+          exam: match.exam,
+          total: match.total,
+          remarks: match.remarks,
+        };
       }
     }
 

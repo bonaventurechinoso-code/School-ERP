@@ -659,15 +659,17 @@ function ReportCardsContent() {
       const ca1Num = s.ca1 !== "" && !isNaN(parseFloat(s.ca1)) ? parseFloat(s.ca1) : 0;
       const ca2Num = s.ca2 !== "" && !isNaN(parseFloat(s.ca2)) ? parseFloat(s.ca2) : 0;
       const examNum = s.exam !== "" && !isNaN(parseFloat(s.exam)) ? parseFloat(s.exam) : 0;
-      const total = Math.round((ca1Num + ca2Num + examNum) * 10) / 10;
-      const hasScores = Boolean(s.ca1 !== "" || s.ca2 !== "" || s.exam !== "");
-      const isCompiled = (s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0;
+      const total = s.total !== undefined && s.total > 0 ? s.total : Math.round((ca1Num + ca2Num + examNum) * 10) / 10;
+      const overallTotal = s.overallTotal || (s.subjects && s.subjects.length > 0 ? s.subjects.reduce((acc: number, sub: any) => acc + (sub.total || 0), 0) : total);
+      const hasScores = Boolean(s.ca1 !== "" || s.ca2 !== "" || s.exam !== "" || total > 0 || (s.subjects && s.subjects.length > 0));
+      const isCompiled = (s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0 || (s.subjects && s.subjects.length > 0);
       return {
         ...s,
         ca1Num,
         ca2Num,
         examNum,
         total,
+        overallTotal,
         hasScores,
         isCompiled,
       };
@@ -1361,8 +1363,8 @@ function ReportCardsContent() {
                                   tier: activeTierName,
                                   rank: student.rank,
                                   totalStudents: stats.totalStudents,
-                                  overallTotal: student.total,
-                                  overallAverage: student.total,
+                                  overallTotal: student.overallTotal || student.total,
+                                  overallAverage: student.overallAverage || (student.overallTotal ? Math.round((student.overallTotal / (student.subjectsCount || (student.subjects ? student.subjects.length : 1))) * 100) / 100 : student.total),
                                   overallGrade: student.isCompiled ? grade.grade : (isEarlyYearsTier ? "Needs Support" : "—"),
                                   status: student.status,
                                   subjects: resolvedSubjects,
