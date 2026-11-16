@@ -128,9 +128,9 @@ export async function GET(req: NextRequest) {
         const ca2 = gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0;
         const exam = gr.exam !== null && gr.exam !== undefined ? Number(gr.exam) : 0;
         const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + ca2 + exam);
-        const letter = isNursery
+        const letter = (isNursery || isCreche)
           ? mapNurseryScoreToGrade(total).letter
-          : (isCreche || tierCategory === "PRIMARY"
+          : (tierCategory === "PRIMARY"
             ? (total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail")
             : (total >= 75 ? "A1" : total >= 70 ? "B2" : total >= 65 ? "B3" : total >= 60 ? "C4" : total >= 50 ? "C6" : total >= 40 ? "D7" : "F9"));
         subjectsMap.set(gr.subject, {
@@ -151,9 +151,9 @@ export async function GET(req: NextRequest) {
         const ca2 = (ar.test2 !== null && ar.test2 !== undefined ? Number(ar.test2) : (ar.midTerm !== null && ar.midTerm !== undefined ? Number(ar.midTerm) : 0));
         const exam = ar.finalExam !== null && ar.finalExam !== undefined ? Number(ar.finalExam) : 0;
         const total = ar.totalScore !== null && ar.totalScore !== undefined ? Number(ar.totalScore) : (ca1 + ca2 + exam);
-        const fallbackLetter = isNursery
+        const fallbackLetter = (isNursery || isCreche)
           ? mapNurseryScoreToGrade(total).letter
-          : (isCreche || tierCategory === "PRIMARY"
+          : (tierCategory === "PRIMARY"
             ? (total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail")
             : (total >= 75 ? "A1" : total >= 70 ? "B2" : total >= 65 ? "B3" : total >= 60 ? "C4" : total >= 50 ? "C6" : total >= 40 ? "D7" : "F9"));
         subjectsMap.set(ar.subject, {
@@ -180,11 +180,13 @@ export async function GET(req: NextRequest) {
     const maxPossibleScore = subjectsList.length * 100;
     const averageScore = subjectsList.length > 0 ? (totalScore / subjectsList.length).toFixed(1) : "0.0";
     const avgNum = Number(averageScore);
-    const overallGrade = isNursery
-      ? mapNurseryScoreToGrade(avgNum).letter
-      : ((tierCategory === "PRIMARY" || isCreche)
-        ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
-        : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9"));
+    const overallGrade = subjectsList.length === 0
+      ? (isNursery || isCreche ? "Needs Support" : "—")
+      : ((isNursery || isCreche)
+        ? mapNurseryScoreToGrade(avgNum).letter
+        : (tierCategory === "PRIMARY"
+          ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
+          : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9")));
     const admissionNumber = student.admissionNumber || "Pending";
 
     const pdfData: ReportCardPdfData = {

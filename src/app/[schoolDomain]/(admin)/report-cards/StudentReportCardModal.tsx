@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib/assessmentEngine";
 import { isCrecheClass } from "@/lib/creche-config";
+import { isNurseryClass } from "@/lib/nursery-config";
+import { getTierForClass } from "@/lib/school-tier-classes";
 
 export interface ReportCardStudentData {
   id: string;
@@ -70,18 +72,13 @@ export default function StudentReportCardModal({
   if (!isOpen) return null;
 
   // Resolve Tier Category
-  const tierName = studentData.tier || "Secondary School";
-  const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(tierName);
-  const isHigherEd =
-    !isCreche && (
-      tierName.toLowerCase().includes("university") ||
-      tierName.toLowerCase().includes("polytechnic") ||
-      tierName.toLowerCase().includes("college") ||
-      tierName.toLowerCase().includes("higher")
-    );
-  const isNursery = !isCreche && (tierName.toLowerCase().includes("nursery") || studentData.currentClass?.toLowerCase().includes("nursery"));
-  const isPrimary = !isCreche && (tierName.toLowerCase().includes("primary") || tierName.toLowerCase().includes("basic") || studentData.currentClass?.toLowerCase().includes("primary"));
+  const classTier = getTierForClass(studentData.currentClass || studentData.tier);
+  const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(studentData.tier);
+  const isNursery = !isCreche && (isNurseryClass(studentData.currentClass) || isNurseryClass(studentData.tier) || classTier.category === "NURSERY");
+  const isPrimary = !isCreche && !isNursery && (classTier.category === "PRIMARY" || studentData.currentClass?.toLowerCase().includes("primary") || studentData.tier?.toLowerCase().includes("primary"));
+  const isHigherEd = classTier.category === "TERTIARY";
   const isSecondary = !isHigherEd && !isNursery && !isPrimary && !isCreche;
+  const tierName = isCreche ? "Creche" : isNursery ? "Nursery / Kindergarten" : isPrimary ? "Primary School" : isHigherEd ? "University" : "Secondary School";
 
   // Single Source of Truth: Resolve real subjects strictly from studentData
   const activeSubjects = (() => {
@@ -126,8 +123,12 @@ export default function StudentReportCardModal({
   const aggregateScore = enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
   const averagePercentage = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length).toFixed(1) : "0.0";
   const overallAvgNum = parseFloat(averagePercentage);
-  const overallGrade = enteredSubjects.length > 0 ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade : "—";
-  const overallRemark = enteredSubjects.length > 0 ? getGradeRemark(overallGrade) : "No Grades Entered";
+  const overallGrade = enteredSubjects.length > 0 
+    ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
+    : (isNursery || isCreche ? "Needs Support" : "—");
+  const overallRemark = enteredSubjects.length > 0 
+    ? getGradeRemark(overallGrade) 
+    : (isNursery || isCreche ? "Needs Support" : "No Grades Entered");
 
   // Position Suffix
   const rankNumber = studentData.rank;
@@ -441,6 +442,13 @@ export default function StudentReportCardModal({
                 </thead>
 
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {evaluatedSubjects.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-8 text-center text-slate-400 dark:text-slate-500 italic">
+                        No subject scores have been entered for this pupil.
+                      </td>
+                    </tr>
+                  )}
                   {evaluatedSubjects.map((sub, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                       <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">

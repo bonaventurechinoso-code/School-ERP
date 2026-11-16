@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import * as jose from "jose";
 import { getTenantClient } from "@/lib/tenant-prisma";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
+import { getTierForClass } from "@/lib/school-tier-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -80,11 +81,11 @@ export async function GET(req: NextRequest) {
         // Support both 1st Term / First Term formatting variants
         const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
           : term === "2nd Term" ? ["2nd Term", "Second Term"]
-          : term === "3rd Term" ? ["3rd Term", "Third Term"]
-          : term === "First Term" ? ["First Term", "1st Term"]
-          : term === "Second Term" ? ["Second Term", "2nd Term"]
-          : term === "Third Term" ? ["Third Term", "3rd Term"]
-          : [term];
+            : term === "3rd Term" ? ["3rd Term", "Third Term"]
+              : term === "First Term" ? ["First Term", "1st Term"]
+                : term === "Second Term" ? ["Second Term", "2nd Term"]
+                  : term === "Third Term" ? ["Third Term", "3rd Term"]
+                    : [term];
 
         // Fallback mock students if DB has no enrolled students for this class
         if (students.length === 0) {
@@ -172,7 +173,7 @@ export async function GET(req: NextRequest) {
         return students.map(student => {
           const sGrades = studentGradesMap.get(student.id) || [];
           const hasScores = sGrades.length > 0;
-          
+
           let ca1 = "";
           let ca2 = "";
           let exam = "";
@@ -203,12 +204,17 @@ export async function GET(req: NextRequest) {
             }
           }
 
+          const resolvedClass = student.currentClass || className || "Primary 1";
+          const resolvedTierName = student.tier?.name && student.tier.name !== "Standard" 
+            ? student.tier.name 
+            : getTierForClass(resolvedClass).name;
+
           return {
             id: student.id,
             admissionNumber: student.admissionNumber || `GW/2026/${(student.currentClass || "CLASS").replace(/\s+/g, "")}/${student.id.slice(0, 3)}`,
             name: `${student.lastName}, ${student.firstName}`,
-            currentClass: student.currentClass || className || "Primary 1",
-            tier: student.tier?.name || "Standard",
+            currentClass: resolvedClass,
+            tier: resolvedTierName,
             ca1,
             ca2,
             exam,

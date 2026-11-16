@@ -99,8 +99,12 @@ export function StudentReportCardPortalModule({
   const averagePercentage =
     enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length).toFixed(1) : "0.0";
   const overallAvgNum = parseFloat(averagePercentage);
-  const overallGrade = enteredSubjects.length > 0 ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade : "—";
-  const overallRemark = enteredSubjects.length > 0 ? getGradeRemark(overallGrade) : "No Grades Entered";
+  const overallGrade = enteredSubjects.length > 0 
+    ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
+    : (isEarlyChildhood ? "Needs Support" : "—");
+  const overallRemark = enteredSubjects.length > 0 
+    ? getGradeRemark(overallGrade) 
+    : (isEarlyChildhood ? "Needs Support" : "No Grades Entered");
 
   const positionDisplay = student.academicRank?.classPosition || "—";
 

@@ -419,13 +419,44 @@ function getOrdinalSuffix(rank: number): string {
   return `${rank}th`;
 }
 
-function getGradeInfo(score: number, tierCategory?: string): { grade: string; badgeClass: string } {
-  const normTier = (tierCategory || "").toUpperCase();
-  const isPrimary = normTier.includes("PRIMARY") || normTier.includes("BASIC") || normTier.includes("ELEMENTARY");
-  const isCreche = normTier.includes("CRECHE") || normTier.includes("PLAYGROUP");
-  const isNursery = !isCreche && (normTier.includes("NURSERY") || normTier.includes("KINDERGARTEN"));
+function getGradeInfo(
+  score: number,
+  tierCategory?: string,
+  hasScores?: boolean,
+  className?: string
+): { grade: string; badgeClass: string } {
+  const norm = `${tierCategory || ""} ${className || ""}`.toUpperCase();
+  const isEarlyYears =
+    norm.includes("NURSERY") ||
+    norm.includes("CRECHE") ||
+    norm.includes("CRÈCHE") ||
+    norm.includes("KINDERGARTEN") ||
+    norm.includes("KG") ||
+    norm.includes("PLAYGROUP") ||
+    norm.includes("DAYCARE") ||
+    norm.includes("EARLY");
 
-  if (isNursery) {
+  const isPrimary =
+    !isEarlyYears &&
+    (norm.includes("PRIMARY") || norm.includes("BASIC") || norm.includes("ELEMENTARY"));
+
+  const isSecondary =
+    norm.includes("SECONDARY") ||
+    norm.includes("HIGH") ||
+    norm.includes("JSS") ||
+    norm.includes("SSS") ||
+    norm.includes("SS 1") ||
+    norm.includes("SS 2") ||
+    norm.includes("SS 3") ||
+    norm.includes("JS 1") ||
+    norm.includes("JS 2") ||
+    norm.includes("JS 3");
+
+  // 1. Early Years (Creche & Nursery) Scale: Excellent / Very Good / Good / Developing / Needs Support
+  if (isEarlyYears) {
+    if (!hasScores && score === 0) {
+      return { grade: "Needs Support", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+    }
     if (score >= 75) return { grade: "Excellent", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
     if (score >= 65) return { grade: "Very Good", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
     if (score >= 50) return { grade: "Good", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
@@ -433,7 +464,11 @@ function getGradeInfo(score: number, tierCategory?: string): { grade: string; ba
     return { grade: "Needs Support", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
   }
 
-  if (isPrimary || isCreche) {
+  // 2. Primary School Scale: Distinction / Very Good / Credit / Pass / Fail
+  if (isPrimary) {
+    if (!hasScores && score === 0) {
+      return { grade: "Not Entered", badgeClass: "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-300 dark:border-slate-700" };
+    }
     if (score >= 75) return { grade: "Distinction", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
     if (score >= 65) return { grade: "Very Good", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
     if (score >= 50) return { grade: "Credit", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
@@ -441,16 +476,28 @@ function getGradeInfo(score: number, tierCategory?: string): { grade: string; ba
     return { grade: "Fail", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
   }
 
-  // Secondary WAEC scale
-  if (score >= 75) return { grade: "A1", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
-  if (score >= 70) return { grade: "B2", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
-  if (score >= 65) return { grade: "B3", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
-  if (score >= 60) return { grade: "C4", badgeClass: "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700" };
-  if (score >= 55) return { grade: "C5", badgeClass: "bg-sky-100 dark:bg-sky-950/50 text-sky-800 dark:text-sky-300 border-sky-300 dark:border-sky-700" };
-  if (score >= 50) return { grade: "C6", badgeClass: "bg-cyan-100 dark:bg-cyan-950/50 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700" };
-  if (score >= 45) return { grade: "D7", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
-  if (score >= 40) return { grade: "E8", badgeClass: "bg-orange-100 dark:bg-orange-950/50 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-700" };
-  return { grade: "F9", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+  // 3. Secondary WAEC Scale: A1 - F9 ONLY (Impossible for Nursery / Creche / Primary)
+  if (isSecondary) {
+    if (!hasScores && score === 0) {
+      return { grade: "Not Entered", badgeClass: "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-300 dark:border-slate-700" };
+    }
+    if (score >= 75) return { grade: "A1", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
+    if (score >= 70) return { grade: "B2", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
+    if (score >= 65) return { grade: "B3", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
+    if (score >= 60) return { grade: "C4", badgeClass: "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700" };
+    if (score >= 55) return { grade: "C5", badgeClass: "bg-sky-100 dark:bg-sky-950/50 text-sky-800 dark:text-sky-300 border-sky-300 dark:border-sky-700" };
+    if (score >= 50) return { grade: "C6", badgeClass: "bg-cyan-100 dark:bg-cyan-950/50 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700" };
+    if (score >= 45) return { grade: "D7", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
+    if (score >= 40) return { grade: "E8", badgeClass: "bg-orange-100 dark:bg-orange-950/50 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-700" };
+    return { grade: "F9", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+  }
+
+  // Default fallback for general basic education (NEVER F9)
+  if (score >= 75) return { grade: "Distinction", badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300" };
+  if (score >= 65) return { grade: "Very Good", badgeClass: "bg-teal-100 text-teal-800 border-teal-300" };
+  if (score >= 50) return { grade: "Credit", badgeClass: "bg-blue-100 text-blue-800 border-blue-300" };
+  if (score >= 40) return { grade: "Pass", badgeClass: "bg-amber-100 text-amber-800 border-amber-300" };
+  return { grade: "Fail", badgeClass: "bg-rose-100 text-rose-800 border-rose-300" };
 }
 
 function getPositionBadge(rank: number): { text: string; badgeClass: string } {
@@ -1137,7 +1184,8 @@ function ReportCardsContent() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredRoster.map((student) => {
                     const pos = getPositionBadge(student.rank);
-                    const grade = getGradeInfo(student.total, student.tier || academicTier);
+                    const studentTierCat = getTierForClass(student.currentClass || className).category;
+                    const grade = getGradeInfo(student.total, studentTierCat, student.isCompiled, student.currentClass || className);
                     const initials = student.name
                       .split(/[\s,]+/)
                       .filter(Boolean)
@@ -1294,44 +1342,26 @@ function ReportCardsContent() {
                                       total: sub.total,
                                       grade: sub.grade || grade.grade,
                                       subjectPosition: student.rank > 0 ? getOrdinalSuffix(student.rank) : "1st",
-                                      remark: sub.remarks || (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : "Pass"),
+                                      remark: sub.remarks || (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : grade.grade === "Developing" ? "Developing well" : grade.grade === "Needs Support" ? "Needs support" : "Pass"),
                                     }))
-                                  : [
-                                      {
-                                        subject: subject || "Continuous Assessment",
-                                        ca1: student.ca1Num,
-                                        ca2: student.ca2Num,
-                                        exam: student.examNum,
-                                        total: student.total,
-                                        grade: grade.grade,
-                                        subjectPosition:
-                                          student.rank > 0
-                                            ? getOrdinalSuffix(student.rank)
-                                            : "—",
-                                        remark:
-                                          grade.grade === "Distinction" || grade.grade === "Excellent"
-                                            ? "Distinction in subject concepts"
-                                            : grade.grade.startsWith("Very")
-                                            ? "Very good performance"
-                                            : grade.grade.startsWith("Credit") || grade.grade === "Good"
-                                            ? "Credit pass"
-                                            : "Pass",
-                                      },
-                                    ];
+                                  : [];
+
+                                const activeTierName = getTierForClass(student.currentClass || className).name;
+                                const isEarlyYearsTier = studentTierCat === "NURSERY";
 
                                 setSelectedStudentForModal({
                                   id: student.id,
                                   name: student.name,
                                   admissionNumber: student.admissionNumber,
-                                  currentClass: className || student.currentClass || "Primary 1",
+                                  currentClass: student.currentClass || className || "Primary 1",
                                   term: term || "1st Term",
                                   academicYear: "2026/2027",
-                                  tier: student.tier || academicTier,
+                                  tier: activeTierName,
                                   rank: student.rank,
                                   totalStudents: stats.totalStudents,
                                   overallTotal: student.total,
                                   overallAverage: student.total,
-                                  overallGrade: grade.grade,
+                                  overallGrade: student.isCompiled ? grade.grade : (isEarlyYearsTier ? "Needs Support" : "—"),
                                   status: student.status,
                                   subjects: resolvedSubjects,
                                 });

@@ -107,24 +107,24 @@ export function resolveCrecheConfig(schoolOrConfig?: any): CrecheAssessmentConfi
 
 /**
  * Maps a Creche percentage or total score to the unified letter grade & remark.
- * Unified scale:
- * 75 - 100: Distinction
+ * Age-appropriate early years scale:
+ * 75 - 100: Excellent
  * 65 - 74: Very Good (73 = Very Good)
- * 50 - 64: Credit
- * 40 - 49: Pass
- * 0 - 39: Fail
+ * 50 - 64: Good
+ * 40 - 49: Developing
+ * 0 - 39: Needs Support
  */
 export function mapCrecheScoreToGrade(score: number): { letter: string; gpa: number; remark: string } {
   const rounded = Math.round(score);
   if (rounded >= 75) {
-    return { letter: "Distinction", gpa: 5.0, remark: "Distinction" };
+    return { letter: "Excellent", gpa: 5.0, remark: "Excellent" };
   } else if (rounded >= 65) {
     return { letter: "Very Good", gpa: 4.0, remark: "Very Good" };
   } else if (rounded >= 50) {
-    return { letter: "Credit", gpa: 3.0, remark: "Credit" };
+    return { letter: "Good", gpa: 3.0, remark: "Good" };
   } else if (rounded >= 40) {
-    return { letter: "Pass", gpa: 2.0, remark: "Pass" };
+    return { letter: "Developing", gpa: 2.0, remark: "Developing" };
   } else {
-    return { letter: "Fail", gpa: 0.0, remark: "Fail" };
+    return { letter: "Needs Support", gpa: 0.0, remark: "Needs Support" };
   }
 }

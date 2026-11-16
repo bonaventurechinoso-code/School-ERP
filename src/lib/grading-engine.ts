@@ -97,11 +97,27 @@ export function resolveGradingTier(tierName?: string, className?: string): Gradi
  * Standard Nigerian letter grade mapping across Primary and Secondary
  */
 export function mapScoreToGradeLetter(score: number, tierCategory?: string): { letter: string; gpa: number; remark: string } {
-  if (tierCategory === "NURSERY") {
+  const norm = (tierCategory || "").toUpperCase();
+  if (
+    norm === "NURSERY" ||
+    norm === "CRECHE" ||
+    norm.includes("NURSERY") ||
+    norm.includes("CRECHE") ||
+    norm.includes("CRÈCHE") ||
+    norm.includes("KINDERGARTEN") ||
+    norm.includes("PLAYGROUP") ||
+    norm.includes("DAYCARE") ||
+    norm.includes("EARLY")
+  ) {
     return mapNurseryScoreToGrade(score);
   }
 
-  if (tierCategory === "PRIMARY" || tierCategory === "CRECHE") {
+  if (
+    norm === "PRIMARY" ||
+    norm.includes("PRIMARY") ||
+    norm.includes("BASIC") ||
+    norm.includes("ELEMENTARY")
+  ) {
     if (score >= 75) {
       return { letter: "Distinction", gpa: 5.0, remark: "Distinction" };
     } else if (score >= 65) {
@@ -115,16 +131,30 @@ export function mapScoreToGradeLetter(score: number, tierCategory?: string): { l
     }
   }
 
+  // Secondary WAEC scale ONLY
+  if (norm.includes("SECONDARY") || norm.includes("HIGH") || norm.includes("JSS") || norm.includes("SSS")) {
+    if (score >= 75) return { letter: "A1", gpa: 5.0, remark: "Distinction" };
+    if (score >= 70) return { letter: "B2", gpa: 4.0, remark: "Very Good" };
+    if (score >= 65) return { letter: "B3", gpa: 3.5, remark: "Good" };
+    if (score >= 60) return { letter: "C4", gpa: 3.0, remark: "Credit" };
+    if (score >= 55) return { letter: "C5", gpa: 2.5, remark: "Credit" };
+    if (score >= 50) return { letter: "C6", gpa: 2.0, remark: "Credit" };
+    if (score >= 45) return { letter: "D7", gpa: 1.5, remark: "Pass" };
+    if (score >= 40) return { letter: "E8", gpa: 1.0, remark: "Pass" };
+    return { letter: "F9", gpa: 0.0, remark: "Fail" };
+  }
+
+  // Default fallback for basic school
   if (score >= 75) {
-    return { letter: "A", gpa: 5.0, remark: "Distinction / Excellent" };
+    return { letter: "Distinction", gpa: 5.0, remark: "Distinction" };
   } else if (score >= 65) {
-    return { letter: "B", gpa: 4.0, remark: "Very Good" };
+    return { letter: "Very Good", gpa: 4.0, remark: "Very Good" };
   } else if (score >= 50) {
-    return { letter: "C", gpa: 3.0, remark: "Credit / Satisfactory" };
+    return { letter: "Credit", gpa: 3.0, remark: "Credit" };
   } else if (score >= 40) {
-    return { letter: "D", gpa: 2.0, remark: "Pass" };
+    return { letter: "Pass", gpa: 2.0, remark: "Pass" };
   } else {
-    return { letter: "F", gpa: 0.0, remark: "Fail" };
+    return { letter: "Fail", gpa: 0.0, remark: "Fail" };
   }
 }
 

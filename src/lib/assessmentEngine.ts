@@ -150,23 +150,34 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "F";
   }
 
-  // Nursery Scale (Age-appropriate for 3-5 year olds): Excellent (75+), Very Good (65-74), Good (50-64), Developing (40-49), Needs Support (<40)
+  // Early Childhood (Creche & Nursery) Scale: Excellent (75+), Very Good (65-74), Good (50-64), Developing (40-49), Needs Support (<40)
+  const norm = (level || "").toUpperCase();
   if (
+    norm.includes("NURSERY") ||
+    norm.includes("CRECHE") ||
+    norm.includes("CRÈCHE") ||
+    norm.includes("DAYCARE") ||
+    norm.includes("PLAYGROUP") ||
+    norm.includes("KINDERGARTEN") ||
+    norm.includes("KG") ||
+    norm.includes("EARLY") ||
     isNurseryClass(level) ||
-    (!isCrecheClass(level) && (level.toUpperCase().includes("NURSERY") || level.toUpperCase().includes("KINDERGARTEN") || level.toUpperCase().includes("KG")))
+    isCrecheClass(level)
   ) {
-    return mapNurseryScoreToGrade(finalTotal).letter;
+    if (finalTotal >= 75) return "Excellent";
+    if (finalTotal >= 65) return "Very Good";
+    if (finalTotal >= 50) return "Good";
+    if (finalTotal >= 40) return "Developing";
+    return "Needs Support";
   }
 
-  // Primary School & Creche Unified Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
+  // Primary School Unified Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
   if (
     resolved === "Primary School" ||
     level === "Primary School" ||
-    isCrecheClass(level) ||
-    level.toUpperCase().includes("CRECHE") ||
-    level.toUpperCase().includes("CRÈCHE") ||
-    level.toUpperCase().includes("DAYCARE") ||
-    level.toUpperCase().includes("PLAYGROUP")
+    norm.includes("PRIMARY") ||
+    norm.includes("BASIC") ||
+    norm.includes("ELEMENTARY")
   ) {
     if (finalTotal >= 75) return "Distinction";
     if (finalTotal >= 65) return "Very Good";
@@ -175,16 +186,30 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "Fail";
   }
 
-  // WAEC / NECO Authentic Scale for Nigerian Secondary Schools
-  if (finalTotal >= 75) return "A1";
-  if (finalTotal >= 70) return "B2";
-  if (finalTotal >= 65) return "B3";
-  if (finalTotal >= 60) return "C4";
-  if (finalTotal >= 55) return "C5";
-  if (finalTotal >= 50) return "C6";
-  if (finalTotal >= 45) return "D7";
-  if (finalTotal >= 40) return "E8";
-  return "F9";
+  // WAEC / NECO Scale ONLY for explicit Secondary School classes
+  if (
+    norm.includes("SECONDARY") ||
+    norm.includes("HIGH") ||
+    norm.includes("JSS") ||
+    norm.includes("SSS")
+  ) {
+    if (finalTotal >= 75) return "A1";
+    if (finalTotal >= 70) return "B2";
+    if (finalTotal >= 65) return "B3";
+    if (finalTotal >= 60) return "C4";
+    if (finalTotal >= 55) return "C5";
+    if (finalTotal >= 50) return "C6";
+    if (finalTotal >= 45) return "D7";
+    if (finalTotal >= 40) return "E8";
+    return "F9";
+  }
+
+  // Default fallback for general basic education (NEVER Secondary F9)
+  if (finalTotal >= 75) return "Distinction";
+  if (finalTotal >= 65) return "Very Good";
+  if (finalTotal >= 50) return "Credit";
+  if (finalTotal >= 40) return "Pass";
+  return "Fail";
 }
 
 /**
