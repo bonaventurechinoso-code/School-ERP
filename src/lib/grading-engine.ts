@@ -131,8 +131,21 @@ export function mapScoreToGradeLetter(score: number, tierCategory?: string): { l
     }
   }
 
-  // Secondary WAEC scale ONLY
-  if (norm.includes("SECONDARY") || norm.includes("HIGH") || norm.includes("JSS") || norm.includes("SSS")) {
+  // Secondary WAEC scale ONLY (A1 - F9)
+  if (
+    norm.includes("SECONDARY") ||
+    norm.includes("HIGH") ||
+    norm.includes("JSS") ||
+    norm.includes("SSS") ||
+    /\bSS\s*[1-3]\b/i.test(norm) ||
+    /\bJS\s*[1-3]\b/i.test(norm) ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12")
+  ) {
     if (score >= 75) return { letter: "A1", gpa: 5.0, remark: "Distinction" };
     if (score >= 70) return { letter: "B2", gpa: 4.0, remark: "Very Good" };
     if (score >= 65) return { letter: "B3", gpa: 3.5, remark: "Good" };

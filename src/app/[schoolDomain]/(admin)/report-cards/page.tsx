@@ -445,12 +445,14 @@ function getGradeInfo(
     norm.includes("HIGH") ||
     norm.includes("JSS") ||
     norm.includes("SSS") ||
-    norm.includes("SS 1") ||
-    norm.includes("SS 2") ||
-    norm.includes("SS 3") ||
-    norm.includes("JS 1") ||
-    norm.includes("JS 2") ||
-    norm.includes("JS 3");
+    /\bSS\s*[1-3]\b/i.test(norm) ||
+    /\bJS\s*[1-3]\b/i.test(norm) ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12");
 
   // 1. Early Years (Creche & Nursery) Scale: Excellent / Very Good / Good / Developing / Needs Support
   if (isEarlyYears) {

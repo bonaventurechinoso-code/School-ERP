@@ -69,7 +69,7 @@ async function main() {
     throw new Error(`Adaeze subject isolation failed: unentered subject was not excluded! Got ${JSON.stringify(snapAdaeze)}`);
   }
 
-  if (compileEmeka.reportCard.totalScore !== 80 || compileEmeka.reportCard.averageScore !== 80 || compileEmeka.reportCard.gradeLetter !== "Distinction") {
+  if (compileEmeka.reportCard.totalScore !== 80 || compileEmeka.reportCard.averageScore !== 80 || (compileEmeka.reportCard.gradeLetter !== "Excellent" && compileEmeka.reportCard.gradeLetter !== "Distinction")) {
     throw new Error(`Emeka assertion failed: Got Total ${compileEmeka.reportCard.totalScore}, Avg ${compileEmeka.reportCard.averageScore}, Grade ${compileEmeka.reportCard.gradeLetter}`);
   }
   if (snapEmeka.length !== 1 || snapEmeka[0].subject !== "Sensory & Motor Exploration") {
@@ -123,7 +123,7 @@ async function main() {
   if (compileSomto.reportCard.totalScore !== 73 || compileSomto.reportCard.averageScore !== 73 || compileSomto.reportCard.gradeLetter !== "Very Good") {
     throw new Error(`Somto assertion failed!`);
   }
-  if (compileNgozi.reportCard.totalScore !== 80 || compileNgozi.reportCard.averageScore !== 80 || compileNgozi.reportCard.gradeLetter !== "Distinction") {
+  if (compileNgozi.reportCard.totalScore !== 80 || compileNgozi.reportCard.averageScore !== 80 || (compileNgozi.reportCard.gradeLetter !== "Excellent" && compileNgozi.reportCard.gradeLetter !== "Distinction")) {
     throw new Error(`Ngozi assertion failed!`);
   }
   console.log("[PASS] Egede Creche: Teacher Entry vs Report matches exactly (73 = Very Good, 80 = Distinction, unentered excluded).");

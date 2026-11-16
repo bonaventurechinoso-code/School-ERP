@@ -48,7 +48,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { getClassesForSchool } from "@/lib/school-tier-classes";
+import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes";
 import { performTenantLogout } from "@/lib/client-logout";
 import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -495,25 +495,29 @@ export default function StaffPortalClient({
   // Compute Tier-Aware Grade and Positions
   const gradedMatrix = useMemo(() => {
     const classLower = (selectedClass || "").toLowerCase();
+    const classTier = getTierForClass(selectedClass);
+    const isSecondaryCohort = classTier.category === "SECONDARY";
     const isEarlyYears =
-      isCreche ||
-      classLower.includes("creche") ||
-      classLower.includes("nursery") ||
-      classLower.includes("kg") ||
-      classLower.includes("kindergarten") ||
-      classLower.includes("reception");
+      !isSecondaryCohort &&
+      (classTier.category === "NURSERY" ||
+        isCreche ||
+        classLower.includes("creche") ||
+        classLower.includes("nursery") ||
+        classLower.includes("kg") ||
+        classLower.includes("kindergarten") ||
+        classLower.includes("reception"));
     const isPrimaryCohort =
-      isPrimary ||
-      classLower.includes("primary") ||
-      classLower.includes("basic") ||
-      classLower.includes("elementary");
+      !isSecondaryCohort &&
+      !isEarlyYears &&
+      (classTier.category === "PRIMARY" || isPrimary || classLower.includes("primary") || classLower.includes("basic") || classLower.includes("elementary"));
 
     function resolveGradeLetter(total: number) {
       if (isEarlyYears) {
-        if (total >= 75) return { letter: "EE", label: "Exceeding Expectations", color: "text-emerald-500" };
-        if (total >= 60) return { letter: "ME", label: "Meeting Expectations", color: "text-blue-500" };
-        if (total >= 40) return { letter: "DV", label: "Developing", color: "text-amber-500" };
-        return { letter: "EM", label: "Emerging", color: "text-rose-500" };
+        if (total >= 75) return { letter: "Excellent", label: "Excellent", color: "text-emerald-500" };
+        if (total >= 65) return { letter: "Very Good", label: "Very Good", color: "text-teal-400" };
+        if (total >= 50) return { letter: "Good", label: "Good", color: "text-blue-400" };
+        if (total >= 40) return { letter: "Developing", label: "Developing", color: "text-amber-500" };
+        return { letter: "Needs Support", label: "Needs Support", color: "text-rose-500" };
       }
       if (isPrimaryCohort) {
         if (total >= 75) return { letter: "Distinction", label: "Distinction", color: "text-emerald-500" };

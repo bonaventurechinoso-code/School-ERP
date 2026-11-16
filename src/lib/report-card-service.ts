@@ -3,6 +3,7 @@ import {
   GradingTier,
   resolveGradingTier,
   calculateNumericalGrade,
+  mapScoreToGradeLetter,
   evaluateNarrativeMilestones,
   computeClassRankings,
   generateAdministrativeRemarks,
@@ -12,6 +13,7 @@ import {
 
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "./creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "./nursery-config";
+import { getTierForClass } from "./school-tier-classes";
 
 export interface SaveAssessmentPayload {
   schoolId: string;
@@ -242,8 +244,10 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   }
   const gradeRecords = Array.from(subjectMap.values());
 
+  const classTier = getTierForClass(className);
   const isCreche = isCrecheClass(className);
-  const isNursery = !isCreche && isNurseryClass(className);
+  const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
+  const isSecondary = classTier.category === "SECONDARY";
 
   const records = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
@@ -251,7 +255,9 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
         ? mapNurseryScoreToGrade(gr.totalScore).letter
         : (isCreche
           ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"));
+          : (isSecondary
+            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
       return {
         id: gr.id,
         subject: gr.subject,
@@ -480,8 +486,10 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
     orderBy: { subject: "asc" },
   }) : [];
 
+  const classTier = getTierForClass(className);
   const isCreche = isCrecheClass(className);
-  const isNursery = !isCreche && isNurseryClass(className);
+  const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
+  const isSecondary = classTier.category === "SECONDARY";
 
   const rawRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
@@ -489,7 +497,9 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
         ? mapNurseryScoreToGrade(gr.totalScore).letter
         : (isCreche
           ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"));
+          : (isSecondary
+            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
       return {
         id: gr.id,
         studentId: gr.studentId,
@@ -742,8 +752,10 @@ export async function getStudentReportCard(
   const gradeRecords = Array.from(subjectMap.values());
 
   const targetClass = reportCard?.className || explicitTierName || "";
+  const classTier = getTierForClass(targetClass);
   const isCreche = isCrecheClass(targetClass);
-  const isNursery = !isCreche && isNurseryClass(targetClass);
+  const isNursery = !isCreche && (isNurseryClass(targetClass) || classTier.category === "NURSERY");
+  const isSecondary = classTier.category === "SECONDARY";
 
   const currentRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
@@ -751,7 +763,9 @@ export async function getStudentReportCard(
         ? mapNurseryScoreToGrade(gr.totalScore).letter
         : (isCreche
           ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"));
+          : (isSecondary
+            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
       return {
         id: gr.id,
         subject: gr.subject,
@@ -840,6 +854,18 @@ export async function getClassResultSheet(
 
   const subjects = Array.from(subjectSet).sort();
 
+  const classTier = getTierForClass(className);
+  const isCreche = isCrecheClass(className);
+  const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
+  const isSecondary = classTier.category === "SECONDARY" || tierCategory === "SECONDARY";
+
+  const resolveBroadsheetGrade = (score: number) => {
+    if (isNursery) return mapNurseryScoreToGrade(score).letter;
+    if (isCreche) return mapCrecheScoreToGrade(score).letter;
+    if (isSecondary) return mapScoreToGradeLetter(score, "SECONDARY").letter;
+    return score >= 75 ? "Distinction" : score >= 65 ? "Very Good" : score >= 50 ? "Credit" : score >= 40 ? "Pass" : "Fail";
+  };
+
   return {
     tierName,
     tierCategory,
@@ -865,7 +891,7 @@ export async function getClassResultSheet(
           ca2: gr.ca2,
           exam: gr.exam,
           totalScore: gr.totalScore,
-          gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+          gradeLetter: resolveBroadsheetGrade(gr.totalScore),
           isPassed: gr.totalScore >= 40,
         };
       });

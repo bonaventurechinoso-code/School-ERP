@@ -94,7 +94,15 @@ export function normalizeTierLevel(level: string): InstitutionalTier {
     norm.includes("JSS") ||
     norm.includes("SSS") ||
     norm.includes("SS ") ||
-    norm === "SS"
+    norm === "SS" ||
+    /\bSS\s*[1-3]\b/i.test(norm) ||
+    /\bJS\s*[1-3]\b/i.test(norm) ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12")
   ) {
     return "Secondary School";
   }
@@ -186,12 +194,22 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "Fail";
   }
 
-  // WAEC / NECO Scale ONLY for explicit Secondary School classes
+  // WAEC / NECO Scale ONLY for Secondary School classes (A1 - F9)
   if (
+    resolved === "Secondary School" ||
+    level === "Secondary School" ||
     norm.includes("SECONDARY") ||
     norm.includes("HIGH") ||
     norm.includes("JSS") ||
-    norm.includes("SSS")
+    norm.includes("SSS") ||
+    /\bSS\s*[1-3]\b/i.test(norm) ||
+    /\bJS\s*[1-3]\b/i.test(norm) ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12")
   ) {
     if (finalTotal >= 75) return "A1";
     if (finalTotal >= 70) return "B2";
@@ -235,7 +253,8 @@ export function getGradeRemark(grade: string): string {
   if (grade === "Developing") return "Developing";
   if (grade === "Needs Support") return "Needs Support";
   if (grade === "Distinction" || grade === "A1" || grade === "A") return "Distinction";
-  if (grade === "Very Good" || grade === "B2" || grade === "B3" || grade === "B") return "Very Good";
+  if (grade === "Very Good" || grade === "B2" || grade === "B") return "Very Good";
+  if (grade === "Good" || grade === "B3") return "Good";
   if (grade === "Credit" || grade === "C4" || grade === "C5" || grade === "C6" || grade === "C") return "Credit";
   if (grade === "Pass" || grade === "D7" || grade === "E8" || grade === "D" || grade === "E") return "Pass";
   if (grade === "Fail" || grade === "F9" || grade === "F") return "Fail";

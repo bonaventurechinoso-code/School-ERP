@@ -479,15 +479,17 @@ export async function saveTeacherGrades(
     throw new Error(`Grades for ${className} (${term}) are locked by the Head Teacher / Principal. Contact administration to unlock.`);
   }
 
+  const classTier = getTierForClass(className);
   const isCreche = isCrecheClass(className);
-  const isNursery = !isCreche && isNurseryClass(className);
+  const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
+  const isSecondary = classTier.category === "SECONDARY";
   const school = await basePrisma.school.findUnique({
     where: { id: ctx.schoolId },
     select: { tierDatabasesConfig: true, tier: true },
   });
   const crecheConfig = resolveCrecheConfig(school);
   const nurseryConfig = resolveNurseryConfig(school);
-  const isPrimary = !isCreche && !isNursery && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
+  const isPrimary = !isCreche && !isNursery && !isSecondary;
 
   const tenantDb = getTenantClient(ctx.schoolId);
 
@@ -498,6 +500,17 @@ export async function saveTeacherGrades(
     }
     if (isCreche) {
       return mapCrecheScoreToGrade(total).letter;
+    }
+    if (isSecondary) {
+      if (total >= 75) return "A1";
+      if (total >= 70) return "B2";
+      if (total >= 65) return "B3";
+      if (total >= 60) return "C4";
+      if (total >= 55) return "C5";
+      if (total >= 50) return "C6";
+      if (total >= 45) return "D7";
+      if (total >= 40) return "E8";
+      return "F9";
     }
     if (isPrimary) {
       if (total >= 75) return "Distinction";

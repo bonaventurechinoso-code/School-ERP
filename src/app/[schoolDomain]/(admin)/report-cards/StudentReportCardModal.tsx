@@ -75,10 +75,10 @@ export default function StudentReportCardModal({
   const classTier = getTierForClass(studentData.currentClass || studentData.tier);
   const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(studentData.tier);
   const isNursery = !isCreche && (isNurseryClass(studentData.currentClass) || isNurseryClass(studentData.tier) || classTier.category === "NURSERY");
-  const isPrimary = !isCreche && !isNursery && (classTier.category === "PRIMARY" || studentData.currentClass?.toLowerCase().includes("primary") || studentData.tier?.toLowerCase().includes("primary"));
+  const isSecondary = classTier.category === "SECONDARY" || (!isCreche && !isNursery && (studentData.currentClass?.toUpperCase().includes("JSS") || studentData.currentClass?.toUpperCase().includes("SSS") || studentData.tier?.toUpperCase().includes("SECONDARY")));
   const isHigherEd = classTier.category === "TERTIARY";
-  const isSecondary = !isHigherEd && !isNursery && !isPrimary && !isCreche;
-  const tierName = isCreche ? "Creche" : isNursery ? "Nursery / Kindergarten" : isPrimary ? "Primary School" : isHigherEd ? "University" : "Secondary School";
+  const isPrimary = !isCreche && !isNursery && !isSecondary && !isHigherEd;
+  const tierName = isCreche ? "Creche" : isNursery ? "Nursery / Kindergarten" : isSecondary ? "Secondary School" : isHigherEd ? "University" : "Primary School";
 
   // Single Source of Truth: Resolve real subjects strictly from studentData
   const activeSubjects = (() => {
@@ -111,9 +111,9 @@ export default function StudentReportCardModal({
     return {
       ...sub,
       computedTotal: sub.total !== undefined && sub.total !== null ? sub.total : calc.total,
-      computedGrade: (isPrimary || isNursery || isCreche) ? calc.grade : (sub.grade || calc.grade),
+      computedGrade: calc.grade,
       computedGp: calc.gp,
-      computedRemark: (isPrimary || isNursery || isCreche) ? getGradeRemark(calc.grade) : (sub.remark || getGradeRemark(sub.grade || calc.grade)),
+      computedRemark: getGradeRemark(calc.grade),
     };
   });
 
@@ -471,7 +471,15 @@ export default function StudentReportCardModal({
                             {sub.computedTotal}
                           </td>
                           <td className="px-3 py-3 text-center">
-                            <span className="inline-block px-2 py-0.5 rounded font-black font-mono text-[11px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <span className={`inline-block px-2 py-0.5 rounded font-black font-mono text-[11px] border ${
+                              sub.computedGrade === "A1" || sub.computedGrade === "B2"
+                                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                : sub.computedGrade.startsWith("B") || sub.computedGrade.startsWith("C")
+                                  ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                                  : sub.computedGrade.startsWith("D") || sub.computedGrade.startsWith("E")
+                                    ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                    : "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                            }`}>
                               {sub.computedGrade}
                             </span>
                           </td>

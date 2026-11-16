@@ -6,6 +6,7 @@ import { generateReportCardPdf, ReportCardPdfData, ReportCardSubjectScore } from
 import { resolveGradingTier } from "@/lib/grading-engine";
 import { isCrecheClass, resolveCrecheConfig } from "@/lib/creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "@/lib/nursery-config";
+import { getTierForClass } from "@/lib/school-tier-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -76,7 +77,8 @@ export async function GET(req: NextRequest) {
     }
 
     const currentClass = student.currentClass || url.searchParams.get("className") || "Primary 1";
-    const tierCategory = resolveGradingTier(student.tier?.name, currentClass);
+    const classTier = getTierForClass(currentClass);
+    const tierCategory = classTier.category;
 
     // 3. Fetch Academic Records / Grades for this student
     const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
@@ -120,7 +122,41 @@ export async function GET(req: NextRequest) {
     const subjectsMap = new Map<string, ReportCardSubjectScore>();
 
     const isCreche = isCrecheClass(currentClass) || isCrecheClass(tierCategory);
-    const isNursery = !isCreche && (isNurseryClass(currentClass) || isNurseryClass(tierCategory));
+    const isNursery = !isCreche && (isNurseryClass(currentClass) || tierCategory === "NURSERY");
+    const isSecondary = tierCategory === "SECONDARY";
+    const isPrimary = !isCreche && !isNursery && !isSecondary;
+
+    const resolvePdfGrade = (score: number) => {
+      if (isNursery || isCreche) {
+        return mapNurseryScoreToGrade(score).letter;
+      }
+      if (isSecondary) {
+        if (score >= 75) return "A1";
+        if (score >= 70) return "B2";
+        if (score >= 65) return "B3";
+        if (score >= 60) return "C4";
+        if (score >= 55) return "C5";
+        if (score >= 50) return "C6";
+        if (score >= 45) return "D7";
+        if (score >= 40) return "E8";
+        return "F9";
+      }
+      if (score >= 75) return "Distinction";
+      if (score >= 65) return "Very Good";
+      if (score >= 50) return "Credit";
+      if (score >= 40) return "Pass";
+      return "Fail";
+    };
+
+    const resolvePdfRemark = (grade: string) => {
+      if (grade === "A1" || grade === "Distinction" || grade === "Excellent") return "Distinction in subject concepts";
+      if (grade === "B2" || grade === "Very Good") return "Very good academic performance";
+      if (grade === "B3" || grade === "Good") return "Good academic performance";
+      if (grade === "C4" || grade === "C5" || grade === "C6" || grade === "Credit") return "Credit / Commendable achievement";
+      if (grade === "D7" || grade === "E8" || grade === "Pass" || grade === "Developing") return "Pass / Fair progress";
+      if (grade === "F9" || grade === "Fail" || grade === "Needs Support") return "Needs Support / Academic intervention required";
+      return "Satisfactory effort";
+    };
 
     if (gradeRecords.length > 0) {
       gradeRecords.forEach((gr, idx) => {
@@ -128,11 +164,7 @@ export async function GET(req: NextRequest) {
         const ca2 = gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0;
         const exam = gr.exam !== null && gr.exam !== undefined ? Number(gr.exam) : 0;
         const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + ca2 + exam);
-        const letter = (isNursery || isCreche)
-          ? mapNurseryScoreToGrade(total).letter
-          : (tierCategory === "PRIMARY"
-            ? (total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail")
-            : (total >= 75 ? "A1" : total >= 70 ? "B2" : total >= 65 ? "B3" : total >= 60 ? "C4" : total >= 50 ? "C6" : total >= 40 ? "D7" : "F9"));
+        const letter = resolvePdfGrade(total);
         subjectsMap.set(gr.subject, {
           subject: gr.subject,
           ca1,
@@ -142,7 +174,7 @@ export async function GET(req: NextRequest) {
           grade: letter,
           subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
-          remark: letter === "Distinction" || letter === "Excellent" ? "Excellent mastery of subject concepts" : letter === "Very Good" ? "Very good academic performance" : "Satisfactory effort",
+          remark: resolvePdfRemark(letter),
         });
       });
     } else if (academicRecords.length > 0) {
@@ -151,21 +183,17 @@ export async function GET(req: NextRequest) {
         const ca2 = (ar.test2 !== null && ar.test2 !== undefined ? Number(ar.test2) : (ar.midTerm !== null && ar.midTerm !== undefined ? Number(ar.midTerm) : 0));
         const exam = ar.finalExam !== null && ar.finalExam !== undefined ? Number(ar.finalExam) : 0;
         const total = ar.totalScore !== null && ar.totalScore !== undefined ? Number(ar.totalScore) : (ca1 + ca2 + exam);
-        const fallbackLetter = (isNursery || isCreche)
-          ? mapNurseryScoreToGrade(total).letter
-          : (tierCategory === "PRIMARY"
-            ? (total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail")
-            : (total >= 75 ? "A1" : total >= 70 ? "B2" : total >= 65 ? "B3" : total >= 60 ? "C4" : total >= 50 ? "C6" : total >= 40 ? "D7" : "F9"));
+        const letter = ar.gradeLetter || resolvePdfGrade(total);
         subjectsMap.set(ar.subject, {
           subject: ar.subject,
           ca1,
           ca2,
           exam,
           total,
-          grade: ar.gradeLetter || fallbackLetter,
+          grade: letter,
           subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
-          remark: ar.teacherRemarks || "Consistent academic performance",
+          remark: ar.teacherRemarks || resolvePdfRemark(letter),
         });
       });
     }
@@ -182,12 +210,22 @@ export async function GET(req: NextRequest) {
     const avgNum = Number(averageScore);
     const overallGrade = subjectsList.length === 0
       ? (isNursery || isCreche ? "Needs Support" : "—")
-      : ((isNursery || isCreche)
-        ? mapNurseryScoreToGrade(avgNum).letter
-        : (tierCategory === "PRIMARY"
-          ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
-          : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9")));
+      : resolvePdfGrade(avgNum);
     const admissionNumber = student.admissionNumber || "Pending";
+
+    // Fetch class position from official compiled ReportCard if available
+    const existingReportCard = await tenantDb.reportCard.findFirst({
+      where: {
+        schoolId: tenantId,
+        studentId: student.id,
+        term: { in: termVariants },
+      },
+    });
+    const rankNum = existingReportCard?.classPosition;
+    const totalInClass = existingReportCard?.totalStudentsInClass || 1;
+    const rankSuffix = rankNum
+      ? `${rankNum}${rankNum === 1 ? "st" : rankNum === 2 ? "nd" : rankNum === 3 ? "rd" : "th"}`
+      : "1st";
 
     const pdfData: ReportCardPdfData = {
       schoolName: school?.name || "Official Academic Institution",
@@ -203,8 +241,8 @@ export async function GET(req: NextRequest) {
       daysOpened: 110,
       daysPresent: 108,
       punctualityRate: "98.2%",
-      classPosition: "1st",
-      totalStudents: 28,
+      classPosition: rankSuffix,
+      totalStudents: totalInClass,
       totalScore,
       maxPossibleScore,
       averageScore,

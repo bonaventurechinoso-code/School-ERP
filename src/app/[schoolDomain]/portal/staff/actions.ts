@@ -6,6 +6,7 @@ import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
+import { getTierForClass } from "@/lib/school-tier-classes";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -447,15 +448,17 @@ export async function saveClassroomGrades(
       };
     }
 
+    const classTier = getTierForClass(className);
     const isCreche = isCrecheClass(className);
-    const isNursery = !isCreche && isNurseryClass(className);
+    const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
+    const isSecondary = classTier.category === "SECONDARY";
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
       select: { tierDatabasesConfig: true, tier: true },
     });
     const crecheConfig = resolveCrecheConfig(school);
     const nurseryConfig = resolveNurseryConfig(school);
-    const isPrimary = !isCreche && !isNursery && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
+    const isPrimary = !isCreche && !isNursery && !isSecondary;
 
     // Validation
     if (isNursery) {
@@ -537,6 +540,17 @@ export async function saveClassroomGrades(
       }
       if (isCreche) {
         return mapCrecheScoreToGrade(total).letter;
+      }
+      if (isSecondary) {
+        if (total >= 75) return "A1";
+        if (total >= 70) return "B2";
+        if (total >= 65) return "B3";
+        if (total >= 60) return "C4";
+        if (total >= 55) return "C5";
+        if (total >= 50) return "C6";
+        if (total >= 45) return "D7";
+        if (total >= 40) return "E8";
+        return "F9";
       }
       if (isPrimary) {
         if (total >= 75) return "Distinction";

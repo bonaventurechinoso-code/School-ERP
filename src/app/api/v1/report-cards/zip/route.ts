@@ -5,6 +5,9 @@ import JSZip from "jszip";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { generateReportCardPdf, ReportCardPdfData, ReportCardSubjectScore } from "@/lib/report-card-pdf";
 import { resolveGradingTier } from "@/lib/grading-engine";
+import { getTierForClass } from "@/lib/school-tier-classes";
+import { isCrecheClass } from "@/lib/creche-config";
+import { isNurseryClass, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 
 export async function GET(req: NextRequest) {
   try {
@@ -98,7 +101,45 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `No students found enrolled in "${className}".` }, { status: 404 });
     }
 
-    const tierCategory = resolveGradingTier(students[0]?.tier?.name, className);
+    const classTier = getTierForClass(className);
+    const tierCategory = classTier.category;
+
+    const isCreche = isCrecheClass(className);
+    const isNursery = !isCreche && (isNurseryClass(className) || tierCategory === "NURSERY");
+    const isSecondary = tierCategory === "SECONDARY";
+    const isPrimary = !isCreche && !isNursery && !isSecondary;
+
+    const resolveZipGrade = (score: number) => {
+      if (isNursery || isCreche) {
+        return mapNurseryScoreToGrade(score).letter;
+      }
+      if (isSecondary) {
+        if (score >= 75) return "A1";
+        if (score >= 70) return "B2";
+        if (score >= 65) return "B3";
+        if (score >= 60) return "C4";
+        if (score >= 55) return "C5";
+        if (score >= 50) return "C6";
+        if (score >= 45) return "D7";
+        if (score >= 40) return "E8";
+        return "F9";
+      }
+      if (score >= 75) return "Distinction";
+      if (score >= 65) return "Very Good";
+      if (score >= 50) return "Credit";
+      if (score >= 40) return "Pass";
+      return "Fail";
+    };
+
+    const resolveZipRemark = (grade: string) => {
+      if (grade === "A1" || grade === "Distinction" || grade === "Excellent") return "Distinction in subject concepts";
+      if (grade === "B2" || grade === "Very Good") return "Very good academic performance";
+      if (grade === "B3" || grade === "Good") return "Good academic performance";
+      if (grade === "C4" || grade === "C5" || grade === "C6" || grade === "Credit") return "Credit / Commendable achievement";
+      if (grade === "D7" || grade === "E8" || grade === "Pass" || grade === "Developing") return "Pass / Fair progress";
+      if (grade === "F9" || grade === "Fail" || grade === "Needs Support") return "Needs Support / Academic intervention required";
+      return "Satisfactory effort";
+    };
 
     // 3. Prepare ZIP Archive
     const zip = new JSZip();
@@ -139,7 +180,7 @@ export async function GET(req: NextRequest) {
         const ca2 = gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0;
         const exam = gr.exam !== null && gr.exam !== undefined ? Number(gr.exam) : 0;
         const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + ca2 + exam);
-        const letter = total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail";
+        const letter = resolveZipGrade(total);
         return {
           subject: gr.subject,
           ca1,
@@ -149,7 +190,7 @@ export async function GET(req: NextRequest) {
           grade: letter,
           subjectPosition: `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}`,
           classAverage: 68,
-          remark: letter === "Distinction" ? "Distinction in concepts" : letter === "Very Good" ? "Very good performance" : "Satisfactory effort",
+          remark: resolveZipRemark(letter),
         };
       });
 
@@ -158,17 +199,17 @@ export async function GET(req: NextRequest) {
       const maxPossibleScore = subjectsList.length * 100;
       const averageScore = subjectsList.length > 0 ? (totalScore / subjectsList.length).toFixed(1) : "0.0";
       const avgNum = Number(averageScore);
-      const overallGrade = tierCategory === "PRIMARY"
-        ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
-        : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9");
+      const overallGrade = subjectsList.length === 0
+        ? (isNursery || isCreche ? "Needs Support" : "—")
+        : resolveZipGrade(avgNum);
 
       const rankStr = `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}`;
       const admissionNumber = student.admissionNumber || "Pending";
 
       const pdfData: ReportCardPdfData = {
-        schoolName: school?.name || "Egede Primary School",
-        schoolMotto: "Knowledge, Discipline and Excellence",
-        schoolAddress: "Ifite-Ogwari, Ayamelum LGA, Anambra State, Nigeria",
+        schoolName: school?.name || "Official Academic Institution",
+        schoolMotto: (school as any)?.motto || "Knowledge, Discipline and Excellence",
+        schoolAddress: (school as any)?.address || "Federal Republic of Nigeria Ministry of Education Certified",
         session,
         term,
         studentName: `${student.firstName} ${student.lastName}`.trim(),

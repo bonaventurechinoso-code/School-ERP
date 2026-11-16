@@ -139,6 +139,12 @@ export function getTierForClass(className: string): {
     norm.includes("SSS") ||
     /\bSS\s*[1-3]\b/i.test(norm) ||
     /\bJS\s*[1-3]\b/i.test(norm) ||
+    norm.includes("GRADE 7") ||
+    norm.includes("GRADE 8") ||
+    norm.includes("GRADE 9") ||
+    norm.includes("GRADE 10") ||
+    norm.includes("GRADE 11") ||
+    norm.includes("GRADE 12") ||
     norm.includes("SECONDARY") ||
     norm.includes("HIGH SCHOOL")
   ) {

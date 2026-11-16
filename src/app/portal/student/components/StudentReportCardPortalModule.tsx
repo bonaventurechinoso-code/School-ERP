@@ -62,7 +62,7 @@ export function StudentReportCardPortalModule({
           isNotEntered,
           subjectPosition: (ca as any).subjectPosition || (idx === 0 ? "1st" : idx === 1 ? "2nd" : idx === 2 ? "3rd" : `${idx + 1}th`),
           classAverage: (ca as any).classAverage || 68,
-          remark: (ca as any).remark || (ca.grade ? getGradeRemark(ca.grade) : (ca.total >= 75 ? "Distinction" : ca.total >= 65 ? "Very Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail")),
+          remark: (ca as any).remark || (ca.grade ? getGradeRemark(ca.grade) : (isSecondary ? (ca.total >= 75 ? "Distinction" : ca.total >= 70 ? "Very Good" : ca.total >= 65 ? "Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail") : (ca.total >= 75 ? "Distinction" : ca.total >= 65 ? "Very Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail"))),
         };
       });
     }
@@ -86,9 +86,9 @@ export function StudentReportCardPortalModule({
     return {
       ...sub,
       computedTotal: sub.total !== undefined && sub.total !== null ? sub.total : calc.total,
-      computedGrade: sub.grade || calc.grade,
+      computedGrade: calc.grade,
       computedGp: calc.gp,
-      computedRemark: sub.remark || getGradeRemark(sub.grade || calc.grade),
+      computedRemark: getGradeRemark(calc.grade),
     };
   });
 
