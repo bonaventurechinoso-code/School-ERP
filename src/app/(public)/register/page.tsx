@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock, Eye, EyeOff } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
@@ -168,7 +168,7 @@ export default function RegisterTenantPage() {
   }, [formData.subdomain]);
 
   // Derive target login URL on the tenant's dedicated subdomain
-  const getSubdomainLoginUrl = (slug?: string) => {
+  const getSubdomainLoginUrl = useCallback((slug?: string) => {
     const effectiveSlug = slug || registrationData?.subdomain || formData.subdomain;
     if (!effectiveSlug) return "/login";
     if (typeof window !== "undefined") {
@@ -179,7 +179,7 @@ export default function RegisterTenantPage() {
       }
     }
     return `https://${effectiveSlug}.${rootDisplay}/login`;
-  };
+  }, [registrationData?.subdomain, formData.subdomain, rootDisplay]);
 
   // 1. After all 3 checks = true, IMMEDIATELY redirect to subdomain login:
   useEffect(() => {
@@ -187,7 +187,7 @@ export default function RegisterTenantPage() {
       const slug = registrationData?.subdomain || formData.subdomain;
       window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl(slug);
     }
-  }, [sslVerified, registrationData, formData.subdomain]);
+  }, [sslVerified, registrationData, formData.subdomain, getSubdomainLoginUrl]);
 
   // 2. Add safety timeout so it NEVER spins more than 5 seconds:
   useEffect(() => {
@@ -198,7 +198,7 @@ export default function RegisterTenantPage() {
       }, 5000);
       return () => clearTimeout(t);
     }
-  }, [isConfiguring, registrationData, formData.subdomain]);
+  }, [isConfiguring, registrationData, formData.subdomain, getSubdomainLoginUrl]);
 
   const availableTiers = [
     { id: "NURSERY", label: "Creche / Nursery", desc: "Ages 0-4" },
