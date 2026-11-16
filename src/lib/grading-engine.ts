@@ -92,9 +92,23 @@ export function resolveGradingTier(tierName?: string, className?: string): Gradi
 }
 
 /**
- * Standard Nigerian / British K-12 letter grade mapping for Primary and Secondary
+ * Standard Nigerian letter grade mapping across Primary and Secondary
  */
-export function mapScoreToGradeLetter(score: number): { letter: string; gpa: number; remark: string } {
+export function mapScoreToGradeLetter(score: number, tierCategory?: string): { letter: string; gpa: number; remark: string } {
+  if (tierCategory === "PRIMARY") {
+    if (score >= 75) {
+      return { letter: "Distinction", gpa: 5.0, remark: "Distinction" };
+    } else if (score >= 65) {
+      return { letter: "Very Good", gpa: 4.0, remark: "Very Good" };
+    } else if (score >= 50) {
+      return { letter: "Credit", gpa: 3.0, remark: "Credit" };
+    } else if (score >= 40) {
+      return { letter: "Pass", gpa: 2.0, remark: "Pass" };
+    } else {
+      return { letter: "Fail", gpa: 0.0, remark: "Fail" };
+    }
+  }
+
   if (score >= 75) {
     return { letter: "A", gpa: 5.0, remark: "Distinction / Excellent" };
   } else if (score >= 65) {
@@ -113,7 +127,8 @@ export function mapScoreToGradeLetter(score: number): { letter: string; gpa: num
  */
 export function calculateNumericalGrade(
   scores: NumericalAssessmentInput,
-  customPassThreshold: number = 50
+  customPassThreshold: number = 50,
+  tierCategory?: string
 ): NumericalGradeResult {
   const t1 = Math.max(0, Number(scores.test1) || 0);
   const t2 = Math.max(0, Number(scores.test2) || 0);
@@ -126,7 +141,7 @@ export function calculateNumericalGrade(
   const threshold = scores.passThreshold ?? customPassThreshold;
   const isPassed = totalScore >= threshold;
 
-  const { letter, gpa, remark } = mapScoreToGradeLetter(totalScore);
+  const { letter, gpa, remark } = mapScoreToGradeLetter(totalScore, tierCategory);
 
   return {
     totalScore,

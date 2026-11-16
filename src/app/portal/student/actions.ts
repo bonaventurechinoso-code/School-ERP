@@ -21,6 +21,7 @@ import {
   SystemNotificationItem 
 } from "./types";
 import { formatTierBadgeCode, getAdmissionNumberSearchVariants } from "@/lib/tenant-tier-utils";
+import { calculateBonaVeeResult } from "@/lib/assessmentEngine";
 
 /**
  * Loads the complete workspace data for the student portal.
@@ -136,6 +137,9 @@ export async function fetchStudentPortalWorkspace(params: {
           },
           reportCards: {
             orderBy: { createdAt: "desc" }
+          },
+          GradeRecord: {
+            orderBy: { subject: "asc" }
           }
         }
       });
@@ -162,6 +166,9 @@ export async function fetchStudentPortalWorkspace(params: {
             },
             reportCards: {
               orderBy: { createdAt: "desc" }
+            },
+            GradeRecord: {
+              orderBy: { subject: "asc" }
             }
           }
         });
@@ -463,20 +470,47 @@ function shapeStudentProfile({
         }
       ]
     };
-  } else if (category === "SECONDARY") {
+  } else if (category === "PRIMARY") {
+    const realGradeRecords = dbStudent?.GradeRecord || [];
+    const realCAs = realGradeRecords.map((gr: any) => ({
+      subject: gr.subject,
+      ca1: gr.ca1,
+      ca2: gr.ca2,
+      exam: gr.exam,
+      total: gr.totalScore,
+      grade: calculateBonaVeeResult("Primary School", { ca1: gr.ca1, ca2: gr.ca2, exam: gr.exam }).grade,
+    }));
+    const totalScore = realCAs.reduce((acc: number, c: any) => acc + (c.total || 0), 0);
+    const avgScore = realCAs.length > 0 ? (totalScore / realCAs.length).toFixed(1) : "0.0";
+    const pos = dbStudent?.reportCards?.[0]?.classPosition;
+    const totStudents = dbStudent?.reportCards?.[0]?.totalStudentsInClass;
     academicRank = {
-      classPosition: "3rd of 44 Students",
-      termAverage: "88.6%",
-      totalStudentsInClass: 44,
-      standingStatus: "Distinction Scholar (Honors Roll)",
-      continuousAssessments: [
-        { subject: "Mathematics", ca1: 14, ca2: 15, exam: 62, total: 91, grade: "A1" },
-        { subject: "English Language", ca1: 13, ca2: 14, exam: 58, total: 85, grade: "A1" },
-        { subject: "Physics", ca1: 14, ca2: 13, exam: 60, total: 87, grade: "A1" },
-        { subject: "Chemistry", ca1: 12, ca2: 14, exam: 55, total: 81, grade: "B2" },
-        { subject: "Biology", ca1: 14, ca2: 14, exam: 59, total: 87, grade: "A1" },
-        { subject: "Technical Drawing", ca1: 15, ca2: 15, exam: 65, total: 95, grade: "A1" }
-      ]
+      classPosition: pos ? `${pos}${pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"} of ${totStudents || 1}` : "—",
+      termAverage: realCAs.length > 0 ? `${avgScore}%` : "—",
+      totalStudentsInClass: totStudents || 1,
+      standingStatus: realCAs.length > 0 ? "Continuous Assessment Active" : "No Grades Entered",
+      continuousAssessments: realCAs,
+    };
+  } else if (category === "SECONDARY") {
+    const realGradeRecords = dbStudent?.GradeRecord || [];
+    const realCAs = realGradeRecords.map((gr: any) => ({
+      subject: gr.subject,
+      ca1: gr.ca1,
+      ca2: gr.ca2,
+      exam: gr.exam,
+      total: gr.totalScore,
+      grade: calculateBonaVeeResult("Secondary School", { ca1: gr.ca1, ca2: gr.ca2, exam: gr.exam }).grade,
+    }));
+    const totalScore = realCAs.reduce((acc: number, c: any) => acc + (c.total || 0), 0);
+    const avgScore = realCAs.length > 0 ? (totalScore / realCAs.length).toFixed(1) : "0.0";
+    const pos = dbStudent?.reportCards?.[0]?.classPosition;
+    const totStudents = dbStudent?.reportCards?.[0]?.totalStudentsInClass;
+    academicRank = {
+      classPosition: pos ? `${pos}${pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"} of ${totStudents || 1}` : "—",
+      termAverage: realCAs.length > 0 ? `${avgScore}%` : "—",
+      totalStudentsInClass: totStudents || 1,
+      standingStatus: realCAs.length > 0 ? "Continuous Assessment Active" : "No Grades Entered",
+      continuousAssessments: realCAs,
     };
   } else {
     // HIGHER_ED (University, Polytechnic, College of Education)

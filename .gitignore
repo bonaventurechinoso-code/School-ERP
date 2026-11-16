@@ -48,6 +48,7 @@ next-env.d.ts
 # By default, Prisma Client is generated in node_modules, which is ignored.
 
 # Databases & local storage
+backups/
 *.db
 *.db-journal
 *.sqlite

@@ -76,19 +76,7 @@ export interface StudentSubjectBreakdownResponse {
   error?: string;
 }
 
-// Fallback deterministic sample termly scores if records are missing
-const SAMPLE_TERMLY_DATA = [
-  { t1: 82, t2: 86, t3: 89, attendance: 96 },
-  { t1: 78, t2: 81, t3: 84, attendance: 94 },
-  { t1: 74, t2: 77, t3: 80, attendance: 92 },
-  { t1: 71, t2: 74, t3: 76, attendance: 90 },
-  { t1: 68, t2: 70, t3: 73, attendance: 88 },
-  { t1: 64, t2: 66, t3: 69, attendance: 86 },
-  { t1: 59, t2: 62, t3: 64, attendance: 84 },
-  { t1: 53, t2: 55, t3: 58, attendance: 80 },
-  { t1: 47, t2: 48, t3: 49, attendance: 78 }, // Trial candidate
-  { t1: 38, t2: 41, t3: 42, attendance: 68 }, // Repeat candidate
-];
+// No mock/sample data in production
 
 function getOrdinal(n: number): string {
   if (n <= 0) return "—";
@@ -188,22 +176,10 @@ export async function fetchAnnualBroadsheet(
       const fullName = `${student.firstName} ${student.lastName}`;
       const studentTerms = cardMap.get(student.id);
 
-      // Extract termly averages or use deterministic sample data
-      const sample = SAMPLE_TERMLY_DATA[i % SAMPLE_TERMLY_DATA.length];
-
-      const t1 =
-        studentTerms?.get("1st term") ??
-        studentTerms?.get("first term") ??
-        sample.t1;
-      const t2 =
-        studentTerms?.get("2nd term") ??
-        studentTerms?.get("second term") ??
-        sample.t2;
-      const t3 =
-        studentTerms?.get("3rd term") ??
-        studentTerms?.get("third term") ??
-        sample.t3;
-      const attendance = sample.attendance;
+      const t1 = studentTerms?.get("1st term") ?? studentTerms?.get("first term") ?? 0;
+      const t2 = studentTerms?.get("2nd term") ?? studentTerms?.get("second term") ?? 0;
+      const t3 = studentTerms?.get("3rd term") ?? studentTerms?.get("third term") ?? 0;
+      const attendance = 100;
 
       // Core engine calculation
       const { annual } = compileAnnualTerms(t1, t2, t3, attendance);
@@ -359,48 +335,33 @@ export async function fetchStudentSubjectBreakdown(
 
     const tierName = student.tier?.name || "Secondary School";
 
-    const standardSubjects = [
-      { code: "MTH 101", name: "Mathematics", base: 78 },
-      { code: "ENG 101", name: "English Studies", base: 80 },
-      { code: "SCI 101", name: "Basic Science & Technology", base: 76 },
-      { code: "ICT 101", name: "Digital Technologies / ICT", base: 85 },
-      { code: "BUS 101", name: "Business Studies", base: 74 },
-      { code: "NVE 101", name: "National Values & Civic Education", base: 82 },
-      { code: "CCA 101", name: "Cultural & Creative Arts", base: 77 },
-      { code: "PVS 101", name: "Pre-Vocational Studies", base: 79 },
-      { code: "CRS 101", name: "Christian Religious Studies / IRS", base: 84 },
-    ];
+    // Single Source of Truth: Query student's real GradeRecord entries
+    const gradeRecords = await basePrisma.gradeRecord.findMany({
+      where: {
+        schoolId: actualSchoolId,
+        studentId,
+      },
+      orderBy: { subject: "asc" },
+    });
 
-    const hash = studentId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const subjects: SubjectBreakdownRow[] = standardSubjects.map((sub, idx) => {
-      const offset = ((hash + idx * 7) % 15) - 5;
-      const annualAvg = Math.max(45, Math.min(95, sub.base + offset));
-      
-      const t1 = Math.max(40, annualAvg - 3);
-      const t2 = Math.max(42, annualAvg + 1);
-      const t3 = Math.max(45, annualAvg + 2);
-
-      const ca1 = Math.round(t3 * 0.2);
-      const ca2 = Math.round(t3 * 0.2);
-      const exam = Math.round(t3 - ca1 - ca2);
-
-      const grade = getNigerianGrade(tierName, annualAvg);
-      const remark = 
-        annualAvg >= 80 ? "Distinction" :
-        annualAvg >= 70 ? "Very Good" :
-        annualAvg >= 60 ? "Good Credit" :
-        annualAvg >= 50 ? "Pass" : "Needs Improvement";
+    const subjects: SubjectBreakdownRow[] = gradeRecords.map((gr) => {
+      const ca1 = gr.ca1 ?? 0;
+      const ca2 = gr.ca2 ?? 0;
+      const exam = gr.exam ?? 0;
+      const total = gr.totalScore ?? (ca1 + ca2 + exam);
+      const grade = gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail";
+      const remark = total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Needs Improvement";
 
       return {
-        code: sub.code,
-        name: sub.name,
+        code: gr.subject.slice(0, 3).toUpperCase() + " 101",
+        name: gr.subject,
         ca1,
         ca2,
         exam,
-        term1Total: Math.round(t1),
-        term2Total: Math.round(t2),
-        term3Total: Math.round(t3),
-        annualAverage: Math.round(annualAvg),
+        term1Total: gr.term.toLowerCase().includes("1") || gr.term.toLowerCase().includes("first") ? total : 0,
+        term2Total: gr.term.toLowerCase().includes("2") || gr.term.toLowerCase().includes("second") ? total : 0,
+        term3Total: gr.term.toLowerCase().includes("3") || gr.term.toLowerCase().includes("third") ? total : 0,
+        annualAverage: total,
         grade,
         remark,
       };

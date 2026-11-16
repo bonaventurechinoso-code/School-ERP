@@ -597,8 +597,8 @@ export default function StaffPortalClient({
       );
 
       if (res.success) {
-        setGradesSaveMessage(`Successfully persisted grades for ${res.count} students.`);
-        setTimeout(() => setGradesSaveMessage(null), 4000);
+        setGradesSaveMessage(`Successfully persisted grades for ${res.count} students at ${res.timestamp || new Date().toLocaleTimeString()}.`);
+        setTimeout(() => setGradesSaveMessage(null), 5000);
       } else {
         setGradesSaveMessage(`Error: ${res.error}`);
       }

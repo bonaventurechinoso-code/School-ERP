@@ -212,19 +212,58 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   const className = payload.className || student?.currentClass || "General";
   const tierCategory = resolveGradingTier(tierName, className);
 
-  // Fetch all academic records for this student and term from the designated tier database
-  const records = await tierDb.academicRecord.findMany({
+  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
+    : term === "2nd Term" ? ["2nd Term", "Second Term"]
+    : term === "3rd Term" ? ["3rd Term", "Third Term"]
+    : term === "First Term" ? ["First Term", "1st Term"]
+    : term === "Second Term" ? ["Second Term", "2nd Term"]
+    : term === "Third Term" ? ["Third Term", "3rd Term"]
+    : [term];
+
+  // Single Source of Truth: GradeRecord is master table
+  const rawGradeRecords = await tierDb.gradeRecord.findMany({
     where: {
       schoolId,
       studentId,
-      term,
-      academicYear,
+      term: { in: termVariants },
     },
-    orderBy: { subject: "asc" },
+    orderBy: { updatedAt: "desc" },
   });
 
+  // Deduplicate by subject (in case both '1st Term' and 'First Term' exist)
+  const subjectMap = new Map<string, any>();
+  for (const gr of rawGradeRecords) {
+    if (!subjectMap.has(gr.subject)) {
+      subjectMap.set(gr.subject, gr);
+    }
+  }
+  const gradeRecords = Array.from(subjectMap.values());
+
+  const records = gradeRecords.length > 0 
+    ? gradeRecords.map((gr: any) => ({
+        id: gr.id,
+        subject: gr.subject,
+        test1: gr.ca1,
+        test2: gr.ca2,
+        finalExam: gr.exam,
+        totalScore: gr.totalScore,
+        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+        isPassed: gr.totalScore >= 40,
+        assessmentType: "NUMERICAL",
+        teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+      }))
+    : await tierDb.academicRecord.findMany({
+        where: {
+          schoolId,
+          studentId,
+          term: { in: termVariants },
+          academicYear,
+        },
+        orderBy: { subject: "asc" },
+      });
+
   if (records.length === 0) {
-    throw new Error(`No academic records found for student ${studentId} in ${term} (${academicYear}).`);
+    throw new Error(`No assessment records found for student ${studentId} in ${term} (${academicYear}).`);
   }
 
   let totalScore = 0;
@@ -261,7 +300,8 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     averageScore = records.length > 0 ? Math.round((totalScore / records.length) * 100) / 100 : 0;
     const gradeCalc = calculateNumericalGrade(
       { finalExam: averageScore },
-      payload.customPassThreshold ?? 50
+      payload.customPassThreshold ?? 40,
+      tierCategory
     );
     overallLetter = gradeCalc.gradeLetter;
     gpa = gradeCalc.gpaPoints;
@@ -383,36 +423,74 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
     throw new Error(`No students found enrolled in classroom "${className}".`);
   }
 
-  // 2. Fetch all academic records for this class, term, and academicYear
+  // 2. Fetch all grade records for this class and term (Single Source of Truth)
   const studentIds = students.map((s: any) => s.id);
-  const records = await tierDb.academicRecord.findMany({
+  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
+    : term === "2nd Term" ? ["2nd Term", "Second Term"]
+    : term === "3rd Term" ? ["3rd Term", "Third Term"]
+    : term === "First Term" ? ["First Term", "1st Term"]
+    : term === "Second Term" ? ["Second Term", "2nd Term"]
+    : term === "Third Term" ? ["Third Term", "3rd Term"]
+    : [term];
+
+  const gradeRecords = await tierDb.gradeRecord.findMany({
     where: {
       schoolId,
-      term,
+      term: { in: termVariants },
+      studentId: { in: studentIds },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const academicRecords = gradeRecords.length === 0 ? await tierDb.academicRecord.findMany({
+    where: {
+      schoolId,
+      term: { in: termVariants },
       academicYear,
       studentId: { in: studentIds },
     },
-  });
+    orderBy: { subject: "asc" },
+  }) : [];
 
-  // Group records by student
+  const rawRecords = gradeRecords.length > 0
+    ? gradeRecords.map((gr: any) => ({
+        id: gr.id,
+        studentId: gr.studentId,
+        subject: gr.subject,
+        test1: gr.ca1,
+        test2: gr.ca2,
+        finalExam: gr.exam,
+        totalScore: gr.totalScore,
+        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+        isPassed: gr.totalScore >= 40,
+        assessmentType: "NUMERICAL",
+        teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+      }))
+    : academicRecords;
+
+  // Group records by student and deduplicate by subject
   const studentRecordMap = new Map<string, any[]>();
-  for (const rec of records) {
+  for (const rec of rawRecords) {
     if (!studentRecordMap.has(rec.studentId)) {
       studentRecordMap.set(rec.studentId, []);
     }
-    studentRecordMap.get(rec.studentId)!.push(rec);
+    const existing = studentRecordMap.get(rec.studentId)!;
+    if (!existing.some((e: any) => e.subject.toLowerCase() === rec.subject.toLowerCase())) {
+      existing.push(rec);
+    }
   }
 
-  // 3. Compute totals and averages for each student
+  // 3. Compute totals and averages for each student strictly across entered subjects
   const studentScoreSummaries: Array<{ studentId: string; totalScore: number; averageScore: number }> = [];
 
   for (const student of students) {
     const studentRecords = studentRecordMap.get(student.id) || [];
+    const entered = studentRecords.filter((r: any) => r.totalScore !== null && r.totalScore !== undefined);
     let tot = 0;
-    studentRecords.forEach((r: any) => {
+    entered.forEach((r: any) => {
       tot += r.totalScore || 0;
     });
-    const avg = studentRecords.length > 0 ? Math.round((tot / studentRecords.length) * 100) / 100 : 0;
+    const avg = entered.length > 0 ? Math.round((tot / entered.length) * 100) / 100 : 0;
     studentScoreSummaries.push({
       studentId: student.id,
       totalScore: tot,
@@ -459,7 +537,8 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
       });
       const gradeCalc = calculateNumericalGrade(
         { finalExam: averageScore },
-        payload.customPassThreshold ?? 50
+        payload.customPassThreshold ?? 40,
+        tierCategory
       );
       overallLetter = gradeCalc.gradeLetter;
       gpa = gradeCalc.gpaPoints;
@@ -572,29 +651,66 @@ export async function getStudentReportCard(
     explicitTierName
   );
 
-  const reportCard = await tierDb.reportCard.findUnique({
+  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
+    : term === "2nd Term" ? ["2nd Term", "Second Term"]
+    : term === "3rd Term" ? ["3rd Term", "Third Term"]
+    : term === "First Term" ? ["First Term", "1st Term"]
+    : term === "Second Term" ? ["Second Term", "2nd Term"]
+    : term === "Third Term" ? ["Third Term", "3rd Term"]
+    : [term];
+
+  const reportCard = await tierDb.reportCard.findFirst({
     where: {
-      schoolId_studentId_term_academicYear: {
-        schoolId,
-        studentId,
-        term,
-        academicYear,
-      },
+      schoolId,
+      studentId,
+      term: { in: termVariants },
+      ...(academicYear ? { academicYear } : {}),
     },
     include: {
       student: true,
     },
   });
 
-  const currentRecords = await tierDb.academicRecord.findMany({
+  const rawGradeRecords = await tierDb.gradeRecord.findMany({
     where: {
       schoolId,
       studentId,
-      term,
-      academicYear,
+      term: { in: termVariants },
     },
-    orderBy: { subject: "asc" },
+    orderBy: { updatedAt: "desc" },
   });
+
+  const subjectMap = new Map<string, any>();
+  for (const gr of rawGradeRecords) {
+    if (!subjectMap.has(gr.subject)) {
+      subjectMap.set(gr.subject, gr);
+    }
+  }
+  const gradeRecords = Array.from(subjectMap.values());
+
+  const currentRecords = gradeRecords.length > 0
+    ? gradeRecords.map((gr: any) => ({
+        id: gr.id,
+        subject: gr.subject,
+        test1: gr.ca1,
+        test2: gr.ca2,
+        finalExam: gr.exam,
+        totalScore: gr.totalScore,
+        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+        isPassed: gr.totalScore >= 40,
+        ca1: gr.ca1,
+        ca2: gr.ca2,
+        exam: gr.exam,
+      }))
+    : await tierDb.academicRecord.findMany({
+        where: {
+          schoolId,
+          studentId,
+          term: { in: termVariants },
+          ...(academicYear ? { academicYear } : {}),
+        },
+        orderBy: { subject: "asc" },
+      });
 
   return {
     tierName,
@@ -619,7 +735,15 @@ export async function getClassResultSheet(
     explicitTierName
   );
 
-  // Fetch students, their report cards, and active continuous assessment records
+  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
+    : term === "2nd Term" ? ["2nd Term", "Second Term"]
+    : term === "3rd Term" ? ["3rd Term", "Third Term"]
+    : term === "First Term" ? ["First Term", "1st Term"]
+    : term === "Second Term" ? ["Second Term", "2nd Term"]
+    : term === "Third Term" ? ["Third Term", "3rd Term"]
+    : [term];
+
+  // Fetch students, their report cards, and active grade records
   const students = await tierDb.student.findMany({
     where: {
       schoolId,
@@ -628,17 +752,23 @@ export async function getClassResultSheet(
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: {
       reportCards: {
-        where: { term, academicYear },
+        where: { term: { in: termVariants } },
+      },
+      GradeRecord: {
+        where: { term: { in: termVariants } },
       },
       academicRecords: {
-        where: { term, academicYear },
+        where: { term: { in: termVariants } },
       },
     },
   });
 
-  // Extract distinct subjects in this classroom
+  // Extract distinct subjects in this classroom from GradeRecord first
   const subjectSet = new Set<string>();
   students.forEach((s: any) => {
+    s.GradeRecord?.forEach((r: any) => {
+      if (r.subject) subjectSet.add(r.subject);
+    });
     s.academicRecords?.forEach((r: any) => {
       if (r.subject) subjectSet.add(r.subject);
     });
@@ -656,8 +786,24 @@ export async function getClassResultSheet(
     students: students.map((s: any) => {
       const card = s.reportCards?.[0] || null;
       const recordMap: Record<string, any> = {};
+
+      // Fill from academicRecords first as baseline
       s.academicRecords?.forEach((r: any) => {
         recordMap[r.subject] = r;
+      });
+
+      // GradeRecord overrides as single source of truth
+      s.GradeRecord?.forEach((gr: any) => {
+        recordMap[gr.subject] = {
+          id: gr.id,
+          subject: gr.subject,
+          ca1: gr.ca1,
+          ca2: gr.ca2,
+          exam: gr.exam,
+          totalScore: gr.totalScore,
+          gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+          isPassed: gr.totalScore >= 40,
+        };
       });
 
       return {

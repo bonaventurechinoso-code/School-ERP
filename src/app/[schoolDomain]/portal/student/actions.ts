@@ -260,7 +260,7 @@ export async function fetchStudentPortalInitialData(
   ]);
 
   // Compute My Attendance Rate
-  let attendanceRate = 96.8;
+  let attendanceRate = 0;
   if (attendanceRecords.length > 0) {
     const presentCount = attendanceRecords.filter(
       (a) => a.status === "PRESENT" || a.status === "LATE"
@@ -269,7 +269,7 @@ export async function fetchStudentPortalInitialData(
   }
 
   // Compute Continuous Assessment (CA) Average
-  let caAverage = 84.5;
+  let caAverage = 0;
   if (gradeRecords.length > 0) {
     const totalCA = gradeRecords.reduce((acc, g) => acc + ((g.ca1 || 0) + (g.ca2 || 0)) / 2, 0);
     caAverage = Math.round((totalCA / gradeRecords.length) * 10) / 10;

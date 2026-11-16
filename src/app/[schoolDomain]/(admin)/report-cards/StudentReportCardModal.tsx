@@ -56,42 +56,10 @@ interface StudentReportCardModalProps {
   schoolDomain?: string;
 }
 
-// Fallback authentic Nigerian subjects per tier if database only has 1 or 0 subjects entered for testing
-const DEFAULT_SECONDARY_SUBJECTS = [
-  { subject: "Mathematics", ca1: 18, ca2: 17, exam: 52, subjectPosition: "1st", classAverage: 68, remark: "Brilliant mathematical aptitude and precision." },
-  { subject: "English Studies", ca1: 16, ca2: 18, exam: 48, subjectPosition: "2nd", classAverage: 65, remark: "Eloquent vocabulary and strong comprehension skills." },
-  { subject: "Intermediate Science", ca1: 17, ca2: 16, exam: 51, subjectPosition: "1st", classAverage: 66, remark: "Outstanding grasp of scientific theories." },
-  { subject: "Digital Technologies / ICT", ca1: 19, ca2: 18, exam: 55, subjectPosition: "1st", classAverage: 72, remark: "Exceptional computing and logical problem solving." },
-  { subject: "Business Studies", ca1: 15, ca2: 16, exam: 46, subjectPosition: "3rd", classAverage: 64, remark: "Very good understanding of commerce and finance." },
-  { subject: "National Values Education", ca1: 16, ca2: 17, exam: 50, subjectPosition: "2nd", classAverage: 67, remark: "Displays high ethical standards and civic awareness." },
-  { subject: "Cultural & Creative Arts", ca1: 17, ca2: 16, exam: 49, subjectPosition: "1st", classAverage: 70, remark: "Highly creative with great aesthetic perception." },
-  { subject: "Pre-Vocational Studies", ca1: 15, ca2: 15, exam: 44, subjectPosition: "4th", classAverage: 63, remark: "Good technical aptitude; consistent effort." },
-];
-
-const DEFAULT_PRIMARY_SUBJECTS = [
-  { subject: "Mathematics", assignment: 10, test: 19, project: 9, exam: 54, remark: "Excellent calculation speed and accuracy." },
-  { subject: "English Studies", assignment: 9, test: 18, project: 9, exam: 50, remark: "Expressive reading and creative writing." },
-  { subject: "Basic Science & Technology", assignment: 9, test: 17, project: 8, exam: 48, remark: "Curious and attentive during practicals." },
-  { subject: "Basic Digital Literacy / ICT", assignment: 10, test: 19, project: 10, exam: 56, remark: "Sharp digital literacy and enthusiasm." },
-  { subject: "National Values Education", assignment: 9, test: 18, project: 9, exam: 51, remark: "Well behaved with good leadership qualities." },
-  { subject: "Cultural & Creative Arts", assignment: 8, test: 17, project: 8, exam: 46, remark: "Very imaginative and cooperative." },
-];
-
-const DEFAULT_NURSERY_SUBJECTS = [
-  { subject: "Numeracy / Cognitive Skills", observation: 92, classwork: 88, affective: 95, remark: "Rapid number recognition and sorting." },
-  { subject: "Literacy / Phonics", observation: 88, classwork: 85, affective: 90, remark: "Clear phonetic sounds and letter tracing." },
-  { subject: "Rhymes & Poetry", observation: 95, classwork: 90, affective: 95, remark: "Enthusiastic and expressive recitation." },
-  { subject: "Social Norms / Habits", observation: 90, classwork: 85, affective: 90, remark: "Polite, friendly, and shares readily with peers." },
-  { subject: "Sensory Play / Creative Arts", observation: 85, classwork: 85, affective: 90, remark: "Good fine motor skills and vibrant color sense." },
-];
-
-const DEFAULT_TERTIARY_SUBJECTS = [
-  { subject: "GST 111 - Use of English & Library Instructions", assignment: 9, test: 18, exam: 62, remark: "Distinction in linguistic expression." },
-  { subject: "MTH 111 - Logic and Linear Algebra", assignment: 10, test: 19, exam: 65, remark: "Mastery of mathematical proofs." },
-  { subject: "COM 111 - Introduction to Computing", assignment: 9, test: 18, exam: 64, remark: "Solid computational thinking." },
-  { subject: "GST 112 - Philosophy & Logic", assignment: 8, test: 16, exam: 54, remark: "Clear analytical discourse." },
-  { subject: "BAM 111 - Principles of Management", assignment: 9, test: 17, exam: 58, remark: "Strong managerial concepts." },
-];
+// Fallback templates by tier (used strictly when no database records exist)
+const DEFAULT_SECONDARY_SUBJECTS: any[] = [];
+const DEFAULT_NURSERY_SUBJECTS: any[] = [];
+const DEFAULT_TERTIARY_SUBJECTS: any[] = [];
 
 export default function StudentReportCardModal({
   isOpen,
@@ -115,40 +83,56 @@ export default function StudentReportCardModal({
   const isPrimary = tierName.toLowerCase().includes("primary") || tierName.toLowerCase().includes("basic");
   const isSecondary = !isHigherEd && !isNursery && !isPrimary;
 
-  // Resolve full multi-subject evaluation records (merges active database records with standardized mock fallback if list < 3)
+  // Single Source of Truth: Resolve real subjects strictly from studentData
   const activeSubjects = (() => {
     const rawList = studentData.subjects || [];
-    if (rawList.length >= 3) return rawList;
-
-    if (isNursery) return DEFAULT_NURSERY_SUBJECTS;
-    if (isPrimary) return DEFAULT_PRIMARY_SUBJECTS;
-    if (isHigherEd) return DEFAULT_TERTIARY_SUBJECTS;
-    return DEFAULT_SECONDARY_SUBJECTS;
+    return rawList.map((sub, idx) => {
+      const isNotEntered =
+        (sub.ca1 === null || sub.ca1 === undefined) &&
+        (sub.ca2 === null || sub.ca2 === undefined) &&
+        (sub.exam === null || sub.exam === undefined);
+      return {
+        ...sub,
+        isNotEntered,
+        subjectPosition: sub.subjectPosition || `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
+      };
+    });
   })();
 
   // Compute calculated metrics across all subjects
   const evaluatedSubjects = activeSubjects.map((sub: any) => {
+    if (sub.isNotEntered) {
+      return {
+        ...sub,
+        computedTotal: null,
+        computedGrade: "Not Entered",
+        computedGp: null,
+        computedRemark: "Not Entered",
+      };
+    }
     const calc = calculateBonaVeeResult(tierName, sub);
     return {
       ...sub,
-      computedTotal: calc.total,
-      computedGrade: calc.grade,
+      computedTotal: sub.total !== undefined && sub.total !== null ? sub.total : calc.total,
+      computedGrade: sub.grade || calc.grade,
       computedGp: calc.gp,
-      computedRemark: sub.remark || getGradeRemark(calc.grade),
+      computedRemark: sub.remark || getGradeRemark(sub.grade || calc.grade),
     };
   });
 
-  const totalPossible = evaluatedSubjects.length * 100;
-  const aggregateScore = evaluatedSubjects.reduce((acc, s) => acc + s.computedTotal, 0);
-  const averagePercentage = evaluatedSubjects.length > 0 ? (aggregateScore / evaluatedSubjects.length).toFixed(1) : "0.0";
+  // Exclude unentered / missing subjects from Total and Average
+  const enteredSubjects = evaluatedSubjects.filter((s: any) => !s.isNotEntered && s.computedTotal !== null && s.computedTotal !== undefined);
+  const totalPossible = enteredSubjects.length * 100;
+  const aggregateScore = enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
+  const averagePercentage = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length).toFixed(1) : "0.0";
   const overallAvgNum = parseFloat(averagePercentage);
-  const overallGrade = calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade;
-  const overallRemark = getGradeRemark(overallGrade);
+  const overallGrade = enteredSubjects.length > 0 ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade : "—";
+  const overallRemark = enteredSubjects.length > 0 ? getGradeRemark(overallGrade) : "No Grades Entered";
 
   // Position Suffix
-  const rankNumber = studentData.rank || 1;
-  const totalStudents = studentData.totalStudents || 28;
-  const positionString = rankNumber === 1 ? "1st" : rankNumber === 2 ? "2nd" : rankNumber === 3 ? "3rd" : `${rankNumber}th`;
+  const rankNumber = studentData.rank;
+  const totalStudents = studentData.totalStudents || 1;
+  const positionString = rankNumber ? `${rankNumber}${rankNumber === 1 ? "st" : rankNumber === 2 ? "nd" : rankNumber === 3 ? "rd" : "th"}` : "—";
 
   const handlePrint = () => {
     window.print();
@@ -402,12 +386,12 @@ export default function StudentReportCardModal({
                     {/* Primary Columns */}
                     {isPrimary && (
                       <>
-                        <th className="px-3 py-3.5 text-center">Assign (10)</th>
-                        <th className="px-3 py-3.5 text-center">Test (20)</th>
-                        <th className="px-3 py-3.5 text-center">Proj (10)</th>
+                        <th className="px-3 py-3.5 text-center">1st CA (20)</th>
+                        <th className="px-3 py-3.5 text-center">2nd CA (20)</th>
                         <th className="px-3 py-3.5 text-center">Exam (60)</th>
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
+                        <th className="px-3 py-3.5 text-center">Position</th>
                         <th className="px-5 py-3.5 text-left">Remark</th>
                       </>
                     )}
@@ -476,17 +460,33 @@ export default function StudentReportCardModal({
                       {/* Primary Row Data */}
                       {isPrimary && (
                         <>
-                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{sub.assignment ?? "—"}</td>
-                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{sub.test ?? "—"}</td>
-                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{sub.project ?? "—"}</td>
-                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{sub.exam ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono font-extrabold text-slate-900 dark:text-white">{sub.computedTotal}</td>
+                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered || sub.ca1 === null || sub.ca1 === undefined ? "—" : sub.ca1}
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered || sub.ca2 === null || sub.ca2 === undefined ? "—" : sub.ca2}
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered || sub.exam === null || sub.exam === undefined ? "—" : sub.exam}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-extrabold text-slate-900 dark:text-white">
+                            {sub.isNotEntered || sub.computedTotal === null || sub.computedTotal === undefined ? "—" : sub.computedTotal}
+                          </td>
                           <td className="px-3 py-3 text-center">
-                            <span className="inline-block px-2 py-0.5 rounded font-black font-mono text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {sub.computedGrade}
+                            <span className={`inline-block px-2 py-0.5 rounded font-black font-mono text-[11px] ${
+                              sub.isNotEntered
+                                ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}>
+                              {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                             </span>
                           </td>
-                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">{sub.computedRemark}</td>
+                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
+                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
+                            {sub.computedRemark}
+                          </td>
                         </>
                       )}
 
@@ -514,6 +514,13 @@ export default function StudentReportCardModal({
                       )}
                     </tr>
                   ))}
+                  {evaluatedSubjects.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400 dark:text-slate-500 italic">
+                        No grade records found for this student. Grades appear here once entered in the Teacher Gradebook.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -613,6 +620,16 @@ export default function StudentReportCardModal({
                 <span>Next Term Resumption Date:</span>
               </div>
               <span className="font-mono text-amber-300">Monday, 11th January 2027</span>
+            </div>
+
+            {/* Official Verification Footer */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2">
+              <div>
+                Generated from Teacher Gradebook • {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+              </div>
+              <div className="font-semibold text-slate-700 dark:text-slate-300">
+                Approved By Principal / Head Teacher
+              </div>
             </div>
 
           </div>

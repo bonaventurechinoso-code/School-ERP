@@ -429,6 +429,28 @@ export async function saveClassroomGrades(
   grades: GradeEntryPayload[]
 ) {
   try {
+    // Strict Validation: 1st CA (0-20), 2nd CA (0-20), Exam (0-60)
+    for (const item of grades) {
+      if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > 20)) {
+        return {
+          success: false,
+          error: `Validation Error: 1st CA score (${item.ca1}) is out of range. Allowed range is 0 - 20.`,
+        };
+      }
+      if (item.ca2 !== undefined && item.ca2 !== null && (item.ca2 < 0 || item.ca2 > 20)) {
+        return {
+          success: false,
+          error: `Validation Error: 2nd CA score (${item.ca2}) is out of range. Allowed range is 0 - 20.`,
+        };
+      }
+      if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > 60)) {
+        return {
+          success: false,
+          error: `Validation Error: Exam score (${item.exam}) is out of range. Allowed range is 0 - 60.`,
+        };
+      }
+    }
+
     const tenantDb = getTenantClient(schoolId);
 
     // Helper to resolve grade letter
@@ -599,13 +621,37 @@ export async function saveClassroomGrades(
       }
     });
 
+    const now = new Date();
+    const timestampStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+    // Record Grade Audit Log
+    try {
+      await basePrisma.auditLog.create({
+        data: {
+          schoolId,
+          action: "GRADE_RECORD_SAVE",
+          target: `${className} - ${subject} (${term})`,
+          metadata: {
+            className,
+            subject,
+            term,
+            academicYear,
+            studentCount: grades.length,
+            timestamp: now.toISOString(),
+          },
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[saveClassroomGrades] Audit log fallback:", auditErr);
+    }
+
     // Invalidate caches & revalidate paths so Admin broadsheet immediately reflects
     await invalidateGradingNamespace(schoolId);
     safeRevalidate(`/[schoolDomain]/exams`, "page");
     safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     safeRevalidate(`/[schoolDomain]/report-cards`, "page");
 
-    return { success: true, count: grades.length };
+    return { success: true, count: grades.length, timestamp: timestampStr };
   } catch (error: any) {
     console.error("[saveClassroomGrades Error]:", error);
     return {

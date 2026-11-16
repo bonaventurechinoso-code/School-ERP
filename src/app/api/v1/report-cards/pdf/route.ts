@@ -85,99 +85,96 @@ export async function GET(req: NextRequest) {
       : term === "Third Term" ? ["Third Term", "3rd Term"]
       : [term];
 
-    // Priority A: AcademicRecord
-    const academicRecords = await tenantDb.academicRecord.findMany({
+    // Priority 1: GradeRecord (Single Source of Truth)
+    const rawGradeRecords = await tenantDb.gradeRecord.findMany({
       where: {
         schoolId: tenantId,
         studentId: student.id,
         term: { in: termVariants },
       },
-      orderBy: { subject: "asc" },
+      orderBy: { updatedAt: "desc" },
     });
 
-    // Priority B: GradeRecord
-    const gradeRecords = await tenantDb.gradeRecord.findMany({
+    // Deduplicate by subject
+    const subjectRecordMap = new Map<string, any>();
+    for (const gr of rawGradeRecords) {
+      if (!subjectRecordMap.has(gr.subject)) {
+        subjectRecordMap.set(gr.subject, gr);
+      }
+    }
+    const gradeRecords = Array.from(subjectRecordMap.values());
+
+    // Priority 2: AcademicRecord (Fallback only if no GradeRecord exists)
+    const academicRecords = gradeRecords.length === 0 ? await tenantDb.academicRecord.findMany({
       where: {
         schoolId: tenantId,
         studentId: student.id,
         term: { in: termVariants },
       },
       orderBy: { subject: "asc" },
-    });
+    }) : [];
 
     // 4. Transform Records into ReportCardSubjectScores
     const subjectsMap = new Map<string, ReportCardSubjectScore>();
 
-    if (academicRecords.length > 0) {
-      academicRecords.forEach((ar, idx) => {
-        subjectsMap.set(ar.subject, {
-          subject: ar.subject,
-          ca1: Number(ar.test1 || 18),
-          ca2: Number(ar.test2 || ar.midTerm || 17),
-          exam: Number(ar.finalExam || 54),
-          total: Number(ar.totalScore || 85),
-          grade: ar.gradeLetter || "A1",
-          subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
-          classAverage: 68,
-          remark: ar.teacherRemarks || "Distinction in subject concepts",
-        });
-      });
-    } else if (gradeRecords.length > 0) {
+    if (gradeRecords.length > 0) {
       gradeRecords.forEach((gr, idx) => {
-        const total = Number(gr.totalScore || 85);
-        const letter = total >= 80 ? "A1" : total >= 70 ? "B2" : total >= 65 ? "B3" : total >= 50 ? "C4" : "Pass";
+        const ca1 = gr.ca1 !== null && gr.ca1 !== undefined ? Number(gr.ca1) : 0;
+        const ca2 = gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0;
+        const exam = gr.exam !== null && gr.exam !== undefined ? Number(gr.exam) : 0;
+        const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + ca2 + exam);
+        const letter = total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail";
         subjectsMap.set(gr.subject, {
           subject: gr.subject,
-          ca1: Number(gr.ca1 || 18),
-          ca2: Number(gr.ca2 || 17),
-          exam: Number(gr.exam || 54),
+          ca1,
+          ca2,
+          exam,
           total,
           grade: letter,
           subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
-          remark: "Very good academic performance",
+          remark: letter === "Distinction" ? "Distinction in subject concepts" : letter === "Very Good" ? "Very good academic performance" : "Satisfactory effort",
+        });
+      });
+    } else if (academicRecords.length > 0) {
+      academicRecords.forEach((ar, idx) => {
+        const ca1 = ar.test1 !== null && ar.test1 !== undefined ? Number(ar.test1) : 0;
+        const ca2 = (ar.test2 !== null && ar.test2 !== undefined ? Number(ar.test2) : (ar.midTerm !== null && ar.midTerm !== undefined ? Number(ar.midTerm) : 0));
+        const exam = ar.finalExam !== null && ar.finalExam !== undefined ? Number(ar.finalExam) : 0;
+        const total = ar.totalScore !== null && ar.totalScore !== undefined ? Number(ar.totalScore) : (ca1 + ca2 + exam);
+        subjectsMap.set(ar.subject, {
+          subject: ar.subject,
+          ca1,
+          ca2,
+          exam,
+          total,
+          grade: ar.gradeLetter || (total >= 75 ? "Distinction" : total >= 65 ? "Very Good" : total >= 50 ? "Credit" : total >= 40 ? "Pass" : "Fail"),
+          subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
+          classAverage: 68,
+          remark: ar.teacherRemarks || "Consistent academic performance",
         });
       });
     }
 
     let subjectsList = Array.from(subjectsMap.values());
 
-    // If no records saved yet, provide standard curriculum subjects for their tier
-    if (subjectsList.length === 0) {
-      if (tierCategory === "SECONDARY") {
-        subjectsList = [
-          { subject: "General Mathematics", ca1: 18, ca2: 17, exam: 54, total: 89, grade: "A1", subjectPosition: "1st", classAverage: 68, remark: "Distinction in concepts" },
-          { subject: "English Language", ca1: 16, ca2: 18, exam: 50, total: 84, grade: "A1", subjectPosition: "2nd", classAverage: 65, remark: "Strong comprehension" },
-          { subject: "Biology", ca1: 17, ca2: 17, exam: 53, total: 87, grade: "A1", subjectPosition: "1st", classAverage: 69, remark: "Curious and attentive" },
-          { subject: "Physics", ca1: 17, ca2: 16, exam: 52, total: 85, grade: "A1", subjectPosition: "1st", classAverage: 66, remark: "Excellent practicals" },
-          { subject: "Chemistry", ca1: 15, ca2: 16, exam: 48, total: 79, grade: "B2", subjectPosition: "3rd", classAverage: 64, remark: "Good grasp of topics" },
-          { subject: "Civic Education", ca1: 16, ca2: 17, exam: 51, total: 84, grade: "A1", subjectPosition: "2nd", classAverage: 67, remark: "High moral standing" },
-          { subject: "Data Processing / ICT", ca1: 19, ca2: 18, exam: 56, total: 93, grade: "A1", subjectPosition: "1st", classAverage: 72, remark: "Superb digital literacy" },
-          { subject: "Economics", ca1: 18, ca2: 17, exam: 55, total: 90, grade: "A1", subjectPosition: "1st", classAverage: 70, remark: "Imaginative & analytical" },
-        ];
-      } else {
-        subjectsList = [
-          { subject: "Mathematics", assignment: 10, test: 19, exam: 54, total: 83, grade: "A1", subjectPosition: "1st", classAverage: 68, remark: "Rapid calculation and precision" },
-          { subject: "English Studies", assignment: 9, test: 18, exam: 50, total: 77, grade: "B2", subjectPosition: "2nd", classAverage: 65, remark: "Eloquent reading and neat hand" },
-          { subject: "Basic Science & Technology", assignment: 9, test: 17, exam: 48, total: 74, grade: "B3", subjectPosition: "1st", classAverage: 66, remark: "Enthusiastic in experiments" },
-          { subject: "National Values Education", assignment: 9, test: 18, exam: 51, total: 78, grade: "B2", subjectPosition: "2nd", classAverage: 67, remark: "Disciplined and respectful" },
-          { subject: "Digital Literacy / ICT", assignment: 10, test: 19, exam: 56, total: 85, grade: "A1", subjectPosition: "1st", classAverage: 72, remark: "Sharp computing intuition" },
-          { subject: "Cultural & Creative Arts", assignment: 8, test: 17, exam: 46, total: 71, grade: "B3", subjectPosition: "1st", classAverage: 70, remark: "Creative artistic expression" },
-        ];
-      }
-    }
+    // Single Source of Truth: Never inject fake subjects in production
+    // If no records saved yet, leave subjectsList empty!
 
     // Calculate Totals & Summary
     const totalScore = subjectsList.reduce((acc, curr) => acc + curr.total, 0);
     const maxPossibleScore = subjectsList.length * 100;
     const averageScore = subjectsList.length > 0 ? (totalScore / subjectsList.length).toFixed(1) : "0.0";
-    const overallGrade = Number(averageScore) >= 80 ? "A1" : Number(averageScore) >= 70 ? "B2" : Number(averageScore) >= 60 ? "C4" : "Pass";
+    const avgNum = Number(averageScore);
+    const overallGrade = tierCategory === "PRIMARY"
+      ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
+      : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9");
     const admissionNumber = student.admissionNumber || "Pending";
 
     const pdfData: ReportCardPdfData = {
-      schoolName: school?.name || "Greenwood Academy",
-      schoolMotto: "Excellence, Character & Future Leadership",
-      schoolAddress: "Lekki Peninsula, Lagos, Nigeria • registry@greenwood.sch.ng",
+      schoolName: school?.name || "Egede Primary School",
+      schoolMotto: "Knowledge, Discipline and Excellence",
+      schoolAddress: "Ifite-Ogwari, Ayamelum LGA, Anambra State, Nigeria",
       session,
       term,
       studentName: `${student.firstName} ${student.lastName}`.trim(),

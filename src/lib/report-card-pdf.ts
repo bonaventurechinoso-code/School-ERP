@@ -137,12 +137,12 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       doc.font("Helvetica-Bold")
         .fontSize(8.5)
         .fillColor("#FDE68A")
-        .text(data.term.toUpperCase(), pageWidth - margin - 110, currentY + 14, { width: 100, align: "center" });
+        .text((data.term || "1st Term").toUpperCase(), pageWidth - margin - 110, currentY + 14, { width: 100, align: "center" });
 
       doc.font("Helvetica")
         .fontSize(8)
         .fillColor("#E2E8F0")
-        .text(data.session, pageWidth - margin - 110, currentY + 26, { width: 100, align: "center" });
+        .text(data.session || "2026/2027", pageWidth - margin - 110, currentY + 26, { width: 100, align: "center" });
 
       currentY += 60;
 
@@ -200,12 +200,20 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       const metricBoxW = (contentWidth - 12) / 5;
       const metricBoxH = 34;
 
+      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail") : "—");
+      const gradeRemarkSub = overallGradeVal === "Distinction" ? "Distinction"
+        : overallGradeVal === "Very Good" ? "Very Good"
+        : overallGradeVal === "Credit" ? "Credit"
+        : overallGradeVal === "Pass" ? "Pass"
+        : overallGradeVal === "Fail" ? "Needs Improvement"
+        : "Standing";
+
       const metrics = [
-        { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 28} students`, color: "#1E3A8A" },
-        { label: "TOTAL SCORE", val: String(data.totalScore || "724"), sub: `Max: ${data.maxPossibleScore || 800}`, color: "#0F172A" },
-        { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "90.5%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
-        { label: "OVERALL GRADE", val: data.overallGrade || "A1", sub: "Distinction", color: "#16A34A" },
-        { label: "STATUS / REMARK", val: "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
+        { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
+        { label: "TOTAL SCORE", val: data.totalScore !== undefined && data.totalScore !== null ? String(data.totalScore) : "0", sub: `Max: ${data.maxPossibleScore ?? (data.subjects.length * 100)}`, color: "#0F172A" },
+        { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
+        { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
+        { label: "STATUS / REMARK", val: overallGradeVal === "Fail" ? "NEEDS SUPPORT" : "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
       ];
 
       metrics.forEach((m, idx) => {
@@ -224,8 +232,8 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 40;
 
-      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE
-      const tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "CA 1", "CA 2", "EXAM", "TOTAL", "GRADE", "POS.", "AVG", "REMARK"];
+      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60)
+      const tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "REMARK"];
       const colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
 
       // Table Header Row
@@ -246,63 +254,70 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 16;
 
-      // Render Subjects List
-      const subjects = data.subjects && data.subjects.length > 0 ? data.subjects : [
-        { subject: "Mathematics", ca1: 18, ca2: 17, exam: 54, total: 89, grade: "A1", subjectPosition: "1st", classAverage: 68, remark: "Distinction in concepts" },
-        { subject: "English Language", ca1: 16, ca2: 18, exam: 50, total: 84, grade: "A1", subjectPosition: "2nd", classAverage: 65, remark: "Strong comprehension" },
-        { subject: "Basic Science & Technology", ca1: 17, ca2: 16, exam: 52, total: 85, grade: "A1", subjectPosition: "1st", classAverage: 66, remark: "Excellent practicals" },
-        { subject: "Digital Technologies / ICT", ca1: 19, ca2: 18, exam: 56, total: 93, grade: "A1", subjectPosition: "1st", classAverage: 72, remark: "Superb digital literacy" },
-        { subject: "Civic Education", ca1: 16, ca2: 17, exam: 51, total: 84, grade: "A1", subjectPosition: "2nd", classAverage: 67, remark: "High moral standing" },
-        { subject: "Agricultural Science", ca1: 17, ca2: 17, exam: 53, total: 87, grade: "A1", subjectPosition: "1st", classAverage: 69, remark: "Curious and attentive" },
-        { subject: "Social Studies", ca1: 15, ca2: 16, exam: 48, total: 79, grade: "B2", subjectPosition: "3rd", classAverage: 64, remark: "Good grasp of topics" },
-        { subject: "Cultural & Creative Arts", ca1: 18, ca2: 17, exam: 55, total: 90, grade: "A1", subjectPosition: "1st", classAverage: 70, remark: "Imaginative & neat" },
-      ];
+      // Render Subjects List strictly from database (Single Source of Truth)
+      const subjects = data.subjects && data.subjects.length > 0 ? data.subjects : [];
 
       const rowHeight = 15;
-      subjects.slice(0, 11).forEach((sub, rowIdx) => {
-        const isEven = rowIdx % 2 === 0;
-        doc.rect(margin, currentY, contentWidth, rowHeight)
-          .fillColor(isEven ? "#FFFFFF" : "#F8FAFC")
+      if (subjects.length === 0) {
+        doc.rect(margin, currentY, contentWidth, rowHeight * 2)
+          .fillColor("#FFFFFF")
           .fill()
           .strokeColor("#E2E8F0")
           .lineWidth(0.5)
           .stroke();
+        doc.font("Helvetica-Oblique")
+          .fontSize(7)
+          .fillColor("#94A3B8")
+          .text("No assessment scores entered yet in Teacher Gradebook for this session.", margin + 10, currentY + 10, { width: contentWidth - 20, align: "center" });
+        currentY += rowHeight * 2;
+      } else {
+        subjects.slice(0, 11).forEach((sub, rowIdx) => {
+          const isEven = rowIdx % 2 === 0;
+          doc.rect(margin, currentY, contentWidth, rowHeight)
+            .fillColor(isEven ? "#FFFFFF" : "#F8FAFC")
+            .fill()
+            .strokeColor("#E2E8F0")
+            .lineWidth(0.5)
+            .stroke();
 
-        let rowX = margin;
-        const subPosition = sub.subjectPosition || `${rowIdx + 1}${rowIdx === 0 ? "st" : rowIdx === 1 ? "nd" : rowIdx === 2 ? "rd" : "th"}`;
-        const rowVals = [
-          sub.subject,
-          String(sub.ca1 !== undefined ? sub.ca1 : sub.assignment || 18),
-          String(sub.ca2 !== undefined ? sub.ca2 : sub.test || 17),
-          String(sub.exam || 54),
-          String(sub.total),
-          sub.grade,
-          subPosition,
-          String(sub.classAverage || 68),
-          sub.remark || "Satisfactory",
-        ];
+          let rowX = margin;
+          const subPosition = sub.subjectPosition || `${rowIdx + 1}${rowIdx === 0 ? "st" : rowIdx === 1 ? "nd" : rowIdx === 2 ? "rd" : "th"}`;
+          const ca1Str = sub.ca1 !== null && sub.ca1 !== undefined ? String(sub.ca1) : "—";
+          const ca2Str = sub.ca2 !== null && sub.ca2 !== undefined ? String(sub.ca2) : "—";
+          const examStr = sub.exam !== null && sub.exam !== undefined ? String(sub.exam) : "—";
+          const totalStr = sub.total !== null && sub.total !== undefined ? String(sub.total) : "—";
 
-        rowVals.forEach((val, cIdx) => {
-          const align = cIdx === 0 ? "left" : cIdx === rowVals.length - 1 ? "left" : "center";
-          const paddingLeft = cIdx === 0 ? 6 : 0;
-          const isBold = cIdx === 0 || cIdx === 4 || cIdx === 5;
-          const font = isBold ? "Helvetica-Bold" : "Helvetica";
-          let color = "#1E293B";
-          if (cIdx === 5) {
-            color = val.startsWith("A") ? "#15803D" : val.startsWith("B") ? "#2563EB" : val.startsWith("C") ? "#D97706" : "#E11D48";
-          } else if (cIdx === 4) {
-            color = "#0F172A";
-          }
+          const rowVals = [
+            sub.subject,
+            ca1Str,
+            ca2Str,
+            examStr,
+            totalStr,
+            sub.grade || "—",
+            subPosition,
+            String(sub.classAverage || 68),
+            sub.remark || "Satisfactory",
+          ];
 
-          doc.font(font)
-            .fontSize(7)
-            .fillColor(color)
-            .text(val, rowX + paddingLeft, currentY + 4, { width: colWidths[cIdx] - paddingLeft, align });
-          rowX += colWidths[cIdx];
+          rowVals.forEach((val, cIdx) => {
+            const align = cIdx === 0 ? "left" : cIdx === rowVals.length - 1 ? "left" : "center";
+            const paddingLeft = cIdx === 0 ? 6 : 0;
+            const isBold = cIdx === 0 || cIdx === 4 || cIdx === 5;
+            const font = isBold ? "Helvetica-Bold" : "Helvetica";
+            let color = "#1E293B";
+            if (cIdx === 5) {
+              color = val === "Distinction" || val === "A1" ? "#047857" : val === "Very Good" || val === "B2" || val === "B3" ? "#0F766E" : val === "Fail" || val === "F9" ? "#B91C1C" : "#1D4ED8";
+            }
+            doc.font(font)
+              .fontSize(6)
+              .fillColor(color)
+              .text(val, rowX + paddingLeft, currentY + 4, { width: colWidths[cIdx] - paddingLeft, align });
+            rowX += colWidths[cIdx];
+          });
+
+          currentY += rowHeight;
         });
-
-        currentY += rowHeight;
-      });
+      }
 
       currentY += 8;
 
@@ -434,7 +449,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fontSize(5.5)
         .fillColor("#94A3B8")
         .text(
-          "Generated securely via BonaVee Institutional School ERP • Multi-Tenant Cryptographic Cloud • Document Ref: BV-REP-" +
+          "Generated from Teacher Gradebook • Approved By Principal • Document Ref: BV-REP-" +
             Date.now().toString(36).toUpperCase(),
           margin + 200,
           currentY + 4,

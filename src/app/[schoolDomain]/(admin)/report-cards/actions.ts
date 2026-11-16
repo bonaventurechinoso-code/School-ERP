@@ -105,3 +105,46 @@ export async function fetchStudentReportCardAction(
     return { success: false, error: error.message || "Failed to fetch student report card." };
   }
 }
+
+/**
+ * Server Action: Principal approval and lock of class report cards
+ */
+export async function approveClassReportCardsAction(
+  schoolId: string,
+  className: string,
+  term: string,
+  academicYear: string
+) {
+  try {
+    const { basePrisma } = await import("@/lib/tenant-prisma");
+    const updated = await basePrisma.reportCard.updateMany({
+      where: {
+        schoolId,
+        className,
+        term,
+        academicYear,
+      },
+      data: {
+        status: "APPROVED",
+      },
+    });
+
+    await basePrisma.auditLog.create({
+      data: {
+        schoolId,
+        action: "PRINCIPAL_REPORT_CARD_APPROVAL",
+        target: `${className} (${term})`,
+        metadata: {
+          approvedAt: new Date().toISOString(),
+          count: updated.count,
+        },
+      },
+    });
+
+    revalidatePath("/[schoolDomain]/report-cards", "page");
+    return { success: true, count: updated.count };
+  } catch (error: any) {
+    console.error("[approveClassReportCardsAction] Error:", error);
+    return { success: false, error: error.message || "Failed to approve class report cards." };
+  }
+}

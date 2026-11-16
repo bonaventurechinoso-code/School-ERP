@@ -41,10 +41,9 @@ export const TIER_DEFAULT_WEIGHTS: Record<InstitutionalTier, WeightComponent[]> 
     { key: "affective", label: "Affective", weight: 20, max: 100, placeholder: "0 - 100" },
   ],
   "Primary School": [
-    { key: "assignment", label: "Assignment", weight: 10, max: 10, placeholder: "0 - 10" },
-    { key: "test", label: "Test", weight: 20, max: 20, placeholder: "0 - 20" },
-    { key: "project", label: "Project", weight: 10, max: 10, placeholder: "0 - 10" },
-    { key: "exam", label: "Exam", weight: 60, max: 60, placeholder: "0 - 60" },
+    { key: "ca1", label: "1st CA (Max 20)", weight: 20, max: 20, placeholder: "0 - 20" },
+    { key: "ca2", label: "2nd CA (Max 20)", weight: 20, max: 20, placeholder: "0 - 20" },
+    { key: "exam", label: "Exam (Max 60)", weight: 60, max: 60, placeholder: "0 - 60" },
   ],
   "Secondary School": [
     { key: "ca1", label: "CA1 (Max 20)", weight: 20, max: 20, placeholder: "0 - 20" },
@@ -148,7 +147,16 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "F";
   }
 
-  // WAEC / NECO Authentic Scale for Nigerian Primary and Secondary Schools
+  // Primary School Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
+  if (resolved === "Primary School" || level === "Primary School") {
+    if (finalTotal >= 75) return "Distinction";
+    if (finalTotal >= 65) return "Very Good";
+    if (finalTotal >= 50) return "Credit";
+    if (finalTotal >= 40) return "Pass";
+    return "Fail";
+  }
+
+  // WAEC / NECO Authentic Scale for Nigerian Secondary Schools
   if (finalTotal >= 75) return "A1";
   if (finalTotal >= 70) return "B2";
   if (finalTotal >= 65) return "B3";
@@ -178,11 +186,11 @@ export function getTertiaryGP(finalTotal: number): number {
  */
 export function getGradeRemark(grade: string): string {
   if (!grade || grade === "—") return "—";
-  if (grade === "A1" || grade === "A") return "Excellent";
-  if (grade === "B2" || grade === "B3" || grade === "B") return "Very Good";
-  if (grade === "C4" || grade === "C5" || grade === "C6" || grade === "C") return "Credit";
-  if (grade === "D7" || grade === "E8" || grade === "D" || grade === "E") return "Pass";
-  if (grade === "F9" || grade === "F") return "Fail";
+  if (grade === "Distinction" || grade === "A1" || grade === "A") return "Distinction";
+  if (grade === "Very Good" || grade === "B2" || grade === "B3" || grade === "B") return "Very Good";
+  if (grade === "Credit" || grade === "C4" || grade === "C5" || grade === "C6" || grade === "C") return "Credit";
+  if (grade === "Pass" || grade === "D7" || grade === "E8" || grade === "D" || grade === "E") return "Pass";
+  if (grade === "Fail" || grade === "F9" || grade === "F") return "Fail";
   return "Pass";
 }
 
@@ -210,7 +218,8 @@ export function calculateBonaVeeResult(level: string, scores: any) {
   if (level === "Creche / Nursery" || resolvedLevel === "Creche / Nursery") {
     total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
   } else if (level === "Primary School" || resolvedLevel === "Primary School") {
-    total = s.assignment + s.test + s.project + s.exam; // CA1(20) + CA2(20) + Exam(60) map split
+    // NERDC 20/20/60 standard: 1st CA (20) + 2nd CA (20) + Exam (60) = 100
+    total = s.ca1 + s.ca2 + s.exam;
   } else if (level === "Secondary School" || resolvedLevel === "Secondary School") {
     total = s.ca1 + s.ca2 + s.exam; // CA1(20) + CA2(20) + Exam(60) = 100
   } else if (
