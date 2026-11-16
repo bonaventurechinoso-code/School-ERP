@@ -10,6 +10,8 @@
  * - Automated administrative remark generation (Class Teacher & Principal)
  */
 
+import { mapNurseryScoreToGrade } from "./nursery-config";
+
 export type GradingTier = "NURSERY" | "PRIMARY" | "SECONDARY";
 
 export type NarrativeMilestone = "EXCELLENT" | "DEVELOPING" | "NEEDS_IMPROVEMENT";
@@ -95,7 +97,11 @@ export function resolveGradingTier(tierName?: string, className?: string): Gradi
  * Standard Nigerian letter grade mapping across Primary and Secondary
  */
 export function mapScoreToGradeLetter(score: number, tierCategory?: string): { letter: string; gpa: number; remark: string } {
-  if (tierCategory === "PRIMARY" || tierCategory === "CRECHE" || tierCategory === "NURSERY") {
+  if (tierCategory === "NURSERY") {
+    return mapNurseryScoreToGrade(score);
+  }
+
+  if (tierCategory === "PRIMARY" || tierCategory === "CRECHE") {
     if (score >= 75) {
       return { letter: "Distinction", gpa: 5.0, remark: "Distinction" };
     } else if (score >= 65) {

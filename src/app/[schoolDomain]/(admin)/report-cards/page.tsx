@@ -419,7 +419,29 @@ function getOrdinalSuffix(rank: number): string {
   return `${rank}th`;
 }
 
-function getGradeInfo(score: number): { grade: string; badgeClass: string } {
+function getGradeInfo(score: number, tierCategory?: string): { grade: string; badgeClass: string } {
+  const normTier = (tierCategory || "").toUpperCase();
+  const isPrimary = normTier.includes("PRIMARY") || normTier.includes("BASIC") || normTier.includes("ELEMENTARY");
+  const isCreche = normTier.includes("CRECHE") || normTier.includes("PLAYGROUP");
+  const isNursery = !isCreche && (normTier.includes("NURSERY") || normTier.includes("KINDERGARTEN"));
+
+  if (isNursery) {
+    if (score >= 75) return { grade: "Excellent", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
+    if (score >= 65) return { grade: "Very Good", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
+    if (score >= 50) return { grade: "Good", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
+    if (score >= 40) return { grade: "Developing", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
+    return { grade: "Needs Support", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+  }
+
+  if (isPrimary || isCreche) {
+    if (score >= 75) return { grade: "Distinction", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
+    if (score >= 65) return { grade: "Very Good", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
+    if (score >= 50) return { grade: "Credit", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
+    if (score >= 40) return { grade: "Pass", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
+    return { grade: "Fail", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+  }
+
+  // Secondary WAEC scale
   if (score >= 75) return { grade: "A1", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
   if (score >= 70) return { grade: "B2", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
   if (score >= 65) return { grade: "B3", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
@@ -1115,7 +1137,7 @@ function ReportCardsContent() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredRoster.map((student) => {
                     const pos = getPositionBadge(student.rank);
-                    const grade = getGradeInfo(student.total);
+                    const grade = getGradeInfo(student.total, student.tier || academicTier);
                     const initials = student.name
                       .split(/[\s,]+/)
                       .filter(Boolean)
@@ -1262,49 +1284,58 @@ function ReportCardsContent() {
                           <div className="inline-flex items-center justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
+                                const resolvedSubjects = (student.subjects && student.subjects.length > 0)
+                                  ? student.subjects.map((sub: any) => ({
+                                      subject: sub.subject,
+                                      ca1: sub.ca1,
+                                      ca2: sub.ca2,
+                                      exam: sub.exam,
+                                      total: sub.total,
+                                      grade: sub.grade || grade.grade,
+                                      subjectPosition: student.rank > 0 ? getOrdinalSuffix(student.rank) : "1st",
+                                      remark: sub.remarks || (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : "Pass"),
+                                    }))
+                                  : [
+                                      {
+                                        subject: subject || "Continuous Assessment",
+                                        ca1: student.ca1Num,
+                                        ca2: student.ca2Num,
+                                        exam: student.examNum,
+                                        total: student.total,
+                                        grade: grade.grade,
+                                        subjectPosition:
+                                          student.rank > 0
+                                            ? getOrdinalSuffix(student.rank)
+                                            : "—",
+                                        remark:
+                                          grade.grade === "Distinction" || grade.grade === "Excellent"
+                                            ? "Distinction in subject concepts"
+                                            : grade.grade.startsWith("Very")
+                                            ? "Very good performance"
+                                            : grade.grade.startsWith("Credit") || grade.grade === "Good"
+                                            ? "Credit pass"
+                                            : "Pass",
+                                      },
+                                    ];
+
                                 setSelectedStudentForModal({
                                   id: student.id,
                                   name: student.name,
                                   admissionNumber: student.admissionNumber,
-                                  currentClass: className || "JSS 1",
-                                  term: term || "First Term",
+                                  currentClass: className || student.currentClass || "Primary 1",
+                                  term: term || "1st Term",
                                   academicYear: "2026/2027",
-                                  tier: academicTier,
+                                  tier: student.tier || academicTier,
                                   rank: student.rank,
                                   totalStudents: stats.totalStudents,
                                   overallTotal: student.total,
                                   overallAverage: student.total,
                                   overallGrade: grade.grade,
                                   status: student.status,
-                                  subjects: [
-                                    {
-                                      subject:
-                                        subject ||
-                                        (academicTier === "SECONDARY"
-                                          ? "Mathematics"
-                                          : "General Studies"),
-                                      ca1: student.ca1Num,
-                                      ca2: student.ca2Num,
-                                      exam: student.examNum,
-                                      total: student.total,
-                                      grade: grade.grade,
-                                      subjectPosition:
-                                        student.rank > 0
-                                          ? getOrdinalSuffix(student.rank)
-                                          : "—",
-                                      remark:
-                                        grade.grade === "A1"
-                                          ? "Distinction in subject concepts"
-                                          : grade.grade.startsWith("B")
-                                          ? "Very good performance"
-                                          : grade.grade.startsWith("C")
-                                          ? "Credit pass"
-                                          : "Pass",
-                                    },
-                                  ],
-                                })
-                              }
+                                  subjects: resolvedSubjects,
+                                });
+                              }}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs shadow-2xs transition cursor-pointer"
                               title="View Terminal Report Sheet"
                             >

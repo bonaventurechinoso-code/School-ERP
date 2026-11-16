@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Globe, Settings, ExternalLink, ShieldCheck, Sparkles, Landmark, CheckCircle2, AlertTriangle } from "lucide-react";
 import { EntranceExamSettings } from "./actions";
 import { resolveCrecheConfig } from "@/lib/creche-config";
+import { resolveNurseryConfig } from "@/lib/nursery-config";
 
 export default async function PortalSettingsPage({
   params: paramsPromise,
@@ -49,6 +50,7 @@ export default async function PortalSettingsPage({
   const initialHeroVideo = schoolConfig.customHeroVideo || "";
   const initialHeroType: "image" | "video" = schoolConfig.customHeroType || (initialHeroVideo ? "video" : "image");
   const initialCrecheConfig = resolveCrecheConfig(school);
+  const initialNurseryConfig = resolveNurseryConfig(school);
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -130,6 +132,7 @@ export default async function PortalSettingsPage({
         initialHeroVideo={initialHeroVideo}
         initialHeroType={initialHeroType}
         initialCrecheConfig={initialCrecheConfig}
+        initialNurseryConfig={initialNurseryConfig}
         initialTab={initialTab}
       />
     </div>

@@ -66,7 +66,7 @@ export function StudentReportCardPortalModule({
           isNotEntered,
           subjectPosition: (ca as any).subjectPosition || (idx === 0 ? "1st" : idx === 1 ? "2nd" : idx === 2 ? "3rd" : `${idx + 1}th`),
           classAverage: (ca as any).classAverage || 68,
-          remark: (ca as any).remark || (ca.total >= 75 ? "Distinction" : ca.total >= 65 ? "Very Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail"),
+          remark: (ca as any).remark || (ca.grade ? getGradeRemark(ca.grade) : (ca.total >= 75 ? "Distinction" : ca.total >= 65 ? "Very Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail")),
         };
       });
     }
@@ -549,11 +549,11 @@ export function StudentReportCardPortalModule({
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs ${
-                            sub.computedGrade === "Distinction" ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200"
+                            sub.computedGrade === "Excellent" || sub.computedGrade === "Distinction" ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200"
                               : sub.computedGrade === "Very Good" ? "bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200"
-                                : sub.computedGrade === "Credit" ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200"
-                                  : sub.computedGrade === "Pass" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200"
-                                    : sub.computedGrade === "Fail" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200"
+                                : sub.computedGrade === "Good" || sub.computedGrade === "Credit" ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200"
+                                  : sub.computedGrade === "Developing" || sub.computedGrade === "Pass" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200"
+                                    : sub.computedGrade === "Needs Support" || sub.computedGrade === "Fail" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200"
                                       : "bg-slate-100 text-slate-500"
                           }`}>
                             {sub.isNotEntered ? "Not Entered" : sub.computedGrade}

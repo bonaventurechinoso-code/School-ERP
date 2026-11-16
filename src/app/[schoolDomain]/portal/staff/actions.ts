@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
+import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -192,18 +193,18 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       leaveRequests,
       staffProfile: currentStaff
         ? {
-            id: currentStaff.id,
-            firstName: currentStaff.firstName,
-            lastName: currentStaff.lastName,
-            email: currentStaff.email,
-            role: currentStaff.role,
-            department: currentStaff.department?.name || "Academics",
-            baseSalary: currentStaff.baseSalary || 0,
-            bankName: currentStaff.bankName || "First Bank of Nigeria",
-            bankAccountNumber: currentStaff.bankAccountNumber || "N/A",
-            accountName: currentStaff.accountName || `${currentStaff.firstName} ${currentStaff.lastName}`,
-            status: currentStaff.status,
-          }
+          id: currentStaff.id,
+          firstName: currentStaff.firstName,
+          lastName: currentStaff.lastName,
+          email: currentStaff.email,
+          role: currentStaff.role,
+          department: currentStaff.department?.name || "Academics",
+          baseSalary: currentStaff.baseSalary || 0,
+          bankName: currentStaff.bankName || "First Bank of Nigeria",
+          bankAccountNumber: currentStaff.bankAccountNumber || "N/A",
+          accountName: currentStaff.accountName || `${currentStaff.firstName} ${currentStaff.lastName}`,
+          status: currentStaff.status,
+        }
         : null,
       payrollRecords: currentStaff?.PayrollRecord || [],
       timetable: currentStaff?.Timetable || [],
@@ -447,15 +448,40 @@ export async function saveClassroomGrades(
     }
 
     const isCreche = isCrecheClass(className);
+    const isNursery = !isCreche && isNurseryClass(className);
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
       select: { tierDatabasesConfig: true, tier: true },
     });
     const crecheConfig = resolveCrecheConfig(school);
-    const isPrimary = !isCreche && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
+    const nurseryConfig = resolveNurseryConfig(school);
+    const isPrimary = !isCreche && !isNursery && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
 
     // Validation
-    if (isCreche) {
+    if (isNursery) {
+      for (const item of grades) {
+        if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > nurseryConfig.ca1Max)) {
+          return {
+            success: false,
+            error: `Validation Error: ${nurseryConfig.ca1Name} score (${item.ca1}) is out of range. Allowed range is 0 - ${nurseryConfig.ca1Max}.`,
+          };
+        }
+        if (item.ca2 !== undefined && item.ca2 !== null && (item.ca2 < 0 || item.ca2 > nurseryConfig.ca2Max)) {
+          return {
+            success: false,
+            error: `Validation Error: ${nurseryConfig.ca2Name} score (${item.ca2}) is out of range. Allowed range is 0 - ${nurseryConfig.ca2Max}.`,
+          };
+        }
+        if (nurseryConfig.hasExam) {
+          if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > nurseryConfig.examMax)) {
+            return {
+              success: false,
+              error: `Validation Error: Exam score (${item.exam}) is out of range. Allowed range is 0 - ${nurseryConfig.examMax}.`,
+            };
+          }
+        }
+      }
+    } else if (isCreche) {
       for (const item of grades) {
         if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > crecheConfig.ca1Max)) {
           return {
@@ -506,6 +532,9 @@ export async function saveClassroomGrades(
 
     // Helper to resolve grade letter
     function getGradeLetter(total: number): string {
+      if (isNursery) {
+        return mapNurseryScoreToGrade(total).letter;
+      }
       if (isCreche) {
         return mapCrecheScoreToGrade(total).letter;
       }
@@ -683,7 +712,7 @@ export async function saveClassroomGrades(
               letterGrade: letter,
               remarks: item.teacherRemarks || null,
             },
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
     });

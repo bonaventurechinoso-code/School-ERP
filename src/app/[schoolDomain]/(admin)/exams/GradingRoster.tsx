@@ -262,10 +262,11 @@ function resolveTierGrade(tierCategory: string, score: number): { letter: string
   }
 
   if (tierCategory === "NURSERY") {
-    if (score >= 75) return { letter: "EE", remark: "Exceeding Expectations", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
-    if (score >= 60) return { letter: "ME", remark: "Meeting Expectations", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
-    if (score >= 40) return { letter: "DV", remark: "Developing", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
-    return { letter: "EM", remark: "Emerging", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+    if (score >= 75) return { letter: "Excellent", remark: "Excellent", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 65) return { letter: "Very Good", remark: "Very Good", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+    if (score >= 50) return { letter: "Good", remark: "Good", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 40) return { letter: "Developing", remark: "Developing", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+    return { letter: "Needs Support", remark: "Needs Support", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
   }
 
   if (tierCategory === "PRIMARY") {

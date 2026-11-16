@@ -10,6 +10,7 @@
  */
 
 import { isCrecheClass } from "./creche-config";
+import { isNurseryClass, mapNurseryScoreToGrade } from "./nursery-config";
 
 export type InstitutionalTier =
   | "Creche / Nursery"
@@ -149,6 +150,14 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "F";
   }
 
+  // Nursery Scale (Age-appropriate for 3-5 year olds): Excellent (75+), Very Good (65-74), Good (50-64), Developing (40-49), Needs Support (<40)
+  if (
+    isNurseryClass(level) ||
+    (!isCrecheClass(level) && (level.toUpperCase().includes("NURSERY") || level.toUpperCase().includes("KINDERGARTEN") || level.toUpperCase().includes("KG")))
+  ) {
+    return mapNurseryScoreToGrade(finalTotal).letter;
+  }
+
   // Primary School & Creche Unified Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
   if (
     resolved === "Primary School" ||
@@ -196,6 +205,10 @@ export function getTertiaryGP(finalTotal: number): number {
  */
 export function getGradeRemark(grade: string): string {
   if (!grade || grade === "—") return "—";
+  if (grade === "Excellent") return "Excellent";
+  if (grade === "Good") return "Good";
+  if (grade === "Developing") return "Developing";
+  if (grade === "Needs Support") return "Needs Support";
   if (grade === "Distinction" || grade === "A1" || grade === "A") return "Distinction";
   if (grade === "Very Good" || grade === "B2" || grade === "B3" || grade === "B") return "Very Good";
   if (grade === "Credit" || grade === "C4" || grade === "C5" || grade === "C6" || grade === "C") return "Credit";
@@ -225,7 +238,14 @@ export function calculateBonaVeeResult(level: string, scores: any) {
   const resolvedLevel = normalizeTierLevel(level);
 
   // 1. Compute Totals based on Tier Weights
-  if (isCrecheClass(level) || level.toUpperCase().includes("CRECHE") || level.toUpperCase().includes("CRÈCHE") || level.toUpperCase().includes("DAYCARE") || level.toUpperCase().includes("PLAYGROUP")) {
+  if (isNurseryClass(level) || (!isCrecheClass(level) && (level.toUpperCase().includes("NURSERY") || level.toUpperCase().includes("KINDERGARTEN")))) {
+    // Nursery Single Source of Truth: scores come strictly from GradeRecord (ca1, ca2, exam)
+    if (scores?.ca1 !== undefined || scores?.ca2 !== undefined || scores?.exam !== undefined) {
+      total = (s.ca1 || 0) + (s.ca2 || 0) + (s.exam || 0);
+    } else {
+      total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
+    }
+  } else if (isCrecheClass(level) || level.toUpperCase().includes("CRECHE") || level.toUpperCase().includes("CRÈCHE") || level.toUpperCase().includes("DAYCARE") || level.toUpperCase().includes("PLAYGROUP")) {
     // Creche Single Source of Truth: scores come from GradeRecord (ca1, ca2, exam)
     if (scores?.ca1 !== undefined || scores?.ca2 !== undefined || scores?.exam !== undefined) {
       total = (s.ca1 || 0) + (s.ca2 || 0) + (s.exam || 0);

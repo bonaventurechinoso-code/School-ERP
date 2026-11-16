@@ -118,9 +118,9 @@ export default function StudentReportCardModal({
     return {
       ...sub,
       computedTotal: sub.total !== undefined && sub.total !== null ? sub.total : calc.total,
-      computedGrade: sub.grade || calc.grade,
+      computedGrade: (isPrimary || isNursery || isCreche) ? calc.grade : (sub.grade || calc.grade),
       computedGp: calc.gp,
-      computedRemark: sub.remark || getGradeRemark(sub.grade || calc.grade),
+      computedRemark: (isPrimary || isNursery || isCreche) ? getGradeRemark(calc.grade) : (sub.remark || getGradeRemark(sub.grade || calc.grade)),
     };
   });
 
@@ -415,14 +415,18 @@ export default function StudentReportCardModal({
                       </>
                     )}
 
-                    {/* Nursery Narrative Columns */}
+                    {/* Nursery Columns */}
                     {isNursery && (
                       <>
-                        <th className="px-4 py-3.5 text-center">Observation (40%)</th>
-                        <th className="px-4 py-3.5 text-center">Classwork (40%)</th>
-                        <th className="px-4 py-3.5 text-center">Affective (20%)</th>
+                        <th className="px-4 py-3.5 text-center">Observation (50)</th>
+                        <th className="px-4 py-3.5 text-center">Continuous Assessment (50)</th>
+                        {activeSubjects.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                          <th className="px-4 py-3.5 text-center">Exam (60)</th>
+                        )}
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
-                        <th className="px-5 py-3.5 text-left">Developmental Remark</th>
+                        <th className="px-3 py-3.5 text-center">Grade</th>
+                        <th className="px-3 py-3.5 text-center">Position</th>
+                        <th className="px-5 py-3.5 text-left">Remark</th>
                       </>
                     )}
 
@@ -550,11 +554,38 @@ export default function StudentReportCardModal({
                       {/* Nursery Row Data */}
                       {isNursery && (
                         <>
-                          <td className="px-4 py-3 text-center font-mono">{sub.observation ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono">{sub.classwork ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono">{sub.affective ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono font-extrabold">{sub.computedTotal}</td>
-                          <td className="px-5 py-3 italic">{sub.computedRemark}</td>
+                          <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered ? "—" : (sub.ca1 ?? "—")}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered ? "—" : (sub.ca2 ?? "—")}
+                          </td>
+                          {activeSubjects.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                            <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {sub.isNotEntered ? "—" : (sub.exam ?? "—")}
+                            </td>
+                          )}
+                          <td className="px-4 py-3 text-center font-mono font-black text-slate-900 dark:text-white">
+                            {sub.isNotEntered ? "—" : sub.computedTotal}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              sub.computedGrade === "Excellent" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200"
+                                : sub.computedGrade === "Very Good" ? "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border border-teal-200"
+                                  : sub.computedGrade === "Good" ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200"
+                                    : sub.computedGrade === "Developing" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200"
+                                      : sub.computedGrade === "Needs Support" ? "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200"
+                                        : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
+                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
+                            {sub.computedRemark}
+                          </td>
                         </>
                       )}
 

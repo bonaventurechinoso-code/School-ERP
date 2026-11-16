@@ -89,7 +89,43 @@ function getOrdinalSuffix(rank: number): string {
 }
 
 function resolveTierGrade(tierCategory: EducationalTierCategory, score: number) {
-  if (tierCategory === "PRIMARY" || tierCategory === "NURSERY") {
+  if (tierCategory === "NURSERY") {
+    if (score >= 75) {
+      return {
+        letter: "Excellent",
+        remark: "Excellent",
+        badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
+      };
+    }
+    if (score >= 65) {
+      return {
+        letter: "Very Good",
+        remark: "Very Good",
+        badgeColor: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800",
+      };
+    }
+    if (score >= 50) {
+      return {
+        letter: "Good",
+        remark: "Good",
+        badgeColor: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
+      };
+    }
+    if (score >= 40) {
+      return {
+        letter: "Developing",
+        remark: "Developing",
+        badgeColor: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
+      };
+    }
+    return {
+      letter: "Needs Support",
+      remark: "Needs Support",
+      badgeColor: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800",
+    };
+  }
+
+  if (tierCategory === "PRIMARY") {
     if (score >= 75) {
       return {
         letter: "Distinction",

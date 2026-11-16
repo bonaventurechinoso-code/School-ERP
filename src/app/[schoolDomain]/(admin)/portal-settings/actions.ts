@@ -6,6 +6,7 @@ import { safeRedisDel, safeRedisScanDel } from "@/lib/redis";
 import { clearL1TenantCache } from "@/lib/cache";
 import { isValidNubanAccountNumber } from "@/lib/nigerian-banks";
 import { CrecheAssessmentConfig, DEFAULT_CRECHE_CONFIG } from "@/lib/creche-config";
+import { NurseryAssessmentConfig, DEFAULT_NURSERY_CONFIG } from "@/lib/nursery-config";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -46,6 +47,7 @@ export interface UpdatePortalSettingsPayload {
   paymentInstruction?: string | null;
   entranceExamSettings?: EntranceExamSettings;
   crecheAssessmentConfig?: Partial<CrecheAssessmentConfig>;
+  nurseryAssessmentConfig?: Partial<NurseryAssessmentConfig>;
 }
 
 export async function updatePortalSettings(
@@ -136,6 +138,19 @@ export async function updatePortalSettings(
           ca2Max: Number(data.crecheAssessmentConfig.ca2Max) > 0 ? Number(data.crecheAssessmentConfig.ca2Max) : (data.crecheAssessmentConfig.hasExam ? 20 : 50),
           examName: data.crecheAssessmentConfig.examName?.trim() || existingCreche.examName || "Terminal Exam",
           examMax: data.crecheAssessmentConfig.hasExam ? (Number(data.crecheAssessmentConfig.examMax) > 0 ? Number(data.crecheAssessmentConfig.examMax) : 60) : 0,
+          totalMax: 100,
+        };
+      }
+      if (data.nurseryAssessmentConfig !== undefined) {
+        const existingNursery = existingConfig.nurseryAssessmentConfig || {};
+        nextConfig.nurseryAssessmentConfig = {
+          hasExam: data.nurseryAssessmentConfig.hasExam !== undefined ? Boolean(data.nurseryAssessmentConfig.hasExam) : (existingNursery.hasExam ?? false),
+          ca1Name: data.nurseryAssessmentConfig.ca1Name?.trim() || existingNursery.ca1Name || "Observation",
+          ca1Max: Number(data.nurseryAssessmentConfig.ca1Max) > 0 ? Number(data.nurseryAssessmentConfig.ca1Max) : (data.nurseryAssessmentConfig.hasExam ? 20 : 50),
+          ca2Name: data.nurseryAssessmentConfig.ca2Name?.trim() || existingNursery.ca2Name || "Continuous Assessment",
+          ca2Max: Number(data.nurseryAssessmentConfig.ca2Max) > 0 ? Number(data.nurseryAssessmentConfig.ca2Max) : (data.nurseryAssessmentConfig.hasExam ? 20 : 50),
+          examName: data.nurseryAssessmentConfig.examName?.trim() || existingNursery.examName || "Terminal Exam",
+          examMax: data.nurseryAssessmentConfig.hasExam ? (Number(data.nurseryAssessmentConfig.examMax) > 0 ? Number(data.nurseryAssessmentConfig.examMax) : 60) : 0,
           totalMax: 100,
         };
       }
@@ -267,5 +282,70 @@ export async function updateCrecheFormulaAction(
   } catch (error: any) {
     console.error("[updateCrecheFormulaAction Error]:", error);
     return { success: false, error: error.message || "Failed to update Creche formula." };
+  }
+}
+
+/**
+ * Server Action: Update Nursery Assessment Formula (Default: Continuous Assessment / Observation 50/50, No Exam unless enabled)
+ */
+export async function updateNurseryFormulaAction(
+  schoolId: string,
+  config: Partial<NurseryAssessmentConfig>,
+  schoolDomain?: string
+) {
+  try {
+    const currentSchool = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { tierDatabasesConfig: true, subdomain: true },
+    });
+    const existingConfig: any = (currentSchool?.tierDatabasesConfig as object) || {};
+    const existingNursery: any = existingConfig.nurseryAssessmentConfig || {};
+    const hasExam = config.hasExam !== undefined ? Boolean(config.hasExam) : (existingNursery.hasExam ?? false);
+    const updatedNursery: NurseryAssessmentConfig = {
+      hasExam,
+      ca1Name: config.ca1Name?.trim() || existingNursery.ca1Name || "Observation",
+      ca1Max: Number(config.ca1Max) > 0 ? Number(config.ca1Max) : (hasExam ? 20 : 50),
+      ca2Name: config.ca2Name?.trim() || existingNursery.ca2Name || "Continuous Assessment",
+      ca2Max: Number(config.ca2Max) > 0 ? Number(config.ca2Max) : (hasExam ? 20 : 50),
+      examName: config.examName?.trim() || existingNursery.examName || "Terminal Exam",
+      examMax: hasExam ? (Number(config.examMax) > 0 ? Number(config.examMax) : 60) : 0,
+      totalMax: 100,
+    };
+
+    const nextConfig = {
+      ...existingConfig,
+      nurseryAssessmentConfig: updatedNursery,
+    };
+
+    await basePrisma.school.update({
+      where: { id: schoolId },
+      data: {
+        tierDatabasesConfig: nextConfig as any,
+      },
+    });
+
+    await basePrisma.auditLog.create({
+      data: {
+        schoolId,
+        action: "UPDATE_NURSERY_ASSESSMENT_FORMULA",
+        target: "Admin Settings - Nursery Formula",
+        metadata: {
+          formula: updatedNursery as any,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const targetSub = schoolDomain || currentSchool?.subdomain;
+    if (targetSub) {
+      safeRevalidatePath(`/${targetSub}/portal-settings`, "page");
+      safeRevalidatePath(`/${targetSub}/exams`, "page");
+      safeRevalidatePath(`/${targetSub}/report-cards`, "page");
+    }
+
+    return { success: true, config: updatedNursery };
+  } catch (error: any) {
+    console.error("[updateNurseryFormulaAction Error]:", error);
+    return { success: false, error: error.message || "Failed to update Nursery formula." };
   }
 }

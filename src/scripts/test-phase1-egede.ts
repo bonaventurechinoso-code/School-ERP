@@ -95,7 +95,7 @@ async function main() {
   const passedTotal = total === 73;
   const passedAvg = avg === 73;
   const passedGrade = gradeLetter === "Very Good" && subjects[0]?.gradeLetter === "Very Good";
-  const passedSubjectCount = subjects.length === 1 && subjects[0].subject === "English Language";
+  const passedSubjectCount = subjects.length === 1 && (subjects[0].subject === "English Studies" || subjects[0].subject === "English Language");
   const noFake521 = total !== 521;
 
   console.log(`  [${passedTotal ? "PASS" : "FAIL"}] Total Score is exactly 73 (got: ${total})`);

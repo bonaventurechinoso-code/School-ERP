@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { isCrecheClass } from "./creche-config";
+import { isNurseryClass, mapNurseryScoreToGrade } from "./nursery-config";
 
 export interface ReportCardSubjectScore {
   subject: string;
@@ -201,12 +202,19 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       const metricBoxW = (contentWidth - 12) / 5;
       const metricBoxH = 34;
 
-      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail") : "—");
-      const gradeRemarkSub = overallGradeVal === "Distinction" ? "Distinction"
+      const isCreche = isCrecheClass(data.className) || (data.tierCategory ? isCrecheClass(data.tierCategory) : false);
+      const isNursery = !isCreche && (isNurseryClass(data.className) || (data.tierCategory ? isNurseryClass(data.tierCategory) : false));
+      const crecheHasExam = isCreche && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
+      const nurseryHasExam = isNursery && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
+      const isEarlyYearsNoExam = (isCreche && !crecheHasExam) || (isNursery && !nurseryHasExam);
+      const isEarlyYearsWithExam = (isCreche && crecheHasExam) || (isNursery && nurseryHasExam);
+
+      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (isNursery ? mapNurseryScoreToGrade(data.averageScore).letter : (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail")) : "—");
+      const gradeRemarkSub = overallGradeVal === "Distinction" || overallGradeVal === "Excellent" ? overallGradeVal
         : overallGradeVal === "Very Good" ? "Very Good"
-          : overallGradeVal === "Credit" ? "Credit"
-            : overallGradeVal === "Pass" ? "Pass"
-              : overallGradeVal === "Fail" ? "Needs Improvement"
+          : overallGradeVal === "Good" || overallGradeVal === "Credit" ? overallGradeVal
+            : overallGradeVal === "Developing" || overallGradeVal === "Pass" ? overallGradeVal
+              : overallGradeVal === "Needs Support" || overallGradeVal === "Fail" ? "Needs Support"
                 : "Standing";
 
       const metrics = [
@@ -214,7 +222,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         { label: "TOTAL SCORE", val: data.totalScore !== undefined && data.totalScore !== null ? String(data.totalScore) : "0", sub: `Max: ${data.maxPossibleScore ?? (data.subjects.length * 100)}`, color: "#0F172A" },
         { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
         { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
-        { label: "STATUS / REMARK", val: overallGradeVal === "Fail" ? "NEEDS SUPPORT" : "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
+        { label: "STATUS / REMARK", val: (overallGradeVal === "Fail" || overallGradeVal === "Needs Support") ? "NEEDS SUPPORT" : "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
       ];
 
       metrics.forEach((m, idx) => {
@@ -233,18 +241,34 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 40;
 
-      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60 for Primary, Observation/CA for Creche)
-      const isCreche = isCrecheClass(data.className) || (data.tierCategory ? isCrecheClass(data.tierCategory) : false);
-      const crecheHasExam = isCreche && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
-
+      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60 for Primary, Observation/CA for Creche & Nursery)
       let tableHeaders: string[];
       let colWidths: number[];
 
-      if (isCreche && !crecheHasExam) {
-        tableHeaders = ["ACTIVITY / CURRICULUM DISCIPLINE", "OBSERVATION (50)", "ASSESSMENT (50)", "TOTAL (100)", "GRADE", "POS.", "AVG", "DEVELOPMENTAL REMARK"];
+      if (isEarlyYearsNoExam) {
+        tableHeaders = [
+          isNursery ? "SUBJECT / LEARNING DOMAIN" : "ACTIVITY / CURRICULUM DISCIPLINE",
+          "OBSERVATION (50)",
+          "ASSESSMENT (50)",
+          "TOTAL (100)",
+          "GRADE",
+          "POS.",
+          "AVG",
+          "DEVELOPMENTAL REMARK"
+        ];
         colWidths = [190, 44, 44, 48, 42, 36, 36, 116];
-      } else if (isCreche && crecheHasExam) {
-        tableHeaders = ["ACTIVITY / CURRICULUM DISCIPLINE", "OBS. (20)", "ASSESS. (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "DEVELOPMENTAL REMARK"];
+      } else if (isEarlyYearsWithExam) {
+        tableHeaders = [
+          isNursery ? "SUBJECT / LEARNING DOMAIN" : "ACTIVITY / CURRICULUM DISCIPLINE",
+          "OBS. (20)",
+          "ASSESS. (20)",
+          "EXAM (60)",
+          "TOTAL (100)",
+          "GRADE",
+          "POS.",
+          "AVG",
+          "DEVELOPMENTAL REMARK"
+        ];
         colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
       } else {
         tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "REMARK"];
@@ -302,7 +326,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           const examStr = sub.exam !== null && sub.exam !== undefined ? String(sub.exam) : "—";
           const totalStr = sub.total !== null && sub.total !== undefined ? String(sub.total) : "—";
 
-          const rowVals = (isCreche && !crecheHasExam)
+          const rowVals = isEarlyYearsNoExam
             ? [
               sub.subject,
               ca1Str,
@@ -311,7 +335,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
               sub.grade || "—",
               subPosition,
               String(sub.classAverage || 68),
-              sub.remark || "Satisfactory",
+              sub.remark || (isNursery ? "Very Good Progress" : "Satisfactory Progress"),
             ]
             : [
               sub.subject,
@@ -325,8 +349,8 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
               sub.remark || "Satisfactory",
             ];
 
-          const gradeColIdx = (isCreche && !crecheHasExam) ? 4 : 5;
-          const totalColIdx = (isCreche && !crecheHasExam) ? 3 : 4;
+          const gradeColIdx = isEarlyYearsNoExam ? 4 : 5;
+          const totalColIdx = isEarlyYearsNoExam ? 3 : 4;
 
           rowVals.forEach((val, cIdx) => {
             const align = cIdx === 0 ? "left" : cIdx === rowVals.length - 1 ? "left" : "center";
@@ -335,7 +359,10 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
             const font = isBold ? "Helvetica-Bold" : "Helvetica";
             let color = "#1E293B";
             if (cIdx === gradeColIdx) {
-              color = val === "Distinction" || val === "A1" ? "#047857" : val === "Very Good" || val === "B2" || val === "B3" ? "#0F766E" : val === "Fail" || val === "F9" ? "#B91C1C" : "#1D4ED8";
+              color = val === "Excellent" || val === "Distinction" || val === "A1" ? "#047857"
+                : val === "Very Good" || val === "Good" || val === "Credit" || val === "B2" || val === "B3" ? "#0F766E"
+                  : val === "Needs Support" || val === "Fail" || val === "F9" ? "#B91C1C"
+                    : "#1D4ED8";
             }
             doc.font(font)
               .fontSize(6)

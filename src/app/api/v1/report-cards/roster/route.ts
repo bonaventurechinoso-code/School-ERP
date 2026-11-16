@@ -147,6 +147,7 @@ export async function GET(req: NextRequest) {
             ca2: Number(gr.ca2) || 0,
             exam: Number(gr.exam) || 0,
             total: Number(gr.totalScore) || (Number(gr.ca1) || 0) + (Number(gr.ca2) || 0) + (Number(gr.exam) || 0),
+            grade: (gr as any).grade || undefined,
             remarks: (gr as any).remarks || "",
           });
           studentGradesMap.set(gr.studentId, list);
@@ -189,9 +190,17 @@ export async function GET(req: NextRequest) {
           } else if (hasScores) {
             totalScore = sGrades.reduce((acc, curr) => acc + curr.total, 0);
             averageScore = Math.round((totalScore / sGrades.length) * 10) / 10;
-            ca1 = String(Math.round(averageScore * 0.2));
-            ca2 = String(Math.round(averageScore * 0.2));
-            exam = String(Math.round(averageScore * 0.6));
+            if (sGrades.length === 1) {
+              // Copy CA1, CA2, Exam exactly from the single GradeRecord (no recalculation or 0.2/0.6 weighting)
+              ca1 = String(sGrades[0].ca1);
+              ca2 = String(sGrades[0].ca2);
+              exam = String(sGrades[0].exam);
+            } else {
+              // Multi-subject: exact average of actual CA1, CA2, Exam entered by teacher
+              ca1 = String(Math.round(sGrades.reduce((acc, c) => acc + c.ca1, 0) / sGrades.length));
+              ca2 = String(Math.round(sGrades.reduce((acc, c) => acc + c.ca2, 0) / sGrades.length));
+              exam = String(Math.round(sGrades.reduce((acc, c) => acc + c.exam, 0) / sGrades.length));
+            }
           }
 
           return {
