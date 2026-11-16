@@ -30,10 +30,6 @@ interface StudentReportCardPortalModuleProps {
   subdomain: string;
 }
 
-// Fallback multi-subject templates by tier (used only for structure or early years if unseeded)
-const DEFAULT_SECONDARY_SUBJECTS: any[] = [];
-const DEFAULT_NURSERY_SUBJECTS: any[] = [];
-const DEFAULT_TERTIARY_COURSES: any[] = [];
 
 export function StudentReportCardPortalModule({
   student,

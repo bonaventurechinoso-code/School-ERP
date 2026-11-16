@@ -57,10 +57,6 @@ interface StudentReportCardModalProps {
   schoolDomain?: string;
 }
 
-// Fallback templates by tier (used strictly when no database records exist)
-const DEFAULT_SECONDARY_SUBJECTS: any[] = [];
-const DEFAULT_NURSERY_SUBJECTS: any[] = [];
-const DEFAULT_TERTIARY_SUBJECTS: any[] = [];
 
 export default function StudentReportCardModal({
   isOpen,
