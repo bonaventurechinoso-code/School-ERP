@@ -109,11 +109,11 @@ export async function GET(req: NextRequest) {
     const studentIds = students.map((s) => s.id);
     const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
       : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-      : term === "First Term" ? ["First Term", "1st Term"]
-      : term === "Second Term" ? ["Second Term", "2nd Term"]
-      : term === "Third Term" ? ["Third Term", "3rd Term"]
-      : [term];
+        : term === "3rd Term" ? ["3rd Term", "Third Term"]
+          : term === "First Term" ? ["First Term", "1st Term"]
+            : term === "Second Term" ? ["Second Term", "2nd Term"]
+              : term === "Third Term" ? ["Third Term", "3rd Term"]
+                : [term];
 
     const allGradeRecords = await tenantDb.gradeRecord.findMany({
       where: {

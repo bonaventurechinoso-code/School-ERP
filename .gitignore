@@ -21,6 +21,8 @@
 *.pem
 *.tmp
 .diff.tmp
+*.pdf
+sample_reports/
 
 # debug
 npm-debug.log*
