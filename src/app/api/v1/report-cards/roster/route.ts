@@ -105,6 +105,17 @@ export async function GET(req: NextRequest) {
               { id: "mock-nur-002", firstName: "Aisha", lastName: "Ibrahim", admissionNumber: `GW/2026/${className.replace(/\s+/g, "") || "NUR1"}/002`, currentClass: className || "Nursery 1", status: "ENROLLED" } as any,
               { id: "mock-nur-003", firstName: "David", lastName: "Ojo", admissionNumber: `GW/2026/${className.replace(/\s+/g, "") || "NUR1"}/003`, currentClass: className || "Nursery 1", status: "ENROLLED" } as any,
             ];
+          } else if (
+            normClass.includes("LEVEL") ||
+            normClass.includes("ND") ||
+            normClass.includes("HND") ||
+            normClass.includes("DIPLOMA") ||
+            normClass.includes("UNIVERSITY") ||
+            normClass.includes("POLYTECHNIC") ||
+            normClass.includes("COLLEGE OF EDUCATION")
+          ) {
+            // Tertiary: Real DB records only, no fake mock pupils
+            students = [];
           } else {
             students = [
               { id: "mock-pri-001", firstName: "Kenechukwu", lastName: "Obi", admissionNumber: `GW/2026/${className.replace(/\s+/g, "") || "PRI1"}/001`, currentClass: className || "Primary 1", status: "ENROLLED" } as any,
@@ -212,8 +223,8 @@ export async function GET(req: NextRequest) {
           }
 
           const resolvedClass = student.currentClass || className || "Primary 1";
-          const resolvedTierName = student.tier?.name && student.tier.name !== "Standard" 
-            ? student.tier.name 
+          const resolvedTierName = student.tier?.name && student.tier.name !== "Standard"
+            ? student.tier.name
             : getTierForClass(resolvedClass).name;
 
           return {

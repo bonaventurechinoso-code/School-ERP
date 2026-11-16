@@ -436,12 +436,25 @@ function getGradeInfo(
     norm.includes("DAYCARE") ||
     norm.includes("EARLY");
 
+  const isTertiary =
+    norm.includes("TERTIARY") ||
+    norm.includes("HIGHER") ||
+    norm.includes("UNIVERSITY") ||
+    norm.includes("POLYTECHNIC") ||
+    norm.includes("COLLEGE OF EDUCATION") ||
+    /\bND\s*[1-2]\b/i.test(norm) ||
+    /\bHND\s*[1-2]\b/i.test(norm) ||
+    norm.includes("DIPLOMA") ||
+    norm.includes("LEVEL");
+
   const isPrimary =
     !isEarlyYears &&
+    !isTertiary &&
     (norm.includes("PRIMARY") || norm.includes("BASIC") || norm.includes("ELEMENTARY"));
 
   const isSecondary =
-    norm.includes("SECONDARY") ||
+    !isTertiary &&
+    (norm.includes("SECONDARY") ||
     norm.includes("HIGH") ||
     norm.includes("JSS") ||
     norm.includes("SSS") ||
@@ -452,7 +465,7 @@ function getGradeInfo(
     norm.includes("GRADE 9") ||
     norm.includes("GRADE 10") ||
     norm.includes("GRADE 11") ||
-    norm.includes("GRADE 12");
+    norm.includes("GRADE 12"));
 
   // 1. Early Years (Creche & Nursery) Scale: Excellent / Very Good / Good / Developing / Needs Support
   if (isEarlyYears) {
@@ -464,6 +477,18 @@ function getGradeInfo(
     if (score >= 50) return { grade: "Good", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
     if (score >= 40) return { grade: "Developing", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
     return { grade: "Needs Support", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+  }
+
+  // 2. Tertiary / Higher Education Scale: A=4.0, B=3.0, C=2.0, D=1.0, F=0.0 (NO A1-F9, NO Distinction/Pass)
+  if (isTertiary) {
+    if (!hasScores && score === 0) {
+      return { grade: "Not Entered", badgeClass: "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-300 dark:border-slate-700" };
+    }
+    if (score >= 70) return { grade: "A (4.0)", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
+    if (score >= 60) return { grade: "B (3.0)", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
+    if (score >= 50) return { grade: "C (2.0)", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
+    if (score >= 40) return { grade: "D (1.0)", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
+    return { grade: "F (0.0)", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
   }
 
   // 2. Primary School Scale: Distinction / Very Good / Credit / Pass / Fail

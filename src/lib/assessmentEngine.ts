@@ -11,6 +11,7 @@
 
 import { isCrecheClass } from "./creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "./nursery-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade } from "./tertiary-config";
 
 export type InstitutionalTier =
   | "Creche / Nursery"
@@ -137,7 +138,7 @@ export function normalizeTierLevel(level: string): InstitutionalTier {
  * - Schools: WAEC / NECO scale (A1 - F9)
  * - Higher Education: A, B, C, D, E, F
  */
-export function getNigerianGrade(level: string, finalTotal: number): string {
+export function getNigerianGrade(level: string, finalTotal: number, scale: "4.0" | "5.0" = "4.0"): string {
   if (finalTotal < 0) return "—";
 
   const resolved = normalizeTierLevel(level);
@@ -147,15 +148,12 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     resolved === "College of Education" ||
     level === "University" ||
     level === "Polytechnic" ||
-    level === "College of Education";
+    level === "College of Education" ||
+    level === "TERTIARY" ||
+    isTertiaryClass(level);
 
   if (isTertiary) {
-    if (finalTotal >= 70) return "A";
-    if (finalTotal >= 60) return "B";
-    if (finalTotal >= 50) return "C";
-    if (finalTotal >= 45) return "D";
-    if (finalTotal >= 40) return "E";
-    return "F";
+    return mapTertiaryScoreToGrade(finalTotal, scale).letter;
   }
 
   // Early Childhood (Creche & Nursery) Scale: Excellent (75+), Very Good (65-74), Good (50-64), Developing (40-49), Needs Support (<40)
@@ -231,16 +229,11 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
 }
 
 /**
- * Supporting lookup logic for Tertiary Grade Points (0.00 - 5.00 NUC / NBTE scale)
+ * Supporting lookup logic for Tertiary Grade Points (Default: 4.0 scale: A=4.0, B=3.0, C=2.0, D=1.0, F=0.0)
  */
-export function getTertiaryGP(finalTotal: number): number {
+export function getTertiaryGP(finalTotal: number, scale: "4.0" | "5.0" = "4.0"): number {
   if (finalTotal < 0) return 0.0;
-  if (finalTotal >= 70) return 5.0;
-  if (finalTotal >= 60) return 4.0;
-  if (finalTotal >= 50) return 3.0;
-  if (finalTotal >= 45) return 2.0;
-  if (finalTotal >= 40) return 1.0;
-  return 0.0;
+  return mapTertiaryScoreToGrade(finalTotal, scale).gp;
 }
 
 /**
@@ -311,18 +304,25 @@ export function calculateBonaVeeResult(level: string, scores: any) {
     level === "University" ||
     level === "Polytechnic" ||
     level === "College of Education" ||
+    level === "TERTIARY" ||
     resolvedLevel === "University" ||
     resolvedLevel === "Polytechnic" ||
-    resolvedLevel === "College of Education"
+    resolvedLevel === "College of Education" ||
+    isTertiaryClass(level)
   ) {
-    total = s.assignment + s.test + s.exam; // Assignment(10) + Test(20) + Exam(70) = 100
+    // Tertiary: Single Source of Truth from GradeRecord (ca1 = Total CA, exam = Exam)
+    if (scores?.ca1 !== undefined || scores?.exam !== undefined) {
+      total = (s.ca1 || 0) + (s.exam || 0);
+    } else {
+      total = s.assignment + s.test + s.exam; // Assignment(10) + Test(20) + Exam(70) = 100
+    }
   }
 
   const finalTotal = Math.round(total);
   return {
     total: finalTotal,
-    grade: getNigerianGrade(level, finalTotal),
-    gp: getTertiaryGP(finalTotal),
+    grade: getNigerianGrade(level, finalTotal, "4.0"),
+    gp: getTertiaryGP(finalTotal, "4.0"),
   };
 }
 

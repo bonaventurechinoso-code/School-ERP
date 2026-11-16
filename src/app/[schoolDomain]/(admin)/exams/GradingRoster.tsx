@@ -194,11 +194,14 @@ function isTertiaryClass(cls: string): boolean {
   const norm = cls.toUpperCase();
   return (
     norm.includes("LEVEL") ||
-    norm.includes("ND") ||
-    norm.includes("HND") ||
+    /\bND\s*[1-2]\b/i.test(norm) ||
+    /\bHND\s*[1-2]\b/i.test(norm) ||
+    norm.includes("DIPLOMA") ||
     norm.includes("NCE") ||
     norm.includes("YEAR") ||
-    norm.includes("UNI")
+    norm.includes("UNI") ||
+    norm.includes("TERTIARY") ||
+    norm.includes("POLYTECHNIC")
   );
 }
 
@@ -206,7 +209,7 @@ function isClassInTier(cls: string, tierCode: string): boolean {
   if (tierCode === "NURSERY") return isNurseryClass(cls);
   if (tierCode === "PRIMARY") return isPrimaryClass(cls);
   if (tierCode === "SECONDARY") return isSecondaryClass(cls);
-  if (tierCode === "UNIVERSITY" || tierCode === "POLYTECHNIC" || tierCode === "COLLEGE") return isTertiaryClass(cls);
+  if (tierCode === "UNIVERSITY" || tierCode === "POLYTECHNIC" || tierCode === "COLLEGE" || tierCode === "TERTIARY") return isTertiaryClass(cls);
   return true;
 }
 
@@ -271,11 +274,10 @@ function resolveTierGrade(tierCategory: string, score: number): { letter: string
   }
 
   if (tierCategory === "TERTIARY") {
-    if (score >= 70) return { letter: "A", remark: "First Class", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
-    if (score >= 60) return { letter: "B", remark: "Second Class Upper", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
-    if (score >= 50) return { letter: "C", remark: "Second Class Lower", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
-    if (score >= 45) return { letter: "D", remark: "Third Class", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
-    if (score >= 40) return { letter: "E", remark: "Pass", badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300" };
+    if (score >= 70) return { letter: "A", remark: "Distinction", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 60) return { letter: "B", remark: "Upper Credit", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+    if (score >= 50) return { letter: "C", remark: "Lower Credit", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 40) return { letter: "D", remark: "Pass", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
     return { letter: "F", remark: "Fail", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
   }
 

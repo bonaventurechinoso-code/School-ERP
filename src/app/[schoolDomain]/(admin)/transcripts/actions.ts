@@ -2,6 +2,7 @@
 
 import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { compileAnnualTerms, getNigerianGrade, getTertiaryGP } from "@/lib/assessmentEngine";
+import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding } from "@/lib/tertiary-config";
 import { getNextGrade, executeTermEndPromotionAction } from "@/app/[schoolDomain]/(admin)/students/actions";
 import { revalidatePath } from "next/cache";
 import { safeRedisScanDel } from "@/lib/redis";
@@ -181,29 +182,40 @@ export async function fetchAnnualBroadsheet(
       const t3 = studentTerms?.get("3rd term") ?? studentTerms?.get("third term") ?? 0;
       const attendance = 100;
 
+      const isTertiary = tierName.toLowerCase().includes("tertiary") || isTertiaryClass(className);
+
       // Core engine calculation
       const { annual } = compileAnnualTerms(t1, t2, t3, attendance);
+      const annualGp = isTertiary ? mapTertiaryScoreToGrade(annual, "4.0").gp : getTertiaryGP(annual);
+      const annualGrade = isTertiary ? mapTertiaryScoreToGrade(annual, "4.0").letter : getNigerianGrade(tierName, annual);
 
-      // Refined Nigerian 3-state promotion: PROMOTED vs PROMOTED_ON_TRIAL vs REPEAT
+      // Refined Nigerian promotion or Tertiary Academic Standing
       let promotionStatus: "PROMOTED" | "PROMOTED_ON_TRIAL" | "REPEAT" = "REPEAT";
       let badgeClass = "bg-rose-50 text-rose-700 border-rose-200";
 
-      if (annual >= 50 && attendance >= 75) {
-        promotionStatus = "PROMOTED";
-        badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
-      } else if (annual >= 45 && attendance >= 75) {
-        promotionStatus = "PROMOTED_ON_TRIAL";
-        badgeClass = "bg-amber-50 text-amber-700 border-amber-200";
+      if (isTertiary) {
+        if (annualGp >= 2.0) {
+          promotionStatus = "PROMOTED";
+          badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        } else {
+          promotionStatus = "REPEAT";
+          badgeClass = "bg-rose-50 text-rose-700 border-rose-200";
+        }
       } else {
-        promotionStatus = "REPEAT";
-        badgeClass = "bg-rose-50 text-rose-700 border-rose-200";
+        if (annual >= 50 && attendance >= 75) {
+          promotionStatus = "PROMOTED";
+          badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        } else if (annual >= 45 && attendance >= 75) {
+          promotionStatus = "PROMOTED_ON_TRIAL";
+          badgeClass = "bg-amber-50 text-amber-700 border-amber-200";
+        } else {
+          promotionStatus = "REPEAT";
+          badgeClass = "bg-rose-50 text-rose-700 border-rose-200";
+        }
       }
 
       // Next class progression
       const { nextClass, isGraduation } = await getNextGrade(student.currentClass || className, tierName);
-
-      const annualGrade = getNigerianGrade(tierName, annual);
-      const annualGp = getTertiaryGP(annual);
 
       compiledRows.push({
         id: student.id,

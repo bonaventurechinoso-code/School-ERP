@@ -1,6 +1,24 @@
-// Nigerian 5-point grading scale
-export const letterToGPA = (letter: string): number => {
-  switch (letter) {
+// Nigerian 4-point (default) & 5-point grading scales
+export const letterToGPA = (letter: string, scale: "4.0" | "5.0" = "4.0"): number => {
+  if (scale === "4.0") {
+    switch (letter.toUpperCase()) {
+      case "A": case "A1":
+        return 4.0;
+      case "B": case "B2": case "B3":
+        return 3.0;
+      case "C": case "C4": case "C5": case "C6":
+        return 2.0;
+      case "D": case "D7": case "E": case "E8":
+        return 1.0;
+      case "F": case "F9":
+        return 0.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  // 5-point scale
+  switch (letter.toUpperCase()) {
     case "A": case "A1":
       return 5.0;
     case "B": case "B2": case "B3":
@@ -18,13 +36,21 @@ export const letterToGPA = (letter: string): number => {
   }
 };
 
-export const calculatePercentageToLetter = (percentage: number, isHigherEd: boolean): string => {
+export const calculatePercentageToLetter = (percentage: number, isHigherEd: boolean, scale: "4.0" | "5.0" = "4.0"): string => {
   if (isHigherEd) {
+    if (scale === "5.0") {
+      if (percentage >= 70) return "A";
+      if (percentage >= 60) return "B";
+      if (percentage >= 50) return "C";
+      if (percentage >= 45) return "D";
+      if (percentage >= 40) return "E";
+      return "F";
+    }
+    // Default 4.0 scale (NO "E" grade)
     if (percentage >= 70) return "A";
     if (percentage >= 60) return "B";
     if (percentage >= 50) return "C";
-    if (percentage >= 45) return "D";
-    if (percentage >= 40) return "E";
+    if (percentage >= 40) return "D";
     return "F";
   } else {
     // WAEC/NECO Standard
@@ -40,7 +66,16 @@ export const calculatePercentageToLetter = (percentage: number, isHigherEd: bool
   }
 };
 
-export const getDegreeClass = (cgpa: number): string => {
+export const getDegreeClass = (cgpa: number, scale: "4.0" | "5.0" = "4.0"): string => {
+  if (scale === "4.0") {
+    if (cgpa >= 3.50) return "Distinction";
+    if (cgpa >= 3.00) return "Upper Credit";
+    if (cgpa >= 2.50) return "Lower Credit";
+    if (cgpa >= 2.00) return "Pass";
+    return "Fail";
+  }
+
+  // 5.0 scale
   if (cgpa >= 4.50) return "First Class";
   if (cgpa >= 3.50) return "Second Class Upper";
   if (cgpa >= 2.40) return "Second Class Lower";

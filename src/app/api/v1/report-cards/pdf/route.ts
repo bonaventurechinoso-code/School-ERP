@@ -6,6 +6,7 @@ import { generateReportCardPdf, ReportCardPdfData, ReportCardSubjectScore } from
 import { resolveGradingTier } from "@/lib/grading-engine";
 import { isCrecheClass, resolveCrecheConfig } from "@/lib/creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "@/lib/nursery-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
@@ -140,9 +141,13 @@ export async function GET(req: NextRequest) {
     const isCreche = isCrecheClass(currentClass) || isCrecheClass(tierCategory);
     const isNursery = !isCreche && (isNurseryClass(currentClass) || tierCategory === "NURSERY");
     const isSecondary = tierCategory === "SECONDARY";
-    const isPrimary = !isCreche && !isNursery && !isSecondary;
+    const isTertiary = tierCategory === "TERTIARY" || isTertiaryClass(currentClass) || isTertiaryClass(tierCategory);
+    const isPrimary = !isCreche && !isNursery && !isSecondary && !isTertiary;
 
     const resolvePdfGrade = (score: number) => {
+      if (isTertiary) {
+        return mapTertiaryScoreToGrade(score, "4.0").letter;
+      }
       if (isNursery || isCreche) {
         return mapNurseryScoreToGrade(score).letter;
       }
@@ -165,6 +170,13 @@ export async function GET(req: NextRequest) {
     };
 
     const resolvePdfRemark = (grade: string) => {
+      if (isTertiary) {
+        if (grade === "A") return "Distinction in course concepts";
+        if (grade === "B") return "Upper Credit academic performance";
+        if (grade === "C") return "Lower Credit academic performance";
+        if (grade === "D") return "Pass / Fair progress";
+        return "Fail / Course retake recommended";
+      }
       if (grade === "A1" || grade === "Distinction" || grade === "Excellent") return "Distinction in subject concepts";
       if (grade === "B2" || grade === "Very Good") return "Very good academic performance";
       if (grade === "B3" || grade === "Good") return "Good academic performance";
@@ -176,18 +188,24 @@ export async function GET(req: NextRequest) {
 
     if (gradeRecords.length > 0) {
       gradeRecords.forEach((gr, idx) => {
+        const tertiaryCourse = isTertiary ? resolveTertiaryCourse(gr.subject) : null;
         const ca1 = gr.ca1 !== null && gr.ca1 !== undefined ? Number(gr.ca1) : 0;
-        const ca2 = gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0;
+        const ca2 = isTertiary ? undefined : (gr.ca2 !== null && gr.ca2 !== undefined ? Number(gr.ca2) : 0);
         const exam = gr.exam !== null && gr.exam !== undefined ? Number(gr.exam) : 0;
-        const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + ca2 + exam);
+        const total = gr.totalScore !== null && gr.totalScore !== undefined ? Number(gr.totalScore) : (ca1 + (ca2 || 0) + exam);
         const letter = resolvePdfGrade(total);
+        const tertiaryGrade = isTertiary ? mapTertiaryScoreToGrade(total, "4.0") : null;
         subjectsMap.set(gr.subject, {
           subject: gr.subject,
+          code: tertiaryCourse?.code || gr.subject,
+          creditUnits: tertiaryCourse?.creditUnits || 3,
           ca1,
           ca2,
           exam,
           total,
           grade: letter,
+          gp: tertiaryGrade?.gp,
+          qualityPoints: tertiaryGrade ? tertiaryGrade.gp * (tertiaryCourse?.creditUnits || 3) : undefined,
           subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
           remark: resolvePdfRemark(letter),
@@ -260,6 +278,13 @@ export async function GET(req: NextRequest) {
       ? `${rankNum}${rankNum === 1 ? "st" : rankNum === 2 ? "nd" : rankNum === 3 ? "rd" : "th"}`
       : (demoProfile ? demoProfile.positionString : "1st");
 
+    const tertiaryGpaCalc = isTertiary
+      ? calculateTertiaryGPA(subjectsList.map((s) => ({
+          creditUnits: s.creditUnits || 3,
+          gp: s.gp !== undefined && s.gp !== null ? s.gp : mapTertiaryScoreToGrade(s.total, "4.0").gp,
+        })))
+      : null;
+
     const pdfData: ReportCardPdfData = {
       schoolName: school?.name || "Official Academic Institution",
       schoolMotto: (school as any)?.motto || "Knowledge, Discipline and Excellence",
@@ -269,7 +294,7 @@ export async function GET(req: NextRequest) {
       studentName: `${student.firstName} ${student.lastName}`.trim(),
       admissionNumber,
       className: currentClass,
-      tierCategory,
+      tierCategory: isTertiary ? "TERTIARY" : tierCategory,
       gender: "Not Specified",
       daysOpened: 110,
       daysPresent: 108,
@@ -279,11 +304,19 @@ export async function GET(req: NextRequest) {
       totalScore,
       maxPossibleScore,
       averageScore,
-      overallGrade,
-      promotionStatus: "Promoted to Next Class",
+      overallGrade: isTertiary ? mapTertiaryScoreToGrade(avgNum, "4.0").letter : overallGrade,
+      promotionStatus: isTertiary
+        ? getTertiaryAcademicStanding(tertiaryGpaCalc?.gpa || 0, "4.0")
+        : "Promoted to Next Class",
+      gpa: tertiaryGpaCalc?.gpa,
+      totalCreditUnits: tertiaryGpaCalc?.totalCreditUnits,
       subjects: subjectsList,
-      teacherRemarks: `${student.firstName} is an exemplary scholar with stellar intellectual and behavioral diligence. Keep up the high standard.`,
-      principalRemarks: "Remarkable terminal achievement. Commended for academic excellence and leadership.",
+      teacherRemarks: isTertiary
+        ? `Commended for satisfactory academic diligence across registered courses. Current Standing: ${getTertiaryAcademicStanding(tertiaryGpaCalc?.gpa || 0, "4.0")}.`
+        : `${student.firstName} is an exemplary scholar with stellar intellectual and behavioral diligence. Keep up the high standard.`,
+      principalRemarks: isTertiary
+        ? "Official terminal transcript verified and approved."
+        : "Remarkable terminal achievement. Commended for academic excellence and leadership.",
       resumptionDate: "Monday, 11th January 2027",
     };
 

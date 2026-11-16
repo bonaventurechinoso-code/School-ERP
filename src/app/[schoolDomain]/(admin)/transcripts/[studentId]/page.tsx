@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts, getDegreeClass } from "@/lib/gpa";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
 import {
   compileAnnualTerms,
   getNigerianGrade,
@@ -212,17 +213,66 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
     tierName.toLowerCase().includes("university") ||
     tierName.toLowerCase().includes("polytechnic") ||
     tierName.toLowerCase().includes("college of education") ||
-    tierName.toLowerCase().includes("higher");
+    tierName.toLowerCase().includes("higher") ||
+    tierName.toLowerCase().includes("tertiary") ||
+    isTertiaryClass(student.currentClass);
 
-  // 4. Process Academic Records
-  const { semesters, cumulativeGPA, degreeClass } = aggregateTranscripts(student.ExamResult);
+  // 4. Process Academic Records from GradeRecord first (Single Source of Truth)
+  const dbGradeRecords = await tenantDb.gradeRecord.findMany({
+    where: { schoolId: school.id, studentId },
+    orderBy: { createdAt: "asc" },
+  }).catch(() => []);
 
-  // Determine whether to use DB records or realistic sessional progression
-  const hasDbRecords = semesters.length > 0;
-  const sessionalRecords = DEFAULT_SECONDARY_SESSIONS;
-  const tertiarySemesters = hasDbRecords ? semesters : DEFAULT_TERTIARY_SEMESTERS;
+  let tertiarySemesters: any[] = [];
+  let tertiaryCumulativeGPA = "0.00";
+  let tertiaryDegreeClass = "—";
+
+  if (isHigherEd && dbGradeRecords.length > 0) {
+    const termMap = new Map<string, any[]>();
+    for (const gr of dbGradeRecords) {
+      const t = gr.term || "1st Term";
+      if (!termMap.has(t)) termMap.set(t, []);
+      termMap.get(t)!.push(gr);
+    }
+
+    const allCoursesForCGPA: any[] = [];
+    tertiarySemesters = Array.from(termMap.entries()).map(([termKey, grList]) => {
+      const courseGrades = grList.map((gr: any) => {
+        const meta = resolveTertiaryCourse(gr.subject);
+        const gradeRes = mapTertiaryScoreToGrade(gr.totalScore, "4.0");
+        return {
+          courseCode: meta.code,
+          courseName: meta.name,
+          creditUnits: meta.creditUnits,
+          percentage: gr.totalScore.toFixed(1),
+          letterGrade: gradeRes.letter,
+          gpaPoints: gradeRes.gp.toFixed(1),
+        };
+      });
+      allCoursesForCGPA.push(...courseGrades.map((c: any) => ({ creditUnits: c.creditUnits, gp: Number(c.gpaPoints) })));
+      const semGPA = calculateTertiaryGPA(courseGrades.map((c: any) => ({ creditUnits: c.creditUnits, gp: Number(c.gpaPoints) })));
+      return {
+        semester: `${student.currentClass || "ND 1"} - ${termKey}`,
+        semesterGPA: semGPA.gpa.toFixed(2),
+        courseGrades,
+      };
+    });
+
+    const cgpaCalc = calculateTertiaryGPA(allCoursesForCGPA);
+    tertiaryCumulativeGPA = cgpaCalc.gpa.toFixed(2);
+    tertiaryDegreeClass = getTertiaryAcademicStanding(cgpaCalc.gpa, "4.0");
+  } else {
+    const { semesters, cumulativeGPA, degreeClass } = aggregateTranscripts(student.ExamResult);
+    tertiarySemesters = semesters.length > 0 ? semesters : DEFAULT_TERTIARY_SEMESTERS;
+    tertiaryCumulativeGPA = cumulativeGPA || "3.50";
+    tertiaryDegreeClass = degreeClass || "Distinction (In Good Standing)";
+  }
+
+  const cumulativeGPA = tertiaryCumulativeGPA;
+  const degreeClass = tertiaryDegreeClass;
 
   // Calculate Cumulative Metrics for K-12
+  const sessionalRecords = DEFAULT_SECONDARY_SESSIONS;
   const cumulativeAvg = (
     sessionalRecords.reduce((acc, s) => acc + s.annualAvg, 0) / sessionalRecords.length
   ).toFixed(1);
@@ -494,7 +544,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
               Cumulative Academic Evaluation
             </span>
             <div className="text-xl font-black text-slate-900 dark:text-white">
-              {isHigherEd ? `Cumulative GPA: ${cumulativeGPA || "4.44"} / 5.00` : `Overall Average: ${cumulativeAvg}% (${cumulativeGrade})`}
+              {isHigherEd ? `Cumulative GPA: ${cumulativeGPA || "3.50"} / 4.00` : `Overall Average: ${cumulativeAvg}% (${cumulativeGrade})`}
             </div>
             <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               Standing: <strong className="text-blue-600 dark:text-blue-400">{degreeClass || cumulativeStanding}</strong>
@@ -503,12 +553,12 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
 
           <div className="flex items-center gap-6 text-center sm:text-right shrink-0">
             <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Subjects</span>
-              <strong className="text-lg font-black text-slate-800 dark:text-slate-200">24 Courses</strong>
+              <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Courses</span>
+              <strong className="text-lg font-black text-slate-800 dark:text-slate-200">{tertiarySemesters.reduce((acc, s) => acc + (s.courseGrades?.length || 0), 0) || 6} Courses</strong>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Pass Rate</span>
-              <strong className="text-lg font-black text-emerald-600">100%</strong>
+              <span className="text-[10px] text-slate-400 uppercase font-bold block">Academic Standing</span>
+              <strong className="text-lg font-black text-emerald-600">Good Standing</strong>
             </div>
           </div>
         </div>
@@ -523,31 +573,27 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
               <span>Official Grading Scale & Assessment Interpretation</span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono">
-              {isHigherEd ? "NUC / NBTE 5.00 CGPA Standard" : "WAEC / NECO / Basic Education Standard"}
+              {isHigherEd ? "NBTE / NUC 4.00 CGPA Standard (Default)" : "WAEC / NECO / Basic Education Standard"}
             </span>
           </div>
 
           {isHigherEd ? (
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-[11px]">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
               <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="font-black text-blue-600">A (70-100%)</div>
-                <div className="text-slate-500 text-[10px]">5.00 GP • First Class</div>
+                <div className="text-slate-500 text-[10px]">4.00 GP • Distinction</div>
               </div>
               <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="font-black text-blue-600">B (60-69%)</div>
-                <div className="text-slate-500 text-[10px]">4.00 GP • 2nd Class Upper</div>
+                <div className="text-slate-500 text-[10px]">3.00 GP • Upper Credit</div>
               </div>
               <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <div className="font-black text-slate-700 dark:text-slate-300">C (50-59%)</div>
-                <div className="text-slate-500 text-[10px]">3.00 GP • 2nd Class Lower</div>
+                <div className="font-black text-blue-600">C (50-59%)</div>
+                <div className="text-slate-500 text-[10px]">2.00 GP • Lower Credit</div>
               </div>
               <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <div className="font-black text-slate-700 dark:text-slate-300">D (45-49%)</div>
-                <div className="text-slate-500 text-[10px]">2.00 GP • Third Class</div>
-              </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <div className="font-black text-amber-600">E (40-44%)</div>
-                <div className="text-slate-500 text-[10px]">1.00 GP • Pass Degree</div>
+                <div className="font-black text-blue-600">D (40-49%)</div>
+                <div className="text-slate-500 text-[10px]">1.00 GP • Pass</div>
               </div>
               <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="font-black text-rose-600">F (0-39%)</div>

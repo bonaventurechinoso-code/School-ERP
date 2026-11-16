@@ -21,6 +21,7 @@ import {
 import { StudentProfileData, TierPresentationConfig } from "../types";
 import { calculateBonaVeeResult, getGradeRemark } from "@/lib/assessmentEngine";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
 import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
 
 
@@ -42,7 +43,7 @@ export function StudentReportCardPortalModule({
   const [selectedTerm, setSelectedTerm] = useState<string>("First Term");
 
   const category = tierConfig.category;
-  const isHigherEd = category === "HIGHER_ED";
+  const isHigherEd = category === "HIGHER_ED" || (category as string) === "TERTIARY" || isTertiaryClass(tierConfig.tierName);
   const isSecondary = category === "SECONDARY";
   const isEarlyChildhood = category === "EARLY_CHILDHOOD";
   const tierName = tierConfig.tierName;
@@ -89,6 +90,20 @@ export function StudentReportCardPortalModule({
         computedRemark: "Not Entered",
       };
     }
+    if (isHigherEd) {
+      const tertiaryCourse = resolveTertiaryCourse(sub.subject);
+      const totalScore = sub.total !== undefined && sub.total !== null ? sub.total : ((Number(sub.ca1) || 0) + (Number(sub.exam) || 0));
+      const gradeRes = mapTertiaryScoreToGrade(totalScore, "4.0");
+      return {
+        ...sub,
+        creditUnits: tertiaryCourse.creditUnits,
+        code: tertiaryCourse.code,
+        computedTotal: totalScore,
+        computedGrade: gradeRes.letter,
+        computedGp: gradeRes.gp,
+        computedRemark: gradeRes.remark,
+      };
+    }
     const calc = calculateBonaVeeResult(tierName, sub);
     return {
       ...sub,
@@ -106,16 +121,26 @@ export function StudentReportCardPortalModule({
   const rawAvg = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length) : 0;
   const averagePercentage = rawAvg.toFixed(2).endsWith(".00") ? rawAvg.toFixed(1) : rawAvg.toFixed(2);
   const overallAvgNum = parseFloat(averagePercentage);
+
+  const tertiaryGPA = isHigherEd && enteredSubjects.length > 0
+    ? calculateTertiaryGPA(enteredSubjects.map((s: any) => ({
+        creditUnits: s.creditUnits || 3,
+        gp: s.computedGp,
+      })))
+    : null;
+
   const overallGrade = enteredSubjects.length > 0 
-    ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
+    ? (isHigherEd ? mapTertiaryScoreToGrade(overallAvgNum, "4.0").letter : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
     : (isEarlyChildhood ? "Needs Support" : "—");
   const overallRemark = enteredSubjects.length > 0 
-    ? getGradeRemark(overallGrade) 
+    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade))
     : (isEarlyChildhood ? "Needs Support" : "No Grades Entered");
 
-  const positionDisplay = (student.academicRank?.classPosition && student.academicRank.classPosition !== "—") 
-    ? student.academicRank.classPosition 
-    : (secondaryDemo ? secondaryDemo.positionString : "—");
+  const positionDisplay = isHigherEd
+    ? (tertiaryGPA ? `GPA ${tertiaryGPA.gpa.toFixed(2)}` : "—")
+    : ((student.academicRank?.classPosition && student.academicRank.classPosition !== "—") 
+      ? student.academicRank.classPosition 
+      : (secondaryDemo ? secondaryDemo.positionString : "—"));
 
   // Academic fee clearance gatekeeper
   const [accessCheck, setAccessCheck] = useState<{
@@ -487,12 +512,11 @@ export function StudentReportCardPortalModule({
                   {isHigherEd && (
                     <>
                       <th className="px-4 py-3 text-center">Units</th>
-                      <th className="px-4 py-3 text-center">Assignment (10%)</th>
-                      <th className="px-4 py-3 text-center">Test (20%)</th>
-                      <th className="px-4 py-3 text-center">Exam (70%)</th>
+                      <th className="px-4 py-3 text-center">CA Score</th>
+                      <th className="px-4 py-3 text-center">Exam Score</th>
                       <th className="px-4 py-3 text-center">Total (100)</th>
-                      <th className="px-4 py-3 text-center">GP</th>
                       <th className="px-4 py-3 text-center">Grade</th>
+                      <th className="px-4 py-3 text-center">GP</th>
                     </>
                   )}
                   {!isSecondary && !isEarlyChildhood && !isHigherEd && (
@@ -577,27 +601,30 @@ export function StudentReportCardPortalModule({
                     {isHigherEd && (
                       <>
                         <td className="px-4 py-3 text-center font-mono text-slate-500">
-                          {sub.units || 3}
+                          {sub.creditUnits || 3}
                         </td>
                         <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.assignment}
+                          {sub.ca1 !== null && sub.ca1 !== undefined ? sub.ca1 : (sub.test !== null && sub.test !== undefined ? sub.test : "—")}
                         </td>
                         <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.test}
-                        </td>
-                        <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.exam}
+                          {sub.exam !== null && sub.exam !== undefined ? sub.exam : "—"}
                         </td>
                         <td className="px-4 py-3 text-center font-black font-mono text-slate-900 dark:text-white">
                           {sub.computedTotal}
                         </td>
-                        <td className="px-4 py-3 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
-                          {sub.computedGp?.toFixed(1) || "5.0"}
-                        </td>
                         <td className="px-4 py-3 text-center">
-                          <span className="inline-block px-2 py-0.5 rounded font-black text-xs bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                          <span className={`inline-block px-2 py-0.5 rounded font-black text-xs ${
+                            sub.computedGrade === "A" ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300" :
+                            sub.computedGrade === "B" ? "bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300" :
+                            sub.computedGrade === "C" ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300" :
+                            sub.computedGrade === "D" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300" :
+                            "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300"
+                          }`}>
                             {sub.computedGrade}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
+                          {sub.computedGp !== null && sub.computedGp !== undefined ? Number(sub.computedGp).toFixed(1) : "—"}
                         </td>
                       </>
                     )}

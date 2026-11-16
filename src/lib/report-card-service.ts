@@ -13,6 +13,7 @@ import {
 
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "./creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "./nursery-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "./tertiary-config";
 import { getTierForClass } from "./school-tier-classes";
 import { getSecondaryDemoProfile, CANONICAL_SECONDARY_PROFILES, JSS_CANONICAL_SUBJECTS } from "./secondary-demo-data";
 
@@ -85,7 +86,14 @@ export async function resolveStudentTierClient(
   } catch { }
 
   // 3. Check isolated tier databases if tenant uses multi-DB
-  const candidateTiers = ["Primary School", "Secondary School", "Creche / Nursery"];
+  const candidateTiers = [
+    "Primary School",
+    "Secondary School",
+    "Creche / Nursery",
+    "Higher Institution / University",
+    "Higher Institution",
+    "Tertiary",
+  ];
   for (const candidate of candidateTiers) {
     try {
       const client = await getPrismaClientForTier(schoolId, candidate);
@@ -122,6 +130,7 @@ export async function resolveClassTierClient(
     tierCategory = resolveGradingTier(undefined, className);
     if (tierCategory === "NURSERY") tierName = "Creche / Nursery";
     else if (tierCategory === "SECONDARY") tierName = "Secondary School";
+    else if (tierCategory === "TERTIARY") tierName = "Higher Institution / University";
     else tierName = "Primary School";
   }
 
@@ -249,27 +258,41 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   const isCreche = isCrecheClass(className);
   const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY";
+  const isTertiary = classTier.category === "TERTIARY" || tierCategory === "TERTIARY" || isTertiaryClass(className);
 
   const records = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
-      const letter = isNursery
-        ? mapNurseryScoreToGrade(gr.totalScore).letter
-        : (isCreche
-          ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (isSecondary
-            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
-            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
+      const tertiaryCourse = isTertiary ? resolveTertiaryCourse(gr.subject) : null;
+      const tertiaryGrade = isTertiary ? mapTertiaryScoreToGrade(gr.totalScore, "4.0") : null;
+      const letter = isTertiary
+        ? tertiaryGrade!.letter
+        : (isNursery
+          ? mapNurseryScoreToGrade(gr.totalScore).letter
+          : (isCreche
+            ? mapCrecheScoreToGrade(gr.totalScore).letter
+            : (isSecondary
+              ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+              : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"))));
       return {
         id: gr.id,
         subject: gr.subject,
+        code: tertiaryCourse?.code || gr.subject,
+        creditUnits: tertiaryCourse?.creditUnits || 3,
+        caWeight: tertiaryCourse?.caWeight || 30,
+        examWeight: tertiaryCourse?.examWeight || 70,
+        gp: tertiaryGrade?.gp ?? null,
+        qualityPoints: tertiaryGrade ? (tertiaryGrade.gp * (tertiaryCourse?.creditUnits || 3)) : null,
         test1: gr.ca1,
-        test2: gr.ca2,
+        test2: isTertiary ? null : gr.ca2,
+        ca1: gr.ca1,
+        ca2: isTertiary ? null : gr.ca2,
         finalExam: gr.exam,
+        exam: gr.exam,
         totalScore: gr.totalScore,
         gradeLetter: letter,
         isPassed: gr.totalScore >= 40,
         assessmentType: "NUMERICAL",
-        teacherRemarks: letter,
+        teacherRemarks: tertiaryGrade ? tertiaryGrade.remark : letter,
       };
     })
     : await tierDb.academicRecord.findMany({
@@ -326,7 +349,14 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     });
 
     averageScore = activeRecords.length > 0 ? Math.round((totalScore / activeRecords.length) * 100) / 100 : 0;
-    if (isNursery) {
+    if (isTertiary) {
+      const gpaCalc = calculateTertiaryGPA(activeRecords.map((r: any) => ({
+        creditUnits: r.creditUnits || 3,
+        gp: r.gp ?? mapTertiaryScoreToGrade(r.totalScore, "4.0").gp,
+      })));
+      gpa = gpaCalc.gpa;
+      overallLetter = mapTertiaryScoreToGrade(averageScore, "4.0").letter;
+    } else if (isNursery) {
       overallLetter = mapNurseryScoreToGrade(averageScore).letter;
       gpa = mapNurseryScoreToGrade(averageScore).gpa;
     } else if (isCreche) {
@@ -343,24 +373,37 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     }
   }
 
-  const remarks = generateAdministrativeRemarks(
-    averageScore,
-    tierCategory,
-    passedSubjects,
-    activeRecords.length
-  );
+  const remarks = isTertiary
+    ? {
+      teacherRemarks: `Academic Standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}`,
+      principalRemarks: `${student?.firstName || "Student"} has demonstrated commendable academic diligence across registered courses. Current standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}.`,
+      classTeacherRemark: `Academic Standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}`,
+      principalRemark: `${student?.firstName || "Student"} has demonstrated commendable academic diligence across registered courses. Current standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}.`,
+    }
+    : generateAdministrativeRemarks(
+      averageScore,
+      tierCategory,
+      passedSubjects,
+      activeRecords.length
+    );
 
   // Immutable JSON snapshot of all subject assessments at the moment of report compilation
   const academicRecordSnapshot = activeRecords.map((r: any) => ({
     id: r.id,
     subject: r.subject,
+    code: r.code || r.subject,
+    creditUnits: r.creditUnits || 3,
+    caWeight: r.caWeight || 30,
+    examWeight: r.examWeight || 70,
+    gp: r.gp ?? null,
+    qualityPoints: r.qualityPoints ?? null,
     test1: r.test1,
     test2: r.test2,
-    ca1: r.test1,
-    ca2: r.test2,
+    ca1: r.ca1 ?? r.test1,
+    ca2: r.ca2 ?? r.test2,
     midTerm: r.midTerm,
     finalExam: r.finalExam,
-    exam: r.finalExam,
+    exam: r.exam ?? r.finalExam,
     totalScore: r.totalScore,
     total: r.totalScore,
     gradeLetter: r.gradeLetter,
@@ -497,16 +540,19 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
   const isCreche = isCrecheClass(className);
   const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY";
+  const isTertiary = classTier.category === "TERTIARY" || isTertiaryClass(className);
 
   const rawRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
-      const letter = isNursery
-        ? mapNurseryScoreToGrade(gr.totalScore).letter
-        : (isCreche
-          ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (isSecondary
-            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
-            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
+      const letter = isTertiary
+        ? mapTertiaryScoreToGrade(gr.totalScore, "4.0").letter
+        : (isNursery
+          ? mapNurseryScoreToGrade(gr.totalScore).letter
+          : (isCreche
+            ? mapCrecheScoreToGrade(gr.totalScore).letter
+            : (isSecondary
+              ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+              : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"))));
       return {
         id: gr.id,
         studentId: gr.studentId,
@@ -598,6 +644,16 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
       } else if (isCreche) {
         overallLetter = mapCrecheScoreToGrade(averageScore).letter;
         gpa = mapCrecheScoreToGrade(averageScore).gpa;
+      } else if (isTertiary) {
+        const tertiaryMapped = mapTertiaryScoreToGrade(averageScore, "4.0");
+        overallLetter = tertiaryMapped.letter;
+        const courseItems = studentRecords.map((r: any) => {
+          const c = resolveTertiaryCourse(r.subject);
+          const mapped = mapTertiaryScoreToGrade(r.totalScore || 0, "4.0");
+          return { creditUnits: c.creditUnits, gradePoint: mapped.gp };
+        });
+        const gpaCalc = calculateTertiaryGPA(courseItems);
+        gpa = gpaCalc.gpa;
       } else {
         const gradeCalc = calculateNumericalGrade(
           { finalExam: averageScore },
@@ -763,25 +819,36 @@ export async function getStudentReportCard(
   const isCreche = isCrecheClass(targetClass);
   const isNursery = !isCreche && (isNurseryClass(targetClass) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY";
+  const isTertiary = classTier.category === "TERTIARY" || isTertiaryClass(targetClass);
 
   const currentRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => {
-      const letter = isNursery
-        ? mapNurseryScoreToGrade(gr.totalScore).letter
-        : (isCreche
-          ? mapCrecheScoreToGrade(gr.totalScore).letter
-          : (isSecondary
-            ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
-            : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail")));
+      const tertiaryCourse = isTertiary ? resolveTertiaryCourse(gr.subject) : null;
+      const tertiaryGrade = isTertiary ? mapTertiaryScoreToGrade(gr.totalScore, "4.0") : null;
+      const letter = isTertiary
+        ? tertiaryGrade!.letter
+        : (isNursery
+          ? mapNurseryScoreToGrade(gr.totalScore).letter
+          : (isCreche
+            ? mapCrecheScoreToGrade(gr.totalScore).letter
+            : (isSecondary
+              ? mapScoreToGradeLetter(gr.totalScore, "SECONDARY").letter
+              : (gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail"))));
       return {
         id: gr.id,
         subject: gr.subject,
+        code: tertiaryCourse?.code || gr.subject,
+        creditUnits: tertiaryCourse?.creditUnits || 3,
+        caWeight: tertiaryCourse?.caWeight || 30,
+        examWeight: tertiaryCourse?.examWeight || 70,
+        gp: tertiaryGrade?.gp ?? null,
+        qualityPoints: tertiaryGrade && tertiaryCourse ? tertiaryGrade.gp * tertiaryCourse.creditUnits : null,
         test1: gr.ca1,
         test2: gr.ca2,
         finalExam: gr.exam,
         totalScore: gr.totalScore,
         gradeLetter: letter,
-        isPassed: gr.totalScore >= 40,
+        isPassed: isTertiary ? tertiaryGrade!.isPass : gr.totalScore >= 40,
         ca1: gr.ca1,
         ca2: gr.ca2,
         exam: gr.exam,
@@ -902,8 +969,10 @@ export async function getClassResultSheet(
   const isCreche = isCrecheClass(className);
   const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY" || tierCategory === "SECONDARY";
+  const isTertiary = classTier.category === "TERTIARY" || tierCategory === "TERTIARY" || isTertiaryClass(className);
 
   const resolveBroadsheetGrade = (score: number) => {
+    if (isTertiary) return mapTertiaryScoreToGrade(score, "4.0").letter;
     if (isNursery) return mapNurseryScoreToGrade(score).letter;
     if (isCreche) return mapCrecheScoreToGrade(score).letter;
     if (isSecondary) return mapScoreToGradeLetter(score, "SECONDARY").letter;

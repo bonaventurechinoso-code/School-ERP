@@ -161,6 +161,42 @@ function resolveTierGrade(tierCategory: EducationalTierCategory, score: number) 
     };
   }
 
+  if (tierCategory === "TERTIARY") {
+    if (score >= 70) {
+      return {
+        letter: "A",
+        remark: "Distinction",
+        badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
+      };
+    }
+    if (score >= 60) {
+      return {
+        letter: "B",
+        remark: "Upper Credit",
+        badgeColor: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800",
+      };
+    }
+    if (score >= 50) {
+      return {
+        letter: "C",
+        remark: "Lower Credit",
+        badgeColor: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
+      };
+    }
+    if (score >= 40) {
+      return {
+        letter: "D",
+        remark: "Pass",
+        badgeColor: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
+      };
+    }
+    return {
+      letter: "F",
+      remark: "Fail",
+      badgeColor: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800",
+    };
+  }
+
   if (score >= 75) {
     return {
       letter: tierCategory === "SECONDARY" ? "A1" : "A",
@@ -466,15 +502,34 @@ export default function AnnualCompiledSheet({
       const nextCls = getNextClass(selectedClass);
 
       if (evaluatedSubjectsCount > 0) {
-        if (annualCumulativeAverage >= passMarkThreshold) {
-          promotionVerdict = `PROMOTED TO ${nextCls.toUpperCase()}`;
-          promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
-        } else if (annualCumulativeAverage >= passMarkThreshold - 10) {
-          promotionVerdict = `PROMOTED ON TRIAL (${nextCls.toUpperCase()})`;
-          promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+        if (tierCategory === "TERTIARY") {
+          if (annualCumulativeAverage >= 70) {
+            promotionVerdict = "DISTINCTION (GOOD STANDING)";
+            promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
+          } else if (annualCumulativeAverage >= 60) {
+            promotionVerdict = "UPPER CREDIT (GOOD STANDING)";
+            promotionBadge = "bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border-teal-300";
+          } else if (annualCumulativeAverage >= 50) {
+            promotionVerdict = "LOWER CREDIT (GOOD STANDING)";
+            promotionBadge = "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border-blue-300";
+          } else if (annualCumulativeAverage >= 40) {
+            promotionVerdict = "PASS (GOOD STANDING)";
+            promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+          } else {
+            promotionVerdict = "ACADEMIC PROBATION / WARNING";
+            promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+          }
         } else {
-          promotionVerdict = `REPEAT ${selectedClass.toUpperCase()}`;
-          promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+          if (annualCumulativeAverage >= passMarkThreshold) {
+            promotionVerdict = `PROMOTED TO ${nextCls.toUpperCase()}`;
+            promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
+          } else if (annualCumulativeAverage >= passMarkThreshold - 10) {
+            promotionVerdict = `PROMOTED ON TRIAL (${nextCls.toUpperCase()})`;
+            promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+          } else {
+            promotionVerdict = `REPEAT ${selectedClass.toUpperCase()}`;
+            promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+          }
         }
       }
 

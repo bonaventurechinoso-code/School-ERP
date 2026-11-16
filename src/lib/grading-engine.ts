@@ -11,8 +11,9 @@
  */
 
 import { mapNurseryScoreToGrade } from "./nursery-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade } from "./tertiary-config";
 
-export type GradingTier = "NURSERY" | "PRIMARY" | "SECONDARY";
+export type GradingTier = "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY";
 
 export type NarrativeMilestone = "EXCELLENT" | "DEVELOPING" | "NEEDS_IMPROVEMENT";
 
@@ -155,6 +156,20 @@ export function mapScoreToGradeLetter(score: number, tierCategory?: string): { l
     if (score >= 45) return { letter: "D7", gpa: 1.5, remark: "Pass" };
     if (score >= 40) return { letter: "E8", gpa: 1.0, remark: "Pass" };
     return { letter: "F9", gpa: 0.0, remark: "Fail" };
+  }
+
+  // Tertiary / Higher Education scale (Default: 4.0 scale: A=4.0, B=3.0, C=2.0, D=1.0, F=0.0)
+  if (
+    norm === "TERTIARY" ||
+    norm.includes("TERTIARY") ||
+    norm.includes("HIGHER") ||
+    norm.includes("UNIVERSITY") ||
+    norm.includes("POLYTECHNIC") ||
+    norm.includes("COLLEGE OF EDUCATION") ||
+    isTertiaryClass(tierCategory)
+  ) {
+    const res = mapTertiaryScoreToGrade(score, "4.0");
+    return { letter: res.letter, gpa: res.gp, remark: res.remark };
   }
 
   // Default fallback for basic school
@@ -357,6 +372,35 @@ export function generateAdministrativeRemarks(
       teacherRemarks: "Shows active curiosity, joyful participation in group play, and steady developmental progression.",
       principalRemarks: "A wonderful term of early foundation growth. Well done!",
     };
+  }
+
+  if (tier === "TERTIARY") {
+    if (averageScore >= 70) {
+      return {
+        teacherRemarks: "Exemplary semester course performance demonstrating intellectual rigor and academic excellence.",
+        principalRemarks: "Distinction standing (Good Academic Standing). Outstanding scholarship across all registered courses.",
+      };
+    } else if (averageScore >= 60) {
+      return {
+        teacherRemarks: "Commendable semester result with solid mastery of coursework and practical exercises.",
+        principalRemarks: "Upper Credit standing (Good Academic Standing). Keep aiming for higher honors.",
+      };
+    } else if (averageScore >= 50) {
+      return {
+        teacherRemarks: "Satisfactory course completion. Consistent revision and engagement in lectures recommended.",
+        principalRemarks: "Lower Credit standing (Good Academic Standing). Strive to improve grade points in upcoming semesters.",
+      };
+    } else if (averageScore >= 40) {
+      return {
+        teacherRemarks: `Fair effort across registered courses. Passed ${passedCount} of ${totalCount} courses. Intensive academic support advised.`,
+        principalRemarks: "Pass standing (Good Academic Standing). Must elevate academic performance to maintain standing.",
+      };
+    } else {
+      return {
+        teacherRemarks: `Unsatisfactory course performance. Academic intervention required across ${totalCount - passedCount} courses.`,
+        principalRemarks: "Academic Warning / Probation. Advised to meet with Academic Adviser and Department Head.",
+      };
+    }
   }
 
   let teacherRemarks = "";

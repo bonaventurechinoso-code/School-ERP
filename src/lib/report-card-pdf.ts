@@ -1,9 +1,12 @@
 import PDFDocument from "pdfkit";
 import { isCrecheClass } from "./creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "./nursery-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding } from "./tertiary-config";
 
 export interface ReportCardSubjectScore {
   subject: string;
+  code?: string;
+  creditUnits?: number;
   ca1?: number;
   ca2?: number;
   assignment?: number;
@@ -12,6 +15,8 @@ export interface ReportCardSubjectScore {
   exam?: number;
   total: number;
   grade: string;
+  gp?: number;
+  qualityPoints?: number;
   subjectPosition?: string;
   classAverage?: number;
   remark: string;
@@ -33,6 +38,9 @@ export interface ReportCardPdfData {
   daysPresent?: number;
   punctualityRate?: string;
   classPosition?: string;
+  gpa?: number;
+  totalCreditUnits?: number;
+  academicStanding?: string;
   totalStudents?: number;
   totalScore?: number;
   maxPossibleScore?: number;
@@ -155,10 +163,17 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       doc.font("Helvetica-Bold")
         .fontSize(8.5)
         .fillColor("#0F172A")
-        .text("OFFICIAL TERMLY CONTINUOUS ASSESSMENT & ACADEMIC REPORT SHEET", margin, currentY + 4, {
-          width: contentWidth,
-          align: "center",
-        });
+        .text(
+          isTertiaryClass(data.className) || data.tierCategory === "TERTIARY"
+            ? "OFFICIAL SEMESTER ACADEMIC TRANSCRIPT & COURSE PERFORMANCE SHEET"
+            : "OFFICIAL TERMLY CONTINUOUS ASSESSMENT & ACADEMIC REPORT SHEET",
+          margin,
+          currentY + 4,
+          {
+            width: contentWidth,
+            align: "center",
+          }
+        );
 
       currentY += 20;
 
@@ -204,26 +219,39 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       const isCreche = isCrecheClass(data.className) || (data.tierCategory ? isCrecheClass(data.tierCategory) : false);
       const isNursery = !isCreche && (isNurseryClass(data.className) || (data.tierCategory ? isNurseryClass(data.tierCategory) : false));
+      const isTertiary = data.tierCategory === "TERTIARY" || isTertiaryClass(data.className) || (data.tierCategory ? isTertiaryClass(data.tierCategory) : false);
       const crecheHasExam = isCreche && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
       const nurseryHasExam = isNursery && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
       const isEarlyYearsNoExam = (isCreche && !crecheHasExam) || (isNursery && !nurseryHasExam);
       const isEarlyYearsWithExam = (isCreche && crecheHasExam) || (isNursery && nurseryHasExam);
 
-      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (isNursery ? mapNurseryScoreToGrade(data.averageScore).letter : (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail")) : "—");
-      const gradeRemarkSub = overallGradeVal === "Distinction" || overallGradeVal === "Excellent" ? overallGradeVal
-        : overallGradeVal === "Very Good" ? "Very Good"
-          : overallGradeVal === "Good" || overallGradeVal === "Credit" ? overallGradeVal
-            : overallGradeVal === "Developing" || overallGradeVal === "Pass" ? overallGradeVal
-              : overallGradeVal === "Needs Support" || overallGradeVal === "Fail" ? "Needs Support"
+      const tertiaryGpa = typeof data.gpa === "number" ? data.gpa : (typeof data.averageScore === "number" ? mapTertiaryScoreToGrade(data.averageScore, "4.0").gp : 3.50);
+      const tertiaryGpaStr = tertiaryGpa.toFixed(2);
+      const tertiaryStanding = getTertiaryAcademicStanding(tertiaryGpa, "4.0");
+
+      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (isTertiary ? mapTertiaryScoreToGrade(data.averageScore, "4.0").letter : (isNursery ? mapNurseryScoreToGrade(data.averageScore).letter : (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail"))) : "—");
+      const gradeRemarkSub = overallGradeVal === "Distinction" || overallGradeVal === "Excellent" || overallGradeVal === "A" ? "Distinction"
+        : overallGradeVal === "Very Good" || overallGradeVal === "B" ? "Upper Credit"
+          : overallGradeVal === "Good" || overallGradeVal === "Credit" || overallGradeVal === "C" ? "Lower Credit"
+            : overallGradeVal === "Developing" || overallGradeVal === "Pass" || overallGradeVal === "D" ? "Pass"
+              : overallGradeVal === "Needs Support" || overallGradeVal === "Fail" || overallGradeVal === "F" ? "Fail"
                 : "Standing";
 
-      const metrics = [
-        { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
-        { label: "TOTAL SCORE", val: data.totalScore !== undefined && data.totalScore !== null ? String(data.totalScore) : "0", sub: `Max: ${data.maxPossibleScore ?? (data.subjects.length * 100)}`, color: "#0F172A" },
-        { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
-        { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
-        { label: "STATUS / REMARK", val: (overallGradeVal === "Fail" || overallGradeVal === "Needs Support") ? "NEEDS SUPPORT" : "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
-      ];
+      const metrics = isTertiary
+        ? [
+          { label: "SEMESTER GPA", val: tertiaryGpaStr, sub: "Scale: 4.00 Max", color: "#1E3A8A" },
+          { label: "REGISTERED UNITS", val: String(data.totalCreditUnits || (data.subjects.length * 3)), sub: `Max: ${data.subjects.length * 100}`, color: "#0F172A" },
+          { label: "WEIGHTED AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Course Score Average", color: "#2563EB" },
+          { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
+          { label: "ACADEMIC STANDING", val: tertiaryGpa >= 2.0 ? "IN GOOD STANDING" : "PROBATION", sub: tertiaryStanding, color: "#D97706" },
+        ]
+        : [
+          { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
+          { label: "TOTAL SCORE", val: data.totalScore !== undefined && data.totalScore !== null ? String(data.totalScore) : "0", sub: `Max: ${data.maxPossibleScore ?? (data.subjects.length * 100)}`, color: "#0F172A" },
+          { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
+          { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
+          { label: "STATUS / REMARK", val: (overallGradeVal === "Fail" || overallGradeVal === "Needs Support") ? "NEEDS SUPPORT" : "PROMOTED", sub: data.promotionStatus || "In Good Standing", color: "#D97706" },
+        ];
 
       metrics.forEach((m, idx) => {
         const xPos = margin + idx * (metricBoxW + 3);
@@ -241,11 +269,24 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 40;
 
-      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60 for Primary, Observation/CA for Creche & Nursery)
+      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE
       let tableHeaders: string[];
       let colWidths: number[];
 
-      if (isEarlyYearsNoExam) {
+      if (isTertiary) {
+        tableHeaders = [
+          "COURSE CODE & TITLE",
+          "UNITS",
+          "CA SCORE",
+          "EXAM",
+          "TOTAL (100)",
+          "GRADE",
+          "GP",
+          "QP",
+          "ACADEMIC REMARK"
+        ];
+        colWidths = [170, 32, 42, 40, 44, 34, 30, 30, 109];
+      } else if (isEarlyYearsNoExam) {
         tableHeaders = [
           isNursery ? "SUBJECT / LEARNING DOMAIN" : "ACTIVITY / CURRICULUM DISCIPLINE",
           "OBSERVATION (50)",
@@ -326,31 +367,43 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           const examStr = sub.exam !== null && sub.exam !== undefined ? String(sub.exam) : "—";
           const totalStr = sub.total !== null && sub.total !== undefined ? String(sub.total) : "—";
 
-          const rowVals = isEarlyYearsNoExam
+          const rowVals = isTertiary
             ? [
-              sub.subject,
+              sub.code ? `${sub.code} - ${sub.subject}` : sub.subject,
+              String(sub.creditUnits || 3),
               ca1Str,
-              ca2Str,
-              totalStr,
-              sub.grade || "—",
-              subPosition,
-              String(sub.classAverage || 68),
-              sub.remark || (isNursery ? "Very Good Progress" : "Satisfactory Progress"),
-            ]
-            : [
-              sub.subject,
-              ca1Str,
-              ca2Str,
               examStr,
               totalStr,
               sub.grade || "—",
-              subPosition,
-              String(sub.classAverage || 68),
-              sub.remark || "Satisfactory",
-            ];
+              sub.gp !== undefined && sub.gp !== null ? Number(sub.gp).toFixed(1) : (mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").gp.toFixed(1)),
+              sub.qualityPoints !== undefined && sub.qualityPoints !== null ? String(sub.qualityPoints) : String((sub.creditUnits || 3) * mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").gp),
+              sub.remark || mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").remark,
+            ]
+            : (isEarlyYearsNoExam
+              ? [
+                sub.subject,
+                ca1Str,
+                ca2Str,
+                totalStr,
+                sub.grade || "—",
+                subPosition,
+                String(sub.classAverage || 68),
+                sub.remark || (isNursery ? "Very Good Progress" : "Satisfactory Progress"),
+              ]
+              : [
+                sub.subject,
+                ca1Str,
+                ca2Str,
+                examStr,
+                totalStr,
+                sub.grade || "—",
+                subPosition,
+                String(sub.classAverage || 68),
+                sub.remark || "Satisfactory",
+              ]);
 
-          const gradeColIdx = isEarlyYearsNoExam ? 4 : 5;
-          const totalColIdx = isEarlyYearsNoExam ? 3 : 4;
+          const gradeColIdx = isTertiary ? 5 : (isEarlyYearsNoExam ? 4 : 5);
+          const totalColIdx = isTertiary ? 4 : (isEarlyYearsNoExam ? 3 : 4);
 
           rowVals.forEach((val, cIdx) => {
             const align = cIdx === 0 ? "left" : cIdx === rowVals.length - 1 ? "left" : "center";

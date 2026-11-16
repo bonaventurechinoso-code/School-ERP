@@ -128,6 +128,12 @@ export const COMBINED_ALLOWED_CLASSES = [
 ];
 
 export const TERTIARY_ALLOWED_CLASSES = [
+  "ND 1",
+  "ND 2",
+  "HND 1",
+  "HND 2",
+  "Diploma 1",
+  "Diploma 2",
   "100 Level",
   "200 Level",
   "300 Level",

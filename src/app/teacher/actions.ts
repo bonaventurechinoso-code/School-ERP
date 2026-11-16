@@ -10,6 +10,7 @@ import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes"
 import { getSubjectsForClassAndTier } from "@/lib/curriculum-data";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
 
 export interface TeacherContext {
   staffId: string;
@@ -483,18 +484,22 @@ export async function saveTeacherGrades(
   const isCreche = isCrecheClass(className);
   const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY";
+  const isTertiary = classTier.category === "TERTIARY" || isTertiaryClass(className);
   const school = await basePrisma.school.findUnique({
     where: { id: ctx.schoolId },
     select: { tierDatabasesConfig: true, tier: true },
   });
   const crecheConfig = resolveCrecheConfig(school);
   const nurseryConfig = resolveNurseryConfig(school);
-  const isPrimary = !isCreche && !isNursery && !isSecondary;
+  const isPrimary = !isCreche && !isNursery && !isSecondary && !isTertiary;
 
   const tenantDb = getTenantClient(ctx.schoolId);
 
   // Helper to resolve grade letter
   function getGradeLetter(total: number): string {
+    if (isTertiary) {
+      return mapTertiaryScoreToGrade(total, "4.0").letter;
+    }
     if (isNursery) {
       return mapNurseryScoreToGrade(total).letter;
     }
@@ -573,22 +578,29 @@ export async function saveTeacherGrades(
   }
 
   await basePrisma.$transaction(async (tx) => {
+    const tertiaryCourse = isTertiary ? resolveTertiaryCourse(subject) : null;
     for (const g of grades) {
       const ca1 = isNursery
         ? Math.min(nurseryConfig.ca1Max, Math.max(0, Number(g.ca1) || 0))
         : (isCreche
           ? Math.min(crecheConfig.ca1Max, Math.max(0, Number(g.ca1) || 0))
-          : Math.min(20, Math.max(0, Number(g.ca1) || 0)));
-      const ca2 = isNursery
-        ? Math.min(nurseryConfig.ca2Max, Math.max(0, Number(g.ca2) || 0))
-        : (isCreche
-          ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(g.ca2) || 0))
-          : Math.min(20, Math.max(0, Number(g.ca2) || 0)));
+          : (isTertiary
+            ? Math.min(tertiaryCourse?.caWeight || 30, Math.max(0, Number(g.ca1) || 0))
+            : Math.min(20, Math.max(0, Number(g.ca1) || 0))));
+      const ca2 = isTertiary
+        ? 0 // ca2 is NOT USED for Tertiary
+        : (isNursery
+          ? Math.min(nurseryConfig.ca2Max, Math.max(0, Number(g.ca2) || 0))
+          : (isCreche
+            ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(g.ca2) || 0))
+            : Math.min(20, Math.max(0, Number(g.ca2) || 0))));
       const exam = isNursery
         ? (nurseryConfig.hasExam ? Math.min(nurseryConfig.examMax, Math.max(0, Number(g.exam) || 0)) : 0)
         : (isCreche
           ? (crecheConfig.hasExam ? Math.min(crecheConfig.examMax, Math.max(0, Number(g.exam) || 0)) : 0)
-          : Math.min(60, Math.max(0, Number(g.exam) || 0)));
+          : (isTertiary
+            ? Math.min(tertiaryCourse?.examWeight || 70, Math.max(0, Number(g.exam) || 0))
+            : Math.min(60, Math.max(0, Number(g.exam) || 0))));
       const totalScore = ca1 + ca2 + exam;
       const gradeLetter = getGradeLetter(totalScore);
 

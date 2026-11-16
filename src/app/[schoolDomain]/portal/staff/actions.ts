@@ -6,6 +6,7 @@ import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
@@ -452,16 +453,33 @@ export async function saveClassroomGrades(
     const isCreche = isCrecheClass(className);
     const isNursery = !isCreche && (isNurseryClass(className) || classTier.category === "NURSERY");
     const isSecondary = classTier.category === "SECONDARY";
+    const isTertiary = classTier.category === "TERTIARY" || isTertiaryClass(className);
     const school = await basePrisma.school.findUnique({
       where: { id: schoolId },
       select: { tierDatabasesConfig: true, tier: true },
     });
     const crecheConfig = resolveCrecheConfig(school);
     const nurseryConfig = resolveNurseryConfig(school);
-    const isPrimary = !isCreche && !isNursery && !isSecondary;
+    const tertiaryCourse = isTertiary ? resolveTertiaryCourse(subject) : null;
+    const isPrimary = !isCreche && !isNursery && !isSecondary && !isTertiary;
 
     // Validation
-    if (isNursery) {
+    if (isTertiary && tertiaryCourse) {
+      for (const item of grades) {
+        if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > tertiaryCourse.caWeight)) {
+          return {
+            success: false,
+            error: `Validation Error: CA score (${item.ca1}) is out of range for ${tertiaryCourse.code}. Allowed range is 0 - ${tertiaryCourse.caWeight}.`,
+          };
+        }
+        if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > tertiaryCourse.examWeight)) {
+          return {
+            success: false,
+            error: `Validation Error: Exam score (${item.exam}) is out of range for ${tertiaryCourse.code}. Allowed range is 0 - ${tertiaryCourse.examWeight}.`,
+          };
+        }
+      }
+    } else if (isNursery) {
       for (const item of grades) {
         if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > nurseryConfig.ca1Max)) {
           return {
@@ -535,6 +553,9 @@ export async function saveClassroomGrades(
 
     // Helper to resolve grade letter
     function getGradeLetter(total: number): string {
+      if (isTertiary) {
+        return mapTertiaryScoreToGrade(total, "4.0").letter;
+      }
       if (isNursery) {
         return mapNurseryScoreToGrade(total).letter;
       }
@@ -614,15 +635,27 @@ export async function saveClassroomGrades(
 
     await basePrisma.$transaction(async (tx) => {
       for (const item of grades) {
-        const ca1 = isCreche
-          ? Math.min(crecheConfig.ca1Max, Math.max(0, Number(item.ca1) || 0))
-          : Math.min(20, Math.max(0, Number(item.ca1) || 0));
-        const ca2 = isCreche
-          ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(item.ca2) || 0))
-          : Math.min(20, Math.max(0, Number(item.ca2) || 0));
-        const exam = isCreche
-          ? (crecheConfig.hasExam ? Math.min(crecheConfig.examMax, Math.max(0, Number(item.exam) || 0)) : 0)
-          : Math.min(60, Math.max(0, Number(item.exam) || 0));
+        const ca1 = isNursery
+          ? Math.min(nurseryConfig.ca1Max, Math.max(0, Number(item.ca1) || 0))
+          : (isCreche
+            ? Math.min(crecheConfig.ca1Max, Math.max(0, Number(item.ca1) || 0))
+            : (isTertiary
+              ? Math.min(tertiaryCourse?.caWeight || 30, Math.max(0, Number(item.ca1) || 0))
+              : Math.min(20, Math.max(0, Number(item.ca1) || 0))));
+        const ca2 = isTertiary
+          ? 0 // ca2 NOT USED for Tertiary
+          : (isNursery
+            ? Math.min(nurseryConfig.ca2Max, Math.max(0, Number(item.ca2) || 0))
+            : (isCreche
+              ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(item.ca2) || 0))
+              : Math.min(20, Math.max(0, Number(item.ca2) || 0))));
+        const exam = isNursery
+          ? (nurseryConfig.hasExam ? Math.min(nurseryConfig.examMax, Math.max(0, Number(item.exam) || 0)) : 0)
+          : (isCreche
+            ? (crecheConfig.hasExam ? Math.min(crecheConfig.examMax, Math.max(0, Number(item.exam) || 0)) : 0)
+            : (isTertiary
+              ? Math.min(tertiaryCourse?.examWeight || 70, Math.max(0, Number(item.exam) || 0))
+              : Math.min(60, Math.max(0, Number(item.exam) || 0))));
         const total = ca1 + ca2 + exam;
         const letter = getGradeLetter(total);
 

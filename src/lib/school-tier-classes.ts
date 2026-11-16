@@ -69,11 +69,18 @@ export const CANONICAL_TIER_CLASSES: Record<EducationalTierCategory, string[]> =
     "SS 3",
   ],
   TERTIARY: [
+    "ND 1",
+    "ND 2",
+    "HND 1",
+    "HND 2",
+    "Diploma 1",
+    "Diploma 2",
     "100 Level",
     "200 Level",
     "300 Level",
     "400 Level",
     "500 Level",
+    "Postgraduate",
   ],
 };
 
@@ -162,6 +169,7 @@ export function getTierForClass(className: string): {
     norm.includes("LEVEL") ||
     norm.includes("ND") ||
     norm.includes("HND") ||
+    norm.includes("DIPLOMA") ||
     norm.includes("NCE") ||
     norm.includes("UNIVERSITY") ||
     norm.includes("POLYTECHNIC") ||

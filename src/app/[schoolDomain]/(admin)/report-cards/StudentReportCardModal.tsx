@@ -14,6 +14,7 @@ import {
 import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib/assessmentEngine";
 import { isCrecheClass } from "@/lib/creche-config";
 import { isNurseryClass } from "@/lib/nursery-config";
+import { isTertiaryClass, resolveTertiaryCourse, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
@@ -77,7 +78,7 @@ export default function StudentReportCardModal({
   const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(studentData.tier);
   const isNursery = !isCreche && (isNurseryClass(studentData.currentClass) || isNurseryClass(studentData.tier) || classTier.category === "NURSERY");
   const isSecondary = classTier.category === "SECONDARY" || (!isCreche && !isNursery && (studentData.currentClass?.toUpperCase().includes("JSS") || studentData.currentClass?.toUpperCase().includes("SSS") || studentData.tier?.toUpperCase().includes("SECONDARY")));
-  const isHigherEd = classTier.category === "TERTIARY";
+  const isHigherEd = classTier.category === "TERTIARY" || isTertiaryClass(studentData.currentClass) || isTertiaryClass(studentData.tier);
   const isPrimary = !isCreche && !isNursery && !isSecondary && !isHigherEd;
   const tierName = isCreche ? "Creche" : isNursery ? "Nursery / Kindergarten" : isSecondary ? "Secondary School" : isHigherEd ? "University" : "Primary School";
 
@@ -131,11 +132,19 @@ export default function StudentReportCardModal({
   const rawAvg = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length) : 0;
   const averagePercentage = rawAvg.toFixed(2).endsWith(".00") ? rawAvg.toFixed(1) : rawAvg.toFixed(2);
   const overallAvgNum = parseFloat(averagePercentage);
+
+  const tertiaryGPA = isHigherEd && enteredSubjects.length > 0
+    ? calculateTertiaryGPA(enteredSubjects.map((s: any) => {
+        const meta = resolveTertiaryCourse(s.subject);
+        return { creditUnits: s.creditUnits || meta.creditUnits, gp: s.computedGp };
+      }))
+    : null;
+
   const overallGrade = enteredSubjects.length > 0 
-    ? calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade 
+    ? (isHigherEd ? calculateBonaVeeResult("University", { exam: overallAvgNum }).grade : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
     : (isNursery || isCreche ? "Needs Support" : "—");
   const overallRemark = enteredSubjects.length > 0 
-    ? getGradeRemark(overallGrade) 
+    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade))
     : (isNursery || isCreche ? "Needs Support" : "No Grades Entered");
 
   // Position Suffix
@@ -306,54 +315,54 @@ export default function StudentReportCardModal({
           {/* ========================================================= */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             
-            {/* Class Position Card */}
+            {/* Position / GPA Card */}
             <div className="bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 text-center">
               <span className="text-amber-800 dark:text-amber-300 font-bold text-xs uppercase tracking-wider block">
-                Class Position
+                {isHigherEd ? "Semester GPA" : "Class Position"}
               </span>
               <div className="text-2xl font-black text-amber-900 dark:text-amber-200 font-mono mt-1">
-                {positionString}
+                {isHigherEd ? (tertiaryGPA?.gpa.toFixed(2) || "0.00") : positionString}
               </div>
               <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-                Out of {totalStudents} Students
+                {isHigherEd ? "Scale: 4.00 Max" : `Out of ${totalStudents} Students`}
               </span>
             </div>
 
-            {/* Aggregate Score Card */}
+            {/* Aggregate Score / Credit Units Card */}
             <div className="bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-2xl p-4 text-center">
               <span className="text-blue-800 dark:text-blue-300 font-bold text-xs uppercase tracking-wider block">
-                Total Score
+                {isHigherEd ? "Total Units Registered" : "Total Score"}
               </span>
               <div className="text-2xl font-black text-blue-900 dark:text-blue-200 font-mono mt-1">
-                {aggregateScore}
+                {isHigherEd ? (tertiaryGPA?.totalCreditUnits || 0) : aggregateScore}
               </div>
               <span className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">
-                Total Obtainable: {totalPossible}
+                {isHigherEd ? `Quality Points: ${tertiaryGPA?.totalQualityPoints || 0}` : `Total Obtainable: ${totalPossible}`}
               </span>
             </div>
 
             {/* Overall Average Card */}
             <div className="bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl p-4 text-center">
               <span className="text-emerald-800 dark:text-emerald-300 font-bold text-xs uppercase tracking-wider block">
-                Class Average
+                {isHigherEd ? "Weighted Average" : "Class Average"}
               </span>
               <div className="text-2xl font-black text-emerald-900 dark:text-emerald-200 font-mono mt-1">
                 {averagePercentage}%
               </div>
               <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                Terminal Percentage
+                {isHigherEd ? "Course Total Average" : "Terminal Percentage"}
               </span>
             </div>
 
-            {/* Aggregate Grade Card */}
+            {/* Aggregate Grade / Academic Standing Card */}
             <div className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/60 rounded-2xl p-4 text-center">
               <span className="text-purple-800 dark:text-purple-300 font-bold text-xs uppercase tracking-wider block">
-                Final Assessment Grade
+                {isHigherEd ? "Academic Standing" : "Final Assessment Grade"}
               </span>
-              <div className="text-2xl font-black text-purple-900 dark:text-purple-200 font-mono mt-1">
-                {overallGrade}
+              <div className="text-2xl font-black text-purple-900 dark:text-purple-200 font-mono mt-1 truncate">
+                {isHigherEd ? overallGrade : overallGrade}
               </div>
-              <span className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">
+              <span className="text-[11px] text-purple-700 dark:text-purple-400 font-medium truncate block">
                 {overallRemark}
               </span>
             </div>
@@ -439,12 +448,13 @@ export default function StudentReportCardModal({
                     {/* Higher Education Columns */}
                     {isHigherEd && (
                       <>
-                        <th className="px-4 py-3.5 text-center">Assignment (10%)</th>
-                        <th className="px-4 py-3.5 text-center">Test (20%)</th>
-                        <th className="px-4 py-3.5 text-center">Exam (70%)</th>
-                        <th className="px-4 py-3.5 text-center">Total (100)</th>
-                        <th className="px-3 py-3.5 text-center">GP</th>
+                        <th className="px-3 py-3.5 text-center">Units</th>
+                        <th className="px-3 py-3.5 text-center">CA Score</th>
+                        <th className="px-3 py-3.5 text-center">Exam Score</th>
+                        <th className="px-3 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
+                        <th className="px-3 py-3.5 text-center">GP</th>
+                        <th className="px-4 py-3.5 text-left">Standing / Remark</th>
                       </>
                     )}
                   </tr>
@@ -613,12 +623,35 @@ export default function StudentReportCardModal({
                       {/* Higher Ed Row Data */}
                       {isHigherEd && (
                         <>
-                          <td className="px-4 py-3 text-center font-mono">{sub.assignment ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono">{sub.test ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono">{sub.exam ?? "—"}</td>
-                          <td className="px-4 py-3 text-center font-mono font-extrabold">{sub.computedTotal}</td>
-                          <td className="px-3 py-3 text-center font-mono font-bold">{sub.computedGp.toFixed(2)}</td>
-                          <td className="px-3 py-3 text-center font-black">{sub.computedGrade}</td>
+                          <td className="px-3 py-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {sub.creditUnits || resolveTertiaryCourse(sub.subject).creditUnits}
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono">
+                            {sub.ca1 !== null && sub.ca1 !== undefined ? sub.ca1 : (sub.test !== null && sub.test !== undefined ? sub.test : "—")}
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono">
+                            {sub.exam !== null && sub.exam !== undefined ? sub.exam : "—"}
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono font-extrabold text-blue-900 dark:text-blue-300">
+                            {sub.computedTotal ?? "—"}
+                          </td>
+                          <td className="px-3 py-3 text-center font-black">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black inline-block ${
+                              sub.computedGrade === "A" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300" :
+                              sub.computedGrade === "B" ? "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300" :
+                              sub.computedGrade === "C" ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300" :
+                              sub.computedGrade === "D" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" :
+                              "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                            }`}>
+                              {sub.computedGrade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono font-bold">
+                            {sub.computedGp !== null && sub.computedGp !== undefined ? Number(sub.computedGp).toFixed(1) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-left text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {sub.computedRemark}
+                          </td>
                         </>
                       )}
                     </tr>
