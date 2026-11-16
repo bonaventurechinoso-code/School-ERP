@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { safeRedisDel, safeRedisScanDel } from "@/lib/redis";
 import { clearL1TenantCache } from "@/lib/cache";
 import { isValidNubanAccountNumber } from "@/lib/nigerian-banks";
+import { CrecheAssessmentConfig, DEFAULT_CRECHE_CONFIG } from "@/lib/creche-config";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -44,6 +45,7 @@ export interface UpdatePortalSettingsPayload {
   settlementAccountName?: string | null;
   paymentInstruction?: string | null;
   entranceExamSettings?: EntranceExamSettings;
+  crecheAssessmentConfig?: Partial<CrecheAssessmentConfig>;
 }
 
 export async function updatePortalSettings(
@@ -96,12 +98,13 @@ export async function updatePortalSettings(
         : "Use Student Admission No as transfer narration";
     }
 
-    // Extended Tier / Portal Configuration (Entrance Exam & Custom Hero Media)
+    // Extended Tier / Portal Configuration (Entrance Exam & Custom Hero Media & Creche Formula)
     const hasTierConfigUpdate = 
       data.entranceExamSettings !== undefined ||
       data.customHeroImage !== undefined ||
       data.customHeroVideo !== undefined ||
-      data.customHeroType !== undefined;
+      data.customHeroType !== undefined ||
+      data.crecheAssessmentConfig !== undefined;
 
     if (hasTierConfigUpdate) {
       const currentSchool = await basePrisma.school.findUnique({
@@ -122,6 +125,19 @@ export async function updatePortalSettings(
       }
       if (data.customHeroType !== undefined) {
         nextConfig.customHeroType = data.customHeroType || "image";
+      }
+      if (data.crecheAssessmentConfig !== undefined) {
+        const existingCreche = existingConfig.crecheAssessmentConfig || {};
+        nextConfig.crecheAssessmentConfig = {
+          hasExam: data.crecheAssessmentConfig.hasExam !== undefined ? Boolean(data.crecheAssessmentConfig.hasExam) : (existingCreche.hasExam ?? false),
+          ca1Name: data.crecheAssessmentConfig.ca1Name?.trim() || existingCreche.ca1Name || "Observation",
+          ca1Max: Number(data.crecheAssessmentConfig.ca1Max) > 0 ? Number(data.crecheAssessmentConfig.ca1Max) : (data.crecheAssessmentConfig.hasExam ? 20 : 50),
+          ca2Name: data.crecheAssessmentConfig.ca2Name?.trim() || existingCreche.ca2Name || "Continuous Assessment",
+          ca2Max: Number(data.crecheAssessmentConfig.ca2Max) > 0 ? Number(data.crecheAssessmentConfig.ca2Max) : (data.crecheAssessmentConfig.hasExam ? 20 : 50),
+          examName: data.crecheAssessmentConfig.examName?.trim() || existingCreche.examName || "Terminal Exam",
+          examMax: data.crecheAssessmentConfig.hasExam ? (Number(data.crecheAssessmentConfig.examMax) > 0 ? Number(data.crecheAssessmentConfig.examMax) : 60) : 0,
+          totalMax: 100,
+        };
       }
 
       updatePayload.tierDatabasesConfig = nextConfig;
@@ -185,5 +201,71 @@ export async function updatePortalSettings(
   } catch (error: any) {
     console.error("[Portal Settings Action] Failed to update portal settings:", error);
     return { success: false, error: error.message || "Failed to update portal settings." };
+  }
+}
+
+/**
+ * Server Action: Update Creche Assessment Formula
+ * Defaults to Observation / Continuous Assessment (No Exam 60) unless enabled by admin.
+ */
+export async function updateCrecheFormulaAction(
+  schoolId: string,
+  config: Partial<CrecheAssessmentConfig>,
+  schoolDomain?: string
+) {
+  try {
+    const currentSchool = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { tierDatabasesConfig: true, subdomain: true },
+    });
+    const existingConfig: any = (currentSchool?.tierDatabasesConfig as object) || {};
+    const existingCreche: any = existingConfig.crecheAssessmentConfig || {};
+    const hasExam = config.hasExam !== undefined ? Boolean(config.hasExam) : (existingCreche.hasExam ?? false);
+    const updatedCreche: CrecheAssessmentConfig = {
+      hasExam,
+      ca1Name: config.ca1Name?.trim() || existingCreche.ca1Name || "Observation",
+      ca1Max: Number(config.ca1Max) > 0 ? Number(config.ca1Max) : (hasExam ? 20 : 50),
+      ca2Name: config.ca2Name?.trim() || existingCreche.ca2Name || "Continuous Assessment",
+      ca2Max: Number(config.ca2Max) > 0 ? Number(config.ca2Max) : (hasExam ? 20 : 50),
+      examName: config.examName?.trim() || existingCreche.examName || "Terminal Exam",
+      examMax: hasExam ? (Number(config.examMax) > 0 ? Number(config.examMax) : 60) : 0,
+      totalMax: 100,
+    };
+
+    const nextConfig = {
+      ...existingConfig,
+      crecheAssessmentConfig: updatedCreche,
+    };
+
+    await basePrisma.school.update({
+      where: { id: schoolId },
+      data: {
+        tierDatabasesConfig: nextConfig as any,
+      },
+    });
+
+    await basePrisma.auditLog.create({
+      data: {
+        schoolId,
+        action: "UPDATE_CRECHE_ASSESSMENT_FORMULA",
+        target: "Admin Settings - Creche Formula",
+        metadata: {
+          formula: updatedCreche as any,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const targetSub = schoolDomain || currentSchool?.subdomain;
+    if (targetSub) {
+      safeRevalidatePath(`/${targetSub}/portal-settings`, "page");
+      safeRevalidatePath(`/${targetSub}/exams`, "page");
+      safeRevalidatePath(`/${targetSub}/report-cards`, "page");
+    }
+
+    return { success: true, config: updatedCreche };
+  } catch (error: any) {
+    console.error("[updateCrecheFormulaAction Error]:", error);
+    return { success: false, error: error.message || "Failed to update Creche formula." };
   }
 }

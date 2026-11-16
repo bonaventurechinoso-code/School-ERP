@@ -4,6 +4,7 @@ import * as jose from "jose";
 import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { generateReportCardPdf, ReportCardPdfData, ReportCardSubjectScore } from "@/lib/report-card-pdf";
 import { resolveGradingTier } from "@/lib/grading-engine";
+import { isCrecheClass, resolveCrecheConfig } from "@/lib/creche-config";
 
 export async function GET(req: NextRequest) {
   try {
@@ -79,11 +80,11 @@ export async function GET(req: NextRequest) {
     // 3. Fetch Academic Records / Grades for this student
     const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
       : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-      : term === "First Term" ? ["First Term", "1st Term"]
-      : term === "Second Term" ? ["Second Term", "2nd Term"]
-      : term === "Third Term" ? ["Third Term", "3rd Term"]
-      : [term];
+        : term === "3rd Term" ? ["3rd Term", "Third Term"]
+          : term === "First Term" ? ["First Term", "1st Term"]
+            : term === "Second Term" ? ["Second Term", "2nd Term"]
+              : term === "Third Term" ? ["Third Term", "3rd Term"]
+                : [term];
 
     // Priority 1: GradeRecord (Single Source of Truth)
     const rawGradeRecords = await tenantDb.gradeRecord.findMany({
@@ -166,15 +167,16 @@ export async function GET(req: NextRequest) {
     const maxPossibleScore = subjectsList.length * 100;
     const averageScore = subjectsList.length > 0 ? (totalScore / subjectsList.length).toFixed(1) : "0.0";
     const avgNum = Number(averageScore);
-    const overallGrade = tierCategory === "PRIMARY"
+    const isCreche = isCrecheClass(currentClass) || isCrecheClass(tierCategory);
+    const overallGrade = (tierCategory === "PRIMARY" || isCreche)
       ? (avgNum >= 75 ? "Distinction" : avgNum >= 65 ? "Very Good" : avgNum >= 50 ? "Credit" : avgNum >= 40 ? "Pass" : "Fail")
       : (avgNum >= 75 ? "A1" : avgNum >= 70 ? "B2" : avgNum >= 65 ? "B3" : avgNum >= 60 ? "C4" : avgNum >= 50 ? "C6" : avgNum >= 40 ? "D7" : "F9");
     const admissionNumber = student.admissionNumber || "Pending";
 
     const pdfData: ReportCardPdfData = {
-      schoolName: school?.name || "Egede Primary School",
-      schoolMotto: "Knowledge, Discipline and Excellence",
-      schoolAddress: "Ifite-Ogwari, Ayamelum LGA, Anambra State, Nigeria",
+      schoolName: school?.name || "Official Academic Institution",
+      schoolMotto: (school as any)?.motto || "Knowledge, Discipline and Excellence",
+      schoolAddress: (school as any)?.address || "Federal Republic of Nigeria Ministry of Education Certified",
       session,
       term,
       studentName: `${student.firstName} ${student.lastName}`.trim(),

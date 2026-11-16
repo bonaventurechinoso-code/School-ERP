@@ -12,6 +12,7 @@ import {
   FileDown,
 } from "lucide-react";
 import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib/assessmentEngine";
+import { isCrecheClass } from "@/lib/creche-config";
 
 export interface ReportCardStudentData {
   id: string;
@@ -74,14 +75,17 @@ export default function StudentReportCardModal({
 
   // Resolve Tier Category
   const tierName = studentData.tier || "Secondary School";
+  const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(tierName);
   const isHigherEd =
-    tierName.toLowerCase().includes("university") ||
-    tierName.toLowerCase().includes("polytechnic") ||
-    tierName.toLowerCase().includes("college") ||
-    tierName.toLowerCase().includes("higher");
-  const isNursery = tierName.toLowerCase().includes("nursery") || tierName.toLowerCase().includes("creche");
-  const isPrimary = tierName.toLowerCase().includes("primary") || tierName.toLowerCase().includes("basic");
-  const isSecondary = !isHigherEd && !isNursery && !isPrimary;
+    !isCreche && (
+      tierName.toLowerCase().includes("university") ||
+      tierName.toLowerCase().includes("polytechnic") ||
+      tierName.toLowerCase().includes("college") ||
+      tierName.toLowerCase().includes("higher")
+    );
+  const isNursery = !isCreche && (tierName.toLowerCase().includes("nursery") || studentData.currentClass?.toLowerCase().includes("nursery"));
+  const isPrimary = !isCreche && (tierName.toLowerCase().includes("primary") || tierName.toLowerCase().includes("basic") || studentData.currentClass?.toLowerCase().includes("primary"));
+  const isSecondary = !isHigherEd && !isNursery && !isPrimary && !isCreche;
 
   // Single Source of Truth: Resolve real subjects strictly from studentData
   const activeSubjects = (() => {
@@ -396,7 +400,22 @@ export default function StudentReportCardModal({
                       </>
                     )}
 
-                    {/* Creche / Nursery Columns */}
+                    {/* Creche Columns */}
+                    {isCreche && (
+                      <>
+                        <th className="px-4 py-3.5 text-center">Observation (50)</th>
+                        <th className="px-4 py-3.5 text-center">Continuous Assessment (50)</th>
+                        {activeSubjects.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                          <th className="px-4 py-3.5 text-center">Exam (60)</th>
+                        )}
+                        <th className="px-4 py-3.5 text-center">Total (100)</th>
+                        <th className="px-3 py-3.5 text-center">Grade</th>
+                        <th className="px-3 py-3.5 text-center">Position</th>
+                        <th className="px-5 py-3.5 text-left">Remark</th>
+                      </>
+                    )}
+
+                    {/* Nursery Narrative Columns */}
                     {isNursery && (
                       <>
                         <th className="px-4 py-3.5 text-center">Observation (40%)</th>
@@ -490,7 +509,45 @@ export default function StudentReportCardModal({
                         </>
                       )}
 
-                      {/* Creche / Nursery Row Data */}
+                      {/* Creche Row Data */}
+                      {isCreche && (
+                        <>
+                          <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered ? "—" : (sub.ca1 ?? "—")}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            {sub.isNotEntered ? "—" : (sub.ca2 ?? "—")}
+                          </td>
+                          {activeSubjects.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                            <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {sub.isNotEntered ? "—" : (sub.exam ?? "—")}
+                            </td>
+                          )}
+                          <td className="px-4 py-3 text-center font-mono font-black text-slate-900 dark:text-white">
+                            {sub.isNotEntered ? "—" : sub.computedTotal}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              sub.computedGrade === "Distinction" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200"
+                                : sub.computedGrade === "Very Good" ? "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border border-teal-200"
+                                  : sub.computedGrade === "Credit" ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200"
+                                    : sub.computedGrade === "Pass" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200"
+                                      : sub.computedGrade === "Fail" ? "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200"
+                                        : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
+                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
+                            {sub.computedRemark}
+                          </td>
+                        </>
+                      )}
+
+                      {/* Nursery Row Data */}
                       {isNursery && (
                         <>
                           <td className="px-4 py-3 text-center font-mono">{sub.observation ?? "—"}</td>

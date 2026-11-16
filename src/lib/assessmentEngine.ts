@@ -9,6 +9,8 @@
  *   Assignment (10%), Test (20%), Semester Exam (70%) -> NUC/NBTE 5.00 GP & Letter (A-F)
  */
 
+import { isCrecheClass } from "./creche-config";
+
 export type InstitutionalTier =
   | "Creche / Nursery"
   | "Primary School"
@@ -147,8 +149,16 @@ export function getNigerianGrade(level: string, finalTotal: number): string {
     return "F";
   }
 
-  // Primary School Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
-  if (resolved === "Primary School" || level === "Primary School") {
+  // Primary School & Creche Unified Scale: Distinction (75+), Very Good (65-74), Credit (50-64), Pass (40-49), Fail (<40)
+  if (
+    resolved === "Primary School" ||
+    level === "Primary School" ||
+    isCrecheClass(level) ||
+    level.toUpperCase().includes("CRECHE") ||
+    level.toUpperCase().includes("CRÈCHE") ||
+    level.toUpperCase().includes("DAYCARE") ||
+    level.toUpperCase().includes("PLAYGROUP")
+  ) {
     if (finalTotal >= 75) return "Distinction";
     if (finalTotal >= 65) return "Very Good";
     if (finalTotal >= 50) return "Credit";
@@ -215,8 +225,19 @@ export function calculateBonaVeeResult(level: string, scores: any) {
   const resolvedLevel = normalizeTierLevel(level);
 
   // 1. Compute Totals based on Tier Weights
-  if (level === "Creche / Nursery" || resolvedLevel === "Creche / Nursery") {
-    total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
+  if (isCrecheClass(level) || level.toUpperCase().includes("CRECHE") || level.toUpperCase().includes("CRÈCHE") || level.toUpperCase().includes("DAYCARE") || level.toUpperCase().includes("PLAYGROUP")) {
+    // Creche Single Source of Truth: scores come from GradeRecord (ca1, ca2, exam)
+    if (scores?.ca1 !== undefined || scores?.ca2 !== undefined || scores?.exam !== undefined) {
+      total = (s.ca1 || 0) + (s.ca2 || 0) + (s.exam || 0);
+    } else {
+      total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
+    }
+  } else if (level === "Creche / Nursery" || resolvedLevel === "Creche / Nursery") {
+    if (scores?.ca1 !== undefined || scores?.ca2 !== undefined || scores?.exam !== undefined) {
+      total = (s.ca1 || 0) + (s.ca2 || 0) + (s.exam || 0);
+    } else {
+      total = s.observation * 0.4 + s.classwork * 0.4 + s.affective * 0.2;
+    }
   } else if (level === "Primary School" || resolvedLevel === "Primary School") {
     // NERDC 20/20/60 standard: 1st CA (20) + 2nd CA (20) + Exam (60) = 100
     total = s.ca1 + s.ca2 + s.exam;

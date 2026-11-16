@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { cache } from "react";
 import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes";
 import { getSubjectsForClassAndTier } from "@/lib/curriculum-data";
+import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 
 export interface TeacherContext {
   staffId: string;
@@ -464,10 +465,41 @@ export async function saveTeacherGrades(
   const ctx = await getTeacherContext();
   if (!ctx) throw new Error("Unauthorized");
 
+  // 1. Lock Check: If Head Teacher / Principal approved or locked, reject edit
+  const isLocked = await basePrisma.reportCard.findFirst({
+    where: {
+      schoolId: ctx.schoolId,
+      className,
+      term,
+      status: { in: ["APPROVED", "LOCKED"] },
+    },
+  });
+  if (isLocked) {
+    throw new Error(`Grades for ${className} (${term}) are locked by the Head Teacher / Principal. Contact administration to unlock.`);
+  }
+
+  const isCreche = isCrecheClass(className);
+  const school = await basePrisma.school.findUnique({
+    where: { id: ctx.schoolId },
+    select: { tierDatabasesConfig: true, tier: true },
+  });
+  const crecheConfig = resolveCrecheConfig(school);
+  const isPrimary = !isCreche && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
+
   const tenantDb = getTenantClient(ctx.schoolId);
 
   // Helper to resolve grade letter
   function getGradeLetter(total: number): string {
+    if (isCreche) {
+      return mapCrecheScoreToGrade(total).letter;
+    }
+    if (isPrimary) {
+      if (total >= 75) return "Distinction";
+      if (total >= 65) return "Very Good";
+      if (total >= 50) return "Credit";
+      if (total >= 40) return "Pass";
+      return "Fail";
+    }
     if (total >= 75) return "A1";
     if (total >= 70) return "B2";
     if (total >= 65) return "B3";
@@ -523,9 +555,15 @@ export async function saveTeacherGrades(
 
   await basePrisma.$transaction(async (tx) => {
     for (const g of grades) {
-      const ca1 = Math.min(20, Math.max(0, Number(g.ca1) || 0));
-      const ca2 = Math.min(20, Math.max(0, Number(g.ca2) || 0));
-      const exam = Math.min(60, Math.max(0, Number(g.exam) || 0));
+      const ca1 = isCreche
+        ? Math.min(crecheConfig.ca1Max, Math.max(0, Number(g.ca1) || 0))
+        : Math.min(20, Math.max(0, Number(g.ca1) || 0));
+      const ca2 = isCreche
+        ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(g.ca2) || 0))
+        : Math.min(20, Math.max(0, Number(g.ca2) || 0));
+      const exam = isCreche
+        ? (crecheConfig.hasExam ? Math.min(crecheConfig.examMax, Math.max(0, Number(g.exam) || 0)) : 0)
+        : Math.min(60, Math.max(0, Number(g.exam) || 0));
       const totalScore = ca1 + ca2 + exam;
       const gradeLetter = getGradeLetter(totalScore);
 
@@ -633,6 +671,24 @@ export async function saveTeacherGrades(
       }
     }
   });
+
+  try {
+    await basePrisma.auditLog.create({
+      data: {
+        actorId: ctx.staffId,
+        schoolId: ctx.schoolId,
+        action: "TEACHER_SAVE_GRADES",
+        target: `${className} - ${subject} (${term})`,
+        metadata: {
+          savedAt: new Date().toISOString(),
+          count: grades.length,
+          isCreche,
+        },
+      },
+    });
+  } catch (auditErr) {
+    console.warn("[saveTeacherGrades] Audit log fallback:", auditErr);
+  }
 
   await invalidateGradingNamespace(ctx.schoolId);
   try {

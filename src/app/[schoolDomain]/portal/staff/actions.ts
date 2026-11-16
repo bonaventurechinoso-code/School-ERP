@@ -4,6 +4,7 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
+import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -429,25 +430,75 @@ export async function saveClassroomGrades(
   grades: GradeEntryPayload[]
 ) {
   try {
-    // Strict Validation: 1st CA (0-20), 2nd CA (0-20), Exam (0-60)
-    for (const item of grades) {
-      if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > 20)) {
-        return {
-          success: false,
-          error: `Validation Error: 1st CA score (${item.ca1}) is out of range. Allowed range is 0 - 20.`,
-        };
+    // 1. Lock Check: If Head Teacher / Principal approved or locked, reject edit
+    const lockedReport = await basePrisma.reportCard.findFirst({
+      where: {
+        schoolId,
+        className,
+        term,
+        status: { in: ["APPROVED", "LOCKED"] },
+      },
+    });
+    if (lockedReport) {
+      return {
+        success: false,
+        error: `Grades for ${className} (${term}) have been approved and locked by the Head Teacher / Principal. Modification requires administrative unlock.`,
+      };
+    }
+
+    const isCreche = isCrecheClass(className);
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { tierDatabasesConfig: true, tier: true },
+    });
+    const crecheConfig = resolveCrecheConfig(school);
+    const isPrimary = !isCreche && (className.toUpperCase().includes("PRIMARY") || className.toUpperCase().includes("BASIC") || school?.tier === "PRIMARY");
+
+    // Validation
+    if (isCreche) {
+      for (const item of grades) {
+        if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > crecheConfig.ca1Max)) {
+          return {
+            success: false,
+            error: `Validation Error: ${crecheConfig.ca1Name} score (${item.ca1}) is out of range. Allowed range is 0 - ${crecheConfig.ca1Max}.`,
+          };
+        }
+        if (item.ca2 !== undefined && item.ca2 !== null && (item.ca2 < 0 || item.ca2 > crecheConfig.ca2Max)) {
+          return {
+            success: false,
+            error: `Validation Error: ${crecheConfig.ca2Name} score (${item.ca2}) is out of range. Allowed range is 0 - ${crecheConfig.ca2Max}.`,
+          };
+        }
+        if (crecheConfig.hasExam) {
+          if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > crecheConfig.examMax)) {
+            return {
+              success: false,
+              error: `Validation Error: Exam score (${item.exam}) is out of range. Allowed range is 0 - ${crecheConfig.examMax}.`,
+            };
+          }
+        }
       }
-      if (item.ca2 !== undefined && item.ca2 !== null && (item.ca2 < 0 || item.ca2 > 20)) {
-        return {
-          success: false,
-          error: `Validation Error: 2nd CA score (${item.ca2}) is out of range. Allowed range is 0 - 20.`,
-        };
-      }
-      if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > 60)) {
-        return {
-          success: false,
-          error: `Validation Error: Exam score (${item.exam}) is out of range. Allowed range is 0 - 60.`,
-        };
+    } else {
+      // Primary & Secondary NERDC Validation: 1st CA (0-20), 2nd CA (0-20), Exam (0-60)
+      for (const item of grades) {
+        if (item.ca1 !== undefined && item.ca1 !== null && (item.ca1 < 0 || item.ca1 > 20)) {
+          return {
+            success: false,
+            error: `Validation Error: 1st CA score (${item.ca1}) is out of range. Allowed range is 0 - 20.`,
+          };
+        }
+        if (item.ca2 !== undefined && item.ca2 !== null && (item.ca2 < 0 || item.ca2 > 20)) {
+          return {
+            success: false,
+            error: `Validation Error: 2nd CA score (${item.ca2}) is out of range. Allowed range is 0 - 20.`,
+          };
+        }
+        if (item.exam !== undefined && item.exam !== null && (item.exam < 0 || item.exam > 60)) {
+          return {
+            success: false,
+            error: `Validation Error: Exam score (${item.exam}) is out of range. Allowed range is 0 - 60.`,
+          };
+        }
       }
     }
 
@@ -455,6 +506,16 @@ export async function saveClassroomGrades(
 
     // Helper to resolve grade letter
     function getGradeLetter(total: number): string {
+      if (isCreche) {
+        return mapCrecheScoreToGrade(total).letter;
+      }
+      if (isPrimary) {
+        if (total >= 75) return "Distinction";
+        if (total >= 65) return "Very Good";
+        if (total >= 50) return "Credit";
+        if (total >= 40) return "Pass";
+        return "Fail";
+      }
       if (total >= 75) return "A1";
       if (total >= 70) return "B2";
       if (total >= 65) return "B3";
@@ -510,9 +571,15 @@ export async function saveClassroomGrades(
 
     await basePrisma.$transaction(async (tx) => {
       for (const item of grades) {
-        const ca1 = Math.min(20, Math.max(0, item.ca1 || 0));
-        const ca2 = Math.min(20, Math.max(0, item.ca2 || 0));
-        const exam = Math.min(60, Math.max(0, item.exam || 0));
+        const ca1 = isCreche
+          ? Math.min(crecheConfig.ca1Max, Math.max(0, Number(item.ca1) || 0))
+          : Math.min(20, Math.max(0, Number(item.ca1) || 0));
+        const ca2 = isCreche
+          ? Math.min(crecheConfig.ca2Max, Math.max(0, Number(item.ca2) || 0))
+          : Math.min(20, Math.max(0, Number(item.ca2) || 0));
+        const exam = isCreche
+          ? (crecheConfig.hasExam ? Math.min(crecheConfig.examMax, Math.max(0, Number(item.exam) || 0)) : 0)
+          : Math.min(60, Math.max(0, Number(item.exam) || 0));
         const total = ca1 + ca2 + exam;
         const letter = getGradeLetter(total);
 

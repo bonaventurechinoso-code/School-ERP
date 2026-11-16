@@ -10,6 +10,8 @@ import {
   NumericalAssessmentInput,
 } from "@/lib/grading-engine";
 
+import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "./creche-config";
+
 export interface SaveAssessmentPayload {
   schoolId: string;
   studentId: string;
@@ -76,7 +78,7 @@ export async function resolveStudentTierClient(
       const client = await getPrismaClientForTier(schoolId, tierName);
       return { client, tierName, student: baseStudent };
     }
-  } catch {}
+  } catch { }
 
   // 3. Check isolated tier databases if tenant uses multi-DB
   const candidateTiers = ["Primary School", "Secondary School", "Creche / Nursery"];
@@ -90,7 +92,7 @@ export async function resolveStudentTierClient(
       if (student) {
         return { client, tierName: candidate, student };
       }
-    } catch {}
+    } catch { }
   }
 
   // Fallback to Primary
@@ -214,11 +216,11 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
 
   const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
     : term === "2nd Term" ? ["2nd Term", "Second Term"]
-    : term === "3rd Term" ? ["3rd Term", "Third Term"]
-    : term === "First Term" ? ["First Term", "1st Term"]
-    : term === "Second Term" ? ["Second Term", "2nd Term"]
-    : term === "Third Term" ? ["Third Term", "3rd Term"]
-    : [term];
+      : term === "3rd Term" ? ["3rd Term", "Third Term"]
+        : term === "First Term" ? ["First Term", "1st Term"]
+          : term === "Second Term" ? ["Second Term", "2nd Term"]
+            : term === "Third Term" ? ["Third Term", "3rd Term"]
+              : [term];
 
   // Single Source of Truth: GradeRecord is master table
   const rawGradeRecords = await tierDb.gradeRecord.findMany({
@@ -239,28 +241,28 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   }
   const gradeRecords = Array.from(subjectMap.values());
 
-  const records = gradeRecords.length > 0 
+  const records = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => ({
-        id: gr.id,
-        subject: gr.subject,
-        test1: gr.ca1,
-        test2: gr.ca2,
-        finalExam: gr.exam,
-        totalScore: gr.totalScore,
-        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
-        isPassed: gr.totalScore >= 40,
-        assessmentType: "NUMERICAL",
-        teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
-      }))
+      id: gr.id,
+      subject: gr.subject,
+      test1: gr.ca1,
+      test2: gr.ca2,
+      finalExam: gr.exam,
+      totalScore: gr.totalScore,
+      gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+      isPassed: gr.totalScore >= 40,
+      assessmentType: "NUMERICAL",
+      teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+    }))
     : await tierDb.academicRecord.findMany({
-        where: {
-          schoolId,
-          studentId,
-          term: { in: termVariants },
-          academicYear,
-        },
-        orderBy: { subject: "asc" },
-      });
+      where: {
+        schoolId,
+        studentId,
+        term: { in: termVariants },
+        academicYear,
+      },
+      orderBy: { subject: "asc" },
+    });
 
   if (records.length === 0) {
     throw new Error(`No assessment records found for student ${studentId} in ${term} (${academicYear}).`);
@@ -275,8 +277,10 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   let narrativeSummary: string | null = null;
   let developmentIndicators: any = null;
 
-  if (tierCategory === "NURSERY") {
-    // Nursery narrative aggregation
+  const hasNumericalScores = gradeRecords.length > 0 || records.some((r: any) => r.totalScore !== undefined && r.totalScore !== null);
+
+  if (tierCategory === "NURSERY" && !hasNumericalScores && !isCrecheClass(className)) {
+    // Pure Nursery narrative aggregation (when no numerical GradeRecords exist)
     const allEvaluations: SkillEvaluationItem[] = [];
     records.forEach((r: any) => {
       if (Array.isArray(r.skillsEvaluation)) {
@@ -289,7 +293,7 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     narrativeSummary = narrativeResult.developmentalSummary;
     developmentIndicators = allEvaluations;
   } else {
-    // Primary / Secondary numerical aggregation
+    // Creche, Primary & Secondary numerical aggregation (Single Source of Truth: GradeRecord)
     records.forEach((r: any) => {
       const score = r.totalScore || 0;
       totalScore += score;
@@ -298,13 +302,18 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     });
 
     averageScore = records.length > 0 ? Math.round((totalScore / records.length) * 100) / 100 : 0;
-    const gradeCalc = calculateNumericalGrade(
-      { finalExam: averageScore },
-      payload.customPassThreshold ?? 40,
-      tierCategory
-    );
-    overallLetter = gradeCalc.gradeLetter;
-    gpa = gradeCalc.gpaPoints;
+    if (isCrecheClass(className)) {
+      overallLetter = mapCrecheScoreToGrade(averageScore).letter;
+      gpa = mapCrecheScoreToGrade(averageScore).gpa;
+    } else {
+      const gradeCalc = calculateNumericalGrade(
+        { finalExam: averageScore },
+        payload.customPassThreshold ?? 40,
+        tierCategory
+      );
+      overallLetter = gradeCalc.gradeLetter;
+      gpa = gradeCalc.gpaPoints;
+    }
   }
 
   const remarks = generateAdministrativeRemarks(
@@ -427,11 +436,11 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
   const studentIds = students.map((s: any) => s.id);
   const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
     : term === "2nd Term" ? ["2nd Term", "Second Term"]
-    : term === "3rd Term" ? ["3rd Term", "Third Term"]
-    : term === "First Term" ? ["First Term", "1st Term"]
-    : term === "Second Term" ? ["Second Term", "2nd Term"]
-    : term === "Third Term" ? ["Third Term", "3rd Term"]
-    : [term];
+      : term === "3rd Term" ? ["3rd Term", "Third Term"]
+        : term === "First Term" ? ["First Term", "1st Term"]
+          : term === "Second Term" ? ["Second Term", "2nd Term"]
+            : term === "Third Term" ? ["Third Term", "3rd Term"]
+              : [term];
 
   const gradeRecords = await tierDb.gradeRecord.findMany({
     where: {
@@ -454,18 +463,18 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
 
   const rawRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => ({
-        id: gr.id,
-        studentId: gr.studentId,
-        subject: gr.subject,
-        test1: gr.ca1,
-        test2: gr.ca2,
-        finalExam: gr.exam,
-        totalScore: gr.totalScore,
-        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
-        isPassed: gr.totalScore >= 40,
-        assessmentType: "NUMERICAL",
-        teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
-      }))
+      id: gr.id,
+      studentId: gr.studentId,
+      subject: gr.subject,
+      test1: gr.ca1,
+      test2: gr.ca2,
+      finalExam: gr.exam,
+      totalScore: gr.totalScore,
+      gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+      isPassed: gr.totalScore >= 40,
+      assessmentType: "NUMERICAL",
+      teacherRemarks: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+    }))
     : academicRecords;
 
   // Group records by student and deduplicate by subject
@@ -517,7 +526,9 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
     let narrativeSummary: string | null = null;
     let developmentIndicators: any = null;
 
-    if (tierCategory === "NURSERY") {
+    const hasStudentNumerical = gradeRecords.length > 0 || studentRecords.some((r: any) => r.totalScore !== undefined && r.totalScore !== null);
+
+    if (tierCategory === "NURSERY" && !hasStudentNumerical && !isCrecheClass(className)) {
       const allEvaluations: SkillEvaluationItem[] = [];
       studentRecords.forEach((r: any) => {
         if (Array.isArray(r.skillsEvaluation)) {
@@ -535,13 +546,18 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
         if (r.isPassed) passedSubjects++;
         else failedSubjects++;
       });
-      const gradeCalc = calculateNumericalGrade(
-        { finalExam: averageScore },
-        payload.customPassThreshold ?? 40,
-        tierCategory
-      );
-      overallLetter = gradeCalc.gradeLetter;
-      gpa = gradeCalc.gpaPoints;
+      if (isCrecheClass(className)) {
+        overallLetter = mapCrecheScoreToGrade(averageScore).letter;
+        gpa = mapCrecheScoreToGrade(averageScore).gpa;
+      } else {
+        const gradeCalc = calculateNumericalGrade(
+          { finalExam: averageScore },
+          payload.customPassThreshold ?? 40,
+          tierCategory
+        );
+        overallLetter = gradeCalc.gradeLetter;
+        gpa = gradeCalc.gpaPoints;
+      }
     }
 
     const remarks = generateAdministrativeRemarks(
@@ -584,7 +600,7 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
         averageScore,
         gradeLetter: overallLetter,
         gpa,
-        classPosition: tierCategory === "NURSERY" ? null : ranking?.classPosition ?? null,
+        classPosition: (tierCategory === "NURSERY" && !isCrecheClass(className)) ? null : ranking?.classPosition ?? null,
         totalStudentsInClass: students.length,
         totalSubjects: studentRecords.length,
         passedSubjects,
@@ -608,7 +624,7 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
         averageScore,
         gradeLetter: overallLetter,
         gpa,
-        classPosition: tierCategory === "NURSERY" ? null : ranking?.classPosition ?? null,
+        classPosition: (tierCategory === "NURSERY" && !isCrecheClass(className)) ? null : ranking?.classPosition ?? null,
         totalStudentsInClass: students.length,
         totalSubjects: studentRecords.length,
         passedSubjects,
@@ -653,11 +669,11 @@ export async function getStudentReportCard(
 
   const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
     : term === "2nd Term" ? ["2nd Term", "Second Term"]
-    : term === "3rd Term" ? ["3rd Term", "Third Term"]
-    : term === "First Term" ? ["First Term", "1st Term"]
-    : term === "Second Term" ? ["Second Term", "2nd Term"]
-    : term === "Third Term" ? ["Third Term", "3rd Term"]
-    : [term];
+      : term === "3rd Term" ? ["3rd Term", "Third Term"]
+        : term === "First Term" ? ["First Term", "1st Term"]
+          : term === "Second Term" ? ["Second Term", "2nd Term"]
+            : term === "Third Term" ? ["Third Term", "3rd Term"]
+              : [term];
 
   const reportCard = await tierDb.reportCard.findFirst({
     where: {
@@ -690,27 +706,27 @@ export async function getStudentReportCard(
 
   const currentRecords = gradeRecords.length > 0
     ? gradeRecords.map((gr: any) => ({
-        id: gr.id,
-        subject: gr.subject,
-        test1: gr.ca1,
-        test2: gr.ca2,
-        finalExam: gr.exam,
-        totalScore: gr.totalScore,
-        gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
-        isPassed: gr.totalScore >= 40,
-        ca1: gr.ca1,
-        ca2: gr.ca2,
-        exam: gr.exam,
-      }))
+      id: gr.id,
+      subject: gr.subject,
+      test1: gr.ca1,
+      test2: gr.ca2,
+      finalExam: gr.exam,
+      totalScore: gr.totalScore,
+      gradeLetter: gr.totalScore >= 75 ? "Distinction" : gr.totalScore >= 65 ? "Very Good" : gr.totalScore >= 50 ? "Credit" : gr.totalScore >= 40 ? "Pass" : "Fail",
+      isPassed: gr.totalScore >= 40,
+      ca1: gr.ca1,
+      ca2: gr.ca2,
+      exam: gr.exam,
+    }))
     : await tierDb.academicRecord.findMany({
-        where: {
-          schoolId,
-          studentId,
-          term: { in: termVariants },
-          ...(academicYear ? { academicYear } : {}),
-        },
-        orderBy: { subject: "asc" },
-      });
+      where: {
+        schoolId,
+        studentId,
+        term: { in: termVariants },
+        ...(academicYear ? { academicYear } : {}),
+      },
+      orderBy: { subject: "asc" },
+    });
 
   return {
     tierName,
@@ -737,11 +753,11 @@ export async function getClassResultSheet(
 
   const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
     : term === "2nd Term" ? ["2nd Term", "Second Term"]
-    : term === "3rd Term" ? ["3rd Term", "Third Term"]
-    : term === "First Term" ? ["First Term", "1st Term"]
-    : term === "Second Term" ? ["Second Term", "2nd Term"]
-    : term === "Third Term" ? ["Third Term", "3rd Term"]
-    : [term];
+      : term === "3rd Term" ? ["3rd Term", "Third Term"]
+        : term === "First Term" ? ["First Term", "1st Term"]
+          : term === "Second Term" ? ["Second Term", "2nd Term"]
+            : term === "Third Term" ? ["Third Term", "3rd Term"]
+              : [term];
 
   // Fetch students, their report cards, and active grade records
   const students = await tierDb.student.findMany({

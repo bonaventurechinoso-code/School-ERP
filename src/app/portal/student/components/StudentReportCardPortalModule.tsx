@@ -465,11 +465,14 @@ export function StudentReportCardPortalModule({
                   )}
                   {isEarlyChildhood && (
                     <>
-                      <th className="px-4 py-3 text-center">Observation (40%)</th>
-                      <th className="px-4 py-3 text-center">Classwork (40%)</th>
-                      <th className="px-4 py-3 text-center">Affective (20%)</th>
+                      <th className="px-4 py-3 text-center">Observation (50)</th>
+                      <th className="px-4 py-3 text-center">Continuous Assessment (50)</th>
+                      {subjectsList.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                        <th className="px-4 py-3 text-center">Exam (60)</th>
+                      )}
                       <th className="px-4 py-3 text-center">Total (100)</th>
-                      <th className="px-4 py-3 text-center">Rating</th>
+                      <th className="px-4 py-3 text-center">Grade</th>
+                      <th className="px-4 py-3 text-center">Position</th>
                     </>
                   )}
                   {isHigherEd && (
@@ -531,21 +534,33 @@ export function StudentReportCardPortalModule({
                     {isEarlyChildhood && (
                       <>
                         <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.observation}
+                          {sub.isNotEntered ? "—" : (sub.ca1 ?? sub.observation ?? "—")}
                         </td>
                         <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.classwork}
+                          {sub.isNotEntered ? "—" : (sub.ca2 ?? sub.classwork ?? "—")}
                         </td>
-                        <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.affective}
-                        </td>
+                        {subjectsList.some((s: any) => s.exam !== null && s.exam !== undefined && s.exam > 0) && (
+                          <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
+                            {sub.isNotEntered ? "—" : (sub.exam ?? "—")}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-center font-black font-mono text-slate-900 dark:text-white">
-                          {sub.computedTotal}
+                          {sub.isNotEntered ? "—" : sub.computedTotal}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span className="inline-block px-2 py-0.5 rounded font-black text-xs bg-pink-50 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300">
-                            {sub.computedGrade}
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                            sub.computedGrade === "Distinction" ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200"
+                              : sub.computedGrade === "Very Good" ? "bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200"
+                                : sub.computedGrade === "Credit" ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200"
+                                  : sub.computedGrade === "Pass" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200"
+                                    : sub.computedGrade === "Fail" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200"
+                                      : "bg-slate-100 text-slate-500"
+                          }`}>
+                            {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
+                          {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
                         </td>
                       </>
                     )}

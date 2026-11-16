@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { isCrecheClass } from "./creche-config";
 
 export interface ReportCardSubjectScore {
   subject: string;
@@ -203,10 +204,10 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail") : "—");
       const gradeRemarkSub = overallGradeVal === "Distinction" ? "Distinction"
         : overallGradeVal === "Very Good" ? "Very Good"
-        : overallGradeVal === "Credit" ? "Credit"
-        : overallGradeVal === "Pass" ? "Pass"
-        : overallGradeVal === "Fail" ? "Needs Improvement"
-        : "Standing";
+          : overallGradeVal === "Credit" ? "Credit"
+            : overallGradeVal === "Pass" ? "Pass"
+              : overallGradeVal === "Fail" ? "Needs Improvement"
+                : "Standing";
 
       const metrics = [
         { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
@@ -232,9 +233,23 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 40;
 
-      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60)
-      const tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "REMARK"];
-      const colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
+      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (NERDC 20/20/60 for Primary, Observation/CA for Creche)
+      const isCreche = isCrecheClass(data.className) || (data.tierCategory ? isCrecheClass(data.tierCategory) : false);
+      const crecheHasExam = isCreche && data.subjects.some((s) => s.exam !== null && s.exam !== undefined && s.exam > 0);
+
+      let tableHeaders: string[];
+      let colWidths: number[];
+
+      if (isCreche && !crecheHasExam) {
+        tableHeaders = ["ACTIVITY / CURRICULUM DISCIPLINE", "OBSERVATION (50)", "ASSESSMENT (50)", "TOTAL (100)", "GRADE", "POS.", "AVG", "DEVELOPMENTAL REMARK"];
+        colWidths = [190, 44, 44, 48, 42, 36, 36, 116];
+      } else if (isCreche && crecheHasExam) {
+        tableHeaders = ["ACTIVITY / CURRICULUM DISCIPLINE", "OBS. (20)", "ASSESS. (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "DEVELOPMENTAL REMARK"];
+        colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
+      } else {
+        tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "REMARK"];
+        colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
+      }
 
       // Table Header Row
       doc.rect(margin, currentY, contentWidth, 16)
@@ -287,25 +302,39 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           const examStr = sub.exam !== null && sub.exam !== undefined ? String(sub.exam) : "—";
           const totalStr = sub.total !== null && sub.total !== undefined ? String(sub.total) : "—";
 
-          const rowVals = [
-            sub.subject,
-            ca1Str,
-            ca2Str,
-            examStr,
-            totalStr,
-            sub.grade || "—",
-            subPosition,
-            String(sub.classAverage || 68),
-            sub.remark || "Satisfactory",
-          ];
+          const rowVals = (isCreche && !crecheHasExam)
+            ? [
+              sub.subject,
+              ca1Str,
+              ca2Str,
+              totalStr,
+              sub.grade || "—",
+              subPosition,
+              String(sub.classAverage || 68),
+              sub.remark || "Satisfactory",
+            ]
+            : [
+              sub.subject,
+              ca1Str,
+              ca2Str,
+              examStr,
+              totalStr,
+              sub.grade || "—",
+              subPosition,
+              String(sub.classAverage || 68),
+              sub.remark || "Satisfactory",
+            ];
+
+          const gradeColIdx = (isCreche && !crecheHasExam) ? 4 : 5;
+          const totalColIdx = (isCreche && !crecheHasExam) ? 3 : 4;
 
           rowVals.forEach((val, cIdx) => {
             const align = cIdx === 0 ? "left" : cIdx === rowVals.length - 1 ? "left" : "center";
             const paddingLeft = cIdx === 0 ? 6 : 0;
-            const isBold = cIdx === 0 || cIdx === 4 || cIdx === 5;
+            const isBold = cIdx === 0 || cIdx === totalColIdx || cIdx === gradeColIdx;
             const font = isBold ? "Helvetica-Bold" : "Helvetica";
             let color = "#1E293B";
-            if (cIdx === 5) {
+            if (cIdx === gradeColIdx) {
               color = val === "Distinction" || val === "A1" ? "#047857" : val === "Very Good" || val === "B2" || val === "B3" ? "#0F766E" : val === "Fail" || val === "F9" ? "#B91C1C" : "#1D4ED8";
             }
             doc.font(font)
@@ -380,7 +409,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fillColor("#334155")
         .text(
           data.teacherRemarks ||
-            "A committed, diligent, and intellectually exceptional student. Demonstrates leadership and academic enthusiasm.",
+          "A committed, diligent, and intellectually exceptional student. Demonstrates leadership and academic enthusiasm.",
           margin + 6,
           currentY + 12,
           { width: contentWidth - 130 }
@@ -393,7 +422,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fillColor("#15803D")
         .text(
           data.principalRemarks ||
-            "Outstanding academic and character performance. A role model to peers. Promoted with Honours.",
+          "Outstanding academic and character performance. A role model to peers. Promoted with Honours.",
           margin + 6,
           currentY + 29,
           { width: contentWidth - 130 }
@@ -450,7 +479,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fillColor("#94A3B8")
         .text(
           "Generated from Teacher Gradebook • Approved By Principal • Document Ref: BV-REP-" +
-            Date.now().toString(36).toUpperCase(),
+          Date.now().toString(36).toUpperCase(),
           margin + 200,
           currentY + 4,
           { width: contentWidth - 208, align: "right" }

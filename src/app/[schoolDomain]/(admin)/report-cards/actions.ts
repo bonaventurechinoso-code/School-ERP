@@ -12,6 +12,14 @@ import {
 } from "@/lib/report-card-service";
 import { revalidatePath } from "next/cache";
 
+function safeRevalidate(path: string, type?: "page" | "layout") {
+  try {
+    revalidatePath(path, type);
+  } catch {
+    // Graceful fallback when invoked outside Next.js request/action context
+  }
+}
+
 /**
  * Server Action: Save continuous assessments or narrative records
  * Dynamically routed to the correct database (Primary vs Secondary vs Nursery).
@@ -19,7 +27,7 @@ import { revalidatePath } from "next/cache";
 export async function saveAcademicRecordAction(payload: SaveAssessmentPayload) {
   try {
     const result = await saveAcademicRecord(payload);
-    revalidatePath("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
     return { success: true, data: result };
   } catch (error: any) {
     console.error("[saveAcademicRecordAction] Error:", error);
@@ -34,7 +42,7 @@ export async function saveAcademicRecordAction(payload: SaveAssessmentPayload) {
 export async function compileClassReportCardsAction(payload: CompileClassPayload) {
   try {
     const result = await compileClassReportCards(payload);
-    revalidatePath("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
     return { success: true, data: result };
   } catch (error: any) {
     console.error("[compileClassReportCardsAction] Error:", error);
@@ -48,7 +56,7 @@ export async function compileClassReportCardsAction(payload: CompileClassPayload
 export async function compileSingleReportCardAction(payload: CompileStudentPayload) {
   try {
     const result = await compileStudentReportCard(payload);
-    revalidatePath("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
     return { success: true, data: result };
   } catch (error: any) {
     console.error("[compileSingleReportCardAction] Error:", error);
@@ -113,7 +121,104 @@ export async function approveClassReportCardsAction(
   schoolId: string,
   className: string,
   term: string,
-  academicYear: string
+  academicYear: string,
+  shouldLock: boolean = true
+) {
+  try {
+    const { basePrisma } = await import("@/lib/tenant-prisma");
+    const newStatus = shouldLock ? "LOCKED" : "APPROVED";
+    const updated = await basePrisma.reportCard.updateMany({
+      where: {
+        schoolId,
+        className,
+        term,
+        academicYear,
+      },
+      data: {
+        status: newStatus,
+      },
+    });
+
+    await basePrisma.auditLog.create({
+      data: {
+        schoolId,
+        action: shouldLock ? "PRINCIPAL_LOCK_REPORT_CARDS" : "PRINCIPAL_REPORT_CARD_APPROVAL",
+        target: `${className} (${term})`,
+        metadata: {
+          approvedAt: new Date().toISOString(),
+          status: newStatus,
+          count: updated.count,
+        },
+      },
+    });
+
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
+    return { success: true, count: updated.count, status: newStatus };
+  } catch (error: any) {
+    console.error("[approveClassReportCardsAction] Error:", error);
+    return { success: false, error: error.message || "Failed to approve class report cards." };
+  }
+}
+
+/**
+ * Server Action: Principal / Head Teacher returns class report cards with comment for revisions
+ */
+export async function returnClassReportCardsAction(
+  schoolId: string,
+  className: string,
+  term: string,
+  academicYear: string,
+  comment: string
+) {
+  try {
+    if (!comment || !comment.trim()) {
+      return { success: false, error: "A return comment/reason must be provided when returning report cards." };
+    }
+
+    const { basePrisma } = await import("@/lib/tenant-prisma");
+    const updated = await basePrisma.reportCard.updateMany({
+      where: {
+        schoolId,
+        className,
+        term,
+        academicYear,
+      },
+      data: {
+        status: "RETURNED",
+        principalRemarks: `Returned for revision: ${comment.trim()}`,
+      },
+    });
+
+    await basePrisma.auditLog.create({
+      data: {
+        schoolId,
+        action: "PRINCIPAL_RETURN_REPORT_CARDS",
+        target: `${className} (${term})`,
+        metadata: {
+          returnedAt: new Date().toISOString(),
+          comment: comment.trim(),
+          count: updated.count,
+        },
+      },
+    });
+
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
+    return { success: true, count: updated.count };
+  } catch (error: any) {
+    console.error("[returnClassReportCardsAction] Error:", error);
+    return { success: false, error: error.message || "Failed to return class report cards." };
+  }
+}
+
+/**
+ * Server Action: Head Teacher / Principal unlocks locked class grades for teacher editing (Requires Audit Log)
+ */
+export async function unlockClassReportCardsAction(
+  schoolId: string,
+  className: string,
+  term: string,
+  academicYear: string,
+  reason: string = "Unlocked for grade corrections"
 ) {
   try {
     const { basePrisma } = await import("@/lib/tenant-prisma");
@@ -125,26 +230,27 @@ export async function approveClassReportCardsAction(
         academicYear,
       },
       data: {
-        status: "APPROVED",
+        status: "COMPILED",
       },
     });
 
     await basePrisma.auditLog.create({
       data: {
         schoolId,
-        action: "PRINCIPAL_REPORT_CARD_APPROVAL",
+        action: "HEAD_TEACHER_UNLOCK_GRADES",
         target: `${className} (${term})`,
         metadata: {
-          approvedAt: new Date().toISOString(),
+          unlockedAt: new Date().toISOString(),
+          reason: reason.trim(),
           count: updated.count,
         },
       },
     });
 
-    revalidatePath("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
     return { success: true, count: updated.count };
   } catch (error: any) {
-    console.error("[approveClassReportCardsAction] Error:", error);
-    return { success: false, error: error.message || "Failed to approve class report cards." };
+    console.error("[unlockClassReportCardsAction] Error:", error);
+    return { success: false, error: error.message || "Failed to unlock class report cards." };
   }
 }
