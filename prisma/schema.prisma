@@ -131,6 +131,7 @@ model School {
 
   students          Student[]
   staff             Staff[]
+  staffAssignments  StaffAssignment[]
   classrooms        Classroom[]
   courses           Course[]
   feeTemplates      FeeTemplate[]
@@ -432,10 +433,67 @@ model Staff {
   lastName  String
   email     String
 
+  // Enterprise Identification & Demographics
+  staffId             String?   // Sequential Staff ID e.g. EGD/STF/001, APX/LEC/001
+  middleName          String?
+  dateOfBirth         DateTime?
+  gender              String?
+  maritalStatus       String?
+  phone               String?
+  residentialAddress  String?
+  state               String?
+  lga                 String?
+  nin                 String?
+  passportUrl         String?
+
+  // Employment Details
+  dateOfEmployment    DateTime?
+  employmentType      String?   // FULL_TIME, PART_TIME, CONTRACT, NYSC, INTERN, VISITING
+  departmentName      String?
+  reportingToId       String?
+  reportingTo         Staff?    @relation("StaffLineManager", fields: [reportingToId], references: [id], onDelete: SetNull)
+  directReports       Staff[]   @relation("StaffLineManager")
+
+  // Qualifications & Professional Accreditation
+  highestQualification     String?
+  fieldOfStudy             String?
+  institutionAttended      String?
+  yearGraduated            String?
+  trcnNumber               String?
+  trcnExpiry               DateTime?
+  trcnStatus               String?
+  professionalBody         String?
+  professionalMembershipNo String?
+  professionalExpiry       DateTime?
+  specialization           String?
+  academicRank             String?
+  cvUrl                    String?
+  certificates             String?   // JSON
+
+  // Next of Kin & Emergency & Guarantor
+  nextOfKinName            String?
+  nextOfKinPhone           String?
+  nextOfKinRelationship    String?
+  nextOfKinAddress         String?
+  emergencyName            String?
+  emergencyPhone           String?
+  guarantorName            String?
+  guarantorPhone           String?
+
+  // Payroll & Statutory
   baseSalary        Float?
+  payGrade          String?   // GL 01-17, CONUASS 01-07, CONPCASS 01-09, CONTISS 01-15, etc.
   bankAccountNumber String?
   bankName          String?
   accountName       String?
+  pensionRsa        String?
+  pensionProvider   String?
+  nhisNo            String?
+  tin               String?
+  paymentMethod     String?   @default("BANK_TRANSFER")
+
+  // Access & Permissions
+  permissions       String?   // JSON
 
   // 2FA Fields
   twoFactorEnabled Boolean @default(false)
@@ -458,12 +516,14 @@ model Staff {
   StaffAttendance StaffAttendance[]
   Notice          Notice[]
   PayrollRecord   PayrollRecord[]
+  assignments     StaffAssignment[]
 
   @@unique([schoolId, email]) // Ensure unique staff emails per school
   @@index([schoolId])
   @@index([schoolId, status])
   @@index([schoolId, email])
   @@index([schoolId, departmentId])
+  @@index([schoolId, staffId])
   @@index([schoolId, createdAt(sort: Desc)])
 }
 
@@ -525,6 +585,7 @@ model Classroom {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   Timetable Timetable[]
+  staffAssignments StaffAssignment[]
 
   @@index([schoolId])
   @@index([schoolId, tierId])
@@ -545,10 +606,45 @@ model Course {
   updatedAt DateTime    @updatedAt
   Timetable Timetable[]
   Exam      Exam[]
+  staffAssignments StaffAssignment[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
   @@index([schoolId, tierId])
+}
+
+model StaffAssignment {
+  id             String     @id @default(uuid())
+  schoolId       String
+  school         School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  staffId        String
+  staff          Staff      @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  classroomId    String?
+  classroom      Classroom? @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  courseId       String?
+  course         Course?    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  assignmentType String     // e.g. "PlaygroupCaregiver", "NurseryClassTeacher", "NurseryAssistant", "PrimaryClassTeacher", "PrimarySubjectTeacher", "PrimaryHeadTeacher", "SecondaryFormTutor", "SecondarySubjectTeacher", "SecondaryHOD", "TertiaryLecturer", "TertiaryCourseAdviser", "TertiaryHOD", "NonTeaching"
+  assignedRole   String?    // The role title at time of onboarding
+  session        String?    // e.g. "2026/2027"
+
+  // Hierarchical metadata
+  faculty        String?    // Tertiary: Faculty of Science, School of Engineering
+  department     String?    // Secondary / Tertiary: Sciences, Commercial, Computer Science
+  programme      String?    // Tertiary: ND Computer Science, BSc Computer Science
+  metadata       String?    // JSON for activities, learning areas, subjects taught, credit units, etc.
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([schoolId])
+  @@index([staffId])
+  @@index([classroomId])
+  @@index([courseId])
+  @@index([assignmentType])
 }
 
 // ------------------------------------------------------
