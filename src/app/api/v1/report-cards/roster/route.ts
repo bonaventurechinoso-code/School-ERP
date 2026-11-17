@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import * as jose from "jose";
-import { getTenantClient } from "@/lib/tenant-prisma";
+import { getTenantClient, basePrisma } from "@/lib/tenant-prisma";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
@@ -33,6 +33,22 @@ export async function GET(req: NextRequest) {
 
     if (!tenantId && paramSchoolId) {
       tenantId = paramSchoolId;
+    }
+
+    // Resolve tenantId if it is a subdomain / slug rather than a database UUID
+    if (tenantId) {
+      const resolvedSchool = await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { id: tenantId },
+            { subdomain: tenantId },
+            ...(paramSchoolId ? [{ id: paramSchoolId }, { subdomain: paramSchoolId }] : []),
+          ],
+        },
+      });
+      if (resolvedSchool) {
+        tenantId = resolvedSchool.id;
+      }
     }
 
     if (!sessionToken && !isDev && !tenantId) {
@@ -145,11 +161,12 @@ export async function GET(req: NextRequest) {
           },
         }).catch(() => []);
 
-        // Group grades by studentId
+        // Group grades by studentId (deduplicating identical subjects across period aliases)
         const studentGradesMap = new Map<string, any[]>();
         gradeRecords.forEach((gr) => {
           const list = studentGradesMap.get(gr.studentId) || [];
-          list.push({
+          const existingIdx = list.findIndex((item) => item.subject === gr.subject);
+          const entry = {
             subject: gr.subject,
             ca1: Number(gr.ca1) || 0,
             ca2: Number(gr.ca2) || 0,
@@ -157,7 +174,14 @@ export async function GET(req: NextRequest) {
             total: Number(gr.totalScore) || (Number(gr.ca1) || 0) + (Number(gr.ca2) || 0) + (Number(gr.exam) || 0),
             grade: (gr as any).grade || undefined,
             remarks: (gr as any).remarks || "",
-          });
+          };
+          if (existingIdx >= 0) {
+            if (gr.term && gr.term.toLowerCase().includes("semester")) {
+              list[existingIdx] = entry;
+            }
+          } else {
+            list.push(entry);
+          }
           studentGradesMap.set(gr.studentId, list);
         });
 

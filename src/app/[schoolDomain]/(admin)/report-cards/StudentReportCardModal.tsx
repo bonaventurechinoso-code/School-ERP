@@ -98,6 +98,16 @@ export default function StudentReportCardModal({
         rawList = demoProfile.subjects as any;
       }
     }
+    // Deduplicate subjects by name (e.g. across multi-period alias queries)
+    if (rawList.length > 0) {
+      const seen = new Set<string>();
+      rawList = rawList.filter((s: any) => {
+        const cleanSub = (s.subject || "").trim().toLowerCase();
+        if (seen.has(cleanSub)) return false;
+        seen.add(cleanSub);
+        return true;
+      });
+    }
     return rawList.map((sub, idx) => {
       const isNotEntered =
         (sub.ca1 === null || sub.ca1 === undefined) &&
@@ -135,7 +145,7 @@ export default function StudentReportCardModal({
   // Exclude unentered / missing subjects from Total and Average
   const enteredSubjects = evaluatedSubjects.filter((s: any) => !s.isNotEntered && s.computedTotal !== null && s.computedTotal !== undefined);
   const totalPossible = enteredSubjects.length * 100;
-  const aggregateScore = studentData.overallTotal || enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
+  const aggregateScore = enteredSubjects.reduce((acc, s) => acc + (s.computedTotal || 0), 0);
   const rawAvg = enteredSubjects.length > 0 ? (aggregateScore / enteredSubjects.length) : 0;
   const averagePercentage = rawAvg.toFixed(2).endsWith(".00") ? rawAvg.toFixed(1) : rawAvg.toFixed(2);
   const overallAvgNum = parseFloat(averagePercentage);
