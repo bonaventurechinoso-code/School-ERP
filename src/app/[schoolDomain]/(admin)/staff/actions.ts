@@ -117,12 +117,150 @@ export async function fetchStaffPaginated(
     search?: string;
   }
 ): Promise<CursorPaginationResult<any>> {
-  const schoolId = await resolveSchoolId(schoolIdentifier);
+  try {
+    const schoolInfo = await resolveSchoolInfo(schoolIdentifier);
+    const schoolId = schoolInfo.schoolId;
 
-  // Strict session and RBAC authorization verification
-  const session = await getSession(undefined, schoolId);
-  const auth = checkRouteAuthorization("/staff", session?.role, session?.staffRole);
-  if (!auth.allowed) {
+    // Strict session and RBAC authorization verification (validate against subdomain or tenant id)
+    const session = await getSession(undefined, schoolInfo.subdomain || schoolId);
+    const auth = checkRouteAuthorization("/staff", session?.role, session?.staffRole);
+    if (!auth.allowed) {
+      return {
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        limit: options?.limit || 25,
+      };
+    }
+
+    const role = options?.role;
+    const status = options?.status;
+    const departmentId = options?.departmentId;
+    const cursor = options?.cursor;
+    const limit = options?.limit || 25;
+    const search = options?.search;
+
+    await ensureStaffMetadataTable().catch(() => {});
+
+    const cacheKey = buildCacheKey({
+      tenantId: schoolId,
+      table: "staff",
+      action: "paginated_enhanced",
+      cursor,
+      limit,
+      filters: { role, status, departmentId, search },
+    });
+
+    return await cacheAside<CursorPaginationResult<any>>({
+      key: cacheKey,
+      ttlSeconds: 900, // 15 minutes safe sliding TTL
+      fetchFn: async () => {
+        try {
+          const tenantDb = getTenantClient(schoolId);
+          const whereClause: any = {
+            schoolId,
+            ...(status && status !== "ALL" ? { status } : {}),
+            ...(role && role !== "ALL"
+              ? role.toUpperCase().includes("NON")
+                ? { user: { role: { not: "TEACHER" } } }
+                : role.toUpperCase().includes("TEACH")
+                ? { user: { role: "TEACHER" } }
+                : { user: { role: toCanonicalRole(role) } }
+              : {}),
+            ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
+          };
+
+          if (search && search.trim()) {
+            const query = search.trim();
+            whereClause.OR = [
+              { firstName: { contains: query, mode: "insensitive" } },
+              { lastName: { contains: query, mode: "insensitive" } },
+              { email: { contains: query, mode: "insensitive" } },
+            ];
+          }
+
+          // Today's date range for attendance check
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const todayEnd = new Date();
+          todayEnd.setHours(23, 59, 59, 999);
+
+          const paginatedResult = await executeCursorPagination(async (args) => {
+            return tenantDb.staff.findMany({
+              ...args,
+              where: whereClause,
+              orderBy: { createdAt: "desc" },
+              include: { 
+                department: true,
+                user: {
+                  select: {
+                    id: true,
+                    role: true,
+                    email: true,
+                    mustChangePassword: true,
+                    status: true,
+                  }
+                },
+                StaffAttendance: {
+                  where: {
+                    date: {
+                      gte: todayStart,
+                      lte: todayEnd,
+                    }
+                  },
+                  take: 1,
+                },
+                PayrollRecord: {
+                  orderBy: { payDate: "desc" },
+                  take: 1,
+                }
+              },
+            });
+          }, { cursor, limit });
+
+          // Augment items with metadata from bonavee_staff_metadata
+          const items = paginatedResult.items || [];
+          const staffIds = items.map((s: any) => s.id);
+          const metadataMap: Record<string, any> = {};
+
+          if (staffIds.length > 0) {
+            try {
+              const rows: any[] = await basePrisma.$queryRawUnsafe(`
+                SELECT * FROM bonavee_staff_metadata WHERE staff_id = ANY($1::text[])
+              `, staffIds);
+              rows.forEach((r: any) => {
+                metadataMap[r.staff_id] = r;
+              });
+            } catch {
+              // Graceful fallback if table query fails
+            }
+          }
+
+          const enhancedItems = items.map((staff: any) => ({
+            ...staff,
+            role: metadataMap[staff.id]?.designation || staff.user?.role || "TEACHER",
+            metadata: metadataMap[staff.id] || null,
+            todayAttendance: staff.StaffAttendance?.[0] || null,
+            latestPayroll: staff.PayrollRecord?.[0] || null,
+          }));
+
+          return {
+            ...paginatedResult,
+            items: enhancedItems,
+          };
+        } catch (fetchErr) {
+          console.error("[fetchStaffPaginated:fetchFn] Inner query error:", fetchErr);
+          return {
+            items: [],
+            nextCursor: null,
+            hasMore: false,
+            limit: options?.limit || 25,
+          };
+        }
+      },
+    });
+  } catch (error) {
+    console.error("[fetchStaffPaginated] Outer handler exception:", error);
     return {
       items: [],
       nextCursor: null,
@@ -130,123 +268,6 @@ export async function fetchStaffPaginated(
       limit: options?.limit || 25,
     };
   }
-
-  const role = options?.role;
-  const status = options?.status;
-  const departmentId = options?.departmentId;
-  const cursor = options?.cursor;
-  const limit = options?.limit || 25;
-  const search = options?.search;
-
-  await ensureStaffMetadataTable();
-
-  const cacheKey = buildCacheKey({
-    tenantId: schoolId,
-    table: "staff",
-    action: "paginated_enhanced",
-    cursor,
-    limit,
-    filters: { role, status, departmentId, search },
-  });
-
-  return cacheAside<CursorPaginationResult<any>>({
-    key: cacheKey,
-    ttlSeconds: 900, // 15 minutes safe sliding TTL
-    fetchFn: async () => {
-      const tenantDb = getTenantClient(schoolId);
-      const whereClause: any = {
-        schoolId,
-        ...(status && status !== "ALL" ? { status } : {}),
-        ...(role && role !== "ALL"
-          ? role.toUpperCase().includes("NON")
-            ? { user: { role: { not: "TEACHER" } } }
-            : role.toUpperCase().includes("TEACH")
-            ? { user: { role: "TEACHER" } }
-            : { user: { role: toCanonicalRole(role) } }
-          : {}),
-        ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
-      };
-
-      if (search && search.trim()) {
-        const query = search.trim();
-        whereClause.OR = [
-          { firstName: { contains: query, mode: "insensitive" } },
-          { lastName: { contains: query, mode: "insensitive" } },
-          { email: { contains: query, mode: "insensitive" } },
-        ];
-      }
-
-      // Today's date range for attendance check
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const paginatedResult = await executeCursorPagination(async (args) => {
-        return tenantDb.staff.findMany({
-          ...args,
-          where: whereClause,
-          orderBy: { createdAt: "desc" },
-          include: { 
-            department: true,
-            user: {
-              select: {
-                id: true,
-                role: true,
-                email: true,
-                mustChangePassword: true,
-                status: true,
-              }
-            },
-            StaffAttendance: {
-              where: {
-                date: {
-                  gte: todayStart,
-                  lte: todayEnd,
-                }
-              },
-              take: 1,
-            },
-            PayrollRecord: {
-              orderBy: { payDate: "desc" },
-              take: 1,
-            }
-          },
-        });
-      }, { cursor, limit });
-
-      // Augment items with metadata from bonavee_staff_metadata
-      const items = paginatedResult.items || [];
-      const staffIds = items.map((s: any) => s.id);
-      const metadataMap: Record<string, any> = {};
-
-      if (staffIds.length > 0) {
-        try {
-          const rows: any[] = await basePrisma.$queryRawUnsafe(`
-            SELECT * FROM bonavee_staff_metadata WHERE staff_id = ANY($1::text[])
-          `, staffIds);
-          rows.forEach((r: any) => {
-            metadataMap[r.staff_id] = r;
-          });
-        } catch {
-          // Graceful fallback if table query fails
-        }
-      }
-
-      const enhancedItems = items.map((staff: any) => ({
-        ...staff,
-        role: metadataMap[staff.id]?.designation || staff.user?.role || "TEACHER",
-        metadata: metadataMap[staff.id] || null,
-        todayAttendance: staff.StaffAttendance?.[0] || null,
-        latestPayroll: staff.PayrollRecord?.[0] || null,
-      }));
-
-      return {
-        ...paginatedResult,
-        items: enhancedItems,
-      };
-    },
-  });
 }
 
 /**

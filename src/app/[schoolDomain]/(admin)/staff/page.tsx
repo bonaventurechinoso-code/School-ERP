@@ -101,7 +101,10 @@ export default async function StaffPage({
     adminsCount,
     todayTurnoutCount,
   ] = await Promise.all([
-    fetchStaffPaginated(school.id, { limit: 25 }),
+    fetchStaffPaginated(params.schoolDomain, { limit: 25 }).catch((err) => {
+      console.error("[StaffPage] fetchStaffPaginated error:", err);
+      return { items: [], nextCursor: null, hasMore: false, limit: 25 };
+    }),
     tenantDb.staff.count({ where: { schoolId: school.id, status: "ACTIVE" } }).catch(() => 0),
     tenantDb.staff.count({ where: { schoolId: school.id, status: "ONBOARDING" } }).catch(() => 0),
     tenantDb.staff.count({
@@ -228,11 +231,11 @@ export default async function StaffPage({
         </div>
       }>
         <StaffTable 
-          staffList={staffPagination.items} 
-          initialNextCursor={staffPagination.nextCursor}
-          initialHasMore={staffPagination.hasMore}
+          staffList={staffPagination?.items || []} 
+          initialNextCursor={staffPagination?.nextCursor || null}
+          initialHasMore={staffPagination?.hasMore || false}
           schoolId={school.id}
-          departments={school.departments}
+          departments={school.departments || []}
           schoolDomain={params.schoolDomain}
           schoolName={school.name}
           activeTier={activeTierName}
