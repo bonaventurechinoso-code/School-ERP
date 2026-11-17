@@ -107,7 +107,8 @@ async function runPhase5Tests() {
   const rc = demoReport.reportCard;
   assert(rc.totalScore === 421, `Report card totalScore is 421 (actual: ${rc.totalScore})`);
   assert(rc.gpa === 3.56, `Report card Semester GPA is 3.56 (actual: ${rc.gpa})`);
-  assert(rc.gradeLetter === "A", `Report card overall grade letter is A (actual: ${rc.gradeLetter})`);
+  assert(rc.gradeLetter === null, `Report card overall grade letter is null for Tertiary (actual: ${rc.gradeLetter})`);
+  assert(rc.term === "1st Semester", `Report card term is formatted to 1st Semester (actual: ${rc.term})`);
   assert(demoReport.currentRecords.length === 6, `Report card has 6 currentRecords (actual: ${demoReport.currentRecords.length})`);
 
   // Verify Quality Points
@@ -209,7 +210,8 @@ async function runPhase5Tests() {
   const sRc = sandboxReport.reportCard;
   assert(sRc.totalScore === 416, `Report card totalScore is 416 (actual: ${sRc.totalScore})`);
   assert(sRc.gpa === 3.56, `Report card Semester GPA is 3.56 (actual: ${sRc.gpa})`);
-  assert(sRc.gradeLetter === "B", `Report card overall grade letter is B (actual: ${sRc.gradeLetter})`);
+  assert(sRc.gradeLetter === null, `Report card overall grade letter is null for Tertiary (actual: ${sRc.gradeLetter})`);
+  assert(sRc.term === "1st Semester", `Report card term is formatted to 1st Semester (actual: ${sRc.term})`);
   assert(sandboxReport.currentRecords.length === 6, `Report card has 6 currentRecords (actual: ${sandboxReport.currentRecords.length})`);
 
   // Verify Quality Points

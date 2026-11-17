@@ -14,7 +14,14 @@ import {
 import { calculateBonaVeeResult, getGradeRemark, InstitutionalTier } from "@/lib/assessmentEngine";
 import { isCrecheClass } from "@/lib/creche-config";
 import { isNurseryClass } from "@/lib/nursery-config";
-import { isTertiaryClass, resolveTertiaryCourse, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
+import {
+  isTertiaryClass,
+  resolveTertiaryCourse,
+  getTertiaryAcademicStanding,
+  getTertiaryClassification,
+  calculateTertiaryGPA,
+  formatTertiarySemester,
+} from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
@@ -140,11 +147,15 @@ export default function StudentReportCardModal({
       }))
     : null;
 
+  const tertiaryClassification = isHigherEd && tertiaryGPA
+    ? getTertiaryClassification(tertiaryGPA.gpa, "4.0")
+    : null;
+
   const overallGrade = enteredSubjects.length > 0 
-    ? (isHigherEd ? calculateBonaVeeResult("University", { exam: overallAvgNum }).grade : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
+    ? (isHigherEd ? null : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
     : (isNursery || isCreche ? "Needs Support" : "—");
   const overallRemark = enteredSubjects.length > 0 
-    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade))
+    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade || ""))
     : (isNursery || isCreche ? "Needs Support" : "No Grades Entered");
 
   // Position Suffix
@@ -171,7 +182,7 @@ export default function StudentReportCardModal({
             </div>
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                Official Termly Report Sheet Preview
+                {isHigherEd ? "Official Semester Transcript Preview" : "Official Termly Report Sheet Preview"}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {studentData.name} • {studentData.admissionNumber || "Reg No: Pending"}
@@ -181,7 +192,7 @@ export default function StudentReportCardModal({
 
           <div className="flex items-center gap-2.5">
             <a
-              href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(studentData.id)}&className=${encodeURIComponent(studentData.currentClass || "")}&term=${encodeURIComponent(studentData.term || "First Term")}`}
+              href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(studentData.id)}&className=${encodeURIComponent(studentData.currentClass || "")}&term=${encodeURIComponent(isHigherEd ? formatTertiarySemester(studentData.term) : (studentData.term || "First Term"))}`}
               download={`ReportCard_${(studentData.admissionNumber || studentData.name).replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
               title="Download High-Resolution PDF"
@@ -241,13 +252,13 @@ export default function StudentReportCardModal({
               {/* Official Document Banner */}
               <div className="text-center sm:text-right">
                 <span className="inline-block px-4 py-1.5 rounded-lg bg-slate-900 text-white font-mono font-bold text-xs uppercase tracking-wider print:bg-black print:text-white">
-                  Termly Academic Report Sheet
+                  {isHigherEd ? "Semester Academic Transcript" : "Termly Academic Report Sheet"}
                 </span>
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1.5">
                   {studentData.academicYear} Academic Session
                 </div>
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {studentData.term}
+                  {isHigherEd ? formatTertiarySemester(studentData.term) : studentData.term}
                 </div>
               </div>
 
@@ -360,10 +371,10 @@ export default function StudentReportCardModal({
                 {isHigherEd ? "Academic Standing" : "Final Assessment Grade"}
               </span>
               <div className="text-2xl font-black text-purple-900 dark:text-purple-200 font-mono mt-1 truncate">
-                {isHigherEd ? overallGrade : overallGrade}
+                {isHigherEd ? tertiaryClassification : overallGrade}
               </div>
               <span className="text-[11px] text-purple-700 dark:text-purple-400 font-medium truncate block">
-                {overallRemark}
+                {isHigherEd ? "Good Academic Standing" : overallRemark}
               </span>
             </div>
 

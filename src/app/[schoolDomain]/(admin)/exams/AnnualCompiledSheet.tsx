@@ -385,9 +385,9 @@ export default function AnnualCompiledSheet({
   const getTermScore = useCallback((studentId: string, subject: string, termName: string) => {
     const tLower = termName.toLowerCase();
     const termVariants = tLower.includes("1")
-      ? ["1st Term", "First Term", "Term 1", "1st term"]
+      ? ["1st Term", "First Term", "Term 1", "1st term", "1st Semester", "First Semester"]
       : tLower.includes("2")
-      ? ["2nd Term", "Second Term", "Term 2", "2nd term"]
+      ? ["2nd Term", "Second Term", "Term 2", "2nd term", "2nd Semester", "Second Semester"]
       : ["3rd Term", "Third Term", "Term 3", "3rd term"];
 
     // 1. GradeRecord
@@ -868,23 +868,25 @@ export default function AnnualCompiledSheet({
 
                   {/* Term Summary Columns */}
                   <th className="px-3 py-3 text-center bg-slate-100/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-l border-r border-slate-200 dark:border-slate-700 w-20">
-                    1st Term
+                    {tierCategory === "TERTIARY" ? "1st Sem" : "1st Term"}
                   </th>
                   <th className="px-3 py-3 text-center bg-slate-100/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 w-20">
-                    2nd Term
+                    {tierCategory === "TERTIARY" ? "2nd Sem" : "2nd Term"}
                   </th>
-                  <th className="px-3 py-3 text-center bg-slate-100/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 w-20">
-                    3rd Term
-                  </th>
+                  {tierCategory !== "TERTIARY" && (
+                    <th className="px-3 py-3 text-center bg-slate-100/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 w-20">
+                      3rd Term
+                    </th>
+                  )}
 
                   {/* Cumulative Annual Average */}
                   <th className="px-3 py-3 text-center bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-r border-indigo-200 dark:border-indigo-900 w-24">
-                    Annual Avg
+                    {tierCategory === "TERTIARY" ? "Annual CGPA" : "Annual Avg"}
                   </th>
 
                   {/* Final Promotion Verdict */}
                   <th className="px-4 py-3 text-center bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 min-w-[180px]">
-                    Promotion Recommendation
+                    {tierCategory === "TERTIARY" ? "Academic Standing" : "Promotion Recommendation"}
                   </th>
                 </tr>
               </thead>
@@ -956,9 +958,11 @@ export default function AnnualCompiledSheet({
                     </td>
 
                     {/* 3rd Term Average */}
-                    <td className="px-3 py-3 text-center font-mono font-bold text-xs text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">
-                      {row.evaluatedSubjectsCount > 0 && row.term3Average > 0 ? `${row.term3Average.toFixed(1)}%` : "—"}
-                    </td>
+                    {tierCategory !== "TERTIARY" && (
+                      <td className="px-3 py-3 text-center font-mono font-bold text-xs text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">
+                        {row.evaluatedSubjectsCount > 0 && row.term3Average > 0 ? `${row.term3Average.toFixed(1)}%` : "—"}
+                      </td>
+                    )}
 
                     {/* Annual Cumulative Average */}
                     <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 border-r border-indigo-100 dark:border-indigo-950">

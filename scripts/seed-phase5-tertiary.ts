@@ -116,7 +116,7 @@ async function seedPhase5Tertiary() {
 
   for (const g of demoGrades) {
     const totalScore = g.ca1 + g.exam;
-    for (const termName of ["1st Term", "First Term"]) {
+    for (const termName of ["1st Semester", "1st Term"]) {
       await basePrisma.gradeRecord.upsert({
         where: {
           schoolId_studentId_term_className_subject: {
@@ -149,7 +149,7 @@ async function seedPhase5Tertiary() {
   }
 
   // Compile Report Card for Demo Student
-  for (const termName of ["1st Term", "First Term"]) {
+  for (const termName of ["1st Semester", "1st Term"]) {
     await compileStudentReportCard({
       schoolId: demoSchool.id,
       studentId: demoStudent.id,
@@ -271,7 +271,7 @@ async function seedPhase5Tertiary() {
 
   for (const g of sandboxGrades) {
     const totalScore = g.ca1 + g.exam;
-    for (const termName of ["1st Term", "First Term"]) {
+    for (const termName of ["1st Semester", "1st Term"]) {
       await basePrisma.gradeRecord.upsert({
         where: {
           schoolId_studentId_term_className_subject: {
@@ -304,7 +304,7 @@ async function seedPhase5Tertiary() {
   }
 
   // Compile Report Card for Sandbox Student
-  for (const termName of ["1st Term", "First Term"]) {
+  for (const termName of ["1st Semester", "1st Term"]) {
     await compileStudentReportCard({
       schoolId: sandboxSchool.id,
       studentId: sandboxStudent.id,

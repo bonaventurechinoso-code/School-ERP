@@ -30,6 +30,14 @@ import {
   getClassesForSchool,
   EducationalTierCategory,
 } from "@/lib/school-tier-classes";
+import {
+  formatTertiarySemester,
+  resolveTertiaryCourse,
+  calculateTertiaryGPA,
+  getTertiaryAcademicStanding,
+  mapTertiaryScoreToGrade,
+  getTertiaryClassification,
+} from "@/lib/tertiary-config";
 
 type GradingRosterProps = {
   schoolId: string;
@@ -244,10 +252,10 @@ function getOrdinalSuffix(rank: number): string {
 function getTermVariants(term: string): string[] {
   const t = (term || "").trim().toLowerCase();
   if (t.includes("1") || t.includes("first")) {
-    return ["1st Term", "First Term", "Term 1", "first term", "1st term", "1st Semester"];
+    return ["1st Term", "First Term", "Term 1", "first term", "1st term", "1st Semester", "First Semester"];
   }
   if (t.includes("2") || t.includes("second")) {
-    return ["2nd Term", "Second Term", "Term 2", "second term", "2nd term", "2nd Semester"];
+    return ["2nd Term", "Second Term", "Term 2", "second term", "2nd term", "2nd Semester", "Second Semester"];
   }
   if (t.includes("3") || t.includes("third")) {
     return ["3rd Term", "Third Term", "Term 3", "third term", "3rd term"];
@@ -274,11 +282,11 @@ function resolveTierGrade(tierCategory: string, score: number): { letter: string
   }
 
   if (tierCategory === "TERTIARY") {
-    if (score >= 70) return { letter: "A", remark: "Distinction", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
-    if (score >= 60) return { letter: "B", remark: "Upper Credit", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
-    if (score >= 50) return { letter: "C", remark: "Lower Credit", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
-    if (score >= 40) return { letter: "D", remark: "Pass", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
-    return { letter: "F", remark: "Fail", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
+    if (score >= 70) return { letter: "Distinction", remark: "Distinction", badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300" };
+    if (score >= 60) return { letter: "Upper Credit", remark: "Upper Credit", badgeColor: "bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-300" };
+    if (score >= 50) return { letter: "Lower Credit", remark: "Lower Credit", badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300" };
+    if (score >= 40) return { letter: "Pass", remark: "Pass", badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300" };
+    return { letter: "Academic Probation", remark: "Academic Probation", badgeColor: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300" };
   }
 
   // Default: Secondary School WAEC 9-point scale
@@ -603,30 +611,62 @@ export default function GradingRoster({
       const average = classSubjects.length > 0 ? (studentTotal / classSubjects.length) : 0;
       const tierGrade = resolveTierGrade(tierCategory, average);
 
-      // Auto-Promotion Decision Logic:
-      let promotionStatus: "PROMOTED" | "PROMOTED ON TRIAL" | "REPEAT" | "—" = "—";
+      // Tertiary GPA & Quality Points Calculation
+      let tertiaryGpa = 0;
+      let tertiaryTotalCu = 0;
+      let tertiaryTotalQp = 0;
+      let tertiaryStanding = "In Good Standing";
+
+      if (isTertiaryTier && evaluatedCount > 0) {
+        const tertiaryCourses = classSubjects.map((sub) => {
+          const sc = subjectScores[sub];
+          const info = resolveTertiaryCourse(sub);
+          const total = sc?.total || 0;
+          const gradeRes = mapTertiaryScoreToGrade(total, "4.0");
+          return {
+            courseName: sub,
+            creditUnits: info.creditUnits,
+            gp: gradeRes.gp,
+          };
+        });
+        const gpaResult = calculateTertiaryGPA(tertiaryCourses);
+        tertiaryGpa = gpaResult.gpa;
+        tertiaryTotalCu = gpaResult.totalCreditUnits;
+        tertiaryTotalQp = gpaResult.totalQualityPoints;
+        tertiaryStanding = getTertiaryClassification(tertiaryGpa, "4.0");
+      }
+
+      // Auto-Promotion / Academic Standing Decision Logic:
+      let promotionStatus: "PROMOTED" | "PROMOTED ON TRIAL" | "REPEAT" | "IN GOOD STANDING" | "ACADEMIC PROBATION" | "—" = "—";
       let promotionBadge = "";
       let passedCount = 0;
 
       if (evaluatedCount > 0) {
-        classSubjects.forEach((sub) => {
-          const sc = subjectScores[sub];
-          if (sc && sc.total >= 40) {
-            passedCount++;
-          }
-        });
-
-        const passRatio = classSubjects.length > 0 ? passedCount / classSubjects.length : 0;
-
-        if (average >= passMarkThreshold && passRatio >= 0.5) {
-          promotionStatus = "PROMOTED";
-          promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
-        } else if (average >= (passMarkThreshold - 10) && passedCount >= Math.floor(classSubjects.length * 0.4)) {
-          promotionStatus = "PROMOTED ON TRIAL";
-          promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+        if (isTertiaryTier) {
+          promotionStatus = tertiaryGpa >= 2.0 ? "IN GOOD STANDING" : "ACADEMIC PROBATION";
+          promotionBadge = tertiaryGpa >= 2.0
+            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300"
+            : "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
         } else {
-          promotionStatus = "REPEAT";
-          promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+          classSubjects.forEach((sub) => {
+            const sc = subjectScores[sub];
+            if (sc && sc.total >= 40) {
+              passedCount++;
+            }
+          });
+
+          const passRatio = classSubjects.length > 0 ? passedCount / classSubjects.length : 0;
+
+          if (average >= passMarkThreshold && passRatio >= 0.5) {
+            promotionStatus = "PROMOTED";
+            promotionBadge = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300";
+          } else if (average >= (passMarkThreshold - 10) && passedCount >= Math.floor(classSubjects.length * 0.4)) {
+            promotionStatus = "PROMOTED ON TRIAL";
+            promotionBadge = "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300";
+          } else {
+            promotionStatus = "REPEAT";
+            promotionBadge = "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300";
+          }
         }
       }
 
@@ -636,17 +676,25 @@ export default function GradingRoster({
         studentTotal,
         evaluatedCount,
         average,
-        grade: tierGrade.letter,
-        remark: tierGrade.remark,
+        grade: isTertiaryTier ? tertiaryStanding : tierGrade.letter,
+        remark: isTertiaryTier ? tertiaryStanding : tierGrade.remark,
         badgeColor: tierGrade.badgeColor,
         promotionStatus,
         promotionBadge,
         passedCount,
+        tertiaryGpa,
+        tertiaryTotalCu,
+        tertiaryTotalQp,
+        tertiaryStanding,
       };
     });
 
-    // Rank students by total score / average descending across ALL subjects
-    const sorted = [...rows].sort((a, b) => b.studentTotal - a.studentTotal);
+    // Rank students by total score / GPA descending across ALL subjects
+    const sorted = [...rows].sort((a, b) =>
+      isTertiaryTier
+        ? ((b.tertiaryGpa || 0) - (a.tertiaryGpa || 0) || b.studentTotal - a.studentTotal)
+        : (b.studentTotal - a.studentTotal)
+    );
     const rankMap = new Map<string, string>();
     let currentRank = 1;
     sorted.forEach((item, index) => {
@@ -941,19 +989,28 @@ export default function GradingRoster({
             </select>
           </div>
 
-          {/* Term Selector */}
+          {/* Term / Semester Selector */}
           <div>
             <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Term:
+              {isTertiaryTier ? "Semester:" : "Term:"}
             </label>
             <select
-              value={selectedTerm}
+              value={isTertiaryTier ? (selectedTerm.includes("2") ? "2nd Semester" : "1st Semester") : selectedTerm}
               onChange={(e) => setSelectedTerm(e.target.value)}
               className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="1st Term">1st Term</option>
-              <option value="2nd Term">2nd Term</option>
-              <option value="3rd Term">3rd Term</option>
+              {isTertiaryTier ? (
+                <>
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
+                </>
+              ) : (
+                <>
+                  <option value="1st Term">1st Term</option>
+                  <option value="2nd Term">2nd Term</option>
+                  <option value="3rd Term">3rd Term</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -1112,16 +1169,16 @@ export default function GradingRoster({
 
                   {/* Summary Columns across ALL subjects */}
                   <th className="px-3 py-3 text-center bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-l border-r border-indigo-200 dark:border-indigo-900 w-20">
-                    Total
+                    {isTertiaryTier ? "QP Total" : "Total"}
                   </th>
                   <th className="px-3 py-3 text-center bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-r border-indigo-200 dark:border-indigo-900 w-20">
-                    Average
+                    {isTertiaryTier ? "Semester GPA" : "Average"}
                   </th>
                   <th className="px-3 py-3 text-center bg-slate-100 dark:bg-slate-800/90 border-r border-slate-200 dark:border-slate-800 w-20">
-                    {tierCategory === "NURSERY" ? "Rating" : tierCategory === "PRIMARY" ? "Grade" : "WAEC"}
+                    {isTertiaryTier ? "Academic Standing" : (tierCategory === "NURSERY" ? "Rating" : tierCategory === "PRIMARY" ? "Grade" : "WAEC")}
                   </th>
                   <th className="px-3 py-3 text-center bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-r border-emerald-200 dark:border-emerald-900 min-w-[130px]">
-                    Auto-Promotion
+                    {isTertiaryTier ? "Academic Status" : "Auto-Promotion"}
                   </th>
                   <th className="px-4 py-3 text-left min-w-[120px]">
                     Remark
@@ -1186,17 +1243,17 @@ export default function GradingRoster({
                       );
                     })}
 
-                    {/* Total Across ALL Subjects */}
+                    {/* Total Across ALL Subjects / QP */}
                     <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20 border-l border-r border-indigo-100 dark:border-indigo-950">
-                      {row.evaluatedCount > 0 ? row.studentTotal : "—"}
+                      {row.evaluatedCount > 0 ? (isTertiaryTier ? `${row.tertiaryTotalQp.toFixed(1)} QP` : row.studentTotal) : "—"}
                     </td>
 
-                    {/* Average Across ALL Subjects */}
+                    {/* Average Across ALL Subjects / GPA */}
                     <td className="px-3 py-3 text-center font-mono font-black text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20 border-r border-indigo-100 dark:border-indigo-950">
-                      {row.evaluatedCount > 0 ? `${row.average.toFixed(2)}%` : "—"}
+                      {row.evaluatedCount > 0 ? (isTertiaryTier ? `${row.tertiaryGpa.toFixed(2)} GPA` : `${row.average.toFixed(2)}%`) : "—"}
                     </td>
 
-                    {/* Tier Grade */}
+                    {/* Tier Grade / Academic Standing (NO Letter Grade A or B for Tertiary) */}
                     <td className="px-3 py-3 text-center border-r border-slate-100 dark:border-slate-800">
                       {row.evaluatedCount > 0 ? (
                         <span className={`inline-block px-2 py-0.5 rounded font-black text-xs font-mono border ${row.badgeColor}`}>
@@ -1207,7 +1264,7 @@ export default function GradingRoster({
                       )}
                     </td>
 
-                    {/* Auto-Promotion Decision */}
+                    {/* Auto-Promotion Decision / Academic Status */}
                     <td className="px-3 py-3 text-center border-r border-slate-100 dark:border-slate-800">
                       {row.evaluatedCount > 0 ? (
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-black text-[10px] font-mono border ${row.promotionBadge}`}>

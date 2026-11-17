@@ -21,7 +21,15 @@ import {
 import { StudentProfileData, TierPresentationConfig } from "../types";
 import { calculateBonaVeeResult, getGradeRemark } from "@/lib/assessmentEngine";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
-import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
+import {
+  isTertiaryClass,
+  resolveTertiaryCourse,
+  mapTertiaryScoreToGrade,
+  getTertiaryAcademicStanding,
+  getTertiaryClassification,
+  calculateTertiaryGPA,
+  formatTertiarySemester,
+} from "@/lib/tertiary-config";
 import PaymentReceiptUpload from "@/components/payments/PaymentReceiptUpload";
 
 
@@ -129,11 +137,15 @@ export function StudentReportCardPortalModule({
       })))
     : null;
 
+  const tertiaryClassification = isHigherEd && tertiaryGPA
+    ? getTertiaryClassification(tertiaryGPA.gpa, "4.0")
+    : null;
+
   const overallGrade = enteredSubjects.length > 0 
-    ? (isHigherEd ? mapTertiaryScoreToGrade(overallAvgNum, "4.0").letter : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
+    ? (isHigherEd ? null : calculateBonaVeeResult(tierName, { exam: overallAvgNum }).grade)
     : (isEarlyChildhood ? "Needs Support" : "—");
   const overallRemark = enteredSubjects.length > 0 
-    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade))
+    ? (isHigherEd ? getTertiaryAcademicStanding(tertiaryGPA?.gpa || 0, "4.0") : getGradeRemark(overallGrade || ""))
     : (isEarlyChildhood ? "Needs Support" : "No Grades Entered");
 
   const positionDisplay = isHigherEd
@@ -281,19 +293,28 @@ export function StudentReportCardPortalModule({
             </select>
           </div>
 
-          {/* Term Selector */}
+          {/* Term / Semester Selector */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">
-              Academic Term
+              {isHigherEd ? "Academic Semester" : "Academic Term"}
             </label>
             <select
               value={selectedTerm}
               onChange={(e) => setSelectedTerm(e.target.value)}
               className="bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="First Term">1st Term (Harmattan / Michaelmas)</option>
-              <option value="Second Term">2nd Term (Lent / Winter)</option>
-              <option value="Third Term">3rd Term (Trinity / Summer)</option>
+              {isHigherEd ? (
+                <>
+                  <option value="1st Semester">1st Semester (Harmattan / Rain)</option>
+                  <option value="2nd Semester">2nd Semester (Rain / Spring)</option>
+                </>
+              ) : (
+                <>
+                  <option value="First Term">1st Term (Harmattan / Michaelmas)</option>
+                  <option value="Second Term">2nd Term (Lent / Winter)</option>
+                  <option value="Third Term">3rd Term (Trinity / Summer)</option>
+                </>
+              )}
             </select>
           </div>
 

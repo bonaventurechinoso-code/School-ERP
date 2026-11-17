@@ -22,6 +22,7 @@ import {
   getTierForClass,
   EducationalTierCategory,
 } from "@/lib/school-tier-classes";
+import { isTertiaryClass } from "@/lib/tertiary-config";
 
 // -------------------------------------------------------------
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
@@ -479,16 +480,9 @@ function getGradeInfo(
     return { grade: "Needs Support", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
   }
 
-  // 2. Tertiary / Higher Education Scale: A=4.0, B=3.0, C=2.0, D=1.0, F=0.0 (NO A1-F9, NO Distinction/Pass)
+  // 2. Tertiary / Higher Education: FAIL 1 - No Overall Grade! Only GPA + Academic Standing.
   if (isTertiary) {
-    if (!hasScores && score === 0) {
-      return { grade: "Not Entered", badgeClass: "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-300 dark:border-slate-700" };
-    }
-    if (score >= 70) return { grade: "A (4.0)", badgeClass: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700" };
-    if (score >= 60) return { grade: "B (3.0)", badgeClass: "bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700" };
-    if (score >= 50) return { grade: "C (2.0)", badgeClass: "bg-blue-100 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700" };
-    if (score >= 40) return { grade: "D (1.0)", badgeClass: "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700" };
-    return { grade: "F (0.0)", badgeClass: "bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700" };
+    return { grade: "", badgeClass: "" };
   }
 
   // 2. Primary School Scale: Distinction / Very Good / Credit / Pass / Fail
@@ -849,16 +843,20 @@ function ReportCardsContent() {
     academicTier === "UNIVERSITY" ||
     (academicTier as string) === "COLLEGE_OF_EDUCATION" ||
     (academicTier as string) === "POLYTECHNIC" ||
-    (academicTier as string) === "HIGHER_ED";
+    (academicTier as string) === "HIGHER_ED" ||
+    selectedTier.category === "TERTIARY" ||
+    isTertiaryClass(className);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 min-h-screen pb-12">
       <header>
         <h2 className="text-3xl font-extrabold tracking-tight" style={{ color: tenant.branding?.primaryColor || "#0f172a" }}>
-          {academicTier === "SECONDARY" ? "Termly Report Sheets" : "Termly Report Cards"}
+          {isTertiaryTier ? "Semester Academic Transcripts" : (academicTier === "SECONDARY" ? "Termly Report Sheets" : "Termly Report Cards")}
         </h2>
         <p className="mt-2 text-lg text-slate-500">
-          Continuous Assessment (CA) tracking, termly exam scores, and automated report sheet generation.
+          {isTertiaryTier
+            ? "Course registration, Continuous Assessment (CA), semester exam grading, and cumulative GPA broadsheet."
+            : "Continuous Assessment (CA) tracking, termly exam scores, and automated report sheet generation."}
         </p>
       </header>
 
@@ -1331,7 +1329,7 @@ function ReportCardsContent() {
                                 <span className="font-extrabold text-base text-slate-900 dark:text-white">
                                   {student.total > 0 ? `${student.total}%` : "—"}
                                 </span>
-                                {student.total > 0 && (
+                                {!isTertiaryTier && student.total > 0 && grade.grade && (
                                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
                                     {grade.grade}
                                   </span>

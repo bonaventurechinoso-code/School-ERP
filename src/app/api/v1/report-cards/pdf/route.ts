@@ -6,7 +6,7 @@ import { generateReportCardPdf, ReportCardPdfData, ReportCardSubjectScore } from
 import { resolveGradingTier } from "@/lib/grading-engine";
 import { isCrecheClass, resolveCrecheConfig } from "@/lib/creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "@/lib/nursery-config";
-import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA, formatTertiarySemester } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 
@@ -290,7 +290,7 @@ export async function GET(req: NextRequest) {
       schoolMotto: (school as any)?.motto || "Knowledge, Discipline and Excellence",
       schoolAddress: (school as any)?.address || "Federal Republic of Nigeria Ministry of Education Certified",
       session,
-      term,
+      term: isTertiary ? formatTertiarySemester(term) : term,
       studentName: `${student.firstName} ${student.lastName}`.trim(),
       admissionNumber,
       className: currentClass,
@@ -304,12 +304,13 @@ export async function GET(req: NextRequest) {
       totalScore,
       maxPossibleScore,
       averageScore,
-      overallGrade: isTertiary ? mapTertiaryScoreToGrade(avgNum, "4.0").letter : overallGrade,
+      overallGrade: isTertiary ? undefined : overallGrade,
       promotionStatus: isTertiary
         ? getTertiaryAcademicStanding(tertiaryGpaCalc?.gpa || 0, "4.0")
         : "Promoted to Next Class",
       gpa: tertiaryGpaCalc?.gpa,
       totalCreditUnits: tertiaryGpaCalc?.totalCreditUnits,
+      totalQualityPoints: tertiaryGpaCalc?.totalQualityPoints,
       subjects: subjectsList,
       teacherRemarks: isTertiary
         ? `Commended for satisfactory academic diligence across registered courses. Current Standing: ${getTertiaryAcademicStanding(tertiaryGpaCalc?.gpa || 0, "4.0")}.`

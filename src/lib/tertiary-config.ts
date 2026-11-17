@@ -260,3 +260,69 @@ export function calculateTertiaryGPA(courses: Array<{ creditUnits?: number; gp?:
     gpa,
   };
 }
+
+/**
+ * Normalizes term/semester strings for Tertiary institutions (Semester 1 / 2, NO 3rd Term).
+ */
+export function formatTertiarySemester(termOrSemester?: string | null): string {
+  if (!termOrSemester) return "1st Semester";
+  const s = String(termOrSemester).trim();
+  if (/^(2nd|second|\b2\b)/i.test(s)) return "2nd Semester";
+  return "1st Semester";
+}
+
+/**
+ * Returns bidirectional search variants for term/semester queries.
+ */
+export function getAcademicPeriodVariants(termOrSemester?: string | null): string[] {
+  if (!termOrSemester) return ["1st Semester", "First Semester", "1st Term", "First Term"];
+  const s = String(termOrSemester).trim().toLowerCase();
+  if (s.includes("1") || s.includes("first")) {
+    return [
+      "1st Semester",
+      "First Semester",
+      "1st Term",
+      "First Term",
+      "Term 1",
+      "Semester 1",
+      "1st semester",
+      "first semester",
+      "1st term",
+      "first term"
+    ];
+  }
+  if (s.includes("2") || s.includes("second")) {
+    return [
+      "2nd Semester",
+      "Second Semester",
+      "2nd Term",
+      "Second Term",
+      "Term 2",
+      "Semester 2",
+      "2nd semester",
+      "second semester",
+      "2nd term",
+      "second term"
+    ];
+  }
+  if (s.includes("3") || s.includes("third")) {
+    return ["3rd Term", "Third Term", "Term 3", "3rd term", "third term"];
+  }
+  return [termOrSemester];
+}
+
+/**
+ * Formats academic period based on tier: Semesters for Tertiary, Terms for others.
+ */
+export function formatAcademicPeriod(termOrSemester?: string | null, isTertiary: boolean = false): string {
+  if (!termOrSemester) return isTertiary ? "1st Semester" : "1st Term";
+  const s = String(termOrSemester).trim();
+  if (isTertiary) {
+    return formatTertiarySemester(s);
+  }
+  const low = s.toLowerCase();
+  if (low.includes("1") || low.includes("first")) return "1st Term";
+  if (low.includes("2") || low.includes("second")) return "2nd Term";
+  if (low.includes("3") || low.includes("third")) return "3rd Term";
+  return s;
+}

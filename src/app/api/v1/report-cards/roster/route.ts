@@ -5,6 +5,7 @@ import { getTenantClient } from "@/lib/tenant-prisma";
 import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
+import { getAcademicPeriodVariants } from "@/lib/tertiary-config";
 
 export async function GET(req: NextRequest) {
   try {
@@ -79,14 +80,8 @@ export async function GET(req: NextRequest) {
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
         });
 
-        // Support both 1st Term / First Term formatting variants
-        const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-          : term === "2nd Term" ? ["2nd Term", "Second Term"]
-            : term === "3rd Term" ? ["3rd Term", "Third Term"]
-              : term === "First Term" ? ["First Term", "1st Term"]
-                : term === "Second Term" ? ["Second Term", "2nd Term"]
-                  : term === "Third Term" ? ["Third Term", "3rd Term"]
-                    : [term];
+        // Support 1st Semester / 1st Term variants across tiers
+        const termVariants = getAcademicPeriodVariants(term);
 
         // Fallback mock students if DB has no enrolled students for this class
         if (students.length === 0) {

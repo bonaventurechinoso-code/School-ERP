@@ -13,7 +13,17 @@ import {
 
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "./creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "./nursery-config";
-import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "./tertiary-config";
+import {
+  isTertiaryClass,
+  resolveTertiaryCourse,
+  mapTertiaryScoreToGrade,
+  getTertiaryAcademicStanding,
+  getTertiaryClassification,
+  calculateTertiaryGPA,
+  formatTertiarySemester,
+  getAcademicPeriodVariants,
+  formatAcademicPeriod,
+} from "./tertiary-config";
 import { getTierForClass } from "./school-tier-classes";
 import { getSecondaryDemoProfile, CANONICAL_SECONDARY_PROFILES, JSS_CANONICAL_SUBJECTS } from "./secondary-demo-data";
 
@@ -227,13 +237,7 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
   const className = payload.className || student?.currentClass || "General";
   const tierCategory = resolveGradingTier(tierName, className);
 
-  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-    : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-        : term === "First Term" ? ["First Term", "1st Term"]
-          : term === "Second Term" ? ["Second Term", "2nd Term"]
-            : term === "Third Term" ? ["Third Term", "3rd Term"]
-              : [term];
+  const termVariants = getAcademicPeriodVariants(term);
 
   // Single Source of Truth: GradeRecord is master table
   const rawGradeRecords = await tierDb.gradeRecord.findMany({
@@ -355,7 +359,7 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
         gp: r.gp ?? mapTertiaryScoreToGrade(r.totalScore, "4.0").gp,
       })));
       gpa = gpaCalc.gpa;
-      overallLetter = mapTertiaryScoreToGrade(averageScore, "4.0").letter;
+      overallLetter = null as any; // FAIL 1: Remove Overall Grade for Tertiary. Only GPA + Academic Standing.
     } else if (isNursery) {
       overallLetter = mapNurseryScoreToGrade(averageScore).letter;
       gpa = mapNurseryScoreToGrade(averageScore).gpa;
@@ -509,13 +513,7 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
 
   // 2. Fetch all grade records for this class and term (Single Source of Truth)
   const studentIds = students.map((s: any) => s.id);
-  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-    : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-        : term === "First Term" ? ["First Term", "1st Term"]
-          : term === "Second Term" ? ["Second Term", "2nd Term"]
-            : term === "Third Term" ? ["Third Term", "3rd Term"]
-              : [term];
+  const termVariants = getAcademicPeriodVariants(term);
 
   const gradeRecords = await tierDb.gradeRecord.findMany({
     where: {
@@ -645,12 +643,11 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
         overallLetter = mapCrecheScoreToGrade(averageScore).letter;
         gpa = mapCrecheScoreToGrade(averageScore).gpa;
       } else if (isTertiary) {
-        const tertiaryMapped = mapTertiaryScoreToGrade(averageScore, "4.0");
-        overallLetter = tertiaryMapped.letter;
+        overallLetter = null as any; // FAIL 1: Remove Overall Grade for Tertiary. Only GPA + Academic Standing.
         const courseItems = studentRecords.map((r: any) => {
           const c = resolveTertiaryCourse(r.subject);
           const mapped = mapTertiaryScoreToGrade(r.totalScore || 0, "4.0");
-          return { creditUnits: c.creditUnits, gradePoint: mapped.gp };
+          return { creditUnits: c.creditUnits, gp: mapped.gp };
         });
         const gpaCalc = calculateTertiaryGPA(courseItems);
         gpa = gpaCalc.gpa;
@@ -777,13 +774,7 @@ export async function getStudentReportCard(
     explicitTierName
   );
 
-  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-    : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-        : term === "First Term" ? ["First Term", "1st Term"]
-          : term === "Second Term" ? ["Second Term", "2nd Term"]
-            : term === "Third Term" ? ["Third Term", "3rd Term"]
-              : [term];
+  const termVariants = getAcademicPeriodVariants(term);
 
   const reportCard = await tierDb.reportCard.findFirst({
     where: {
@@ -901,6 +892,14 @@ export async function getStudentReportCard(
     }
   }
 
+  if (finalReportCard && isTertiary) {
+    finalReportCard = {
+      ...finalReportCard,
+      gradeLetter: null,
+      term: formatTertiarySemester(finalReportCard.term || term),
+    };
+  }
+
   return {
     tierName,
     reportCard: finalReportCard,
@@ -924,13 +923,7 @@ export async function getClassResultSheet(
     explicitTierName
   );
 
-  const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-    : term === "2nd Term" ? ["2nd Term", "Second Term"]
-      : term === "3rd Term" ? ["3rd Term", "Third Term"]
-        : term === "First Term" ? ["First Term", "1st Term"]
-          : term === "Second Term" ? ["Second Term", "2nd Term"]
-            : term === "Third Term" ? ["Third Term", "3rd Term"]
-              : [term];
+  const termVariants = getAcademicPeriodVariants(term);
 
   // Fetch students, their report cards, and active grade records
   const students = await tierDb.student.findMany({
@@ -1069,11 +1062,20 @@ export async function getClassResultSheet(
         }
       }
 
+      let finalCard = card;
+      if (finalCard && isTertiary) {
+        finalCard = {
+          ...finalCard,
+          gradeLetter: null,
+          term: formatTertiarySemester(finalCard.term || term),
+        };
+      }
+
       return {
         id: s.id,
         name: `${s.lastName}, ${s.firstName}`,
         admissionNumber: s.admissionNumber,
-        reportCard: card,
+        reportCard: finalCard,
         subjectScores: recordMap,
       };
     }),

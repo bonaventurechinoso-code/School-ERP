@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import { isCrecheClass } from "./creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "./nursery-config";
-import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding } from "./tertiary-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, formatTertiarySemester } from "./tertiary-config";
 
 export interface ReportCardSubjectScore {
   subject: string;
@@ -40,6 +40,7 @@ export interface ReportCardPdfData {
   classPosition?: string;
   gpa?: number;
   totalCreditUnits?: number;
+  totalQualityPoints?: number;
   academicStanding?: string;
   totalStudents?: number;
   totalScore?: number;
@@ -144,10 +145,15 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .strokeColor("#D97706")
         .stroke();
 
+      const isTertiaryHeader = isTertiaryClass(data.className) || data.tierCategory === "TERTIARY";
+      const displayPeriod = isTertiaryHeader
+        ? formatTertiarySemester(data.term)
+        : (data.term || "1st Term");
+
       doc.font("Helvetica-Bold")
         .fontSize(8.5)
         .fillColor("#FDE68A")
-        .text((data.term || "1st Term").toUpperCase(), pageWidth - margin - 110, currentY + 14, { width: 100, align: "center" });
+        .text(displayPeriod.toUpperCase(), pageWidth - margin - 110, currentY + 14, { width: 100, align: "center" });
 
       doc.font("Helvetica")
         .fontSize(8)
@@ -164,7 +170,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fontSize(8.5)
         .fillColor("#0F172A")
         .text(
-          isTertiaryClass(data.className) || data.tierCategory === "TERTIARY"
+          isTertiaryHeader
             ? "OFFICIAL SEMESTER ACADEMIC TRANSCRIPT & COURSE PERFORMANCE SHEET"
             : "OFFICIAL TERMLY CONTINUOUS ASSESSMENT & ACADEMIC REPORT SHEET",
           margin,
@@ -229,7 +235,9 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       const tertiaryGpaStr = tertiaryGpa.toFixed(2);
       const tertiaryStanding = getTertiaryAcademicStanding(tertiaryGpa, "4.0");
 
-      const overallGradeVal = data.overallGrade || (typeof data.averageScore === "number" ? (isTertiary ? mapTertiaryScoreToGrade(data.averageScore, "4.0").letter : (isNursery ? mapNurseryScoreToGrade(data.averageScore).letter : (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail"))) : "—");
+      const overallGradeVal = isTertiary
+        ? "—"
+        : data.overallGrade || (typeof data.averageScore === "number" ? (isNursery ? mapNurseryScoreToGrade(data.averageScore).letter : (data.averageScore >= 75 ? "Distinction" : data.averageScore >= 65 ? "Very Good" : data.averageScore >= 50 ? "Credit" : data.averageScore >= 40 ? "Pass" : "Fail")) : "—");
       const gradeRemarkSub = overallGradeVal === "Distinction" || overallGradeVal === "Excellent" || overallGradeVal === "A" ? "Distinction"
         : overallGradeVal === "Very Good" || overallGradeVal === "B" ? "Upper Credit"
           : overallGradeVal === "Good" || overallGradeVal === "Credit" || overallGradeVal === "C" ? "Lower Credit"
@@ -240,10 +248,10 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
       const metrics = isTertiary
         ? [
           { label: "SEMESTER GPA", val: tertiaryGpaStr, sub: "Scale: 4.00 Max", color: "#1E3A8A" },
-          { label: "REGISTERED UNITS", val: String(data.totalCreditUnits || (data.subjects.length * 3)), sub: `Max: ${data.subjects.length * 100}`, color: "#0F172A" },
-          { label: "WEIGHTED AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Course Score Average", color: "#2563EB" },
-          { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
-          { label: "ACADEMIC STANDING", val: tertiaryGpa >= 2.0 ? "IN GOOD STANDING" : "PROBATION", sub: tertiaryStanding, color: "#D97706" },
+          { label: "REGISTERED UNITS", val: String(data.totalCreditUnits || (data.subjects.length * 3)), sub: "Total Credit Units", color: "#0F172A" },
+          { label: "QUALITY POINTS", val: String(data.totalQualityPoints !== undefined && data.totalQualityPoints !== null ? data.totalQualityPoints : (tertiaryGpa * (data.totalCreditUnits || 16)).toFixed(1)), sub: "Cumulative Points", color: "#2563EB" },
+          { label: "WEIGHTED AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Course Score Average", color: "#0D9488" },
+          { label: "ACADEMIC STANDING", val: tertiaryStanding.toUpperCase(), sub: tertiaryGpa >= 2.0 ? "In Good Standing" : "Academic Probation", color: "#16A34A" },
         ]
         : [
           { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
@@ -482,27 +490,33 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .lineWidth(0.5)
         .stroke();
 
-      // Class Teacher Remarks
-      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#0F172A").text("CLASS TEACHER'S REMARK:", margin + 6, currentY + 4);
+      // Class Teacher / Course Adviser Remarks
+      const teacherTitle = isTertiary ? "COURSE ADVISER'S REMARK:" : "CLASS TEACHER'S REMARK:";
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#0F172A").text(teacherTitle, margin + 6, currentY + 4);
       doc.font("Helvetica-Oblique")
         .fontSize(6.5)
         .fillColor("#334155")
         .text(
           data.teacherRemarks ||
-          "A committed, diligent, and intellectually exceptional student. Demonstrates leadership and academic enthusiasm.",
+          (isTertiary
+            ? "A dedicated and intellectually disciplined student with consistent course engagement."
+            : "A committed, diligent, and intellectually exceptional student. Demonstrates leadership and academic enthusiasm."),
           margin + 6,
           currentY + 12,
           { width: contentWidth - 130 }
         );
 
-      // Principal's Remarks
-      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#0F172A").text("PRINCIPAL'S REMARK:", margin + 6, currentY + 22);
+      // Principal / Dean / HOD Remarks
+      const adminTitle = isTertiary ? "HEAD OF DEPARTMENT / DEAN'S REMARK:" : "PRINCIPAL'S REMARK:";
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#0F172A").text(adminTitle, margin + 6, currentY + 22);
       doc.font("Helvetica-Oblique")
         .fontSize(6.5)
         .fillColor("#15803D")
         .text(
           data.principalRemarks ||
-          "Outstanding academic and character performance. A role model to peers. Promoted with Honours.",
+          (isTertiary
+            ? "Satisfactory semester academic standing maintained. Cleared for subsequent semester course registration."
+            : "Outstanding academic and character performance. A role model to peers. Promoted with Honours."),
           margin + 6,
           currentY + 29,
           { width: contentWidth - 130 }
@@ -545,11 +559,12 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fillColor("#1E293B")
         .fill();
 
+      const resumptionLabel = isTertiary ? "NEXT SEMESTER RESUMPTION DATE:" : "NEXT TERM RESUMPTION DATE:";
       doc.font("Helvetica-Bold")
         .fontSize(6)
         .fillColor("#FDE68A")
         .text(
-          `NEXT TERM RESUMPTION DATE: ${data.resumptionDate || "Monday, 11th January 2027"}`,
+          `${resumptionLabel} ${data.resumptionDate || "Monday, 11th January 2027"}`,
           margin + 8,
           currentY + 3.5
         );
@@ -558,8 +573,9 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .fontSize(5.5)
         .fillColor("#94A3B8")
         .text(
-          "Generated from Teacher Gradebook • Approved By Principal • Document Ref: BV-REP-" +
-          Date.now().toString(36).toUpperCase(),
+          isTertiary
+            ? "Generated from Semester Course Records • Certified By Registrar • Document Ref: TR-SEM-" + Date.now().toString(36).toUpperCase()
+            : "Generated from Teacher Gradebook • Approved By Principal • Document Ref: BV-REP-" + Date.now().toString(36).toUpperCase(),
           margin + 200,
           currentY + 4,
           { width: contentWidth - 208, align: "right" }

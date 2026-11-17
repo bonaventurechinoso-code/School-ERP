@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts, getDegreeClass } from "@/lib/gpa";
-import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA } from "@/lib/tertiary-config";
+import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade, getTertiaryAcademicStanding, calculateTertiaryGPA, formatTertiarySemester } from "@/lib/tertiary-config";
 import {
   compileAnnualTerms,
   getNigerianGrade,
@@ -252,7 +252,7 @@ export default async function StudentTranscriptPage({ params: paramsPromise }: T
       allCoursesForCGPA.push(...courseGrades.map((c: any) => ({ creditUnits: c.creditUnits, gp: Number(c.gpaPoints) })));
       const semGPA = calculateTertiaryGPA(courseGrades.map((c: any) => ({ creditUnits: c.creditUnits, gp: Number(c.gpaPoints) })));
       return {
-        semester: `${student.currentClass || "ND 1"} - ${termKey}`,
+        semester: `${student.currentClass || "ND 1"} - ${formatTertiarySemester(termKey)}`,
         semesterGPA: semGPA.gpa.toFixed(2),
         courseGrades,
       };
