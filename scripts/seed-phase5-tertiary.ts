@@ -114,49 +114,59 @@ async function seedPhase5Tertiary() {
     { subject: "MTH 111 - Logic and Linear Algebra", ca1: 25, exam: 48 },   // 73 -> A (4.0 * 3 = 12.0)
   ];
 
+  // Idempotency: Clean up any legacy "1st Term" / "First Term" rows for tertiary
+  await basePrisma.gradeRecord.deleteMany({
+    where: {
+      studentId: demoStudent.id,
+      term: { in: ["1st Term", "First Term"] },
+    },
+  });
+  await basePrisma.reportCard.deleteMany({
+    where: {
+      studentId: demoStudent.id,
+      term: { in: ["1st Term", "First Term"] },
+    },
+  });
+
   for (const g of demoGrades) {
     const totalScore = g.ca1 + g.exam;
-    for (const termName of ["1st Semester", "1st Term"]) {
-      await basePrisma.gradeRecord.upsert({
-        where: {
-          schoolId_studentId_term_className_subject: {
-            schoolId: demoSchool.id,
-            studentId: demoStudent.id,
-            term: termName,
-            className: "ND 1",
-            subject: g.subject,
-          },
-        },
-        update: {
-          ca1: g.ca1,
-          ca2: 0,
-          exam: g.exam,
-          totalScore,
-        },
-        create: {
+    await basePrisma.gradeRecord.upsert({
+      where: {
+        schoolId_studentId_term_className_subject: {
           schoolId: demoSchool.id,
           studentId: demoStudent.id,
-          term: termName,
+          term: "1st Semester",
           className: "ND 1",
           subject: g.subject,
-          ca1: g.ca1,
-          ca2: 0,
-          exam: g.exam,
-          totalScore,
         },
-      });
-    }
+      },
+      update: {
+        ca1: g.ca1,
+        ca2: 0,
+        exam: g.exam,
+        totalScore,
+      },
+      create: {
+        schoolId: demoSchool.id,
+        studentId: demoStudent.id,
+        term: "1st Semester",
+        className: "ND 1",
+        subject: g.subject,
+        ca1: g.ca1,
+        ca2: 0,
+        exam: g.exam,
+        totalScore,
+      },
+    });
   }
 
   // Compile Report Card for Demo Student
-  for (const termName of ["1st Semester", "1st Term"]) {
-    await compileStudentReportCard({
-      schoolId: demoSchool.id,
-      studentId: demoStudent.id,
-      term: termName,
-      academicYear: "2026/2027",
-    });
-  }
+  await compileStudentReportCard({
+    schoolId: demoSchool.id,
+    studentId: demoStudent.id,
+    term: "1st Semester",
+    academicYear: "2026/2027",
+  });
 
   console.log("✅ Demo School ND 1 seeded & compiled successfully!");
 
@@ -269,49 +279,59 @@ async function seedPhase5Tertiary() {
     { subject: "GST 113 - Nigerian Peoples and Culture", ca1: 21, exam: 43 },    // 64 -> B (3.0 * 2 = 6.0)
   ];
 
+  // Idempotency: Clean up any legacy "1st Term" / "First Term" rows for sandbox tertiary
+  await basePrisma.gradeRecord.deleteMany({
+    where: {
+      studentId: sandboxStudent.id,
+      term: { in: ["1st Term", "First Term"] },
+    },
+  });
+  await basePrisma.reportCard.deleteMany({
+    where: {
+      studentId: sandboxStudent.id,
+      term: { in: ["1st Term", "First Term"] },
+    },
+  });
+
   for (const g of sandboxGrades) {
     const totalScore = g.ca1 + g.exam;
-    for (const termName of ["1st Semester", "1st Term"]) {
-      await basePrisma.gradeRecord.upsert({
-        where: {
-          schoolId_studentId_term_className_subject: {
-            schoolId: sandboxSchool.id,
-            studentId: sandboxStudent.id,
-            term: termName,
-            className: "100 Level",
-            subject: g.subject,
-          },
-        },
-        update: {
-          ca1: g.ca1,
-          ca2: 0,
-          exam: g.exam,
-          totalScore,
-        },
-        create: {
+    await basePrisma.gradeRecord.upsert({
+      where: {
+        schoolId_studentId_term_className_subject: {
           schoolId: sandboxSchool.id,
           studentId: sandboxStudent.id,
-          term: termName,
+          term: "1st Semester",
           className: "100 Level",
           subject: g.subject,
-          ca1: g.ca1,
-          ca2: 0,
-          exam: g.exam,
-          totalScore,
         },
-      });
-    }
+      },
+      update: {
+        ca1: g.ca1,
+        ca2: 0,
+        exam: g.exam,
+        totalScore,
+      },
+      create: {
+        schoolId: sandboxSchool.id,
+        studentId: sandboxStudent.id,
+        term: "1st Semester",
+        className: "100 Level",
+        subject: g.subject,
+        ca1: g.ca1,
+        ca2: 0,
+        exam: g.exam,
+        totalScore,
+      },
+    });
   }
 
   // Compile Report Card for Sandbox Student
-  for (const termName of ["1st Semester", "1st Term"]) {
-    await compileStudentReportCard({
-      schoolId: sandboxSchool.id,
-      studentId: sandboxStudent.id,
-      term: termName,
-      academicYear: "2026/2027",
-    });
-  }
+  await compileStudentReportCard({
+    schoolId: sandboxSchool.id,
+    studentId: sandboxStudent.id,
+    term: "1st Semester",
+    academicYear: "2026/2027",
+  });
 
   console.log("✅ Sandbox School 100 Level seeded & compiled successfully!");
 }

@@ -171,11 +171,11 @@ export async function GET(req: NextRequest) {
 
     const resolvePdfRemark = (grade: string) => {
       if (isTertiary) {
-        if (grade === "A") return "Distinction in course concepts";
-        if (grade === "B") return "Upper Credit academic performance";
-        if (grade === "C") return "Lower Credit academic performance";
-        if (grade === "D") return "Pass / Fair progress";
-        return "Fail / Course retake recommended";
+        if (grade === "A") return "Distinction";
+        if (grade === "B") return "Upper Credit";
+        if (grade === "C") return "Lower Credit";
+        if (grade === "D") return "Pass";
+        return "Fail";
       }
       if (grade === "A1" || grade === "Distinction" || grade === "Excellent") return "Distinction in subject concepts";
       if (grade === "B2" || grade === "Very Good") return "Very good academic performance";

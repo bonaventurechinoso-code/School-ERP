@@ -22,7 +22,7 @@ import {
   getTierForClass,
   EducationalTierCategory,
 } from "@/lib/school-tier-classes";
-import { isTertiaryClass } from "@/lib/tertiary-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
 
 // -------------------------------------------------------------
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
@@ -1369,7 +1369,7 @@ function ReportCardsContent() {
                                       total: sub.total,
                                       grade: sub.grade || grade.grade,
                                       subjectPosition: student.rank > 0 ? getOrdinalSuffix(student.rank) : "1st",
-                                      remark: sub.remarks || (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : grade.grade === "Developing" ? "Developing well" : grade.grade === "Needs Support" ? "Needs support" : "Pass"),
+                                      remark: sub.remarks || (isTertiaryTier ? mapTertiaryScoreToGrade(sub.total, "4.0").remark : (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : grade.grade === "Developing" ? "Developing well" : grade.grade === "Needs Support" ? "Needs support" : "Pass")),
                                     }))
                                   : [];
 

@@ -385,7 +385,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
               sub.grade || "—",
               sub.gp !== undefined && sub.gp !== null ? Number(sub.gp).toFixed(1) : (mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").gp.toFixed(1)),
               sub.qualityPoints !== undefined && sub.qualityPoints !== null ? String(sub.qualityPoints) : String((sub.creditUnits || 3) * mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").gp),
-              sub.remark || mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").remark,
+              mapTertiaryScoreToGrade(Number(sub.total) || 0, "4.0").remark,
             ]
             : (isEarlyYearsNoExam
               ? [

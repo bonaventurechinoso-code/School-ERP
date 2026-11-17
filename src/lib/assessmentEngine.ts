@@ -246,7 +246,9 @@ export function getGradeRemark(grade: string): string {
   if (grade === "Developing") return "Developing";
   if (grade === "Needs Support") return "Needs Support";
   if (grade === "Distinction" || grade === "A1" || grade === "A") return "Distinction";
-  if (grade === "Very Good" || grade === "B2" || grade === "B") return "Very Good";
+  if (grade === "Upper Credit" || grade === "B") return "Upper Credit";
+  if (grade === "Lower Credit") return "Lower Credit";
+  if (grade === "Very Good" || grade === "B2") return "Very Good";
   if (grade === "Good" || grade === "B3") return "Good";
   if (grade === "Credit" || grade === "C4" || grade === "C5" || grade === "C6" || grade === "C") return "Credit";
   if (grade === "Pass" || grade === "D7" || grade === "E8" || grade === "D" || grade === "E") return "Pass";

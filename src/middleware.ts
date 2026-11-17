@@ -302,7 +302,7 @@ async function extractAndVerifyToken(req: NextRequest): Promise<VerifiedClaims |
         };
       }
     }
-  } catch {}
+  } catch { }
 
   return null;
 }
@@ -836,8 +836,8 @@ export async function middleware(req: NextRequest) {
     const loginUrl = getSafeRedirectUrl(targetLoginPath, req);
     const normalizedCallback = isSuperAdminPath(lowerPath)
       ? lowerPath
-          .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
-          .replace(/\/tenats(?=\/|$)/, "/tenants")
+        .replace(/^\/(?:supper-admin|supper_admin|superadmin|super_admin|admin)(?=\/|$)/, "/super-admin")
+        .replace(/\/tenats(?=\/|$)/, "/tenants")
       : pathname;
     loginUrl.searchParams.set("callbackUrl", normalizedCallback);
 

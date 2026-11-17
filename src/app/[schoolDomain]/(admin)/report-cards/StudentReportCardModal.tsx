@@ -21,6 +21,7 @@ import {
   getTertiaryClassification,
   calculateTertiaryGPA,
   formatTertiarySemester,
+  mapTertiaryScoreToGrade,
 } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
@@ -132,10 +133,21 @@ export default function StudentReportCardModal({
         computedRemark: "Not Entered",
       };
     }
+    const totalScore = sub.total !== undefined && sub.total !== null ? sub.total : ((sub.exam || 0) + (sub.ca1 || 0));
+    if (isHigherEd) {
+      const tert = mapTertiaryScoreToGrade(totalScore, "4.0");
+      return {
+        ...sub,
+        computedTotal: totalScore,
+        computedGrade: tert.letter,
+        computedGp: tert.gp,
+        computedRemark: tert.remark, // "Upper Credit" for B, "Distinction" for A, "Lower Credit" for C
+      };
+    }
     const calc = calculateBonaVeeResult(tierName, sub);
     return {
       ...sub,
-      computedTotal: sub.total !== undefined && sub.total !== null ? sub.total : calc.total,
+      computedTotal: totalScore,
       computedGrade: calc.grade,
       computedGp: calc.gp,
       computedRemark: getGradeRemark(calc.grade),
