@@ -84,35 +84,35 @@ export const INITIAL_SHARED_FORM_DATA: SharedFormData = {
   lastName: "",
   middleName: "",
   dateOfBirth: "",
-  gender: "Female",
-  maritalStatus: "Single",
+  gender: "",
+  maritalStatus: "",
   phone: "",
   email: "",
   residentialAddress: "",
-  state: "Enugu",
-  lga: "Udi",
+  state: "",
+  lga: "",
   nin: "",
   passportUrl: "",
 
   staffId: "",
-  dateOfEmployment: new Date().toISOString().split("T")[0],
-  employmentType: "Full-time",
-  departmentName: "Academic",
+  dateOfEmployment: "",
+  employmentType: "",
+  departmentName: "",
   reportingToId: "",
   status: "ACTIVE",
 
   nextOfKinName: "",
-  nextOfKinRelationship: "Spouse",
+  nextOfKinRelationship: "",
   nextOfKinPhone: "",
   nextOfKinAddress: "",
   emergencyName: "",
   emergencyPhone: "",
-  sameAsNextOfKin: true,
+  sameAsNextOfKin: false,
   guarantorName: "",
   guarantorPhone: "",
 
   baseSalary: "", // BLANK P0
-  payGrade: "GL 07",
+  payGrade: "",
   bankName: "",
   bankAccountNumber: "", // BLANK P0
   accountName: "",
@@ -120,7 +120,7 @@ export const INITIAL_SHARED_FORM_DATA: SharedFormData = {
   pensionProvider: "",
   nhisNo: "",
   tin: "",
-  paymentMethod: "Bank Transfer",
+  paymentMethod: "",
 
   role: "",
 };
@@ -300,11 +300,15 @@ export default function StaffOnboardingSharedSections({
             <select
               value={formData.gender}
               onChange={(e) => handleChange("gender", e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                errors.gender ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
             >
+              <option value="">-- Select Gender --</option>
               <option value="Female">Female</option>
               <option value="Male">Male</option>
             </select>
+            {errors.gender && <p className="text-[11px] text-rose-500 mt-1">{errors.gender}</p>}
           </div>
 
           {/* Marital Status */}
@@ -315,6 +319,7 @@ export default function StaffOnboardingSharedSections({
               onChange={(e) => handleChange("maritalStatus", e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
+              <option value="">-- Select Marital Status --</option>
               <option value="Single">Single</option>
               <option value="Married">Married</option>
               <option value="Divorced">Divorced</option>
@@ -405,12 +410,16 @@ export default function StaffOnboardingSharedSections({
             <select
               value={formData.state}
               onChange={(e) => handleChange("state", e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                errors.state ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
             >
+              <option value="">-- Select State --</option>
               {NIGERIAN_STATES.map((st) => (
                 <option key={st} value={st}>{st}</option>
               ))}
             </select>
+            {errors.state && <p className="text-[11px] text-rose-500 mt-1">{errors.state}</p>}
           </div>
         </div>
       </div>
@@ -473,8 +482,11 @@ export default function StaffOnboardingSharedSections({
             <select
               value={formData.employmentType}
               onChange={(e) => handleChange("employmentType", e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                errors.employmentType ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
             >
+              <option value="">-- Select Employment Type --</option>
               <option value="Full-time">Full-time</option>
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
@@ -482,6 +494,9 @@ export default function StaffOnboardingSharedSections({
               <option value="Intern">Student Intern</option>
               {tierCategory === "TERTIARY" && <option value="Visiting">Visiting / Adjunct</option>}
             </select>
+            {errors.employmentType && (
+              <p className="text-[11px] text-rose-500 mt-1">{errors.employmentType}</p>
+            )}
           </div>
         </div>
 
@@ -494,8 +509,11 @@ export default function StaffOnboardingSharedSections({
             <select
               value={formData.departmentName}
               onChange={(e) => handleChange("departmentName", e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                errors.departmentName ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
             >
+              <option value="">-- Select Department / Unit --</option>
               {tierCategory === "CRECHE" && (
                 <>
                   <option value="Early Childhood Care">Early Childhood Care</option>
@@ -538,6 +556,9 @@ export default function StaffOnboardingSharedSections({
                 </>
               )}
             </select>
+            {errors.departmentName && (
+              <p className="text-[11px] text-rose-500 mt-1">{errors.departmentName}</p>
+            )}
           </div>
 
           {/* Reporting To */}
@@ -603,8 +624,11 @@ export default function StaffOnboardingSharedSections({
             <select
               value={formData.nextOfKinRelationship}
               onChange={(e) => handleChange("nextOfKinRelationship", e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                errors.nextOfKinRelationship ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
             >
+              <option value="">-- Select Relationship --</option>
               <option value="Spouse">Spouse</option>
               <option value="Parent">Parent</option>
               <option value="Sibling">Sibling</option>
@@ -612,6 +636,9 @@ export default function StaffOnboardingSharedSections({
               <option value="Guardian">Guardian</option>
               <option value="Other Relative">Other Relative</option>
             </select>
+            {errors.nextOfKinRelationship && (
+              <p className="text-[11px] text-rose-500 mt-1">{errors.nextOfKinRelationship}</p>
+            )}
           </div>
 
           {/* Phone */}
@@ -747,6 +774,7 @@ export default function StaffOnboardingSharedSections({
               onChange={(e) => handleChange("payGrade", e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white font-medium"
             >
+              <option value="">-- Select Pay Grade --</option>
               {payGrades.map((g) => (
                 <option key={g} value={g}>{g}</option>
               ))}
@@ -761,6 +789,7 @@ export default function StaffOnboardingSharedSections({
               onChange={(e) => handleChange("paymentMethod", e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
+              <option value="">-- Select Payment Method --</option>
               <option value="Bank Transfer">Bank Transfer (NUBAN)</option>
               <option value="Cash / Cheque">Cash / Manual Cheque</option>
             </select>

@@ -21,6 +21,7 @@ import StaffOnboardingSharedSections, {
   SharedFormData,
   INITIAL_SHARED_FORM_DATA,
 } from "./StaffOnboardingSharedSections";
+import StaffRolePickerForm from "./StaffRolePickerForm";
 import {
   SECONDARY_STAFF_ROLES,
   SECONDARY_HOD_DEPARTMENTS,
@@ -75,13 +76,13 @@ export default function SecondaryStaffOnboardingModal({
 }: Props) {
   const [formData, setFormData] = useState<SharedFormData>({
     ...INITIAL_SHARED_FORM_DATA,
-    role: "Subject Teacher",
-    payGrade: "GL 08",
+    role: "",
+    payGrade: "",
   });
 
   // Section C: Secondary Specific Qualification & TRCN
-  const [qualification, setQualification] = useState<string>("B.Sc (Ed) / B.A (Ed)");
-  const [fieldOfStudy, setFieldOfStudy] = useState("Science Education (Physics/Chemistry)");
+  const [qualification, setQualification] = useState<string>("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [institutionAttended, setInstitutionAttended] = useState("");
   const [yearGraduated, setYearGraduated] = useState("");
   const [trcnNumber, setTrcnNumber] = useState("");
@@ -92,14 +93,11 @@ export default function SecondaryStaffOnboardingModal({
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
   const [formTutorClassId, setFormTutorClassId] = useState<string>("");
   const [teachingClassIds, setTeachingClassIds] = useState<string[]>([]);
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([
-    "English Language",
-    "Mathematics",
-  ]);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [customSubjectInput, setCustomSubjectInput] = useState("");
 
   // Secondary HOD specifics (multi-department support)
-  const [selectedHodDepartments, setSelectedHodDepartments] = useState<string[]>(["Sciences"]);
+  const [selectedHodDepartments, setSelectedHodDepartments] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,10 +114,6 @@ export default function SecondaryStaffOnboardingModal({
         const res = await fetchSchoolClassesAction(schoolDomain);
         if (isMounted && res.success && res.data && res.data.length > 0) {
           setAvailableClasses(res.data.map((c: any) => ({ id: c.id, name: c.name })));
-          if (!formTutorClassId) {
-            setFormTutorClassId(res.data[0].id);
-            setTeachingClassIds([res.data[0].id]);
-          }
         }
       } catch (err) {
         console.error("Failed to load classes for secondary modal:", err);
@@ -179,6 +173,9 @@ export default function SecondaryStaffOnboardingModal({
     setSubmitError(null);
 
     const localErrors: Record<string, string> = {};
+    if (!formData.role || !formData.role.trim()) {
+      localErrors.role = "Please select a staff role from the role matrix above.";
+    }
     if (!formData.firstName.trim()) localErrors.firstName = "First Name is required.";
     if (!formData.lastName.trim()) localErrors.lastName = "Last Name is required.";
     if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
@@ -187,7 +184,13 @@ export default function SecondaryStaffOnboardingModal({
     if (!formData.phone.trim()) localErrors.phone = "Phone number is required.";
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.dateOfBirth) localErrors.dateOfBirth = "Date of Birth is required.";
+    if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.employmentType) localErrors.employmentType = "Employment Type is required.";
+    if (!formData.departmentName) localErrors.departmentName = "Department / Unit is required.";
+    if (!qualification.trim()) localErrors.qualification = "Please select highest qualification.";
+    if (!fieldOfStudy.trim()) localErrors.fieldOfStudy = "Field of Study / Major is required.";
     if (!formData.nextOfKinName.trim()) localErrors.nextOfKinName = "Next of Kin Name is required.";
+    if (!formData.nextOfKinRelationship) localErrors.nextOfKinRelationship = "Next of Kin Relationship is required.";
     if (!formData.nextOfKinPhone.trim()) localErrors.nextOfKinPhone = "Next of Kin Phone is required.";
 
     // Salary & NUBAN
@@ -394,6 +397,23 @@ export default function SecondaryStaffOnboardingModal({
             </div>
           )}
 
+          {/* DYNAMIC ROLE PICKER FORM */}
+          <StaffRolePickerForm
+            tierCategory="SECONDARY"
+            selectedRole={formData.role}
+            onSelectRole={(role) => {
+              setFormData((prev) => ({ ...prev, role }));
+              if (errors.role) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.role;
+                  return next;
+                });
+              }
+            }}
+            error={errors.role}
+          />
+
           {/* SHARED SECTIONS A & B */}
           <StaffOnboardingSharedSections
             tierCategory="SECONDARY"
@@ -427,15 +447,30 @@ export default function SecondaryStaffOnboardingModal({
                 </label>
                 <select
                   value={qualification}
-                  onChange={(e) => setQualification(e.target.value)}
-                  className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500"
+                  onChange={(e) => {
+                    setQualification(e.target.value);
+                    if (errors.qualification) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.qualification;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full text-xs font-medium border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500 ${
+                    errors.qualification ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                  }`}
                 >
+                  <option value="">-- Select Highest Qualification --</option>
                   {NURSERY_PRIMARY_SECONDARY_QUALIFICATIONS.map((q) => (
                     <option key={q} value={q}>
                       {q}
                     </option>
                   ))}
                 </select>
+                {errors.qualification && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">{errors.qualification}</p>
+                )}
               </div>
 
               <div>
@@ -445,10 +480,24 @@ export default function SecondaryStaffOnboardingModal({
                 <input
                   type="text"
                   value={fieldOfStudy}
-                  onChange={(e) => setFieldOfStudy(e.target.value)}
+                  onChange={(e) => {
+                    setFieldOfStudy(e.target.value);
+                    if (errors.fieldOfStudy) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.fieldOfStudy;
+                        return n;
+                      });
+                    }
+                  }}
                   placeholder="e.g. Physics Education, English Literature, Mathematics, Economics"
-                  className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
+                  className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 ${
+                    errors.fieldOfStudy ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                  }`}
                 />
+                {errors.fieldOfStudy && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">{errors.fieldOfStudy}</p>
+                )}
               </div>
 
               <div>

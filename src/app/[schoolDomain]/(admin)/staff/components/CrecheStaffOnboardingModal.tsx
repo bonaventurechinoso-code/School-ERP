@@ -17,6 +17,7 @@ import StaffOnboardingSharedSections, {
   SharedFormData,
   INITIAL_SHARED_FORM_DATA,
 } from "./StaffOnboardingSharedSections";
+import StaffRolePickerForm from "./StaffRolePickerForm";
 import {
   CRECHE_STAFF_ROLES,
   CRECHE_QUALIFICATIONS,
@@ -65,27 +66,21 @@ export default function CrecheStaffOnboardingModal({
 }: Props) {
   const [formData, setFormData] = useState<SharedFormData>({
     ...INITIAL_SHARED_FORM_DATA,
-    role: "Caregiver",
-    payGrade: "GL 04",
+    role: "",
+    payGrade: "",
   });
 
   // Section C: Creche Specific Qualification & Certification
-  const [qualification, setQualification] = useState<string>("Diploma in Early Childhood Education");
-  const [fieldOfStudy, setFieldOfStudy] = useState("Early Childhood Care");
+  const [qualification, setQualification] = useState<string>("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [institutionAttended, setInstitutionAttended] = useState("");
   const [yearGraduated, setYearGraduated] = useState("");
-  const [childcareCertName, setChildcareCertName] = useState("First Aid & CPR Certified");
+  const [childcareCertName, setChildcareCertName] = useState("");
   const [trcnNumber, setTrcnNumber] = useState(""); // Optional for Creche
 
   // Creche Assignment Model
-  const [assignedPlaygroup, setAssignedPlaygroup] = useState<string>(
-    classrooms.find((c) => /creche|playgroup|infant|toddler/i.test(c.name))?.name || "Playgroup A (Infants 3-12 mos)"
-  );
-  const [selectedActivities, setSelectedActivities] = useState<string[]>([
-    "Rhymes & Songs",
-    "Sensory & Texture Play",
-    "Nap & Resting Care",
-  ]);
+  const [assignedPlaygroup, setAssignedPlaygroup] = useState<string>("");
+  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,6 +109,9 @@ export default function CrecheStaffOnboardingModal({
 
     // Validate Creche Specific fields
     const localErrors: Record<string, string> = {};
+    if (!formData.role || !formData.role.trim()) {
+      localErrors.role = "Please select a staff role from the role options above.";
+    }
     if (!formData.firstName.trim()) localErrors.firstName = "First Name is required.";
     if (!formData.lastName.trim()) localErrors.lastName = "Last Name is required.";
     if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
@@ -122,7 +120,12 @@ export default function CrecheStaffOnboardingModal({
     if (!formData.phone.trim()) localErrors.phone = "Phone number is required.";
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.dateOfBirth) localErrors.dateOfBirth = "Date of Birth is required.";
+    if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.employmentType) localErrors.employmentType = "Employment Type is required.";
+    if (!formData.departmentName) localErrors.departmentName = "Department / Unit is required.";
+    if (!qualification.trim()) localErrors.qualification = "Please select highest qualification.";
     if (!formData.nextOfKinName.trim()) localErrors.nextOfKinName = "Next of Kin Name is required.";
+    if (!formData.nextOfKinRelationship) localErrors.nextOfKinRelationship = "Next of Kin Relationship is required.";
     if (!formData.nextOfKinPhone.trim()) localErrors.nextOfKinPhone = "Next of Kin Phone is required.";
 
     // Salary & NUBAN
@@ -296,35 +299,22 @@ export default function CrecheStaffOnboardingModal({
             </div>
           )}
 
-          {/* ROLE SELECTOR (CRECHE TIER-AWARE) */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Select Caregiver / Staff Role <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {CRECHE_STAFF_ROLES.map((role) => {
-                const isSelected = formData.role === role;
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => {
-                      setFormData((prev) => ({ ...prev, role }));
-                      if (errors.role) setErrors((prev) => ({ ...prev, role: "" }));
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? "bg-amber-500 text-white border-amber-600 shadow-xs font-bold"
-                        : "bg-slate-50/70 hover:bg-slate-100 border-slate-200 text-slate-700 font-medium"
-                    }`}
-                  >
-                    <span className="text-xs">{role}</span>
-                    {isSelected && <Check className="w-4 h-4 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* DYNAMIC ROLE PICKER FORM */}
+          <StaffRolePickerForm
+            tierCategory="CRECHE"
+            selectedRole={formData.role}
+            onSelectRole={(role) => {
+              setFormData((prev) => ({ ...prev, role }));
+              if (errors.role) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.role;
+                  return next;
+                });
+              }
+            }}
+            error={errors.role}
+          />
 
           {/* =============================================================== */}
           {/* CRECHE ASSIGNMENT MODEL: PLAYGROUP & DEVELOPMENTAL ACTIVITIES  */}
@@ -355,9 +345,21 @@ export default function CrecheStaffOnboardingModal({
                 </div>
                 <select
                   value={assignedPlaygroup}
-                  onChange={(e) => setAssignedPlaygroup(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white font-medium"
+                  onChange={(e) => {
+                    setAssignedPlaygroup(e.target.value);
+                    if (errors.assignedPlaygroup) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.assignedPlaygroup;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white font-medium ${
+                    errors.assignedPlaygroup ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                  }`}
                 >
+                  <option value="">-- Select Playgroup / Toddler Class --</option>
                   {availablePlaygroups.map((pg) => (
                     <option key={pg} value={pg}>{pg}</option>
                   ))}
@@ -434,13 +436,28 @@ export default function CrecheStaffOnboardingModal({
                 </label>
                 <select
                   value={qualification}
-                  onChange={(e) => setQualification(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  onChange={(e) => {
+                    setQualification(e.target.value);
+                    if (errors.qualification) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.qualification;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+                    errors.qualification ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                  }`}
                 >
+                  <option value="">-- Select Highest Academic Qualification --</option>
                   {CRECHE_QUALIFICATIONS.map((q) => (
                     <option key={q} value={q}>{q}</option>
                   ))}
                 </select>
+                {errors.qualification && (
+                  <p className="text-[11px] text-rose-500 mt-1">{errors.qualification}</p>
+                )}
               </div>
 
               {/* Childcare Certification */}

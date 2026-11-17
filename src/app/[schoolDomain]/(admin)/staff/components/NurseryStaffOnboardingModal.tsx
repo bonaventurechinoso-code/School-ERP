@@ -16,6 +16,7 @@ import StaffOnboardingSharedSections, {
   SharedFormData,
   INITIAL_SHARED_FORM_DATA,
 } from "./StaffOnboardingSharedSections";
+import StaffRolePickerForm from "./StaffRolePickerForm";
 import {
   NURSERY_STAFF_ROLES,
   NURSERY_PRIMARY_SECONDARY_QUALIFICATIONS,
@@ -64,29 +65,22 @@ export default function NurseryStaffOnboardingModal({
 }: Props) {
   const [formData, setFormData] = useState<SharedFormData>({
     ...INITIAL_SHARED_FORM_DATA,
-    role: "Nursery Teacher",
-    payGrade: "GL 06",
+    role: "",
+    payGrade: "",
   });
 
   // Section C: Nursery Specific Qualification
-  const [qualification, setQualification] = useState<string>("N.C.E (Nigeria Certificate in Education)");
-  const [fieldOfStudy, setFieldOfStudy] = useState("Early Childhood Care & Education (ECCE)");
+  const [qualification, setQualification] = useState<string>("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [institutionAttended, setInstitutionAttended] = useState("");
   const [yearGraduated, setYearGraduated] = useState("");
   const [trcnNumber, setTrcnNumber] = useState(""); // Optional for Nursery
 
   // Nursery Assignment Model
-  const [assignedClass, setAssignedClass] = useState<string>(
-    classrooms.find((c) => /nursery|kindergarten|kg/i.test(c.name))?.name || "Nursery 1"
-  );
+  const [assignedClass, setAssignedClass] = useState<string>("");
   const [isAssistantFloating, setIsAssistantFloating] = useState(false);
-  const [multiAssignedClasses, setMultiAssignedClasses] = useState<string[]>(["Nursery 1"]);
-  const [selectedLearningAreas, setSelectedLearningAreas] = useState<string[]>([
-    "Literacy & Phonics",
-    "Numeracy & Number Readiness",
-    "Rhymes, Songs & Drama",
-    "Creative Arts, Crafts & Coloring",
-  ]);
+  const [multiAssignedClasses, setMultiAssignedClasses] = useState<string[]>([]);
+  const [selectedLearningAreas, setSelectedLearningAreas] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -122,6 +116,9 @@ export default function NurseryStaffOnboardingModal({
 
     // Validate
     const localErrors: Record<string, string> = {};
+    if (!formData.role || !formData.role.trim()) {
+      localErrors.role = "Please select a staff role from the role options above.";
+    }
     if (!formData.firstName.trim()) localErrors.firstName = "First Name is required.";
     if (!formData.lastName.trim()) localErrors.lastName = "Last Name is required.";
     if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
@@ -130,7 +127,12 @@ export default function NurseryStaffOnboardingModal({
     if (!formData.phone.trim()) localErrors.phone = "Phone number is required.";
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.dateOfBirth) localErrors.dateOfBirth = "Date of Birth is required.";
+    if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.employmentType) localErrors.employmentType = "Employment Type is required.";
+    if (!formData.departmentName) localErrors.departmentName = "Department / Unit is required.";
+    if (!qualification.trim()) localErrors.qualification = "Please select highest qualification.";
     if (!formData.nextOfKinName.trim()) localErrors.nextOfKinName = "Next of Kin Name is required.";
+    if (!formData.nextOfKinRelationship) localErrors.nextOfKinRelationship = "Next of Kin Relationship is required.";
     if (!formData.nextOfKinPhone.trim()) localErrors.nextOfKinPhone = "Next of Kin Phone is required.";
 
     // Salary & NUBAN
@@ -314,36 +316,23 @@ export default function NurseryStaffOnboardingModal({
             </div>
           )}
 
-          {/* ROLE SELECTOR (NURSERY TIER-AWARE) */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Select Nursery Staff Role <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {NURSERY_STAFF_ROLES.map((role) => {
-                const isSelected = formData.role === role;
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => {
-                      setFormData((prev) => ({ ...prev, role }));
-                      setIsAssistantFloating(role.toLowerCase().includes("assistant") || role.toLowerCase().includes("caregiver"));
-                      if (errors.role) setErrors((prev) => ({ ...prev, role: "" }));
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? "bg-teal-600 text-white border-teal-700 shadow-xs font-bold"
-                        : "bg-slate-50/70 hover:bg-slate-100 border-slate-200 text-slate-700 font-medium"
-                    }`}
-                  >
-                    <span className="text-xs">{role}</span>
-                    {isSelected && <Check className="w-4 h-4 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* DYNAMIC ROLE PICKER FORM */}
+          <StaffRolePickerForm
+            tierCategory="NURSERY"
+            selectedRole={formData.role}
+            onSelectRole={(role) => {
+              setFormData((prev) => ({ ...prev, role }));
+              setIsAssistantFloating(role.toLowerCase().includes("assistant") || role.toLowerCase().includes("caregiver"));
+              if (errors.role) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.role;
+                  return next;
+                });
+              }
+            }}
+            error={errors.role}
+          />
 
           {/* =============================================================== */}
           {/* NURSERY ASSIGNMENT MODEL: CLASS & LEARNING AREAS                 */}
@@ -403,9 +392,21 @@ export default function NurseryStaffOnboardingModal({
                 ) : (
                   <select
                     value={assignedClass}
-                    onChange={(e) => setAssignedClass(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 bg-white font-medium"
+                    onChange={(e) => {
+                      setAssignedClass(e.target.value);
+                      if (errors.assignedClass) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.assignedClass;
+                          return n;
+                        });
+                      }
+                    }}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-teal-500 bg-white font-medium ${
+                      errors.assignedClass ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                    }`}
                   >
+                    <option value="">-- Select Nursery Class --</option>
                     {availableNurseryClasses.map((cls) => (
                       <option key={cls} value={cls}>{cls}</option>
                     ))}
@@ -483,13 +484,28 @@ export default function NurseryStaffOnboardingModal({
                 </label>
                 <select
                   value={qualification}
-                  onChange={(e) => setQualification(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  onChange={(e) => {
+                    setQualification(e.target.value);
+                    if (errors.qualification) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.qualification;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-teal-500 bg-white ${
+                    errors.qualification ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+                  }`}
                 >
+                  <option value="">-- Select Highest Academic Qualification --</option>
                   {NURSERY_PRIMARY_SECONDARY_QUALIFICATIONS.map((q) => (
                     <option key={q} value={q}>{q}</option>
                   ))}
                 </select>
+                {errors.qualification && (
+                  <p className="text-[11px] text-rose-500 mt-1">{errors.qualification}</p>
+                )}
               </div>
 
               {/* Field of Study */}

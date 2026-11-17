@@ -22,6 +22,7 @@ import StaffOnboardingSharedSections, {
   SharedFormData,
   INITIAL_SHARED_FORM_DATA,
 } from "./StaffOnboardingSharedSections";
+import StaffRolePickerForm from "./StaffRolePickerForm";
 import {
   TERTIARY_ALL_STAFF_ROLES,
   TERTIARY_QUALIFICATIONS,
@@ -71,21 +72,27 @@ export default function TertiaryStaffOnboardingModal({
   classrooms = [],
   lineManagers = [],
 }: Props) {
+  const isPolytechnic =
+    schoolName.toLowerCase().includes("poly") ||
+    schoolName.toLowerCase().includes("college of technology") ||
+    schoolDomain.toLowerCase().includes("poly") ||
+    schoolDomain.toLowerCase().includes("apex");
+
   const [formData, setFormData] = useState<SharedFormData>({
     ...INITIAL_SHARED_FORM_DATA,
-    role: "Lecturer II",
-    payGrade: "CONUASS 03",
+    role: "",
+    payGrade: "",
   });
 
   // Section C: Tertiary Specific Qualifications, Academic Rank & Professional Body
-  const [qualification, setQualification] = useState<string>("Ph.D (Doctor of Philosophy)");
-  const [fieldOfStudy, setFieldOfStudy] = useState("Computer Science");
-  const [specialization, setSpecialization] = useState("Distributed Systems & Artificial Intelligence");
+  const [qualification, setQualification] = useState<string>("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
+  const [specialization, setSpecialization] = useState("");
   const [institutionAttended, setInstitutionAttended] = useState("");
   const [yearGraduated, setYearGraduated] = useState("");
 
   // Professional Body (COREN, ICAN, etc.)
-  const [professionalBody, setProfessionalBody] = useState<string>("CPN (Computer Professionals Registration Council of Nigeria)");
+  const [professionalBody, setProfessionalBody] = useState<string>("");
   const [professionalMembershipNo, setProfessionalMembershipNo] = useState("");
   const [professionalExpiry, setProfessionalExpiry] = useState("");
 
@@ -94,20 +101,20 @@ export default function TertiaryStaffOnboardingModal({
   const [trcnExpiry, setTrcnExpiry] = useState("");
 
   // Section D: Tertiary Academic Assignment
-  const [faculty, setFaculty] = useState("Faculty of Science & Computing");
-  const [department, setDepartment] = useState("Department of Computer Science");
-  const [programme, setProgramme] = useState("B.Sc Computer Science");
+  const [faculty, setFaculty] = useState("");
+  const [department, setDepartment] = useState("");
+  const [programme, setProgramme] = useState("");
   const [academicSemester, setAcademicSemester] = useState<"1st Semester" | "2nd Semester">("1st Semester");
-  const [courseAdviserLevel, setCourseAdviserLevel] = useState("100 Level");
+  const [courseAdviserLevel, setCourseAdviserLevel] = useState("");
   const [isCourseAdviser, setIsCourseAdviser] = useState(false);
 
   // Courses allocation
   const [availableCourses, setAvailableCourses] = useState<TertiaryCourseItem[]>(SAMPLE_TERTIARY_COURSES);
-  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>(["c1", "c5"]);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [newCourseCode, setNewCourseCode] = useState("");
   const [newCourseTitle, setNewCourseTitle] = useState("");
-  const [newCourseUnits, setNewCourseUnits] = useState("3");
-  const [newCourseLevel, setNewCourseLevel] = useState("100 Level");
+  const [newCourseUnits, setNewCourseUnits] = useState("");
+  const [newCourseLevel, setNewCourseLevel] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,7 +138,6 @@ export default function TertiaryStaffOnboardingModal({
             semester: "1st Semester",
           }));
           setAvailableCourses(mapped);
-          setSelectedCourseIds([mapped[0].id]);
         }
       } catch (err) {
         console.error("Failed to load tertiary courses:", err);
@@ -191,6 +197,9 @@ export default function TertiaryStaffOnboardingModal({
     setSubmitError(null);
 
     const localErrors: Record<string, string> = {};
+    if (!formData.role || !formData.role.trim()) {
+      localErrors.role = "Please select an academic or administrative role from the role options above.";
+    }
     if (!formData.firstName.trim()) localErrors.firstName = "First Name is required.";
     if (!formData.lastName.trim()) localErrors.lastName = "Last Name is required.";
     if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
@@ -199,7 +208,12 @@ export default function TertiaryStaffOnboardingModal({
     if (!formData.phone.trim()) localErrors.phone = "Phone number is required.";
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.dateOfBirth) localErrors.dateOfBirth = "Date of Birth is required.";
+    if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.employmentType) localErrors.employmentType = "Employment Type is required.";
+    if (!formData.departmentName) localErrors.departmentName = "Department / Unit is required.";
+    if (!qualification.trim()) localErrors.qualification = "Please select highest academic qualification.";
     if (!formData.nextOfKinName.trim()) localErrors.nextOfKinName = "Next of Kin Name is required.";
+    if (!formData.nextOfKinRelationship) localErrors.nextOfKinRelationship = "Next of Kin Relationship is required.";
     if (!formData.nextOfKinPhone.trim()) localErrors.nextOfKinPhone = "Next of Kin Phone is required.";
 
     // Salary & NUBAN
@@ -215,8 +229,19 @@ export default function TertiaryStaffOnboardingModal({
     }
 
     // Tertiary Specialization requirement for lecturers
-    if (!isNonTeaching && !specialization.trim()) {
-      localErrors.specialization = "Area of Specialization is required for academic staff.";
+    if (!isNonTeaching) {
+      if (!specialization.trim()) {
+        localErrors.specialization = "Area of Specialization is required for academic staff.";
+      }
+      if (!faculty.trim()) {
+        localErrors.faculty = "Faculty / School is required.";
+      }
+      if (!department.trim()) {
+        localErrors.department = "Department is required.";
+      }
+      if (!programme.trim()) {
+        localErrors.programme = "Programme is required.";
+      }
     }
 
     // Tertiary Course Assignment validation
@@ -399,6 +424,24 @@ export default function TertiaryStaffOnboardingModal({
             </div>
           )}
 
+          {/* DYNAMIC ROLE PICKER FORM */}
+          <StaffRolePickerForm
+            tierCategory="TERTIARY"
+            isPolytechnic={isPolytechnic}
+            selectedRole={formData.role}
+            onSelectRole={(role) => {
+              setFormData((prev) => ({ ...prev, role }));
+              if (errors.role) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.role;
+                  return next;
+                });
+              }
+            }}
+            error={errors.role}
+          />
+
           {/* SHARED SECTIONS A & B */}
           <StaffOnboardingSharedSections
             tierCategory="TERTIARY"
@@ -407,6 +450,7 @@ export default function TertiaryStaffOnboardingModal({
             errors={errors}
             setErrors={setErrors}
             lineManagers={lineManagers}
+            isPolytechnic={isPolytechnic}
           />
 
           {/* SECTION C: QUALIFICATIONS, SPECIALIZATION & PROFESSIONAL COMPLIANCE */}
@@ -430,15 +474,30 @@ export default function TertiaryStaffOnboardingModal({
                 </label>
                 <select
                   value={qualification}
-                  onChange={(e) => setQualification(e.target.value)}
-                  className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-purple-500"
+                  onChange={(e) => {
+                    setQualification(e.target.value);
+                    if (errors.qualification) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.qualification;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full text-xs font-medium border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-purple-500 ${
+                    errors.qualification ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                  }`}
                 >
+                  <option value="">-- Select Highest Academic Qualification --</option>
                   {TERTIARY_QUALIFICATIONS.map((q) => (
                     <option key={q} value={q}>
                       {q}
                     </option>
                   ))}
                 </select>
+                {errors.qualification && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">{errors.qualification}</p>
+                )}
               </div>
 
               <div>
@@ -602,10 +661,24 @@ export default function TertiaryStaffOnboardingModal({
                   <input
                     type="text"
                     value={faculty}
-                    onChange={(e) => setFaculty(e.target.value)}
+                    onChange={(e) => {
+                      setFaculty(e.target.value);
+                      if (errors.faculty) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.faculty;
+                          return n;
+                        });
+                      }
+                    }}
                     placeholder="e.g. School of Technology"
-                    className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500"
+                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 ${
+                      errors.faculty ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                    }`}
                   />
+                  {errors.faculty && (
+                    <p className="text-[11px] text-red-600 font-medium mt-1">{errors.faculty}</p>
+                  )}
                 </div>
 
                 <div>
@@ -615,10 +688,24 @@ export default function TertiaryStaffOnboardingModal({
                   <input
                     type="text"
                     value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
+                    onChange={(e) => {
+                      setDepartment(e.target.value);
+                      if (errors.department) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.department;
+                          return n;
+                        });
+                      }
+                    }}
                     placeholder="e.g. Computer Science"
-                    className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500"
+                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 ${
+                      errors.department ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                    }`}
                   />
+                  {errors.department && (
+                    <p className="text-[11px] text-red-600 font-medium mt-1">{errors.department}</p>
+                  )}
                 </div>
 
                 <div>
@@ -628,10 +715,24 @@ export default function TertiaryStaffOnboardingModal({
                   <input
                     type="text"
                     value={programme}
-                    onChange={(e) => setProgramme(e.target.value)}
+                    onChange={(e) => {
+                      setProgramme(e.target.value);
+                      if (errors.programme) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.programme;
+                          return n;
+                        });
+                      }
+                    }}
                     placeholder="e.g. ND Computer Science"
-                    className="w-full text-xs font-medium border border-slate-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500"
+                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 ${
+                      errors.programme ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                    }`}
                   />
+                  {errors.programme && (
+                    <p className="text-[11px] text-red-600 font-medium mt-1">{errors.programme}</p>
+                  )}
                 </div>
 
                 <div>
