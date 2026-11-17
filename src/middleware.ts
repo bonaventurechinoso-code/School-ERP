@@ -563,20 +563,20 @@ export async function middleware(req: NextRequest) {
     const claims = await extractAndVerifyToken(req);
 
     if (!claims || !claims.userId) {
-      // Demo Environment Auto-Entry: never lock demo visitors behind credentials
-      if (subdomain === "demo") {
-        const sessionTokenId = `demo-auto-${Date.now()}`;
+      // Demo / Sandbox Environment Auto-Entry: never lock demo/sandbox visitors behind credentials
+      if (subdomain === "demo" || subdomain === "sandbox") {
+        const sessionTokenId = `${subdomain}-auto-${Date.now()}`;
         const sessionJwt = await new jose.SignJWT({
           jti: sessionTokenId,
           sessionToken: sessionTokenId,
           sessionId: sessionTokenId,
           id: sessionTokenId,
           token: sessionTokenId,
-          userId: "demo-admin-staff",
-          email: "demo.admin@schoolerp.local",
-          tenantId: "demo",
-          schoolDomain: "demo",
-          tenantName: "Apex International Academy",
+          userId: `${subdomain}-admin-staff`,
+          email: `${subdomain}.admin@schoolerp.local`,
+          tenantId: subdomain,
+          schoolDomain: subdomain,
+          tenantName: subdomain === "sandbox" ? "Trial Sandbox Academy" : "Apex International Academy",
           role: "TENANT_ADMIN",
           userRole: "TENANT_ADMIN",
           staffRole: "School Administrator",
@@ -786,15 +786,15 @@ export async function middleware(req: NextRequest) {
 
       redirectUrl.searchParams.set("sso_token", ssoToken);
       return NextResponse.redirect(redirectUrl, 307);
-    } else if (targetSlug === "demo") {
+    } else if (targetSlug === "demo" || targetSlug === "sandbox") {
       const demoToken = await new jose.SignJWT({
-        userId: "demo-admin-staff",
-        email: "demo.admin@schoolerp.local",
+        userId: `${targetSlug}-admin-staff`,
+        email: `${targetSlug}.admin@schoolerp.local`,
         role: "TENANT_ADMIN",
         userRole: "TENANT_ADMIN",
-        tenantSlug: "demo",
-        schoolDomain: "demo",
-        tenantName: "Apex International Academy",
+        tenantSlug: targetSlug,
+        schoolDomain: targetSlug,
+        tenantName: targetSlug === "sandbox" ? "Trial Sandbox Academy" : "Apex International Academy",
         isDemo: true,
         type: "demo_sso",
       })

@@ -128,6 +128,18 @@ async function runPreDeploy() {
       env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
     });
     console.log('[PRE_DEPLOY_FIX] Successfully migrated DATABASE_URL.');
+
+    // Seed Phase 5 Tertiary Students into Primary DB
+    console.log('[PRE_DEPLOY_FIX] Seeding Phase 5 Tertiary Students into DATABASE_URL...');
+    try {
+      execSync('npx tsx scripts/seed-phase5-tertiary.ts', {
+        stdio: 'inherit',
+        env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
+      });
+      console.log('[PRE_DEPLOY_FIX] Successfully seeded Phase 5 Tertiary data.');
+    } catch (seedErr) {
+      console.warn('[PRE_DEPLOY_FIX] Warning on Phase 5 Tertiary seeding:', seedErr.message);
+    }
   } catch (err) {
     console.error('[PRE_DEPLOY_FIX] Failed migrating DATABASE_URL:', err.message);
     process.exit(1);
@@ -153,6 +165,19 @@ async function runPreDeploy() {
           stdio: 'inherit',
           env: process.env,
         });
+
+        // Seed Phase 5 Tertiary Students into DEMO_DATABASE_URL
+        console.log('[PRE_DEPLOY_FIX] Seeding Phase 5 Tertiary Students into DEMO_DATABASE_URL...');
+        try {
+          execSync('npx tsx scripts/seed-phase5-tertiary.ts', {
+            stdio: 'inherit',
+            env: { ...process.env, DATABASE_URL: process.env.DEMO_DATABASE_URL },
+          });
+          console.log('[PRE_DEPLOY_FIX] Successfully seeded Phase 5 Tertiary data into DEMO_DATABASE_URL.');
+        } catch (demoSeedErr) {
+          console.warn('[PRE_DEPLOY_FIX] Warning on DEMO Phase 5 Tertiary seeding:', demoSeedErr.message);
+        }
+
         console.log('[PRE_DEPLOY_FIX] Demo database is fully synchronized and seeded.');
       } catch (err) {
         console.error('[PRE_DEPLOY_FIX] Error during DEMO_DATABASE_URL synchronization:', err.message);
