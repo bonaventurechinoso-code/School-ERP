@@ -11,6 +11,8 @@ import { clearL1TenantCache } from "@/lib/cache";
 import { sendStaffEnrollmentConfirmationEmail } from "@/lib/mail";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/permissions";
+import crypto from "crypto";
+import { StaffTierCategory, isNonTeachingRole } from "@/lib/staff-roles-config";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -1038,6 +1040,415 @@ export async function fetchSchoolSubjectsAction(schoolIdentifier: string) {
   } catch (error: any) {
     console.error("[fetchSchoolSubjectsAction] Error:", error);
     return { success: false, data: [] };
+  }
+}
+
+/**
+ * Idempotent, sequential Staff ID generator
+ * Format: SchoolCode + RolePrefix + Sequential
+ * Example: EGD/STF/001, APX/LEC/001, APX/STF/001
+ */
+export async function generateEnterpriseStaffId(
+  schoolIdentifier: string,
+  role: string,
+  tierCategory: StaffTierCategory
+): Promise<string> {
+  const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+  const school = await basePrisma.school.findUnique({
+    where: { id: schoolId },
+    select: { name: true, subdomain: true },
+  });
+
+  let schoolCode = "STF";
+  const sub = (subdomain || school?.subdomain || "").toUpperCase();
+  if (sub === "EGEDE") schoolCode = "EGD";
+  else if (sub === "DEMO") schoolCode = "APX";
+  else if (sub === "SANDBOX") schoolCode = "TSA";
+  else if (sub.length >= 3) schoolCode = sub.slice(0, 3);
+  else if (school?.name) {
+    const words = school.name.trim().split(/\s+/);
+    if (words.length >= 3) {
+      schoolCode = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+    } else {
+      schoolCode = school.name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase().padEnd(3, "X");
+    }
+  }
+
+  // Academic role prefix for Tertiary
+  const isTertiaryAcademic =
+    tierCategory === "TERTIARY" &&
+    !isNonTeachingRole(role) &&
+    (role.toLowerCase().includes("lecturer") ||
+     role.toLowerCase().includes("professor") ||
+     role.toLowerCase().includes("reader") ||
+     role.toLowerCase().includes("assistant") ||
+     role.toLowerCase().includes("graduate"));
+
+  const rolePrefix = isTertiaryAcademic ? "LEC" : "STF";
+  const prefix = `${schoolCode}/${rolePrefix}/`;
+
+  // Find max existing sequential number with this prefix
+  const existingStaff = await basePrisma.staff.findMany({
+    where: {
+      schoolId,
+      staffId: { startsWith: prefix },
+    },
+    select: { staffId: true },
+  });
+
+  let maxNum = 0;
+  for (const s of existingStaff) {
+    if (s.staffId) {
+      const parts = s.staffId.split("/");
+      const last = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(last) && last > maxNum) {
+        maxNum = last;
+      }
+    }
+  }
+
+  const nextSeq = String(maxNum + 1).padStart(3, "0");
+  return `${prefix}${nextSeq}`;
+}
+
+/**
+ * Fetch staff members for Line Manager dropdown
+ */
+export async function fetchSchoolStaffMembersAction(schoolIdentifier: string) {
+  try {
+    const schoolId = await resolveSchoolId(schoolIdentifier);
+    const staff = await basePrisma.staff.findMany({
+      where: { schoolId, status: { in: ["ACTIVE", "ONBOARDING"] } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        staffId: true,
+        user: { select: { role: true } },
+      },
+      orderBy: { lastName: "asc" },
+    });
+    return { success: true, data: staff };
+  } catch (err: any) {
+    console.error("[fetchSchoolStaffMembersAction] Error:", err);
+    return { success: false, data: [] };
+  }
+}
+
+export interface EnterpriseStaffPayload {
+  tierCategory: StaffTierCategory;
+  
+  // Section A: Personal & Identity
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  dateOfBirth: string;
+  gender: string;
+  maritalStatus?: string;
+  phone: string;
+  email: string;
+  residentialAddress: string;
+  state: string;
+  lga: string;
+  nin?: string;
+  passportUrl?: string;
+
+  // Section B: Employment
+  staffId?: string;
+  dateOfEmployment: string;
+  employmentType: string;
+  departmentName?: string;
+  departmentId?: string | null;
+  reportingToId?: string | null;
+  status?: string;
+
+  // Section C: Qualification & Compliance
+  highestQualification: string;
+  fieldOfStudy?: string;
+  institutionAttended?: string;
+  yearGraduated?: string;
+  trcnNumber?: string;
+  trcnExpiry?: string;
+  trcnStatus?: string;
+  professionalBody?: string;
+  professionalMembershipNo?: string;
+  professionalExpiry?: string;
+  specialization?: string;
+  academicRank?: string;
+  cvUrl?: string;
+  certificates?: string;
+
+  // Section D: Next of Kin & Emergency
+  nextOfKinName: string;
+  nextOfKinRelationship: string;
+  nextOfKinPhone: string;
+  nextOfKinAddress?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  guarantorName?: string;
+  guarantorPhone?: string;
+
+  // Section E: Payroll & Statutory
+  baseSalary: number;
+  payGrade?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  accountName?: string;
+  pensionRsa?: string;
+  pensionProvider?: string;
+  nhisNo?: string;
+  tin?: string;
+  paymentMethod?: string;
+
+  // Section F: Account & Access
+  role: string;
+
+  // Section G: Assignments (Tier-specific)
+  assignments: {
+    assignmentType: string;
+    classroomId?: string;
+    courseId?: string;
+    faculty?: string;
+    department?: string;
+    programme?: string;
+    metadata?: Record<string, any>;
+  }[];
+}
+
+export async function createEnterpriseStaffAction(
+  schoolIdentifier: string,
+  payload: EnterpriseStaffPayload
+) {
+  try {
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+
+    // 1. Mandatory Validations
+    if (!payload.firstName?.trim()) return { success: false, error: "First Name is required." };
+    if (!payload.lastName?.trim()) return { success: false, error: "Last Name is required." };
+    if (!payload.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email.trim())) {
+      return { success: false, error: "A valid Email address is required." };
+    }
+    if (!payload.phone?.trim()) return { success: false, error: "Phone number is required." };
+    if (!payload.residentialAddress?.trim()) return { success: false, error: "Residential Address is required." };
+    if (!payload.state?.trim()) return { success: false, error: "State is required." };
+    if (!payload.lga?.trim()) return { success: false, error: "LGA is required." };
+    if (!payload.role?.trim()) return { success: false, error: "Role is required." };
+    if (!payload.dateOfEmployment) return { success: false, error: "Resumption Date is required." };
+    if (!payload.highestQualification?.trim()) return { success: false, error: "Highest Qualification is required." };
+    if (!payload.nextOfKinName?.trim()) return { success: false, error: "Next of Kin Name is required." };
+    if (!payload.nextOfKinPhone?.trim()) return { success: false, error: "Next of Kin Phone is required." };
+
+    // 2. Date of Birth age validation (>= 18, <= 70)
+    if (!payload.dateOfBirth) return { success: false, error: "Date of Birth is required." };
+    const dob = new Date(payload.dateOfBirth);
+    if (isNaN(dob.getTime())) return { success: false, error: "Invalid Date of Birth." };
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+    if (age < 18) return { success: false, error: `Staff must be at least 18 years old (Current age: ${age}).` };
+    if (age > 70) return { success: false, error: `Staff age cannot exceed 70 years (Current age: ${age}).` };
+
+    // 3. Resumption Date cannot be in future
+    const resumptionDate = new Date(payload.dateOfEmployment);
+    if (resumptionDate > today) {
+      return { success: false, error: "Date of Employment / Resumption Date cannot be in the future." };
+    }
+
+    // 4. NIN validation (must be 11 digits if provided)
+    if (payload.nin?.trim()) {
+      const cleanNin = payload.nin.trim().replace(/\D/g, "");
+      if (cleanNin.length !== 11) {
+        return { success: false, error: "National Identity Number (NIN) must be exactly 11 numerical digits." };
+      }
+    }
+
+    // 5. NUBAN validation & Bank Name required if Salary > 0 or Account provided
+    const salaryNum = Number(payload.baseSalary) || 0;
+    if (payload.bankAccountNumber?.trim() || salaryNum > 0) {
+      const cleanNuban = (payload.bankAccountNumber || "").trim().replace(/\D/g, "");
+      if (cleanNuban.length !== 10) {
+        return { success: false, error: "NUBAN Account Number must be exactly 10 numerical digits." };
+      }
+      if (!payload.bankName?.trim()) {
+        return { success: false, error: "Bank Name is required when Account Number or Salary is provided." };
+      }
+    }
+
+    // 6. TRCN Rule per Tier
+    const isTeaching = !isNonTeachingRole(payload.role);
+    if (isTeaching && (payload.tierCategory === "PRIMARY" || payload.tierCategory === "SECONDARY")) {
+      if (!payload.trcnNumber?.trim()) {
+        return {
+          success: false,
+          error: `TRCN License / Registration Number is mandatory for ${payload.tierCategory} teachers under Nigerian educational regulations.`,
+        };
+      }
+    }
+
+    // 7. Teaching vs Non-Teaching Assignment Rules
+    if (isTeaching) {
+      if (!payload.assignments || payload.assignments.length === 0) {
+        return {
+          success: false,
+          error: "Teaching staff must have at least one teaching unit / class / course assigned before onboarding.",
+        };
+      }
+    } else {
+      if (payload.assignments && payload.assignments.length > 0) {
+        payload.assignments = [];
+      }
+    }
+
+    // 8. Unique Email Check per school
+    const normalizedEmail = payload.email.trim().toLowerCase();
+    const existingStaffEmail = await basePrisma.staff.findFirst({
+      where: { schoolId, email: normalizedEmail },
+    });
+    if (existingStaffEmail) {
+      return { success: false, error: `A staff member with email "${normalizedEmail}" already exists in this institution.` };
+    }
+
+    // 9. Auto-generate sequential Staff ID
+    const assignedStaffId = payload.staffId?.trim() || await generateEnterpriseStaffId(schoolId, payload.role, payload.tierCategory);
+
+    // 10. Server-side cryptographically secure password generation
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%";
+    let tempPassword = "";
+    for (let i = 0; i < 10; i++) {
+      tempPassword += chars.charAt(crypto.randomInt(0, chars.length));
+    }
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    const canonicalRole = toCanonicalRole(payload.role);
+
+    // 11. Atomic Transaction to create User, Staff, and StaffAssignment records
+    const result = await basePrisma.$transaction(async (tx) => {
+      // Create or update User record
+      const user = await tx.user.upsert({
+        where: { schoolId_email: { schoolId, email: normalizedEmail } },
+        update: {
+          firstName: payload.firstName.trim(),
+          lastName: payload.lastName.trim(),
+          role: canonicalRole,
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          status: payload.status || "ACTIVE",
+        },
+        create: {
+          schoolId,
+          email: normalizedEmail,
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          role: canonicalRole,
+          firstName: payload.firstName.trim(),
+          lastName: payload.lastName.trim(),
+          status: payload.status || "ACTIVE",
+        },
+      });
+
+      // Create Staff record
+      const staff = await tx.staff.create({
+        data: {
+          schoolId,
+          userId: user.id,
+          staffId: assignedStaffId,
+          firstName: payload.firstName.trim(),
+          lastName: payload.lastName.trim(),
+          middleName: payload.middleName?.trim() || null,
+          email: normalizedEmail,
+          phone: payload.phone.trim(),
+          dateOfBirth: dob,
+          gender: payload.gender,
+          maritalStatus: payload.maritalStatus || null,
+          residentialAddress: payload.residentialAddress.trim(),
+          state: payload.state.trim(),
+          lga: payload.lga.trim(),
+          nin: payload.nin?.trim() || null,
+          passportUrl: payload.passportUrl || null,
+          dateOfEmployment: resumptionDate,
+          employmentType: payload.employmentType || "FULL_TIME",
+          departmentName: payload.departmentName || null,
+          departmentId: payload.departmentId || null,
+          reportingToId: payload.reportingToId || null,
+          status: payload.status || "ACTIVE",
+          highestQualification: payload.highestQualification,
+          fieldOfStudy: payload.fieldOfStudy || null,
+          institutionAttended: payload.institutionAttended || null,
+          yearGraduated: payload.yearGraduated || null,
+          trcnNumber: payload.trcnNumber?.trim() || null,
+          trcnExpiry: payload.trcnExpiry ? new Date(payload.trcnExpiry) : null,
+          trcnStatus: payload.trcnNumber?.trim() ? (payload.trcnExpiry && new Date(payload.trcnExpiry) < today ? "EXPIRED" : "REGISTERED") : "NOT_REGISTERED",
+          professionalBody: payload.professionalBody || null,
+          professionalMembershipNo: payload.professionalMembershipNo || null,
+          professionalExpiry: payload.professionalExpiry ? new Date(payload.professionalExpiry) : null,
+          specialization: payload.specialization || null,
+          academicRank: payload.academicRank || null,
+          cvUrl: payload.cvUrl || null,
+          certificates: payload.certificates || null,
+          nextOfKinName: payload.nextOfKinName.trim(),
+          nextOfKinRelationship: payload.nextOfKinRelationship.trim(),
+          nextOfKinPhone: payload.nextOfKinPhone.trim(),
+          nextOfKinAddress: payload.nextOfKinAddress?.trim() || null,
+          emergencyName: payload.emergencyName?.trim() || payload.nextOfKinName.trim(),
+          emergencyPhone: payload.emergencyPhone?.trim() || payload.nextOfKinPhone.trim(),
+          guarantorName: payload.guarantorName?.trim() || null,
+          guarantorPhone: payload.guarantorPhone?.trim() || null,
+          baseSalary: salaryNum,
+          payGrade: payload.payGrade || null,
+          bankName: payload.bankName?.trim() || null,
+          bankAccountNumber: payload.bankAccountNumber?.trim() || null,
+          accountName: payload.accountName?.trim() || `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+          pensionRsa: payload.pensionRsa || null,
+          pensionProvider: payload.pensionProvider || null,
+          nhisNo: payload.nhisNo || null,
+          tin: payload.tin || null,
+          paymentMethod: payload.paymentMethod || "BANK_TRANSFER",
+          activeAt: payload.status === "ACTIVE" ? today : null,
+          onboardingAt: today,
+        },
+      });
+
+      // Create StaffAssignment records
+      if (payload.assignments && payload.assignments.length > 0) {
+        for (const assign of payload.assignments) {
+          await tx.staffAssignment.create({
+            data: {
+              schoolId,
+              staffId: staff.id,
+              classroomId: assign.classroomId || null,
+              courseId: assign.courseId || null,
+              assignmentType: assign.assignmentType,
+              assignedRole: payload.role,
+              session: "2026/2027",
+              faculty: assign.faculty || null,
+              department: assign.department || null,
+              programme: assign.programme || null,
+              metadata: assign.metadata ? JSON.stringify(assign.metadata) : null,
+            },
+          });
+        }
+      }
+
+      return staff;
+    });
+
+    safeRevalidate(`/${subdomain}/staff`, "page");
+
+    return {
+      success: true,
+      data: {
+        id: result.id,
+        staffId: result.staffId,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        email: result.email,
+        role: payload.role,
+        status: result.status,
+      },
+    };
+  } catch (error: any) {
+    console.error("[createEnterpriseStaffAction] Fatal Error:", error);
+    return { success: false, error: error.message || "Failed to onboard staff member." };
   }
 }
 
