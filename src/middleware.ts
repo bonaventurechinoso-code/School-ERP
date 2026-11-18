@@ -159,6 +159,7 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
       apiPath.startsWith("/api/v1/auth/verify-reset-token") ||
       apiPath.startsWith("/api/schools") ||
       apiPath.startsWith("/api/tenants/register") ||
+      apiPath.startsWith("/api/tenants/check-slug") ||
       apiPath.startsWith("/api/ssl") ||
       apiPath.startsWith("/api/wallet/webhook") ||
       apiPath.startsWith("/api/trial") ||

@@ -456,37 +456,37 @@ export default function RegisterTenantPage() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start sm:justify-center py-4 sm:py-8 px-3 sm:px-6 lg:px-8 overflow-y-auto">
-      <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-2 sm:my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start sm:justify-center py-1 sm:py-8 px-2 sm:px-6 lg:px-8 overflow-y-auto">
+      <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
         
-        {/* Header */}
-        <div className="relative z-10 px-5 py-4 sm:px-8 sm:py-5 text-white bg-slate-900 transition-colors duration-300">
-          <div className="flex items-center justify-between gap-4 mb-2">
-            <div className="flex items-center gap-2">
+        {/* Header (Streamlined for mobile) */}
+        <div className="relative z-10 px-3.5 py-2.5 sm:px-8 sm:py-5 text-white bg-slate-900 transition-colors duration-300 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2 mb-1 sm:mb-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <Image
                 src="/img/business-logo.png"
                 alt="School ERP"
-                width={24}
-                height={24}
-                className="w-6 h-6 object-contain rounded-md"
+                width={20}
+                height={20}
+                className="w-4 h-4 sm:w-6 sm:h-6 object-contain rounded-md"
               />
-              <span className="text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
+              <span className="text-[10px] sm:text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
             </div>
             {!isConfiguring && (
-              <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+              <div className="flex items-center gap-1 text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                 <span>Step {step} of 2</span>
               </div>
             )}
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold">
+          <h1 className="text-base sm:text-2xl font-bold leading-tight">
             {isConfiguring 
               ? "Configuring secure school portal..." 
               : "Register Your School"}
           </h1>
-          <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5">
             {isConfiguring ? (
               <span className="text-blue-400 font-medium flex items-center gap-1.5">
-                <Loader2 className="w-4 h-4 animate-spin" /> Synchronizing SSL handshake & reverse proxy
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Synchronizing SSL handshake & reverse proxy
               </span>
             ) : (
               step === 1 ? "Institutional Identity & Administrator Setup" : "Academic Tier Allocation"
@@ -495,9 +495,9 @@ export default function RegisterTenantPage() {
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 md:p-8 flex-1 flex flex-col">
+        <div className="p-3 sm:p-6 md:p-8 flex-1 flex flex-col">
           {errorMsg && (
-            <div className="mb-5 p-3.5 sm:p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-xl text-xs sm:text-sm font-medium">
+            <div className="mb-3 sm:mb-5 p-2.5 sm:p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-xl text-xs sm:text-sm font-medium">
               {errorMsg}
             </div>
           )}
@@ -603,18 +603,19 @@ export default function RegisterTenantPage() {
             <>
               {/* STEP 1: INSTITUTIONAL IDENTITY FORM */}
               {step === 1 && (
-                <form onSubmit={handleNextStep} className="space-y-5 flex-1 flex flex-col">
-                  <div className="space-y-4 sm:space-y-5 flex-1">
+                <form onSubmit={handleNextStep} className="space-y-2 sm:space-y-4 flex-1 flex flex-col">
+                  <div className="space-y-2 sm:space-y-4 flex-1">
                     {/* Row 1: School Name & Desired URL Slug */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           School Name *
                         </label>
                         <input 
                           required
+                          id="institutionName"
                           type="text" 
-                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="e.g. Greenwood Academy"
                           value={formData.schoolName} 
                           onChange={e => handleSchoolNameChange(e.target.value)} 
@@ -622,69 +623,72 @@ export default function RegisterTenantPage() {
                       </div>
                       
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300">
                             Institutional Subdomain *
                           </label>
                           {slugChecking ? (
-                            <span className="text-[11px] text-blue-500 font-medium flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin" /> Checking...
+                            <span className="text-[10px] text-blue-500 font-medium flex items-center gap-1">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Checking...
                             </span>
                           ) : slugAvailable === true ? (
-                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                              <Check className="w-3 h-3 stroke-[3]" /> Available
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" /> Available
                             </span>
                           ) : slugAvailable === false ? (
-                            <span className="text-[11px] text-rose-600 dark:text-rose-400 font-bold">
+                            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
                               Taken / Reserved
                             </span>
                           ) : null}
                         </div>
                         <div className="flex">
-                          <span className="inline-flex items-center px-2.5 sm:px-3 rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
+                          <span className="inline-flex items-center px-1.5 sm:px-2.5 rounded-l-lg sm:rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] sm:text-xs font-mono select-none">
                             https://
                           </span>
                           <input 
                             required
+                            id="subdomain"
+                            name="subdomain"
                             type="text" 
-                            className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none px-2 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                             placeholder="greenwood"
                             value={formData.subdomain} 
                             onChange={e => handleSubdomainChange(e.target.value)} 
                           />
-                          <span className="inline-flex items-center px-2.5 sm:px-3 rounded-r-xl border border-l-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-xs sm:text-sm font-mono select-none">
+                          <span className="inline-flex items-center px-1.5 sm:px-2.5 rounded-r-lg sm:rounded-r-xl border border-l-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] sm:text-xs font-mono select-none">
                             .{rootDisplay}
                           </span>
                         </div>
                         {slugSuggested && (
-                          <div className="mt-1.5 flex items-center gap-2 text-xs">
+                          <div className="mt-0.5 flex items-center gap-1 text-[10px]">
                             <span className="text-slate-500 dark:text-zinc-400">Alternative:</span>
                             <button
                               type="button"
                               onClick={() => handleApplySuggestion(slugSuggested)}
-                              className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-100 dark:hover:bg-blue-900 transition cursor-pointer"
+                              className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono font-bold hover:bg-blue-100 dark:hover:bg-blue-900 transition cursor-pointer text-[9px]"
                             >
                               Use {slugSuggested}
                             </button>
                           </div>
                         )}
-                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 mt-1 truncate">
-                          Full Portal URL: <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">https://{formData.subdomain || "your-school"}.{rootDisplay}</span>
+                        <p className="hidden sm:block text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 truncate">
+                          Full URL: <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">https://{formData.subdomain || "your-school"}.{rootDisplay}</span>
                         </p>
                       </div>
                     </div>
 
                     {/* Row 2: Admin Email & Contact Phone */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           Admin Email *
                         </label>
                         <input 
                           required
+                          id="adminEmail"
                           name="adminEmail"
                           type="email" 
-                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="admin@school.edu"
                           value={formData.adminEmail} 
                           onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
@@ -692,15 +696,16 @@ export default function RegisterTenantPage() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           Contact Phone
                         </label>
                         <input 
                           type="tel" 
+                          id="adminPhone"
                           name="contactPhone"
                           inputMode="numeric" 
                           pattern="[0-9+]*" 
-                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                          className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="+234 800 000 0000"
                           value={formData.contactPhone} 
                           onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
@@ -708,10 +713,10 @@ export default function RegisterTenantPage() {
                       </div>
                     </div>
 
-                    {/* Row 3: Admin Password & Confirm Password */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                    {/* Row 3: Admin Password & Confirm Password (Side-by-side on mobile to resize form length) */}
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4">
                       <div>
-                        <label htmlFor="adminPassword" className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        <label htmlFor="adminPassword" className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5 truncate">
                           Admin Password *
                         </label>
                         <div className="relative">
@@ -720,24 +725,24 @@ export default function RegisterTenantPage() {
                             id="adminPassword"
                             name="adminPassword"
                             type={showPassword ? "text" : "password"}
-                            placeholder="Min. 8 characters"
-                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            placeholder="Min. 8 chars"
+                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2 py-1.5 sm:p-2.5 pr-7 sm:pr-9 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                             value={formData.adminPassword}
                             onChange={e => setFormData({ ...formData, adminPassword: e.target.value })}
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                            className="absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                             aria-label={showPassword ? "Hide password" : "Show password"}
                           >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       </div>
 
                       <div>
-                        <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-1">
+                        <label htmlFor="confirmPassword" className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5 truncate">
                           Confirm Password *
                         </label>
                         <div className="relative">
@@ -746,75 +751,69 @@ export default function RegisterTenantPage() {
                             id="confirmPassword"
                             name="confirmPassword"
                             type={showConfirmPassword ? "text" : "password"}
-                            placeholder="Confirm password"
-                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-xl p-2.5 sm:p-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm sm:text-base placeholder:text-slate-400 dark:placeholder:text-zinc-500"
+                            placeholder="Confirm"
+                            className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2 py-1.5 sm:p-2.5 pr-7 sm:pr-9 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                             value={formData.confirmPassword}
                             onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
                           />
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                            className="absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                             aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                           >
-                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Validation & Password Strength Meter */}
-                    <div className="space-y-2 pt-0.5">
+                    {/* Validation & Password Strength Meter (Streamlined & Compact) */}
+                    <div className="space-y-1 pt-0.5">
                       {/* Visual Strength Meter Bar */}
                       {formData.adminPassword.length > 0 && (
-                        <div className="space-y-1.5 p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700">
-                          <div className="flex items-center justify-between text-xs">
+                        <div className="space-y-1 p-1.5 sm:p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700">
+                          <div className="flex items-center justify-between text-[10px] sm:text-xs">
                             <span className="font-semibold text-slate-700 dark:text-zinc-300">Password Strength:</span>
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] border ${strength?.badge || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:border-zinc-600"}`}>
+                            <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] sm:text-[11px] border ${strength?.badge || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-700 dark:text-zinc-300 dark:border-zinc-600"}`}>
                               {strength ? strength.level : "Too Short"}
                             </span>
                           </div>
-                          {/* 3-Segment Progress Bar */}
-                          <div className="grid grid-cols-3 gap-1.5 h-1.5 w-full">
+                          <div className="grid grid-cols-3 gap-1 h-1 sm:h-1.5 w-full">
                             <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 1 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
                             <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 2 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
                             <div className={`rounded-full transition-colors duration-300 ${strength && strength.score >= 3 ? strength.color : "bg-slate-200 dark:bg-zinc-700"}`} />
                           </div>
-                          {strength?.level === "Weak" && (
-                            <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-0.5">
-                              Meets minimum requirements. You can register now, or strengthen it anytime.
-                            </p>
-                          )}
                         </div>
                       )}
 
-                      {/* Enterprise Password Rules Checklist */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                      {/* Compact Inline Checklist */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
+                        <span className={`inline-flex items-center gap-1 transition-colors ${
                           hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
                         }`}>
-                          {hasMinLength ? "✓" : "•"} Min. 8 chars
+                          {hasMinLength ? "✓" : "•"} 8+ chars
                         </span>
-                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        <span className={`inline-flex items-center gap-1 transition-colors ${
                           hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
                         }`}>
-                          {hasUppercase ? "✓" : "•"} 1 Uppercase
+                          {hasUppercase ? "✓" : "•"} Uppercase
                         </span>
-                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        <span className={`inline-flex items-center gap-1 transition-colors ${
                           hasNumber ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
                         }`}>
-                          {hasNumber ? "✓" : "•"} 1 Digit
+                          {hasNumber ? "✓" : "•"} Digit
                         </span>
-                        <span className={`inline-flex items-center gap-1.5 transition-colors ${
+                        <span className={`inline-flex items-center gap-1 transition-colors ${
                           hasSpecial ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
                         }`}>
-                          {hasSpecial ? "✓" : "•"} 1 Symbol
+                          {hasSpecial ? "✓" : "•"} Symbol
                         </span>
                       </div>
 
                       {/* Password Match Indicator */}
                       {formData.confirmPassword.length > 0 && (
-                        <div className="text-xs">
+                        <div className="text-[10px]">
                           <span className={`inline-flex items-center gap-1 font-semibold ${
                             formData.adminPassword === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
                           }`}>
@@ -825,8 +824,8 @@ export default function RegisterTenantPage() {
                     </div>
                   </div>
 
-                  {/* Action Footer (In-flow on mobile so confirm password & rules are never cut off, sticky on tablet/desktop) */}
-                  <div className="relative sm:sticky sm:bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white dark:bg-zinc-900 sm:bg-white/95 sm:dark:bg-zinc-900/95 sm:backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-10 shadow-lg sm:shadow-none">
+                  {/* Action Footer (Accommodating Next Step Button on Mobile) */}
+                  <div className="mt-2 sm:mt-6 p-2.5 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 -mx-3 sm:-mx-6 md:-mx-8 -mb-3 sm:-mb-6 md:-mb-8 rounded-b-2xl sm:rounded-b-3xl">
                     <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
                       <ShieldCheck className="w-4 h-4 text-emerald-500" />
                       <span>Secure institutional setup</span>
@@ -836,7 +835,7 @@ export default function RegisterTenantPage() {
                     </div>
                     <button 
                       type="submit" 
-                      className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
+                      className="w-full sm:w-auto px-5 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
                     >
                       <span>Next Step: Select Tiers</span>
                       <ArrowRight className="w-4 h-4" />
@@ -847,38 +846,38 @@ export default function RegisterTenantPage() {
 
               {/* STEP 2: ACADEMIC TIER ALLOCATION */}
               {step === 2 && (
-                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col">
+                <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col">
                   <div className="flex-1">
-                    <div className="mb-4">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">Academic Tier Allocation</h3>
+                    <div className="mb-3 sm:mb-4">
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-0.5">Academic Tier Allocation</h3>
                       <p className="text-slate-600 dark:text-zinc-400 text-xs sm:text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
                       {availableTiers.map(tier => {
                         const isSelected = selectedTiers.includes(tier.id);
                         return (
                           <div 
                             key={tier.id}
                             onClick={() => handleTierToggle(tier.id)}
-                            className={`cursor-pointer p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 flex items-start gap-3 ${
+                            className={`cursor-pointer p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 flex items-start gap-3 ${
                               isSelected 
                                 ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-500" 
                                 : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/50 hover:border-blue-300 dark:hover:border-zinc-700 hover:shadow-sm"
                             }`}
                           >
-                            <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition ${
+                            <div className={`mt-0.5 flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded border flex items-center justify-center transition ${
                               isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-700"
                             }`}>
                               {isSelected && (
-                                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                 </svg>
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className={`font-bold truncate text-sm ${isSelected ? "text-blue-900 dark:text-blue-200" : "text-slate-800 dark:text-zinc-100"}`}>{tier.label}</h4>
-                              <p className={`text-xs mt-0.5 leading-tight ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-slate-500 dark:text-zinc-400"}`}>{tier.desc}</p>
+                              <h4 className={`font-bold truncate text-xs sm:text-sm ${isSelected ? "text-blue-900 dark:text-blue-200" : "text-slate-800 dark:text-zinc-100"}`}>{tier.label}</h4>
+                              <p className={`text-[11px] sm:text-xs mt-0.5 leading-tight ${isSelected ? "text-blue-700 dark:text-blue-300" : "text-slate-500 dark:text-zinc-400"}`}>{tier.desc}</p>
                             </div>
                           </div>
                         );
@@ -886,12 +885,12 @@ export default function RegisterTenantPage() {
                     </div>
                   </div>
 
-                  {/* Action Footer */}
-                  <div className="relative sm:sticky sm:bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white dark:bg-zinc-900 sm:bg-white/95 sm:dark:bg-zinc-900/95 sm:backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-10 shadow-lg sm:shadow-none">
+                  {/* Action Footer (Sticky on mobile and desktop) */}
+                  <div className="sticky bottom-0 -mx-3 sm:-mx-6 md:-mx-8 -mb-3 sm:-mb-6 md:-mb-8 mt-3 sm:mt-6 p-3 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-30 shadow-lg sm:shadow-none">
                     <button 
                       type="button"
                       onClick={() => { setStep(1); setErrorMsg(""); }}
-                      className="px-4 sm:px-6 py-2.5 sm:py-3 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-semibold rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition text-sm cursor-pointer"
+                      className="px-3.5 sm:px-6 py-2 sm:py-3 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-semibold rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition text-xs sm:text-sm cursor-pointer"
                       disabled={isSubmitting}
                     >
                       &larr; Back
@@ -900,7 +899,7 @@ export default function RegisterTenantPage() {
                       type="button"
                       onClick={handleSubmit}
                       disabled={isSubmitting || selectedTiers.length === 0}
-                      className="flex-1 sm:flex-initial px-6 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
+                      className="flex-1 sm:flex-initial px-5 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
                     >
                       {isSubmitting ? (
                         <>
