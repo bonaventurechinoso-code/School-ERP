@@ -60,6 +60,11 @@ const SYSTEM_PREFIXES = new Set([
   "unauthorized",
   "portal-not-found",
   "favicon.ico",
+  "manifest.json",
+  "manifest.webmanifest",
+  "robots.txt",
+  "sitemap.xml",
+  "sw.js",
   "uploads",
   "img",
 ]);
@@ -1036,6 +1041,6 @@ export const config = {
     "/dashboard/:path*",
     "/api/super-admin/:path*",
     "/api/admin/:path*",
-    "/((?!_next/static|_next/image|favicon.ico|img/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|manifest.webmanifest|robots.txt|sitemap.xml|sw.js|img/|uploads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|json)$).*)",
   ],
 };

@@ -11,7 +11,6 @@ import {
   GraduationCap,
   ShieldCheck,
   Briefcase,
-  CheckCircle2,
   AlertCircle,
   Award,
   Layers,
@@ -23,8 +22,8 @@ import {
 } from "lucide-react";
 
 interface RolePickerProps {
-  tierCategory: StaffTierCategory;
-  selectedRole: string;
+  tierCategory?: StaffTierCategory;
+  selectedRole?: string;
   onSelectRole: (role: string) => void;
   error?: string;
   isPolytechnic?: boolean;
@@ -40,8 +39,8 @@ interface RoleItem {
 }
 
 export default function StaffRolePickerForm({
-  tierCategory,
-  selectedRole,
+  tierCategory = "PRIMARY",
+  selectedRole = "",
   onSelectRole,
   error,
   isPolytechnic = false,
@@ -49,6 +48,7 @@ export default function StaffRolePickerForm({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -65,9 +65,21 @@ export default function StaffRolePickerForm({
     };
   }, [isOpen]);
 
+  // Focus search input when dropdown opens without SSR hydration mismatch
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   // Generate structured, tier-specific role items
   const roleGroups = useMemo<RoleItem[]>(() => {
-    switch (tierCategory) {
+    const safeCategory = tierCategory || "PRIMARY";
+
+    switch (safeCategory) {
       case "CRECHE": {
         return [
           {
@@ -98,24 +110,24 @@ export default function StaffRolePickerForm({
             id: "Nurse / First Aider",
             title: "Nurse / First Aider",
             category: "support",
-            badgeText: "Paediatric Health",
-            description: "First aid administration, toddler health monitoring, and emergency triage.",
+            badgeText: "Pediatric Health & Safety",
+            description: "Monitors daily temperature, infant vitals, first aid logs, and allergies.",
             trcnStatus: "none",
           },
           {
             id: "Cleaner / Support",
-            title: "Cleaner / Facility Support",
+            title: "Early Years Sanitation Officer",
             category: "support",
-            badgeText: "Sanitation & Care",
-            description: "Nursery toy sanitization, bedding laundry, hygiene and feeding area clean.",
+            badgeText: "Sanitation & Hygiene",
+            description: "Maintains sanitized play areas, sterilized feeding items, and nap areas.",
             trcnStatus: "none",
           },
           {
             id: "Admin / Receptionist",
-            title: "Admin / Receptionist",
+            title: "Front Desk & Parent Liaison",
             category: "support",
-            badgeText: "Front Desk & Records",
-            description: "Parent sign-in/out registers, visitor access, toddler health logs.",
+            badgeText: "Centre Administration",
+            description: "Manages morning drop-offs, pickup authentication, fees and visitor desk.",
             trcnStatus: "none",
           },
         ];
@@ -127,48 +139,48 @@ export default function StaffRolePickerForm({
             id: "Nursery Teacher",
             title: "Nursery Teacher (Lead)",
             category: "teaching",
-            badgeText: "Early Childhood (ECCE)",
-            description: "Class lead for phonics, numeracy readiness, sensory & developmental arts.",
+            badgeText: "Early Childhood (EYFS)",
+            description: "Leads phonics, early numeracy, handwriting readiness, and Montessori activities.",
             trcnStatus: "optional",
           },
           {
             id: "Assistant Teacher",
-            title: "Assistant Teacher",
+            title: "Assistant / Floating Teacher",
             category: "teaching",
-            badgeText: "Class Support / Floating",
-            description: "Assists lead teacher with small-group activities and classroom coordination.",
+            badgeText: "Classroom Support",
+            description: "Supports lead teacher across nursery streams, learning centres, and routines.",
             trcnStatus: "optional",
           },
           {
-            id: "Nursery Supervisor / Head of Nursery",
-            title: "Head of Nursery / Supervisor",
+            id: "Head of Nursery",
+            title: "Head of Nursery / Sectional Head",
             category: "leadership",
-            badgeText: "Nursery Leadership",
-            description: "Curriculum oversight, teacher evaluation, and parent-teacher communication.",
+            badgeText: "Sectional Executive",
+            description: "Oversees early years curriculum, termly developmental profiles, and teacher remarks.",
             trcnStatus: "optional",
           },
           {
-            id: "Caregiver",
-            title: "Nursery Minder / Caregiver",
+            id: "Nurse / First Aider",
+            title: "School Nurse / First Aider",
             category: "support",
-            badgeText: "Child Welfare",
-            description: "Supports children with meals, toilet training, and general welfare.",
+            badgeText: "Health & Well-being",
+            description: "Manages sick bay, child medical records, pupil medications, and safety cards.",
             trcnStatus: "none",
           },
           {
-            id: "Admin",
-            title: "Nursery Admin Officer",
+            id: "Caregiver / Nanny",
+            title: "Classroom Nanny / Childcare Assistant",
             category: "support",
-            badgeText: "Administrative Desk",
-            description: "Student admission documentation, attendance consolidation, parent liaisons.",
+            badgeText: "Pupil Care",
+            description: "Assists with bathroom routines, mealtime support, and classroom tidiness.",
             trcnStatus: "none",
           },
           {
-            id: "Support Staff",
-            title: "Facility & Support Staff",
+            id: "Admin / Receptionist",
+            title: "Administrative Assistant",
             category: "support",
-            badgeText: "Sanitation & Care",
-            description: "Sanitation, playground safety, and physical classroom orderliness.",
+            badgeText: "Front Office",
+            description: "Handles pupil enrollment inquiries, visitor registration, and attendance files.",
             trcnStatus: "none",
           },
         ];
@@ -181,63 +193,71 @@ export default function StaffRolePickerForm({
             title: "Class Teacher",
             category: "teaching",
             badgeText: "Single Class (Basic 1-6)",
-            description: "Dedicated class manager; handles attendance register, broadsheet, and report cards.",
+            description: "Primary custodian of one classroom; teaches core subjects, takes daily register & termly scores.",
             trcnStatus: "mandatory",
           },
           {
             id: "Subject Teacher",
-            title: "Subject Teacher",
+            title: "Specialist Subject Teacher",
             category: "teaching",
-            badgeText: "Multi-Class & Subject",
-            description: "Teaches specialized subjects (French, CCA, ICT, Music) across multiple primary arms.",
+            badgeText: "French, ICT, Music, Diction",
+            description: "Teaches designated specialist subjects across multiple primary arms and levels.",
             trcnStatus: "mandatory",
           },
           {
+            id: "Class Assistant",
+            title: "Classroom Teaching Assistant",
+            category: "teaching",
+            badgeText: "Academic Support",
+            description: "Supports class teacher with marking, remedial reading, and pupil supervision.",
+            trcnStatus: "optional",
+          },
+          {
             id: "Head Teacher",
-            title: "Head Teacher",
+            title: "Head Teacher / Headmaster / Headmistress",
             category: "leadership",
-            badgeText: "Institutional Lead",
-            description: "School executive authority; broadsheet approval, teacher supervision, Ministry relations.",
+            badgeText: "Primary School Head",
+            description: "Executive academic leader; oversees lesson plans, broadsheets, and statutory registers.",
             trcnStatus: "mandatory",
           },
           {
             id: "Assistant Head Teacher",
-            title: "Assistant Head Teacher",
+            title: "Assistant Head Teacher (Academics / Admin)",
             category: "leadership",
-            badgeText: "Deputy Oversight",
-            description: "Deputizes for Head Teacher; manages daily duty roster and lesson note vetting.",
+            badgeText: "Deputy Primary Head",
+            description: "Assists headmaster with teacher rosters, timetable allocations, and assembly registers.",
             trcnStatus: "mandatory",
           },
           {
             id: "Bursar / Accountant",
-            title: "Bursar / Accountant",
+            title: "Bursar / School Accountant",
             category: "support",
-            badgeText: "Finance & Accounts",
-            description: "Fee collections, payroll preparation, financial ledger maintenance, receipts.",
+            badgeText: "Financial Management",
+            description: "Manages fee collections, receipting, invoices, bank reconciliations, and payroll.",
             trcnStatus: "none",
           },
           {
             id: "Admin Officer",
-            title: "Admin Officer",
+            title: "Administrative Officer",
             category: "support",
-            badgeText: "Personnel & Records",
-            description: "Pupil bio-data, statutory registers, circulars, and administrative records.",
+            badgeText: "Registry & Records",
+            description: "Maintains pupil dossiers, state ministry returns, and official correspondence.",
             trcnStatus: "none",
           },
           {
-            id: "Librarian",
-            title: "School Librarian",
+            id: "School Nurse",
+            title: "Registered School Nurse",
             category: "support",
-            badgeText: "Learning Resources",
-            description: "Library book cataloging, reader cards, literacy resources.",
+            badgeText: "Pupil Clinic",
+            description: "Operates primary sick bay, first-aid emergencies, and health immunization files.",
             trcnStatus: "none",
           },
           {
-            id: "Cleaner / Security / Driver",
-            title: "Auxiliary / Driver / Security",
+            id: "Support Staff",
+            title: "Support Services & Security",
             category: "support",
-            badgeText: "General Support",
-            description: "Premises security, pupil transit transportation, campus sanitation.",
+            badgeText: "Campus Operations",
+            description: "Facilities maintenance, gate security, campus grounds, and transport logistics.",
             trcnStatus: "none",
           },
         ];
@@ -249,88 +269,96 @@ export default function StaffRolePickerForm({
             id: "Subject Teacher",
             title: "Subject Teacher",
             category: "teaching",
-            badgeText: "Curriculum Subject",
-            description: "Delivers syllabus, marks continuous assessment tests, records terminal examination scores.",
+            badgeText: "Curriculum Subject Lead",
+            description: "Delivers senior/junior WAEC, NECO & BECE syllabus for designated subjects.",
             trcnStatus: "mandatory",
           },
           {
-            id: "Form Tutor (Class Teacher)",
-            title: "Form Tutor / Class Teacher",
+            id: "Form Tutor / Class Teacher",
+            title: "Form Tutor / Master",
             category: "teaching",
-            badgeText: "Class & Arm Manager",
-            description: "Manages class register, behavior remarks, broadsheet verification, report cards.",
+            badgeText: "Class / Arm Custodian",
+            description: "Manages roll call, attendance registers, and pastoral welfare for a designated arm (e.g. JSS 1A).",
             trcnStatus: "mandatory",
           },
           {
             id: "Head of Department (HOD)",
             title: "Head of Department (HOD)",
             category: "leadership",
-            badgeText: "Department Supervisor",
-            description: "Supervises Sciences, Arts, Commercial, or Languages; vets lesson notes and exams.",
+            badgeText: "Departmental Leader",
+            description: "Supervises subject teachers, approves schemes of work, reviews lesson notes & countersigns CA scores.",
             trcnStatus: "mandatory",
           },
           {
-            id: "Vice Principal (Academics)",
-            title: "Vice Principal (Academics)",
+            id: "Vice Principal (Academic)",
+            title: "Vice Principal (Academics / VP Acad)",
             category: "leadership",
-            badgeText: "Academic Executive",
-            description: "Academic timetable, examination schedules, WAEC/NECO registrations.",
+            badgeText: "Senior Leadership",
+            description: "Coordinates master timetable, WAEC/NECO examination centres, broadsheets, and academic standards.",
             trcnStatus: "mandatory",
           },
           {
-            id: "Vice Principal (Admin)",
-            title: "Vice Principal (Admin)",
+            id: "Vice Principal (Administration)",
+            title: "Vice Principal (Administration / VP Admin)",
             category: "leadership",
-            badgeText: "Administrative Executive",
-            description: "Staff discipline, school plant maintenance, non-academic personnel coordination.",
+            badgeText: "Senior Leadership",
+            description: "Manages school discipline, co-curricular clubs, boarding houses, and staff turnout.",
             trcnStatus: "mandatory",
           },
           {
             id: "Principal",
-            title: "Principal",
+            title: "School Principal",
             category: "leadership",
-            badgeText: "Executive Head",
-            description: "Chief executive officer of the secondary school; ministry liaison and broadsheet seal.",
+            badgeText: "Chief Executive Officer",
+            description: "Highest administrative & academic authority; signs terminal report cards, transcripts and certificates.",
             trcnStatus: "mandatory",
           },
           {
             id: "Bursar",
             title: "School Bursar",
             category: "support",
-            badgeText: "Financial Accounting",
-            description: "Fee billings, payment verification, cashbook management, financial audits.",
+            badgeText: "Financial Controller",
+            description: "Controls tuition collection, billing schedules, vendor payments, and annual budget reports.",
+            trcnStatus: "none",
+          },
+          {
+            id: "Guidance Counselor",
+            title: "Guidance & Career Counselor",
+            category: "support",
+            badgeText: "Student Welfare",
+            description: "Coordinates career guidance, UTME subject combinations, psycho-social counseling and ethics.",
+            trcnStatus: "optional",
+          },
+          {
+            id: "Librarian",
+            title: "School Librarian / Media Specialist",
+            category: "support",
+            badgeText: "Library & E-Learning",
+            description: "Curates library catalogue, text distributions, past question papers, and study halls.",
             trcnStatus: "none",
           },
           {
             id: "Lab Technologist",
-            title: "Laboratory Technologist",
+            title: "Science / ICT Lab Technologist",
             category: "support",
-            badgeText: "Science Labs",
-            description: "Prepares science lab apparatus & reagents for WAEC/NECO practical exams.",
+            badgeText: "STEM Laboratories",
+            description: "Prepares chemistry/physics/biology practicals and maintains computer labs for CBT tests.",
             trcnStatus: "none",
           },
           {
-            id: "Librarian",
-            title: "Secondary Librarian",
-            category: "support",
-            badgeText: "Resource Center",
-            description: "Maintains library index, digital learning terminals, and text inventory.",
-            trcnStatus: "none",
-          },
-          {
-            id: "Admin",
+            id: "Admin Officer",
             title: "Administrative Officer",
             category: "support",
-            badgeText: "Admin Desk",
-            description: "Student dossiers, external exam entries, transcript requests, official letters.",
+            badgeText: "Secretariat & Registry",
+            description: "Manages admissions files, Ministry of Education census, and official dispatch.",
             trcnStatus: "none",
           },
           {
             id: "Support Staff",
-            title: "Support / Security / Driver",
+            title: "Support Services & Security",
             category: "support",
-            badgeText: "Logistics & Security",
-            description: "Campus security watch, student transit bus operations, groundskeeping.",
+            badgeText: "General Support",
+            description: "Campus security guard, maintenance officer, driver, janitorial services.",
             trcnStatus: "none",
           },
         ];
@@ -414,7 +442,33 @@ export default function StaffRolePickerForm({
     }
   }, [tierCategory, isPolytechnic]);
 
-  const selectedItem = roleGroups.find((r) => r.id === selectedRole);
+  // Robust selected item resolution with fuzzy/custom role fallback
+  const selectedItem = useMemo<RoleItem | null>(() => {
+    if (!selectedRole || !selectedRole.trim()) return null;
+    const direct = roleGroups.find((r) => r.id === selectedRole);
+    if (direct) return direct;
+
+    const norm = selectedRole.toLowerCase().trim();
+    const fuzzy = roleGroups.find(
+      (r) =>
+        r.id.toLowerCase() === norm ||
+        r.title.toLowerCase() === norm ||
+        norm.includes(r.id.toLowerCase()) ||
+        r.id.toLowerCase().includes(norm)
+    );
+    if (fuzzy) return fuzzy;
+
+    const nonTeach = isNonTeachingRole(selectedRole);
+    return {
+      id: selectedRole,
+      title: selectedRole,
+      category: nonTeach ? ("support" as const) : ("teaching" as const),
+      badgeText: nonTeach ? "Support Staff" : "Academic Staff",
+      description: "Designated institutional staff role.",
+      trcnStatus: "optional" as const,
+    };
+  }, [roleGroups, selectedRole]);
+
   const isNonTeaching = isNonTeachingRole(selectedRole);
 
   // Group roles by category for clean sectioning
@@ -449,7 +503,7 @@ export default function StaffRolePickerForm({
       case "TERTIARY":
         return isPolytechnic ? "Polytechnic" : "University / Tertiary";
       default:
-        return tierCategory;
+        return tierCategory || "School";
     }
   }, [tierCategory, isPolytechnic]);
 
@@ -480,11 +534,23 @@ export default function StaffRolePickerForm({
 
       {/* CLEAN PLACEHOLDER FORM FIELD WITH DROPDOWN */}
       <div className="relative" ref={dropdownRef}>
-        {/* Trigger Button Styled as a Clean Placeholder Form Field */}
-        <button
-          type="button"
+        {/* Trigger styled as a Clean Accessible Placeholder Form Field */}
+        <div
           id="staff-role-picker"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-controls="staff-role-picker-listbox"
+          tabIndex={0}
           onClick={() => setIsOpen((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+              e.preventDefault();
+              setIsOpen((prev) => !prev);
+            } else if (e.key === "Escape") {
+              setIsOpen(false);
+            }
+          }}
           className={`w-full text-left bg-white border rounded-xl px-3.5 py-2.5 text-xs font-medium flex items-center justify-between transition outline-none cursor-pointer ${
             error
               ? "border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400"
@@ -492,8 +558,6 @@ export default function StaffRolePickerForm({
               ? "border-blue-500 ring-2 ring-blue-500/20"
               : "border-slate-300 hover:border-slate-400 focus:ring-2 focus:ring-blue-500"
           }`}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {selectedItem ? (
@@ -525,24 +589,18 @@ export default function StaffRolePickerForm({
 
           <div className="flex items-center gap-1.5 shrink-0 ml-2">
             {selectedRole && (
-              <span
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectRole("");
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    onSelectRole("");
-                  }
-                }}
                 className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition cursor-pointer"
                 title="Clear selection"
+                aria-label="Clear role selection"
               >
                 <X className="w-3.5 h-3.5" />
-              </span>
+              </button>
             )}
             <ChevronDown
               className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
@@ -550,17 +608,22 @@ export default function StaffRolePickerForm({
               }`}
             />
           </div>
-        </button>
+        </div>
 
         {/* FLOATING LIST OF ROLES PER INSTITUTIONAL TIER */}
         {isOpen && (
-          <div className="absolute z-50 mt-1.5 w-full bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div 
+            id="staff-role-picker-listbox"
+            role="listbox" 
+            aria-label={`Available roles for ${tierDisplay}`}
+            className="absolute z-50 mt-1.5 w-full bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+          >
             {/* SEARCH FILTER */}
             <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <input
+                ref={searchInputRef}
                 type="text"
-                autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Search ${tierDisplay} roles (e.g. Teacher, HOD, Bursar)...`}
@@ -570,7 +633,8 @@ export default function StaffRolePickerForm({
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                  aria-label="Clear search"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -599,10 +663,21 @@ export default function StaffRolePickerForm({
                     return (
                       <div
                         key={role.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        tabIndex={0}
                         onClick={() => {
                           onSelectRole(role.id);
                           setIsOpen(false);
                           setSearchQuery("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectRole(role.id);
+                            setIsOpen(false);
+                            setSearchQuery("");
+                          }
                         }}
                         className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
                           isSelected
@@ -656,10 +731,21 @@ export default function StaffRolePickerForm({
                     return (
                       <div
                         key={role.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        tabIndex={0}
                         onClick={() => {
                           onSelectRole(role.id);
                           setIsOpen(false);
                           setSearchQuery("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectRole(role.id);
+                            setIsOpen(false);
+                            setSearchQuery("");
+                          }
                         }}
                         className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
                           isSelected
@@ -713,10 +799,21 @@ export default function StaffRolePickerForm({
                     return (
                       <div
                         key={role.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        tabIndex={0}
                         onClick={() => {
                           onSelectRole(role.id);
                           setIsOpen(false);
                           setSearchQuery("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectRole(role.id);
+                            setIsOpen(false);
+                            setSearchQuery("");
+                          }
                         }}
                         className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
                           isSelected

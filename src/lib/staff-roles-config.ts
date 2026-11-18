@@ -219,9 +219,9 @@ export const TERTIARY_ALL_STAFF_ROLES = [
 /**
  * Format staff role title safely according to tier
  */
-export function formatStaffRoleByTier(role: string, category: StaffTierCategory = "PRIMARY"): string {
+export function formatStaffRoleByTier(role?: string | null, category: StaffTierCategory = "PRIMARY"): string {
   if (!role) return "Staff Member";
-  const norm = role.toUpperCase().trim().replace(/[\s-]+/g, "_");
+  const norm = role.toString().toUpperCase().trim().replace(/[\s-]+/g, "_");
 
   if (category === "CRECHE") {
     if (norm.includes("CARE") || norm.includes("NANNY") || norm.includes("TEACHER") || norm.includes("LECTURER")) return "Caregiver";
@@ -264,7 +264,7 @@ export function formatStaffRoleByTier(role: string, category: StaffTierCategory 
 // ============================================================================
 export function resolveStaffTierCategory(tierInput?: string | null): StaffTierCategory {
   if (!tierInput) return "PRIMARY";
-  const normalized = tierInput.toUpperCase().trim();
+  const normalized = tierInput.toString().toUpperCase().trim();
 
   // Strict Creche check (First priority)
   if (
@@ -382,9 +382,9 @@ export function getStaffTierBadgeLabel(category: StaffTierCategory): string {
 // ============================================================================
 // 5. NON-TEACHING ROLE RULE FOR ALL TIERS
 // ============================================================================
-export function isNonTeachingRole(role: string): boolean {
+export function isNonTeachingRole(role?: string | null): boolean {
   if (!role) return false;
-  const norm = role.toLowerCase().trim();
+  const norm = role.toString().toLowerCase().trim();
   return (
     norm.includes("bursar") ||
     norm.includes("accountant") ||
@@ -503,10 +503,15 @@ export function getPayGradesForTier(category: StaffTierCategory, isPolytechnic =
 // ============================================================================
 // 8. ROLE PERMISSIONS SUMMARY
 // ============================================================================
-export function getRolePermissionSummary(role: string, category: StaffTierCategory): string {
-  const norm = role.toLowerCase().trim();
+export function getRolePermissionSummary(role?: string | null, category?: StaffTierCategory): string {
+  const norm = (role || "").toString().toLowerCase().trim();
+  const safeCategory = category || "PRIMARY";
 
-  if (category === "CRECHE") {
+  if (!norm) {
+    return "Staff Member: Role designation pending. Select a role above to inspect specific permissions boundary.";
+  }
+
+  if (safeCategory === "CRECHE") {
     if (norm.includes("caregiver")) {
       return "Caregiver: Can record child daily attendance, daily activities, feeding, naps, and developmental observations for assigned playgroup.";
     }
