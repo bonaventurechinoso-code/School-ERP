@@ -1,15 +1,10 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   StaffTierCategory,
-  CRECHE_STAFF_ROLES,
-  NURSERY_STAFF_ROLES,
-  PRIMARY_STAFF_ROLES,
-  SECONDARY_STAFF_ROLES,
   TERTIARY_UNIVERSITY_ACADEMIC_ROLES,
   TERTIARY_POLYTECHNIC_ACADEMIC_ROLES,
-  TERTIARY_ADMIN_ROLES,
   isNonTeachingRole,
 } from "@/lib/staff-roles-config";
 import {
@@ -21,7 +16,10 @@ import {
   Award,
   Layers,
   UserCheck,
-  BookOpen,
+  ChevronDown,
+  Search,
+  X,
+  Check,
 } from "lucide-react";
 
 interface RolePickerProps {
@@ -48,11 +46,30 @@ export default function StaffRolePickerForm({
   error,
   isPolytechnic = false,
 }: RolePickerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
   // Generate structured, tier-specific role items
-  const roleGroups = useMemo(() => {
+  const roleGroups = useMemo<RoleItem[]>(() => {
     switch (tierCategory) {
       case "CRECHE": {
-        const items: RoleItem[] = [
+        return [
           {
             id: "Caregiver",
             title: "Caregiver / Minder",
@@ -102,11 +119,10 @@ export default function StaffRolePickerForm({
             trcnStatus: "none",
           },
         ];
-        return items;
       }
 
       case "NURSERY": {
-        const items: RoleItem[] = [
+        return [
           {
             id: "Nursery Teacher",
             title: "Nursery Teacher (Lead)",
@@ -156,11 +172,10 @@ export default function StaffRolePickerForm({
             trcnStatus: "none",
           },
         ];
-        return items;
       }
 
       case "PRIMARY": {
-        const items: RoleItem[] = [
+        return [
           {
             id: "Class Teacher",
             title: "Class Teacher",
@@ -226,11 +241,10 @@ export default function StaffRolePickerForm({
             trcnStatus: "none",
           },
         ];
-        return items;
       }
 
       case "SECONDARY": {
-        const items: RoleItem[] = [
+        return [
           {
             id: "Subject Teacher",
             title: "Subject Teacher",
@@ -320,7 +334,6 @@ export default function StaffRolePickerForm({
             trcnStatus: "none",
           },
         ];
-        return items;
       }
 
       case "TERTIARY": {
@@ -328,7 +341,7 @@ export default function StaffRolePickerForm({
           ? TERTIARY_POLYTECHNIC_ACADEMIC_ROLES
           : TERTIARY_UNIVERSITY_ACADEMIC_ROLES;
 
-        const items: RoleItem[] = [
+        return [
           ...academicRoles.map((role) => ({
             id: role,
             title: role,
@@ -340,61 +353,60 @@ export default function StaffRolePickerForm({
           {
             id: "Head of Department (HOD)",
             title: "Head of Department (HOD)",
-            category: "leadership",
+            category: "leadership" as const,
             badgeText: "Academic Department Lead",
             description: "Formal academic administrator; presides over departmental board, course allocations & marks.",
-            trcnStatus: "optional",
+            trcnStatus: "optional" as const,
           },
           {
             id: "Dean",
             title: "Dean of Faculty / School",
-            category: "leadership",
+            category: "leadership" as const,
             badgeText: "Faculty Executive",
             description: "Heads faculty board of studies; approves semester results and degree recommendations.",
-            trcnStatus: "optional",
+            trcnStatus: "optional" as const,
           },
           {
             id: "Provost / Rector / Vice-Chancellor",
             title: isPolytechnic ? "Rector / Deputy Rector" : "Vice-Chancellor / DVC",
-            category: "leadership",
+            category: "leadership" as const,
             badgeText: "Principal Officer",
             description: "Chief executive & academic officer of the higher institution.",
-            trcnStatus: "optional",
+            trcnStatus: "optional" as const,
           },
           {
             id: "Registrar / Bursar (Non-Academic)",
             title: "Registrar / Bursar",
-            category: "support",
+            category: "support" as const,
             badgeText: "Principal Administration",
             description: "Institutional custodian of academic records, admissions, personnel, and finances.",
-            trcnStatus: "none",
+            trcnStatus: "none" as const,
           },
           {
             id: "Lab Technologist",
             title: "Chief / Principal Technologist",
-            category: "support",
+            category: "support" as const,
             badgeText: "Engineering / Science Labs",
             description: "Manages university/polytechnic workshops, diagnostic equipment, and studio benches.",
-            trcnStatus: "none",
+            trcnStatus: "none" as const,
           },
           {
             id: "Admin Officer",
             title: "Faculty / Departmental Officer",
-            category: "support",
+            category: "support" as const,
             badgeText: "Academic Registry",
             description: "Coordinates student matriculation, exam slips, course registration clearance.",
-            trcnStatus: "none",
+            trcnStatus: "none" as const,
           },
           {
             id: "Support Staff",
             title: "Works & Support Services",
-            category: "support",
+            category: "support" as const,
             badgeText: "Campus Services",
             description: "Works, physical planning, security patrol, campus sanitation.",
-            trcnStatus: "none",
+            trcnStatus: "none" as const,
           },
         ];
-        return items;
       }
 
       default:
@@ -405,153 +417,407 @@ export default function StaffRolePickerForm({
   const selectedItem = roleGroups.find((r) => r.id === selectedRole);
   const isNonTeaching = isNonTeachingRole(selectedRole);
 
+  // Group roles by category for clean sectioning
+  const categorizedRoles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? roleGroups.filter(
+          (r) =>
+            r.title.toLowerCase().includes(query) ||
+            r.description.toLowerCase().includes(query) ||
+            r.badgeText.toLowerCase().includes(query)
+        )
+      : roleGroups;
+
+    return {
+      teaching: filtered.filter((r) => r.category === "teaching"),
+      leadership: filtered.filter((r) => r.category === "leadership"),
+      support: filtered.filter((r) => r.category === "support"),
+    };
+  }, [roleGroups, searchQuery]);
+
+  const tierDisplay = useMemo(() => {
+    switch (tierCategory) {
+      case "CRECHE":
+        return "Creche / Daycare";
+      case "NURSERY":
+        return "Nursery School";
+      case "PRIMARY":
+        return "Primary School";
+      case "SECONDARY":
+        return "Secondary School";
+      case "TERTIARY":
+        return isPolytechnic ? "Polytechnic" : "University / Tertiary";
+      default:
+        return tierCategory;
+    }
+  }, [tierCategory, isPolytechnic]);
+
+  const placeholderText = `-- Select Role / Designation for this ${tierDisplay} Staff --`;
+
   return (
-    <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-2xs space-y-5">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
-            <UserCheck className="w-5 h-5" />
+    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-3">
+      {/* HEADER ROW */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+            <UserCheck className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-slate-800 text-sm sm:text-base">
-                Select Staff Role / Position
-              </h3>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                {tierCategory} Tier
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Choose the candidate&apos;s designated appointment. Roster privileges and assignments adapt automatically.
-            </p>
+            <label
+              htmlFor="staff-role-picker"
+              className="text-xs font-bold text-slate-800 flex items-center gap-1 cursor-pointer"
+            >
+              Staff Role / Designation <span className="text-rose-500">*</span>
+            </label>
           </div>
         </div>
 
-        {selectedRole ? (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shrink-0 self-start sm:self-auto">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Active Role: {selectedRole}</span>
+        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+          {tierDisplay}
+        </span>
+      </div>
+
+      {/* CLEAN PLACEHOLDER FORM FIELD WITH DROPDOWN */}
+      <div className="relative" ref={dropdownRef}>
+        {/* Trigger Button Styled as a Clean Placeholder Form Field */}
+        <button
+          type="button"
+          id="staff-role-picker"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={`w-full text-left bg-white border rounded-xl px-3.5 py-2.5 text-xs font-medium flex items-center justify-between transition outline-none cursor-pointer ${
+            error
+              ? "border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400"
+              : isOpen
+              ? "border-blue-500 ring-2 ring-blue-500/20"
+              : "border-slate-300 hover:border-slate-400 focus:ring-2 focus:ring-blue-500"
+          }`}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {selectedItem ? (
+              <>
+                {selectedItem.category === "teaching" ? (
+                  <GraduationCap className="w-4 h-4 text-blue-600 shrink-0" />
+                ) : selectedItem.category === "leadership" ? (
+                  <Award className="w-4 h-4 text-purple-600 shrink-0" />
+                ) : (
+                  <Briefcase className="w-4 h-4 text-slate-600 shrink-0" />
+                )}
+                <span className="font-bold text-slate-900 truncate">{selectedItem.title}</span>
+                <span
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                    selectedItem.category === "teaching"
+                      ? "bg-blue-100 text-blue-700"
+                      : selectedItem.category === "leadership"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {selectedItem.badgeText}
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-400 font-normal truncate">{placeholderText}</span>
+            )}
           </div>
-        ) : (
-          <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl shrink-0 self-start sm:self-auto">
-            Selection Required *
-          </span>
+
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {selectedRole && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectRole("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onSelectRole("");
+                  }
+                }}
+                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition cursor-pointer"
+                title="Clear selection"
+              >
+                <X className="w-3.5 h-3.5" />
+              </span>
+            )}
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                isOpen ? "rotate-180 text-blue-600" : ""
+              }`}
+            />
+          </div>
+        </button>
+
+        {/* FLOATING LIST OF ROLES PER INSTITUTIONAL TIER */}
+        {isOpen && (
+          <div className="absolute z-50 mt-1.5 w-full bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* SEARCH FILTER */}
+            <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search ${tierDisplay} roles (e.g. Teacher, HOD, Bursar)...`}
+                className="w-full bg-transparent text-xs text-slate-800 placeholder:text-slate-400 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* SCROLLABLE LIST OF ROLES */}
+            <div className="max-h-72 overflow-y-auto p-2 space-y-3 divide-y divide-slate-100">
+              {/* 1. TEACHING / ACADEMIC FACULTY */}
+              {categorizedRoles.teaching.length > 0 && (
+                <div className="space-y-1">
+                  <div className="px-2 pt-1 pb-1 text-[10px] font-black tracking-wider uppercase text-blue-600 flex items-center justify-between">
+                    <span>
+                      {tierCategory === "TERTIARY"
+                        ? "Academic Faculty / Lecturers"
+                        : tierCategory === "CRECHE"
+                        ? "Early Years Caregivers"
+                        : "Teaching Faculty"}
+                    </span>
+                    <span className="text-slate-400 font-normal">
+                      ({categorizedRoles.teaching.length})
+                    </span>
+                  </div>
+                  {categorizedRoles.teaching.map((role) => {
+                    const isSelected = selectedRole === role.id;
+                    return (
+                      <div
+                        key={role.id}
+                        onClick={() => {
+                          onSelectRole(role.id);
+                          setIsOpen(false);
+                          setSearchQuery("");
+                        }}
+                        className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
+                          isSelected
+                            ? "bg-blue-50 border border-blue-200 text-blue-900"
+                            : "hover:bg-slate-50 text-slate-800"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <GraduationCap
+                              className={`w-3.5 h-3.5 ${
+                                isSelected ? "text-blue-600" : "text-slate-400"
+                              }`}
+                            />
+                            <span className="text-xs font-bold">{role.title}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100/70 text-blue-700">
+                              {role.badgeText}
+                            </span>
+                            {role.trcnStatus === "mandatory" && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
+                                <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                            {role.description}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 2. LEADERSHIP & SUPERVISION */}
+              {categorizedRoles.leadership.length > 0 && (
+                <div className="space-y-1 pt-2">
+                  <div className="px-2 pt-1 pb-1 text-[10px] font-black tracking-wider uppercase text-purple-600 flex items-center justify-between">
+                    <span>Leadership & Administration</span>
+                    <span className="text-slate-400 font-normal">
+                      ({categorizedRoles.leadership.length})
+                    </span>
+                  </div>
+                  {categorizedRoles.leadership.map((role) => {
+                    const isSelected = selectedRole === role.id;
+                    return (
+                      <div
+                        key={role.id}
+                        onClick={() => {
+                          onSelectRole(role.id);
+                          setIsOpen(false);
+                          setSearchQuery("");
+                        }}
+                        className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
+                          isSelected
+                            ? "bg-purple-50 border border-purple-200 text-purple-900"
+                            : "hover:bg-slate-50 text-slate-800"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Award
+                              className={`w-3.5 h-3.5 ${
+                                isSelected ? "text-purple-600" : "text-slate-400"
+                              }`}
+                            />
+                            <span className="text-xs font-bold">{role.title}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-purple-100/70 text-purple-700">
+                              {role.badgeText}
+                            </span>
+                            {role.trcnStatus === "mandatory" && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
+                                <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                            {role.description}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 3. NON-TEACHING & SUPPORT */}
+              {categorizedRoles.support.length > 0 && (
+                <div className="space-y-1 pt-2">
+                  <div className="px-2 pt-1 pb-1 text-[10px] font-black tracking-wider uppercase text-slate-600 flex items-center justify-between">
+                    <span>Non-Teaching & Support Staff</span>
+                    <span className="text-slate-400 font-normal">
+                      ({categorizedRoles.support.length})
+                    </span>
+                  </div>
+                  {categorizedRoles.support.map((role) => {
+                    const isSelected = selectedRole === role.id;
+                    return (
+                      <div
+                        key={role.id}
+                        onClick={() => {
+                          onSelectRole(role.id);
+                          setIsOpen(false);
+                          setSearchQuery("");
+                        }}
+                        className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between gap-3 ${
+                          isSelected
+                            ? "bg-slate-100 border border-slate-300 text-slate-900"
+                            : "hover:bg-slate-50 text-slate-800"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Briefcase
+                              className={`w-3.5 h-3.5 ${
+                                isSelected ? "text-slate-700" : "text-slate-400"
+                              }`}
+                            />
+                            <span className="text-xs font-bold">{role.title}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-700">
+                              {role.badgeText}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                            {role.description}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-4 h-4 rounded-full bg-slate-700 text-white flex items-center justify-center shrink-0 mt-0.5">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {categorizedRoles.teaching.length === 0 &&
+                categorizedRoles.leadership.length === 0 &&
+                categorizedRoles.support.length === 0 && (
+                  <div className="p-6 text-center text-xs text-slate-400">
+                    No roles found matching &quot;{searchQuery}&quot; for {tierDisplay}.
+                  </div>
+                )}
+            </div>
+          </div>
         )}
       </div>
 
+      {/* ERROR MESSAGE */}
       {error && (
-        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* ROLE PICKER CARDS GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {roleGroups.map((role) => {
-          const isSelected = selectedRole === role.id;
-          const isTeaching = role.category === "teaching";
-          const isLeader = role.category === "leadership";
-
-          return (
-            <div
-              key={role.id}
-              onClick={() => onSelectRole(role.id)}
-              className={`relative p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                isSelected
-                  ? "bg-blue-50/70 border-blue-600 shadow-sm ring-2 ring-blue-500/20"
-                  : "bg-slate-50/60 hover:bg-white hover:border-slate-300 border-slate-200"
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    {isTeaching ? (
-                      <GraduationCap className={`w-4 h-4 ${isSelected ? "text-blue-600" : "text-slate-500"}`} />
-                    ) : isLeader ? (
-                      <Award className={`w-4 h-4 ${isSelected ? "text-purple-600" : "text-slate-500"}`} />
-                    ) : (
-                      <Briefcase className={`w-4 h-4 ${isSelected ? "text-slate-700" : "text-slate-400"}`} />
-                    )}
-                    <h4 className={`text-xs font-bold leading-tight ${isSelected ? "text-blue-900 font-extrabold" : "text-slate-800"}`}>
-                      {role.title}
-                    </h4>
-                  </div>
-                  {isSelected && (
-                    <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    </div>
-                  )}
-                </div>
-
-                <p className="text-[11px] text-slate-500 leading-relaxed font-normal">
-                  {role.description}
-                </p>
-              </div>
-
-              {/* TAGS */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                  isTeaching
-                    ? "bg-blue-100/70 text-blue-700"
-                    : isLeader
-                    ? "bg-purple-100/70 text-purple-700"
-                    : "bg-slate-200/70 text-slate-700"
-                }`}>
-                  {role.badgeText}
-                </span>
-
-                {role.trcnStatus === "mandatory" && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 flex items-center gap-1">
-                    <ShieldCheck className="w-2.5 h-2.5 text-amber-600" />
-                    TRCN Required
-                  </span>
-                )}
-                {role.trcnStatus === "optional" && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                    TRCN (if available)
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* DYNAMIC FEEDBACK BANNER BASED ON SELECTION */}
+      {/* COMPACT SINGLE-LINE STATUS PILL */}
       {selectedItem ? (
-        <div className={`p-4 rounded-xl border text-xs flex items-start gap-3 transition-all ${
-          isNonTeaching
-            ? "bg-amber-50/70 border-amber-200 text-amber-900"
-            : "bg-blue-50/70 border-blue-200 text-blue-900"
-        }`}>
-          {isNonTeaching ? (
-            <Briefcase className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          ) : (
-            <Layers className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-          )}
-          <div className="space-y-0.5">
-            <span className="font-bold block">
-              {isNonTeaching ? "Non-Teaching / Support Post Selected:" : "Teaching / Academic Post Selected:"}
-            </span>
-            <p className="text-[11px] leading-relaxed">
+        <div
+          className={`px-3.5 py-2 rounded-xl border text-xs flex items-center justify-between gap-2 transition-all ${
+            isNonTeaching
+              ? "bg-amber-50/80 border-amber-200 text-amber-900"
+              : "bg-blue-50/80 border-blue-200 text-blue-900"
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {isNonTeaching ? (
+              <Briefcase className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            ) : (
+              <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            )}
+            <span className="text-[11px] truncate">
               {isNonTeaching ? (
                 <>
-                  Teaching unit and classroom allocations (Section D) will be <strong>hidden</strong>. Staff member will be assigned administrative permissions and personnel records only.
+                  <strong>Non-Teaching Role ({selectedRole}):</strong> Class & course assignments in
+                  Section D will be hidden automatically.
                 </>
               ) : (
                 <>
-                  Teaching allocations in Section D are <strong>active</strong>. You will be prompted to allocate classrooms, subjects, or courses according to {tierCategory} regulations.
+                  <strong>Teaching Role ({selectedRole}):</strong> Classroom & subject assignments
+                  in Section D are enabled.
                 </>
               )}
-            </p>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            {selectedItem.trcnStatus === "mandatory" && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-amber-600" /> TRCN Mandatory
+              </span>
+            )}
+            {selectedItem.trcnStatus === "optional" && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                TRCN Optional
+              </span>
+            )}
           </div>
         </div>
       ) : (
-        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 text-center">
-          Click any card above to select the candidate&apos;s role. The form will adapt dynamically.
-        </div>
+        <p className="text-[11px] text-slate-400">
+          Select candidate&apos;s designated role from the placeholder dropdown above. System permissions and Section D adapt automatically.
+        </p>
       )}
     </div>
   );
