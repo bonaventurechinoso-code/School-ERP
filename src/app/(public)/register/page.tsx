@@ -456,8 +456,8 @@ export default function RegisterTenantPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start py-4 sm:py-8 px-3 sm:px-6 lg:px-8 overflow-y-auto">
-      <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start sm:justify-center py-4 sm:py-8 px-3 sm:px-6 lg:px-8 overflow-y-auto">
+      <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-2 sm:my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
         
         {/* Header */}
         <div className="relative z-10 px-5 py-4 sm:px-8 sm:py-5 text-white bg-slate-900 transition-colors duration-300">
@@ -603,8 +603,8 @@ export default function RegisterTenantPage() {
             <>
               {/* STEP 1: INSTITUTIONAL IDENTITY FORM */}
               {step === 1 && (
-                <form onSubmit={handleNextStep} className="space-y-4 sm:space-y-5 flex-1 flex flex-col justify-between">
-                  <div className="space-y-4 sm:space-y-5">
+                <form onSubmit={handleNextStep} className="space-y-5 flex-1 flex flex-col">
+                  <div className="space-y-4 sm:space-y-5 flex-1">
                     {/* Row 1: School Name & Desired URL Slug */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                       <div>
@@ -825,8 +825,8 @@ export default function RegisterTenantPage() {
                     </div>
                   </div>
 
-                  {/* Sticky Action Footer */}
-                  <div className="sticky bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-20 shadow-lg sm:shadow-none">
+                  {/* Action Footer (In-flow on mobile so confirm password & rules are never cut off, sticky on tablet/desktop) */}
+                  <div className="relative sm:sticky sm:bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white dark:bg-zinc-900 sm:bg-white/95 sm:dark:bg-zinc-900/95 sm:backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-10 shadow-lg sm:shadow-none">
                     <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400">
                       <ShieldCheck className="w-4 h-4 text-emerald-500" />
                       <span>Secure institutional setup</span>
@@ -847,8 +847,8 @@ export default function RegisterTenantPage() {
 
               {/* STEP 2: ACADEMIC TIER ALLOCATION */}
               {step === 2 && (
-                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col justify-between">
-                  <div>
+                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 flex-1 flex flex-col">
+                  <div className="flex-1">
                     <div className="mb-4">
                       <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">Academic Tier Allocation</h3>
                       <p className="text-slate-600 dark:text-zinc-400 text-xs sm:text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
@@ -886,8 +886,8 @@ export default function RegisterTenantPage() {
                     </div>
                   </div>
 
-                  {/* Sticky Action Footer */}
-                  <div className="sticky bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-20 shadow-lg sm:shadow-none">
+                  {/* Action Footer */}
+                  <div className="relative sm:sticky sm:bottom-0 -mx-4 sm:-mx-6 md:-mx-8 -mb-4 sm:-mb-6 md:-mb-8 mt-6 p-4 sm:p-5 bg-white dark:bg-zinc-900 sm:bg-white/95 sm:dark:bg-zinc-900/95 sm:backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-10 shadow-lg sm:shadow-none">
                     <button 
                       type="button"
                       onClick={() => { setStep(1); setErrorMsg(""); }}
