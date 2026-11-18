@@ -962,6 +962,8 @@ export default function StaffTable({
         onStaffUpdated={refreshRoster}
         onPrintIdCard={printStaffIdCard}
         onPrintAppointmentLetter={printAppointmentLetter}
+        activeTier={effectiveTier}
+        tierCategory={tierCategory}
       />
 
       

@@ -551,11 +551,13 @@ export async function updateStaffProfile(
   data: {
     firstName: string;
     lastName: string;
+    middleName?: string;
     email: string;
     role: string;
     status?: string;
     departmentId?: string | null;
     baseSalary?: number | null;
+    payGrade?: string | null;
     bankName?: string | null;
     bankAccountNumber?: string | null;
     accountName?: string | null;
@@ -564,20 +566,31 @@ export async function updateStaffProfile(
     whatsapp?: string;
     nin?: string;
     gender?: string;
+    dateOfBirth?: string;
+    maritalStatus?: string;
     stateOfOrigin?: string;
     lgaOfOrigin?: string;
     residentialAddress?: string;
     qualification?: string;
     institution?: string;
     graduationYear?: string;
+    fieldOfStudy?: string;
+    specialization?: string;
     trcnNumber?: string;
     trcnCategory?: string;
     trcnStatus?: string;
-    specialization?: string;
+    professionalBody?: string;
+    professionalMembershipNo?: string;
     appointmentType?: string;
     appointmentDate?: string;
     emergencyName?: string;
     emergencyPhone?: string;
+    assignedClass?: string;
+    assignedSubjects?: string;
+    faculty?: string;
+    pensionRsa?: string;
+    pensionProvider?: string;
+    tin?: string;
   }
 ) {
   try {
@@ -620,6 +633,30 @@ export async function updateStaffProfile(
       bankAccountNumber: data.bankAccountNumber || null,
       accountName: data.accountName || null,
     };
+
+    if (data.role) updateData.academicRank = data.role;
+    if (data.middleName) updateData.middleName = data.middleName.trim();
+    if (data.gender) updateData.gender = data.gender;
+    if (data.phone) updateData.phone = data.phone.trim();
+    if (data.nin) updateData.nin = data.nin.trim();
+    if (data.maritalStatus) updateData.maritalStatus = data.maritalStatus;
+    if (data.stateOfOrigin) updateData.state = data.stateOfOrigin.trim();
+    if (data.lgaOfOrigin) updateData.lga = data.lgaOfOrigin.trim();
+    if (data.residentialAddress) updateData.residentialAddress = data.residentialAddress.trim();
+    if (data.qualification) updateData.highestQualification = data.qualification;
+    if (data.institution) updateData.institutionAttended = data.institution.trim();
+    if (data.graduationYear) updateData.yearGraduated = data.graduationYear;
+    if (data.fieldOfStudy) updateData.fieldOfStudy = data.fieldOfStudy.trim();
+    if (data.specialization) updateData.specialization = data.specialization.trim();
+    if (data.trcnNumber !== undefined) updateData.trcnNumber = data.trcnNumber ? data.trcnNumber.trim() : null;
+    if (data.trcnStatus) updateData.trcnStatus = data.trcnStatus;
+    if (data.professionalBody) updateData.professionalBody = data.professionalBody;
+    if (data.professionalMembershipNo) updateData.professionalMembershipNo = data.professionalMembershipNo.trim();
+    if (data.payGrade !== undefined) updateData.payGrade = data.payGrade || null;
+    if (data.appointmentType) updateData.employmentType = data.appointmentType;
+    if (data.pensionRsa !== undefined) updateData.pensionRsa = data.pensionRsa || null;
+    if (data.pensionProvider !== undefined) updateData.pensionProvider = data.pensionProvider || null;
+    if (data.tin !== undefined) updateData.tin = data.tin || null;
 
     if (data.status) {
       updateData.status = data.status;

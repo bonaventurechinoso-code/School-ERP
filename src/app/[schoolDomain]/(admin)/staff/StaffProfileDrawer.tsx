@@ -45,6 +45,16 @@ import {
   updatePayrollVoucherStatusAction,
   deletePayrollVoucherAction,
 } from "./actions";
+import StaffRolePickerForm from "./components/StaffRolePickerForm";
+import {
+  StaffTierCategory,
+  resolveStaffTierCategory,
+  TIER_TERMINOLOGY,
+  getQualificationsForTier,
+  getPayGradesForTier,
+  isNonTeachingRole,
+  formatStaffRoleByTier,
+} from "@/lib/staff-roles-config";
 
 /**
  * Computes official Nigerian educational salary structure:
@@ -93,6 +103,8 @@ export interface StaffProfileDrawerProps {
   schoolId: string;
   schoolDomain: string;
   schoolName: string;
+  activeTier?: string;
+  tierCategory?: StaffTierCategory;
   onStaffUpdated?: () => void;
   onPrintIdCard?: (staff: any) => void;
   onPrintAppointmentLetter?: (staff: any) => void;
@@ -229,6 +241,8 @@ export default function StaffProfileDrawer({
   schoolId,
   schoolDomain,
   schoolName,
+  activeTier,
+  tierCategory: propTierCategory,
   onStaffUpdated,
   onPrintIdCard,
   onPrintAppointmentLetter,
@@ -252,6 +266,37 @@ export default function StaffProfileDrawer({
   const [copiedNuban, setCopiedNuban] = useState(false);
   const [voucherProcessingId, setVoucherProcessingId] = useState<string | null>(null);
 
+  // Dynamic Tier & Institutional Context Resolution (Zero Leakage)
+  const resolvedTierCategory: StaffTierCategory = React.useMemo(() => {
+    if (propTierCategory) return propTierCategory;
+    const raw =
+      activeTier ||
+      staff?.academicTier ||
+      staff?.tier ||
+      staff?.metadata?.tier ||
+      profileData?.metadata?.tier;
+    return resolveStaffTierCategory(raw);
+  }, [propTierCategory, activeTier, staff, profileData]);
+
+  const isPolytechnic = React.useMemo(() => {
+    const name = (schoolName || "").toLowerCase();
+    return name.includes("polytechnic") || name.includes("monotechnic");
+  }, [schoolName]);
+
+  const tierTerminology = TIER_TERMINOLOGY[resolvedTierCategory];
+
+  const availableQualifications = React.useMemo(() => {
+    return getQualificationsForTier(resolvedTierCategory);
+  }, [resolvedTierCategory]);
+
+  const isNonTeaching = React.useMemo(() => {
+    return isNonTeachingRole(formData.role);
+  }, [formData.role]);
+
+  const availablePayGrades = React.useMemo(() => {
+    return getPayGradesForTier(resolvedTierCategory, isPolytechnic, isNonTeaching);
+  }, [resolvedTierCategory, isPolytechnic, isNonTeaching]);
+
   useEffect(() => {
     if (staff && isOpen) {
       setProfileData(staff);
@@ -274,35 +319,60 @@ export default function StaffProfileDrawer({
   const initFormData = (data: any) => {
     const meta = data.metadata || {};
     setFormData({
+      // Section A: Personal & Contact
       firstName: data.firstName || "",
       lastName: data.lastName || "",
+      middleName: data.middleName || meta.middle_name || "",
       email: data.email || "",
-      role: data.role || "",
-      status: data.status || "ACTIVE",
+      phone: data.phone || meta.phone || "",
+      whatsapp: meta.whatsapp || "",
+      dateOfBirth: data.dateOfBirth || meta.date_of_birth || "",
+      gender: data.gender || meta.gender || "Male",
+      maritalStatus: data.maritalStatus || meta.marital_status || "Single",
+      nin: data.nin || meta.nin || "",
+      stateOfOrigin: data.state || meta.state_of_origin || "",
+      lgaOfOrigin: data.lga || meta.lga_of_origin || "",
+      residentialAddress: data.residentialAddress || meta.residential_address || "",
+
+      // Section B: Employment & Institutional Role
+      role: meta.designation || data.academicRank || data.role || "",
       departmentId: data.departmentId || "",
-      baseSalary: data.baseSalary || "",
+      status: data.status || "ACTIVE",
+      appointmentType: data.employmentType || meta.appointment_type || "FULL_TIME",
+      appointmentDate: meta.appointment_date || new Date().toISOString().split("T")[0],
+
+      // Section C: Academic & Professional Credentials
+      qualification: data.highestQualification || meta.qualification || availableQualifications[0] || "",
+      institution: data.institutionAttended || meta.institution || "",
+      graduationYear: data.yearGraduated || meta.graduation_year || "2020",
+      fieldOfStudy: data.fieldOfStudy || meta.field_of_study || "",
+      specialization: data.specialization || meta.specialization || "",
+      // Tier-specific credentials
+      trcnNumber: data.trcnNumber || meta.trcn_number || "",
+      trcnCategory: meta.trcn_category || "Category C",
+      trcnStatus: data.trcnStatus || meta.trcn_status || "REGISTERED",
+      professionalBody: data.professionalBody || meta.professional_body || "",
+      professionalMembershipNo: data.professionalMembershipNo || meta.professional_membership_no || "",
+
+      // Section D: Teaching & Unit Allocation
+      assignedClass: data.assignedClass || meta.assigned_class || "",
+      assignedSubjects: data.assignedSubjects || meta.assigned_subjects || "",
+      faculty: data.faculty || meta.faculty || "",
+
+      // Section E: Compensation & Banking
+      baseSalary: data.baseSalary !== undefined && data.baseSalary !== null ? data.baseSalary : "",
+      payGrade: data.payGrade || meta.pay_grade || "",
       bankName: data.bankName || "Zenith Bank",
       bankAccountNumber: data.bankAccountNumber || "",
-      accountName: data.accountName || `${data.firstName} ${data.lastName}`,
-      // Meta
-      phone: meta.phone || "",
-      whatsapp: meta.whatsapp || "",
-      nin: meta.nin || "",
-      gender: meta.gender || "Male",
-      stateOfOrigin: meta.state_of_origin || "",
-      lgaOfOrigin: meta.lga_of_origin || "",
-      residentialAddress: meta.residential_address || "",
-      qualification: meta.qualification || "B.Ed (Bachelor of Education)",
-      institution: meta.institution || "",
-      graduationYear: meta.graduation_year || "2020",
-      trcnNumber: meta.trcn_number || "",
-      trcnCategory: meta.trcn_category || "Category C",
-      trcnStatus: meta.trcn_status || "REGISTERED",
-      specialization: meta.specialization || "General Studies",
-      appointmentType: meta.appointment_type || "FULL_TIME",
-      appointmentDate: meta.appointment_date || new Date().toISOString().split("T")[0],
-      emergencyName: meta.emergency_name || "",
-      emergencyPhone: meta.emergency_phone || "",
+      accountName: data.accountName || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+      pensionRsa: data.pensionRsa || meta.pension_rsa || "",
+      pensionProvider: data.pensionProvider || meta.pension_provider || "",
+      tin: data.tin || meta.tin || "",
+
+      // Section F: Emergency & Next of Kin
+      emergencyName: meta.emergency_name || data.nextOfKinName || "",
+      emergencyPhone: meta.emergency_phone || data.nextOfKinPhone || "",
+      nextOfKinRelationship: meta.next_of_kin_relationship || data.nextOfKinRelationship || "Spouse",
     });
     if (data.baseSalary) {
       setVoucherAmount(data.baseSalary.toString());
@@ -550,7 +620,15 @@ export default function StaffProfileDrawer({
           <div className="flex items-center gap-1 mt-2 -mb-2 border-b border-slate-800 overflow-x-auto">
             {[
               { id: "bio", label: "Bio-Data & Contact" },
-              { id: "qualifications", label: "TRCN & Qualifications" },
+              {
+                id: "qualifications",
+                label:
+                  resolvedTierCategory === "TERTIARY"
+                    ? "Credentials & Accreditation"
+                    : resolvedTierCategory === "CRECHE"
+                    ? "Childcare & Certifications"
+                    : "TRCN & Qualifications",
+              },
               { id: "department", label: "Dept & Attendance" },
               { id: "payroll", label: "Salary & Banking" },
             ].map((tab) => (
@@ -582,51 +660,85 @@ export default function StaffProfileDrawer({
         {/* SCROLLABLE BODY */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
           {isEditing ? (
-            /* EDIT FORM */
+            /* TIERED ONBOARDING FORMAT EDIT FORM - ZERO LEAKAGE */
             <form onSubmit={handleSaveProfile} className="space-y-6">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                  Personal Information
-                </h4>
-                <div className="grid grid-cols-2 gap-3 text-xs">
+              {/* TIER IDENTIFICATION HEADER */}
+              <div className="flex items-center justify-between p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-xs">
+                    {tierTerminology.tierName}
+                  </span>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">First Name</label>
+                    <h4 className="text-xs font-black text-slate-800">
+                      Tiered Personnel Dossier Editor
+                    </h4>
+                    <p className="text-[11px] text-indigo-700 font-medium">
+                      Strict tier-scoped roles and credentials with zero institutional leakage
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                  {staffEmployeeId}
+                </span>
+              </div>
+
+              {/* SECTION A: PERSONAL & CONTACT INFORMATION */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section A: Personal & Contact Information
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">First Name *</label>
                     <input
                       type="text"
                       required
                       value={formData.firstName}
                       onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Last Name</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Middle Name</label>
+                    <input
+                      type="text"
+                      placeholder="Optional"
+                      value={formData.middleName}
+                      onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Last Name *</label>
                     <input
                       type="text"
                       required
                       value={formData.lastName}
                       onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Email Address</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Official / Work Email *</label>
                     <input
                       type="email"
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Phone Number</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Primary Phone Number *</label>
                     <input
                       type="tel"
-                      placeholder="e.g. +234 803 123 4567"
+                      placeholder="e.g. 08031234567"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -636,18 +748,16 @@ export default function StaffProfileDrawer({
                       placeholder="e.g. 2348031234567"
                       value={formData.whatsapp}
                       onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">NIN (11 Digits)</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Date of Birth</label>
                     <input
-                      type="text"
-                      maxLength={11}
-                      placeholder="e.g. 98234120932"
-                      value={formData.nin}
-                      onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      type="date"
+                      value={formData.dateOfBirth}
+                      onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -655,112 +765,102 @@ export default function StaffProfileDrawer({
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     >
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                     </select>
                   </div>
                   <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Marital Status</label>
+                    <select
+                      value={formData.maritalStatus}
+                      onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="Single">Single</option>
+                      <option value="Married">Married</option>
+                      <option value="Divorced">Divorced</option>
+                      <option value="Widowed">Widowed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">National ID (NIN - 11 Digits)</label>
+                    <input
+                      type="text"
+                      maxLength={11}
+                      placeholder="e.g. 98234120932"
+                      value={formData.nin}
+                      onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
                     <label className="block font-semibold text-slate-600 mb-1">State of Origin</label>
                     <input
                       type="text"
-                      placeholder="e.g. Lagos, Ogun, Kano"
+                      placeholder="e.g. Lagos, Enugu, Kano"
                       value={formData.stateOfOrigin}
                       onChange={(e) => setFormData({ ...formData, stateOfOrigin: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">LGA of Origin</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ikeja, Nsukka, Municipal"
+                      value={formData.lgaOfOrigin}
+                      onChange={(e) => setFormData({ ...formData, lgaOfOrigin: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block font-semibold text-slate-600 mb-1">Residential Address</label>
+                    <input
+                      type="text"
+                      placeholder="Street address, City, State"
+                      value={formData.residentialAddress}
+                      onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* QUALIFICATIONS & TRCN */}
+              {/* SECTION B: EMPLOYMENT & ROLE DESIGNATION (ZERO LEAKAGE ROLE PICKER) */}
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                  TRCN & Academic Credentials
-                </h4>
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Highest Qualification</label>
-                    <select
-                      value={formData.qualification}
-                      onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-                    >
-                      {QUALIFICATIONS.map((q) => (
-                        <option key={q} value={q}>{q}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Awarding Institution</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. University of Lagos / FCE Akoka"
-                      value={formData.institution}
-                      onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">TRCN Registration No.</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. TRCN/LA/2024/09842"
-                      value={formData.trcnNumber}
-                      onChange={(e) => setFormData({ ...formData, trcnNumber: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">TRCN Category</label>
-                    <select
-                      value={formData.trcnCategory}
-                      onChange={(e) => setFormData({ ...formData, trcnCategory: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-                    >
-                      {TRCN_CATEGORIES.map((c) => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">TRCN Certification Status</label>
-                    <select
-                      value={formData.trcnStatus}
-                      onChange={(e) => setFormData({ ...formData, trcnStatus: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-                    >
-                      <option value="REGISTERED">Registered & Certified Teacher</option>
-                      <option value="IN_PROGRESS">Examination Passed (License Pending)</option>
-                      <option value="EXEMPT">Non-Teaching / Administrative Exempt</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Teaching Specialization</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mathematics & Further Maths"
-                      value={formData.specialization}
-                      onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
-                    />
-                  </div>
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section B: Employment & Institutional Role
+                  </h4>
                 </div>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* TIER-SCOPED ROLE PICKER */}
+                  <div className="md:col-span-2">
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Institutional Role & Designation ({tierTerminology.tierName} Tier) *
+                    </label>
+                    <StaffRolePickerForm
+                      tierCategory={resolvedTierCategory}
+                      isPolytechnic={isPolytechnic}
+                      selectedRole={formData.role}
+                      onSelectRole={(newRole: string) => {
+                        setFormData((prev: any) => ({ ...prev, role: newRole }));
+                      }}
+                      error={!formData.role ? "Please choose an institutional role" : undefined}
+                    />
+                  </div>
 
-              {/* DEPARTMENT & COMPENSATION */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-                  Department & Remuneration
-                </h4>
-                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Academic Department</label>
+                    <label className="block font-semibold text-slate-600 mb-1">
+                      {resolvedTierCategory === "TERTIARY" ? "Academic / Administrative Department" : "Department / Unit"}
+                    </label>
                     <select
                       value={formData.departmentId}
                       onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     >
                       <option value="">-- Select Department --</option>
                       {departments.map((d) => (
@@ -768,74 +868,13 @@ export default function StaffProfileDrawer({
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Role / Designation</label>
-                    <select
-                      value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
-                    >
-                      <option value="">-- Select Role / Designation --</option>
-                      <optgroup label="Academic & Leadership">
-                        <option value="Principal">Principal</option>
-                        <option value="Vice Principal (Academic)">Vice Principal (Academic)</option>
-                        <option value="Vice Principal (Administration)">Vice Principal (Administration)</option>
-                        <option value="Headmaster / Headmistress">Headmaster / Headmistress</option>
-                        <option value="Assistant Headmaster">Assistant Headmaster</option>
-                        <option value="Head of Department (HOD)">Head of Department (HOD)</option>
-                        <option value="Dean of Studies">Dean of Studies</option>
-                        <option value="Exam Officer">Exam Officer</option>
-                        <option value="Form Teacher">Form Teacher</option>
-                        <option value="Class Teacher">Class Teacher</option>
-                        <option value="Subject Teacher">Subject Teacher</option>
-                        <option value="Early Years Educator">Early Years Educator</option>
-                        <option value="Nursery Caregiver">Nursery Caregiver</option>
-                      </optgroup>
-                      <optgroup label="Administrative & Support">
-                        <option value="Bursar / Accountant">Bursar / Accountant</option>
-                        <option value="Registrar">Registrar</option>
-                        <option value="Administrative Officer">Administrative Officer</option>
-                        <option value="School Secretary">School Secretary</option>
-                        <option value="Guidance Counsellor">Guidance Counsellor</option>
-                        <option value="Librarian">Librarian</option>
-                        <option value="Lab Technologist / Attendant">Lab Technologist / Attendant</option>
-                        <option value="ICT Administrator">ICT Administrator</option>
-                        <option value="School Nurse / Health Officer">School Nurse / Health Officer</option>
-                        <option value="Security / Operations Officer">Security / Operations Officer</option>
-                      </optgroup>
-                      <optgroup label="Higher / Tertiary Institutions">
-                        <option value="Vice Chancellor / Rector / Provost">Vice Chancellor / Rector / Provost</option>
-                        <option value="Dean of Faculty">Dean of Faculty</option>
-                        <option value="Professor">Professor</option>
-                        <option value="Associate Professor / Reader">Associate Professor / Reader</option>
-                        <option value="Senior Lecturer">Senior Lecturer</option>
-                        <option value="Lecturer I">Lecturer I</option>
-                        <option value="Lecturer II">Lecturer II</option>
-                        <option value="Assistant Lecturer">Assistant Lecturer</option>
-                        <option value="Graduate Assistant">Graduate Assistant</option>
-                      </optgroup>
-                      {formData.role && ![
-                        "Principal", "Vice Principal (Academic)", "Vice Principal (Administration)",
-                        "Headmaster / Headmistress", "Assistant Headmaster", "Head of Department (HOD)",
-                        "Dean of Studies", "Exam Officer", "Form Teacher", "Class Teacher",
-                        "Subject Teacher", "Early Years Educator", "Nursery Caregiver",
-                        "Bursar / Accountant", "Registrar", "Administrative Officer", "School Secretary",
-                        "Guidance Counsellor", "Librarian", "Lab Technologist / Attendant",
-                        "ICT Administrator", "School Nurse / Health Officer", "Security / Operations Officer",
-                        "Vice Chancellor / Rector / Provost", "Dean of Faculty", "Professor",
-                        "Associate Professor / Reader", "Senior Lecturer", "Lecturer I", "Lecturer II",
-                        "Assistant Lecturer", "Graduate Assistant"
-                      ].includes(formData.role) && (
-                        <option value={formData.role}>{formData.role} (Current)</option>
-                      )}
-                    </select>
-                  </div>
+
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">Employment Status</label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium bg-white"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     >
                       <option value="ACTIVE">ACTIVE</option>
                       <option value="ONBOARDING">ONBOARDING</option>
@@ -844,6 +883,379 @@ export default function StaffProfileDrawer({
                       <option value="TERMINATED">TERMINATED</option>
                     </select>
                   </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Appointment Type</label>
+                    <select
+                      value={formData.appointmentType}
+                      onChange={(e) => setFormData({ ...formData, appointmentType: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="FULL_TIME">Full-Time Regular</option>
+                      <option value="PROBATIONARY">Probationary Appointment</option>
+                      <option value="PART_TIME">Part-Time / Adjunct</option>
+                      <option value="CONTRACT">Contract Appointment</option>
+                      <option value="INTERN">NYSC / Graduate Intern</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Date of Appointment</label>
+                    <input
+                      type="date"
+                      value={formData.appointmentDate}
+                      onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION C: TIER-SPECIFIC QUALIFICATIONS & REGULATORY COMPLIANCE */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section C: {resolvedTierCategory === "TERTIARY" ? "Academic Degrees & Professional Accreditation" : resolvedTierCategory === "CRECHE" ? "Early Childhood Qualifications & Care Certifications" : "Academic Credentials & TRCN Licensing"}
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Highest Qualification ({tierTerminology.tierName}) *</label>
+                    <select
+                      value={formData.qualification}
+                      onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      {availableQualifications.map((q) => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                      {formData.qualification && !availableQualifications.includes(formData.qualification) && (
+                        <option value={formData.qualification}>{formData.qualification} (Current)</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Awarding Institution</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Premier University / College of Education"
+                      value={formData.institution}
+                      onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Year of Graduation</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 2018"
+                      value={formData.graduationYear}
+                      onChange={(e) => setFormData({ ...formData, graduationYear: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">
+                      {resolvedTierCategory === "TERTIARY" ? "Area of Academic Specialization" : "Subject Specialization / Discipline"}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Computer Science, English Education"
+                      value={formData.specialization}
+                      onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* TIER-SCOPED STATUTORY COMPLIANCE FIELDS */}
+                  {(resolvedTierCategory === "PRIMARY" || resolvedTierCategory === "SECONDARY") && (
+                    <>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">TRCN Registration No.</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. TRCN/LA/2024/09842"
+                          value={formData.trcnNumber}
+                          onChange={(e) => setFormData({ ...formData, trcnNumber: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">TRCN License Category</label>
+                        <select
+                          value={formData.trcnCategory}
+                          onChange={(e) => setFormData({ ...formData, trcnCategory: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {TRCN_CATEGORIES.map((c) => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block font-semibold text-slate-600 mb-1">TRCN Licensing Status</label>
+                        <select
+                          value={formData.trcnStatus}
+                          onChange={(e) => setFormData({ ...formData, trcnStatus: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          <option value="REGISTERED">Registered & Certified Teacher (Active License)</option>
+                          <option value="IN_PROGRESS">Examination Passed (License Induction Pending)</option>
+                          <option value="EXEMPT">Non-Teaching / Administrative Staff (Exempt)</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {resolvedTierCategory === "TERTIARY" && (
+                    <>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Professional Accreditation Body</label>
+                        <select
+                          value={formData.professionalBody}
+                          onChange={(e) => setFormData({ ...formData, professionalBody: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          <option value="">-- None / Pure Academic --</option>
+                          <option value="COREN">COREN - Council for Regulation of Engineering</option>
+                          <option value="ICAN">ICAN - Institute of Chartered Accountants of Nigeria</option>
+                          <option value="NBA">NBA - Nigerian Bar Association</option>
+                          <option value="NMCN">NMCN - Nursing and Midwifery Council of Nigeria</option>
+                          <option value="CITN">CITN - Chartered Institute of Taxation of Nigeria</option>
+                          <option value="CIBN">CIBN - Chartered Institute of Bankers of Nigeria</option>
+                          <option value="TRCN">TRCN - Teachers Registration Council of Nigeria</option>
+                          <option value="OTHER">Other Professional Fellowship</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Professional License / Membership No.</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. COREN/REG/2021/8834"
+                          value={formData.professionalMembershipNo}
+                          onChange={(e) => setFormData({ ...formData, professionalMembershipNo: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {(resolvedTierCategory === "CRECHE" || resolvedTierCategory === "NURSERY") && (
+                    <>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Childcare / Early Years Certification</label>
+                        <select
+                          value={formData.professionalBody}
+                          onChange={(e) => setFormData({ ...formData, professionalBody: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          <option value="CACHE_3">CACHE Level 3 Early Years Educator</option>
+                          <option value="CACHE_2">CACHE Level 2 Childcare & Development</option>
+                          <option value="MONTESSORI">Montessori Early Childhood Diploma</option>
+                          <option value="NCE_EARLY">N.C.E Early Childhood Care & Education</option>
+                          <option value="FIRST_AID">Pediatric First Aid & CPR Certified</option>
+                          <option value="IN_HOUSE">In-House Early Years Caregiver Training</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Childcare Registration / Cert No.</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. EYC/2024/4921"
+                          value={formData.professionalMembershipNo}
+                          onChange={(e) => setFormData({ ...formData, professionalMembershipNo: e.target.value })}
+                          className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION D: TEACHING & UNIT ALLOCATION */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section D: Academic & Classroom Allocation
+                  </h4>
+                </div>
+                {isNonTeaching ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 italic">
+                    Non-teaching / administrative staff role ({formData.role || "Selected"}). Classroom and academic teaching unit allocations are not applicable.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    {resolvedTierCategory === "CRECHE" && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Assigned Playgroup / Room</label>
+                          <select
+                            value={formData.assignedClass}
+                            onChange={(e) => setFormData({ ...formData, assignedClass: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="">-- Select Playgroup Room --</option>
+                            <option value="Infant Room (0-12 months)">Infant Room (0-12 months)</option>
+                            <option value="Toddler Room (1-2 years)">Toddler Room (1-2 years)</option>
+                            <option value="Explorer Playgroup (2-3 years)">Explorer Playgroup (2-3 years)</option>
+                            <option value="General Creche Unit">General Creche Unit</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Care Shift / Schedule</label>
+                          <select
+                            value={formData.assignedSubjects}
+                            onChange={(e) => setFormData({ ...formData, assignedSubjects: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="Morning Shift (7:00 AM - 1:00 PM)">Morning Shift (7:00 AM - 1:00 PM)</option>
+                            <option value="Full Day Shift (7:00 AM - 6:00 PM)">Full Day Shift (7:00 AM - 6:00 PM)</option>
+                            <option value="Afternoon Shift (12:00 PM - 6:00 PM)">Afternoon Shift (12:00 PM - 6:00 PM)</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {resolvedTierCategory === "NURSERY" && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Assigned Nursery Class</label>
+                          <select
+                            value={formData.assignedClass}
+                            onChange={(e) => setFormData({ ...formData, assignedClass: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="">-- Select Nursery Class --</option>
+                            <option value="Pre-KG">Pre-KG</option>
+                            <option value="KG 1">KG 1</option>
+                            <option value="KG 2">KG 2</option>
+                            <option value="Nursery 1">Nursery 1</option>
+                            <option value="Nursery 2">Nursery 2</option>
+                            <option value="Reception">Reception</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Primary Learning Area</label>
+                          <select
+                            value={formData.assignedSubjects}
+                            onChange={(e) => setFormData({ ...formData, assignedSubjects: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="Phonics & Early Literacy">Phonics & Early Literacy</option>
+                            <option value="Numeracy & Quantitative Skills">Numeracy & Quantitative Skills</option>
+                            <option value="Sensorial & Motor Development">Sensorial & Motor Development</option>
+                            <option value="Creative Arts & Music">Creative Arts & Music</option>
+                            <option value="General Early Childhood Educator">General Early Childhood Educator</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {resolvedTierCategory === "PRIMARY" && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Assigned Primary Class</label>
+                          <select
+                            value={formData.assignedClass}
+                            onChange={(e) => setFormData({ ...formData, assignedClass: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="">-- Select Class --</option>
+                            <option value="Basic 1">Basic 1</option>
+                            <option value="Basic 2">Basic 2</option>
+                            <option value="Basic 3">Basic 3</option>
+                            <option value="Basic 4">Basic 4</option>
+                            <option value="Basic 5">Basic 5</option>
+                            <option value="Basic 6">Basic 6</option>
+                            <option value="Floating / Specialist">Floating / Specialist</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Primary Teaching Specialty</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. General Class Teacher / Basic Science Specialist"
+                            value={formData.assignedSubjects}
+                            onChange={(e) => setFormData({ ...formData, assignedSubjects: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {resolvedTierCategory === "SECONDARY" && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Form Tutor Class (Optional)</label>
+                          <select
+                            value={formData.assignedClass}
+                            onChange={(e) => setFormData({ ...formData, assignedClass: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          >
+                            <option value="">-- None / Subject Teacher Only --</option>
+                            <option value="JSS 1">JSS 1</option>
+                            <option value="JSS 2">JSS 2</option>
+                            <option value="JSS 3">JSS 3</option>
+                            <option value="SSS 1">SSS 1</option>
+                            <option value="SSS 2">SSS 2</option>
+                            <option value="SSS 3">SSS 3</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Teaching Subjects</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mathematics, Further Mathematics, Physics"
+                            value={formData.assignedSubjects}
+                            onChange={(e) => setFormData({ ...formData, assignedSubjects: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {resolvedTierCategory === "TERTIARY" && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Faculty / School / College</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Faculty of Science / School of Technology"
+                            value={formData.faculty}
+                            onChange={(e) => setFormData({ ...formData, faculty: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-slate-600 mb-1">Assigned Courses / Modules</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. CSC 201, CSC 305, GST 101"
+                            value={formData.assignedSubjects}
+                            onChange={(e) => setFormData({ ...formData, assignedSubjects: e.target.value })}
+                            className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION E: COMPENSATION, PAY GRADE & STATUTORY BANKING */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section E: Compensation, Pay Grade & Banking
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">Monthly Base Salary (₦)</label>
                     <input
@@ -851,16 +1263,37 @@ export default function StaffProfileDrawer({
                       placeholder="e.g. 220000"
                       value={formData.baseSalary}
                       onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
+
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Bank Name</label>
+                    <label className="block font-semibold text-slate-600 mb-1">
+                      Tier Pay Grade ({tierTerminology.tierName})
+                    </label>
+                    <select
+                      value={formData.payGrade}
+                      onChange={(e) => setFormData({ ...formData, payGrade: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="">-- Select Pay Grade --</option>
+                      {availablePayGrades.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                      {formData.payGrade && !availablePayGrades.includes(formData.payGrade) && (
+                        <option value={formData.payGrade}>{formData.payGrade} (Current)</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Deposit Bank Name</label>
                     <BankDrawerDropdown
                       value={formData.bankName}
                       onChange={(b) => setFormData({ ...formData, bankName: b })}
                     />
                   </div>
+
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">NUBAN Account Number (10 Digits)</label>
                     <input
@@ -869,36 +1302,120 @@ export default function StaffProfileDrawer({
                       placeholder="e.g. 0123456789"
                       value={formData.bankAccountNumber}
                       onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
-                  <div>
+
+                  <div className="md:col-span-2">
                     <label className="block font-semibold text-slate-600 mb-1">Verified Account Name</label>
                     <input
                       type="text"
                       value={formData.accountName}
                       onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Pension Fund Administrator (PFA)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Stanbic IBTC Pension / ARM Pension"
+                      value={formData.pensionProvider}
+                      onChange={(e) => setFormData({ ...formData, pensionProvider: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Pension RSA PIN</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. PEN1003847291"
+                      value={formData.pensionRsa}
+                      onChange={(e) => setFormData({ ...formData, pensionRsa: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block font-semibold text-slate-600 mb-1">Tax Identification Number (TIN)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 23819283-0001"
+                      value={formData.tin}
+                      onChange={(e) => setFormData({ ...formData, tin: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                   </div>
                 </div>
               </div>
 
+              {/* SECTION F: EMERGENCY CONTACT & NEXT OF KIN */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="w-2 h-4 rounded-full bg-indigo-600" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Section F: Emergency Contact & Next of Kin
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Next of Kin Full Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mary Jane Doe"
+                      value={formData.emergencyName}
+                      onChange={(e) => setFormData({ ...formData, emergencyName: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Relationship</label>
+                    <select
+                      value={formData.nextOfKinRelationship}
+                      onChange={(e) => setFormData({ ...formData, nextOfKinRelationship: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="Spouse">Spouse</option>
+                      <option value="Parent">Parent</option>
+                      <option value="Sibling">Sibling</option>
+                      <option value="Child">Child</option>
+                      <option value="Guardian">Guardian / Relative</option>
+                      <option value="Next of Kin">Next of Kin</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Emergency Telephone</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 08029998877"
+                      value={formData.emergencyPhone}
+                      onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ACTION FOOTER */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-100 transition"
+                  className="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition flex items-center gap-2"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{isPending ? "Saving..." : "Save Profile"}</span>
+                  <span>{isPending ? "Saving..." : "Save Staff Profile"}</span>
                 </button>
               </div>
             </form>
@@ -998,37 +1515,78 @@ export default function StaffProfileDrawer({
                 </div>
               )}
 
-              {/* TAB 2: QUALIFICATIONS & TRCN */}
+              {/* TAB 2: QUALIFICATIONS & STATUTORY ACCREDITATION */}
               {activeTab === "qualifications" && (
                 <div className="space-y-5">
-                  {/* TRCN ACCREDITATION CARD */}
-                  <div className="bg-emerald-900 text-white p-5 rounded-2xl shadow-sm border border-emerald-800 relative overflow-hidden">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-                          Teachers Registration Council of Nigeria
-                        </span>
-                        <h4 className="text-lg font-black mt-1">TRCN Professional Certification</h4>
-                        <p className="text-xs text-emerald-200 mt-1 font-medium">
-                          License No: <strong className="text-white font-mono">{meta.trcn_number || "TRCN/PENDING/2026"}</strong>
-                        </p>
-                      </div>
-                      <div className="w-12 h-12 rounded-xl bg-emerald-800/80 flex items-center justify-center text-emerald-300">
-                        <Award className="w-7 h-7" />
+                  {/* TIER-SPECIFIC ACCREDITATION CARD */}
+                  {resolvedTierCategory === "TERTIARY" ? (
+                    <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-sm border border-slate-800 relative overflow-hidden">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                            Higher Education Academic & Professional Credentials
+                          </span>
+                          <h4 className="text-lg font-black mt-1">
+                            {profileData?.academicRank || profileData?.role || "Faculty Member"}
+                          </h4>
+                          <p className="text-xs text-indigo-200 mt-1 font-medium">
+                            Professional Body: <strong className="text-white">{meta.professional_body || profileData?.professionalBody || "Academic Registry / Fellowship"}</strong>
+                          </p>
+                          <p className="text-xs text-indigo-200 font-medium">
+                            Membership / Reg No: <strong className="text-white font-mono">{meta.professional_membership_no || profileData?.professionalMembershipNo || "ACAD/TERT/ON-FILE"}</strong>
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-indigo-400">
+                          <GraduationCap className="w-7 h-7" />
+                        </div>
                       </div>
                     </div>
+                  ) : resolvedTierCategory === "CRECHE" ? (
+                    <div className="bg-pink-900 text-white p-5 rounded-2xl shadow-sm border border-pink-800 relative overflow-hidden">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-pink-300">
+                            Early Childhood Care & Development Accreditation
+                          </span>
+                          <h4 className="text-lg font-black mt-1">Certified Childcare Practitioner</h4>
+                          <p className="text-xs text-pink-200 mt-1 font-medium">
+                            Accreditation Reg No: <strong className="text-white font-mono">{meta.professional_membership_no || meta.trcn_number || "EYC/REG/PENDING"}</strong>
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-xl bg-pink-800 flex items-center justify-center text-pink-300">
+                          <Award className="w-7 h-7" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-900 text-white p-5 rounded-2xl shadow-sm border border-emerald-800 relative overflow-hidden">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                            Teachers Registration Council of Nigeria
+                          </span>
+                          <h4 className="text-lg font-black mt-1">TRCN Professional Certification</h4>
+                          <p className="text-xs text-emerald-200 mt-1 font-medium">
+                            License No: <strong className="text-white font-mono">{meta.trcn_number || "TRCN/PENDING/2026"}</strong>
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-xl bg-emerald-800/80 flex items-center justify-center text-emerald-300">
+                          <Award className="w-7 h-7" />
+                        </div>
+                      </div>
 
-                    <div className="mt-4 pt-4 border-t border-emerald-800/60 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-emerald-400 text-[10px] uppercase font-bold block">Accreditation Tier</span>
-                        <span className="font-black text-white">{meta.trcn_category || "Category C (B.Ed)"}</span>
+                      <div className="mt-4 pt-4 border-t border-emerald-800/60 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-emerald-400 text-[10px] uppercase font-bold block">Accreditation Tier</span>
+                          <span className="font-black text-white">{meta.trcn_category || "Category C (B.Ed)"}</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-900 font-black px-2.5 py-1 rounded-full text-[11px]">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{meta.trcn_status === "REGISTERED" ? "Verified & Licensed" : "Exam Passed"}</span>
+                        </span>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-900 font-black px-2.5 py-1 rounded-full text-[11px]">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{meta.trcn_status === "REGISTERED" ? "Verified & Licensed" : "Exam Passed"}</span>
-                      </span>
                     </div>
-                  </div>
+                  )}
 
                   {/* HIGHEST DEGREE */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
