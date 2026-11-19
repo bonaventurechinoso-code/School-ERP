@@ -195,7 +195,9 @@ export async function GET(req: NextRequest) {
         };
       });
 
-      if (subjectsList.length === 0 && isSecondary) {
+      const isDemo = (school?.subdomain || "").toLowerCase() === "demo";
+
+      if (subjectsList.length === 0 && isSecondary && isDemo) {
         const demoProfile = getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber) || getSecondaryDemoProfile(`${student.firstName} ${student.lastName}`);
         if (demoProfile) {
           subjectsList = demoProfile.subjects.map((sub, sIdx) => ({
@@ -222,9 +224,24 @@ export async function GET(req: NextRequest) {
         ? (isNursery || isCreche ? "Needs Support" : "—")
         : resolveZipGrade(avgNum);
 
-      const demoProfile = isSecondary ? (getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber)) : null;
+      const demoProfile = isSecondary && isDemo ? (getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber)) : null;
       const rankStr = demoProfile ? demoProfile.positionString : `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}`;
       const admissionNumber = student.admissionNumber || demoProfile?.admissionNumber || "Pending";
+
+      const existingReportCard = await tenantDb.reportCard.findFirst({
+        where: {
+          schoolId: tenantId,
+          studentId: student.id,
+          term: { in: termVariants },
+        },
+      });
+
+      const dynamicTeacherRemark = existingReportCard?.teacherRemarks ||
+        subjectsList.find((s) => s.remark && typeof s.remark === "string" && s.remark.trim().length > 0)?.remark ||
+        (isDemo ? `${student.firstName} shows diligent scholarship and good teamwork. Keep progressing.` : "No remarks recorded yet by teacher in the gradebook.");
+
+      const dynamicPrincipalRemark = existingReportCard?.principalRemarks ||
+        (isDemo ? "Satisfactory terminal achievement. Encouraged to maintain consistency." : "Pending official administrative review.");
 
       const pdfData: ReportCardPdfData = {
         schoolName: school?.name || "Official Academic Institution",
@@ -248,9 +265,11 @@ export async function GET(req: NextRequest) {
         overallGrade,
         promotionStatus: "Promoted to Next Class",
         subjects: subjectsList,
-        teacherRemarks: `${student.firstName} shows diligent scholarship and good teamwork. Keep progressing.`,
-        principalRemarks: "Satisfactory terminal achievement. Encouraged to maintain consistency.",
-        resumptionDate: "Monday, 11th January 2027",
+        teacherRemarks: dynamicTeacherRemark,
+        principalRemarks: dynamicPrincipalRemark,
+        resumptionDate: existingReportCard?.nextTermBegins
+          ? new Date(existingReportCard.nextTermBegins).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+          : (isDemo ? "Monday, 11th January 2027" : "To be communicated by institution management"),
       };
 
       const pdfBuffer = await generateReportCardPdf(pdfData);

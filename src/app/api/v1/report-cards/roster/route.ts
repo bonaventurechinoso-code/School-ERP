@@ -36,8 +36,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Resolve tenantId if it is a subdomain / slug rather than a database UUID
+    // Hoisted outside block so isDemo check inside fetchFn closure can access it
+    let resolvedSchool: { id: string; subdomain: string | null } | null = null;
     if (tenantId) {
-      const resolvedSchool = await basePrisma.school.findFirst({
+      resolvedSchool = await basePrisma.school.findFirst({
         where: {
           OR: [
             { id: tenantId },
@@ -99,8 +101,10 @@ export async function GET(req: NextRequest) {
         // Support 1st Semester / 1st Term variants across tiers
         const termVariants = getAcademicPeriodVariants(term);
 
-        // Fallback mock students if DB has no enrolled students for this class
-        if (students.length === 0) {
+        const isDemo = (resolvedSchool?.subdomain || "").toLowerCase() === "demo";
+
+        // Fallback mock students ONLY for public DEMO tenant. Newly registered institutions have strictly zero generated pupils.
+        if (students.length === 0 && isDemo) {
           const normClass = className.toUpperCase();
           if (normClass.includes("JSS") || normClass.includes("SS")) {
             students = [
@@ -161,6 +165,15 @@ export async function GET(req: NextRequest) {
           },
         }).catch(() => []);
 
+        // Also fetch ReportCard records for dynamic teacher & principal remarks
+        const reportCards = await tenantDb.reportCard.findMany({
+          where: {
+            schoolId: tenantId,
+            term: { in: termVariants },
+            ...(classVariants.length > 0 ? { className: { in: classVariants } } : {}),
+          },
+        }).catch(() => []);
+
         // Group grades by studentId (deduplicating identical subjects across period aliases)
         const studentGradesMap = new Map<string, any[]>();
         gradeRecords.forEach((gr) => {
@@ -203,7 +216,7 @@ export async function GET(req: NextRequest) {
 
         return students.map(student => {
           let sGrades = studentGradesMap.get(student.id) || [];
-          if (sGrades.length === 0) {
+          if (sGrades.length === 0 && isDemo) {
             const demoProfile = getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber) || getSecondaryDemoProfile(`${student.firstName} ${student.lastName}`);
             if (demoProfile && (className.toUpperCase().includes("JSS") || (student.currentClass && student.currentClass.toUpperCase().includes("JSS")) || student.tier?.name?.toLowerCase().includes("secondary"))) {
               sGrades = demoProfile.subjects;
@@ -246,6 +259,11 @@ export async function GET(req: NextRequest) {
             ? student.tier.name
             : getTierForClass(resolvedClass).name;
 
+          const rc = reportCards.find((r: any) => r.studentId === student.id);
+          const dynamicTeacherRemark = rc?.teacherRemarks ||
+            sGrades.map((g: any) => g.remarks).find((rem: any) => rem && typeof rem === "string" && rem.trim().length > 0) ||
+            "";
+
           return {
             id: student.id,
             admissionNumber: student.admissionNumber || `GW/2026/${(student.currentClass || "CLASS").replace(/\s+/g, "")}/${student.id.slice(0, 3)}`,
@@ -260,6 +278,8 @@ export async function GET(req: NextRequest) {
             overallAverage: averageScore,
             subjectsCount: sGrades.length,
             subjects: sGrades,
+            teacherRemarks: dynamicTeacherRemark,
+            principalRemarks: rc?.principalRemarks || "",
             isCompiled: hasScores,
           };
         });

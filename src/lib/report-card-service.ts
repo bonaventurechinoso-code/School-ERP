@@ -63,6 +63,8 @@ export interface CompileStudentPayload {
   tierName?: string;
   customPassThreshold?: number;
   nextTermBegins?: Date | null;
+  /** Optional teacher remark pre-seeded from gradebook / academic records */
+  teacherRemarks?: string | null;
 }
 
 /**
@@ -311,7 +313,14 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
 
   let activeRecords: any[] = records;
   if (activeRecords.length === 0) {
-    const demoProfile = getSecondaryDemoProfile(studentId) || (student ? getSecondaryDemoProfile(student.admissionNumber || `${student.firstName} ${student.lastName}`) : null);
+    const school = await basePrisma.school.findUnique({
+      where: { id: schoolId },
+      select: { subdomain: true },
+    });
+    const isDemo = school?.subdomain?.toLowerCase() === "demo";
+    const demoProfile = isDemo
+      ? (getSecondaryDemoProfile(studentId) || (student ? getSecondaryDemoProfile(student.admissionNumber || `${student.firstName} ${student.lastName}`) : null))
+      : null;
     if (demoProfile && (isSecondary || className.toUpperCase().includes("JSS") || className.toUpperCase().includes("SECONDARY"))) {
       activeRecords = demoProfile.subjects;
     } else {
@@ -377,7 +386,11 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
     }
   }
 
-  const remarks = isTertiary
+  const recordedTeacherRemarks = payload.teacherRemarks ||
+    activeRecords.map((r: any) => r.teacherRemarks).find((rem: any) => rem && typeof rem === "string" && rem.trim().length > 0) ||
+    null;
+
+  const autoRemarks = isTertiary
     ? {
       teacherRemarks: `Academic Standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}`,
       principalRemarks: `${student?.firstName || "Student"} has demonstrated commendable academic diligence across registered courses. Current standing: ${getTertiaryAcademicStanding(gpa || 0, "4.0")}.`,
@@ -390,6 +403,11 @@ export async function compileStudentReportCard(payload: CompileStudentPayload) {
       passedSubjects,
       activeRecords.length
     );
+
+  const remarks = {
+    ...autoRemarks,
+    teacherRemarks: recordedTeacherRemarks || autoRemarks.teacherRemarks,
+  };
 
   // Immutable JSON snapshot of all subject assessments at the moment of report compilation
   const academicRecordSnapshot = activeRecords.map((r: any) => ({
@@ -662,12 +680,21 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
       }
     }
 
-    const remarks = generateAdministrativeRemarks(
+    const autoRemarks = generateAdministrativeRemarks(
       averageScore,
       tierCategory,
       passedSubjects,
       studentRecords.length
     );
+
+    const recordedTeacherRemarks =
+      studentRecords.map((r: any) => r.teacherRemarks).find((rem: any) => rem && typeof rem === "string" && rem.trim().length > 0) ||
+      null;
+
+    const remarks = {
+      ...autoRemarks,
+      teacherRemarks: recordedTeacherRemarks || autoRemarks.teacherRemarks,
+    };
 
     const academicRecordSnapshot = studentRecords.map((r: any) => ({
       id: r.id,
@@ -858,7 +885,13 @@ export async function getStudentReportCard(
   let finalRecords: any[] = currentRecords;
   let finalReportCard: any = reportCard;
 
-  if (finalRecords.length === 0) {
+  const school = await basePrisma.school.findUnique({
+    where: { id: schoolId },
+    select: { subdomain: true },
+  });
+  const isDemo = school?.subdomain?.toLowerCase() === "demo";
+
+  if (finalRecords.length === 0 && isDemo) {
     const demoProfile = getSecondaryDemoProfile(studentId) || (reportCard?.student ? getSecondaryDemoProfile(reportCard.student.admissionNumber || `${reportCard.student.firstName} ${reportCard.student.lastName}`) : null);
     if (demoProfile && (isSecondary || targetClass === "" || targetClass.toUpperCase().includes("JSS") || targetClass.toUpperCase().includes("SECONDARY") || tierName?.toLowerCase().includes("secondary"))) {
       finalRecords = demoProfile.subjects;
@@ -972,7 +1005,13 @@ export async function getClassResultSheet(
     return score >= 75 ? "Distinction" : score >= 65 ? "Very Good" : score >= 50 ? "Credit" : score >= 40 ? "Pass" : "Fail";
   };
 
-  if (students.length === 0 && (className.toUpperCase().includes("JSS") || isSecondary)) {
+  const school = await basePrisma.school.findUnique({
+    where: { id: schoolId },
+    select: { subdomain: true },
+  });
+  const isDemo = school?.subdomain?.toLowerCase() === "demo";
+
+  if (students.length === 0 && (className.toUpperCase().includes("JSS") || isSecondary) && isDemo) {
     const demoSubjects = [...JSS_CANONICAL_SUBJECTS].sort();
     return {
       tierName,
@@ -1043,8 +1082,8 @@ export async function getClassResultSheet(
         };
       });
 
-      // If student has no records in DB and is secondary, check canonical secondary demo profile
-      if (Object.keys(recordMap).length === 0 && isSecondary) {
+      // If student has no records in DB and is secondary, check canonical secondary demo profile ONLY for demo tenant
+      if (Object.keys(recordMap).length === 0 && isSecondary && isDemo) {
         const demoProfile = getSecondaryDemoProfile(s.id) || getSecondaryDemoProfile(s.admissionNumber) || getSecondaryDemoProfile(`${s.firstName} ${s.lastName}`);
         if (demoProfile) {
           demoProfile.subjects.forEach((sub) => {

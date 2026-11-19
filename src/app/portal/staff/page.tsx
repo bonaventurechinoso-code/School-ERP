@@ -29,5 +29,10 @@ export default async function StaffPortalPage({
   if (searchParams.tab) queryParams.set("tab", searchParams.tab);
   const qs = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
+  const userRole = (session.role || session.userRole || "").toUpperCase();
+  if (["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(userRole)) {
+    redirect(`/${targetDomain}/dashboard?denied=teacher_portal_restricted`);
+  }
+
   redirect(`/${targetDomain}/portal/staff${qs}`);
 }

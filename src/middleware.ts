@@ -717,6 +717,17 @@ export async function middleware(req: NextRequest) {
       if (lowerPath.includes("/portal/student") || lowerPath.includes("/portal/parent")) {
         return createSubdomainRoleRedirect("/portal/principal");
       }
+    } else if (["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(userRole)) {
+      const isForbiddenStaffRoute =
+        lowerPath === "/portal/staff" ||
+        lowerPath.startsWith("/portal/staff/") ||
+        lowerPath === "/portal/teacher" ||
+        lowerPath.startsWith("/portal/teacher/") ||
+        lowerPath === "/teacher" ||
+        lowerPath.startsWith("/teacher/");
+      if (isForbiddenStaffRoute) {
+        return createSubdomainRoleRedirect("/dashboard?denied=teacher_portal_restricted");
+      }
     }
 
     // E6. Rewrite verified authorized request to internal Next.js tenant route
@@ -1014,6 +1025,23 @@ export async function middleware(req: NextRequest) {
       lowerPath.includes("/portal/parent")
     ) {
       return createRoleRedirect(`/${targetTenant}/portal/principal`);
+    }
+  } else if (["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(userRole)) {
+    const isForbiddenStaffRoute =
+      lowerPath === `/${targetTenant}/portal/staff` ||
+      lowerPath.startsWith(`/${targetTenant}/portal/staff/`) ||
+      lowerPath === "/portal/staff" ||
+      lowerPath.startsWith("/portal/staff/") ||
+      lowerPath === `/${targetTenant}/portal/teacher` ||
+      lowerPath.startsWith(`/${targetTenant}/portal/teacher/`) ||
+      lowerPath === "/portal/teacher" ||
+      lowerPath.startsWith("/portal/teacher/") ||
+      lowerPath === `/${targetTenant}/teacher` ||
+      lowerPath.startsWith(`/${targetTenant}/teacher/`) ||
+      lowerPath === "/teacher" ||
+      lowerPath.startsWith("/teacher/");
+    if (isForbiddenStaffRoute) {
+      return createRoleRedirect(`/${targetTenant}/dashboard?denied=teacher_portal_restricted`);
     }
   }
 

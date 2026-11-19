@@ -41,6 +41,11 @@ export interface ReportCardStudentData {
   overallTotal?: number;
   overallGrade?: string;
   status?: string;
+  teacherRemarks?: string;
+  principalRemarks?: string;
+  classTeacherName?: string;
+  principalName?: string;
+  nextTermResumption?: string;
   subjects?: Array<{
     subject: string;
     ca1?: number;
@@ -58,6 +63,7 @@ export interface ReportCardStudentData {
     subjectPosition?: string;
     classAverage?: number;
     remark?: string;
+    remarks?: string;
   }>;
 }
 
@@ -82,6 +88,7 @@ export default function StudentReportCardModal({
   if (!isOpen) return null;
 
   // Resolve Tier Category
+  const isDemo = (schoolDomain || "").toLowerCase().trim() === "demo";
   const classTier = getTierForClass(studentData.currentClass || studentData.tier);
   const isCreche = isCrecheClass(studentData.currentClass) || isCrecheClass(studentData.tier);
   const isNursery = !isCreche && (isNurseryClass(studentData.currentClass) || isNurseryClass(studentData.tier) || classTier.category === "NURSERY");
@@ -90,10 +97,10 @@ export default function StudentReportCardModal({
   const isPrimary = !isCreche && !isNursery && !isSecondary && !isHigherEd;
   const tierName = isCreche ? "Creche" : isNursery ? "Nursery / Kindergarten" : isSecondary ? "Secondary School" : isHigherEd ? "University" : "Primary School";
 
-  // Single Source of Truth: Resolve real subjects strictly from studentData
+  // Single Source of Truth: Resolve real subjects strictly from studentData. Zero mock data for newly registered tenants.
   const activeSubjects = (() => {
     let rawList = studentData.subjects || [];
-    if (rawList.length === 0 && isSecondary) {
+    if (rawList.length === 0 && isSecondary && isDemo) {
       const demoProfile = getSecondaryDemoProfile(studentData.id) || getSecondaryDemoProfile(studentData.admissionNumber) || getSecondaryDemoProfile(studentData.name);
       if (demoProfile) {
         rawList = demoProfile.subjects as any;
@@ -130,7 +137,7 @@ export default function StudentReportCardModal({
         computedTotal: null,
         computedGrade: "Not Entered",
         computedGp: null,
-        computedRemark: "Not Entered",
+        computedRemark: sub.remark || sub.remarks || "Not Entered",
       };
     }
     const totalScore = sub.total !== undefined && sub.total !== null ? sub.total : ((sub.exam || 0) + (sub.ca1 || 0));
@@ -141,16 +148,17 @@ export default function StudentReportCardModal({
         computedTotal: totalScore,
         computedGrade: tert.letter,
         computedGp: tert.gp,
-        computedRemark: tert.remark, // "Upper Credit" for B, "Distinction" for A, "Lower Credit" for C
+        computedRemark: sub.remark || sub.remarks || tert.remark,
       };
     }
     const calc = calculateBonaVeeResult(tierName, sub);
+    const subjectTeacherRemark = sub.remark || sub.remarks || getGradeRemark(calc.grade);
     return {
       ...sub,
       computedTotal: totalScore,
       computedGrade: calc.grade,
       computedGp: calc.gp,
-      computedRemark: getGradeRemark(calc.grade),
+      computedRemark: subjectTeacherRemark,
     };
   });
 
@@ -181,10 +189,26 @@ export default function StudentReportCardModal({
     : (isNursery || isCreche ? "Needs Support" : "No Grades Entered");
 
   // Position Suffix
-  const secondaryDemo = isSecondary ? getSecondaryDemoProfile(studentData.id) : null;
+  const secondaryDemo = isSecondary && isDemo ? getSecondaryDemoProfile(studentData.id) : null;
   const rankNumber = studentData.rank || secondaryDemo?.rank;
-  const totalStudents = studentData.totalStudents || (secondaryDemo ? 5 : 1);
+  const totalStudents = studentData.totalStudents || (secondaryDemo ? 5 : undefined);
   const positionString = rankNumber ? `${rankNumber}${rankNumber === 1 ? "st" : rankNumber === 2 ? "nd" : rankNumber === 3 ? "rd" : "th"}` : (secondaryDemo ? secondaryDemo.positionString : "—");
+
+  // Dynamic Teacher & Principal Remarks (Routed from Teacher Gradebook)
+  const dynamicClassTeacherRemark = studentData.teacherRemarks ||
+    studentData.subjects?.find((s) => s.remark && typeof s.remark === "string" && s.remark.trim().length > 0)?.remark ||
+    (isDemo
+      ? `${studentData.name} has demonstrated exceptional academic discipline, sharp intellect, and commendable consistency across all assessments this term.`
+      : "No remark recorded yet by teacher in the gradebook.");
+
+  const dynamicPrincipalRemark = studentData.principalRemarks ||
+    (isDemo
+      ? "An outstanding, well-rounded terminal performance. Keep up this commendable standard of academic brilliance!"
+      : "Pending official administrative review.");
+
+  const dynamicClassTeacherName = studentData.classTeacherName || (isDemo ? "Mrs. O. Adebayo" : "Class Teacher");
+  const dynamicPrincipalName = studentData.principalName || (isDemo ? "Dr. K. Nwachukwu" : "Head Teacher / Principal");
+  const dynamicResumptionDate = studentData.nextTermResumption || (isDemo ? "Monday, 11th January 2027" : "To be communicated by institution management");
 
   const handlePrint = () => {
     window.print();
@@ -716,12 +740,12 @@ export default function StudentReportCardModal({
               </div>
 
               <div className="grid grid-cols-2 gap-y-2 text-xs">
-                <div className="flex justify-between pr-4"><span>Punctuality:</span> <strong className="font-mono text-blue-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Neatness & Appearance:</span> <strong className="font-mono text-blue-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Politeness & Manners:</span> <strong className="font-mono text-blue-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Honesty & Reliability:</span> <strong className="font-mono text-blue-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Self-Control & Focus:</span> <strong className="font-mono text-blue-600">4</strong></div>
-                <div className="flex justify-between pr-4"><span>Relationship with Peers:</span> <strong className="font-mono text-blue-600">5</strong></div>
+                <div className="flex justify-between pr-4"><span>Punctuality:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Neatness & Appearance:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Politeness & Manners:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Honesty & Reliability:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Self-Control & Focus:</span> <strong className="font-mono text-blue-600">{isDemo ? "4" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Relationship with Peers:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
               </div>
             </div>
 
@@ -735,12 +759,12 @@ export default function StudentReportCardModal({
               </div>
 
               <div className="grid grid-cols-2 gap-y-2 text-xs">
-                <div className="flex justify-between pr-4"><span>Handwriting & Penmanship:</span> <strong className="font-mono text-emerald-600">4</strong></div>
-                <div className="flex justify-between pr-4"><span>Verbal Fluency:</span> <strong className="font-mono text-emerald-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Sports & Athleticism:</span> <strong className="font-mono text-emerald-600">4</strong></div>
-                <div className="flex justify-between pr-4"><span>Crafts & Creativity:</span> <strong className="font-mono text-emerald-600">5</strong></div>
-                <div className="flex justify-between pr-4"><span>Musical & Artistic Skill:</span> <strong className="font-mono text-emerald-600">4</strong></div>
-                <div className="flex justify-between pr-4"><span>Manual Dexterity:</span> <strong className="font-mono text-emerald-600">4</strong></div>
+                <div className="flex justify-between pr-4"><span>Handwriting & Penmanship:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Verbal Fluency:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Sports & Athleticism:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Crafts & Creativity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Musical & Artistic Skill:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                <div className="flex justify-between pr-4"><span>Manual Dexterity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
               </div>
             </div>
 
@@ -751,18 +775,18 @@ export default function StudentReportCardModal({
           {/* ========================================================= */}
           <div className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
             
-            {/* Class Teacher Remark */}
+            {/* Class Teacher Remark (Routed from Gradebook) */}
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div className="space-y-1">
                 <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">
                   Class Teacher&apos;s Remark:
                 </span>
                 <p className="text-slate-800 dark:text-slate-200 font-medium italic">
-                  &ldquo;{studentData.name} has demonstrated exceptional academic discipline, sharp intellect, and commendable consistency across all assessments this term.&rdquo;
+                  &ldquo;{dynamicClassTeacherRemark}&rdquo;
                 </p>
               </div>
               <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-                <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">Mrs. O. Adebayo</div>
+                <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">{dynamicClassTeacherName}</div>
                 <span className="text-[10px] text-slate-400">Class Teacher&apos;s Signature</span>
               </div>
             </div>
@@ -774,7 +798,7 @@ export default function StudentReportCardModal({
                   Principal&apos;s Official Remark:
                 </span>
                 <p className="text-slate-800 dark:text-slate-200 font-medium italic">
-                  &ldquo;An outstanding, well-rounded terminal performance. Keep up this commendable standard of academic brilliance!&rdquo;
+                  &ldquo;{dynamicPrincipalRemark}&rdquo;
                 </p>
               </div>
               <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 flex items-center gap-4">
@@ -782,7 +806,7 @@ export default function StudentReportCardModal({
                   Official<br />Stamp
                 </div>
                 <div>
-                  <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">Dr. K. Nwachukwu</div>
+                  <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">{dynamicPrincipalName}</div>
                   <span className="text-[10px] text-slate-400">Principal&apos;s Signature</span>
                 </div>
               </div>
@@ -794,7 +818,7 @@ export default function StudentReportCardModal({
                 <Calendar className="w-4 h-4 text-amber-400" />
                 <span>Next Term Resumption Date:</span>
               </div>
-              <span className="font-mono text-amber-300">Monday, 11th January 2027</span>
+              <span className="font-mono text-amber-300">{dynamicResumptionDate}</span>
             </div>
 
             {/* Official Verification Footer */}

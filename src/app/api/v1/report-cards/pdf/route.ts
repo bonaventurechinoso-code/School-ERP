@@ -74,10 +74,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const demoProfile = getSecondaryDemoProfile(studentId) || (student ? getSecondaryDemoProfile(student.admissionNumber || `${student.firstName} ${student.lastName}`) : null);
+    const isDemo = (school?.subdomain || "").toLowerCase() === "demo";
+    const demoProfile = isDemo
+      ? (getSecondaryDemoProfile(studentId) || (student ? getSecondaryDemoProfile(student.admissionNumber || `${student.firstName} ${student.lastName}`) : null))
+      : null;
 
     if (!student) {
-      if (demoProfile) {
+      if (demoProfile && isDemo) {
         student = {
           id: demoProfile.id,
           schoolId: tenantId,
@@ -232,7 +235,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    if (subjectsMap.size === 0 && demoProfile && isSecondary) {
+    if (subjectsMap.size === 0 && demoProfile && isSecondary && isDemo) {
       demoProfile.subjects.forEach((sub, idx) => {
         subjectsMap.set(sub.subject, {
           subject: sub.subject,
@@ -285,6 +288,17 @@ export async function GET(req: NextRequest) {
         })))
       : null;
 
+    const dynamicTeacherRemark = existingReportCard?.teacherRemarks ||
+      subjectsList.find((s) => s.remark && typeof s.remark === "string" && s.remark.trim().length > 0)?.remark ||
+      (isDemo
+        ? `${student.firstName} is an exemplary scholar with stellar intellectual and behavioral diligence. Keep up the high standard.`
+        : "No remarks recorded yet by teacher in the gradebook.");
+
+    const dynamicPrincipalRemark = existingReportCard?.principalRemarks ||
+      (isDemo
+        ? "Remarkable terminal achievement. Commended for academic excellence and leadership."
+        : "Pending official administrative review.");
+
     const pdfData: ReportCardPdfData = {
       schoolName: school?.name || "Official Academic Institution",
       schoolMotto: (school as any)?.motto || "Knowledge, Discipline and Excellence",
@@ -312,13 +326,11 @@ export async function GET(req: NextRequest) {
       totalCreditUnits: tertiaryGpaCalc?.totalCreditUnits,
       totalQualityPoints: tertiaryGpaCalc?.totalQualityPoints,
       subjects: subjectsList,
-      teacherRemarks: isTertiary
-        ? `Commended for satisfactory academic diligence across registered courses. Current Standing: ${getTertiaryAcademicStanding(tertiaryGpaCalc?.gpa || 0, "4.0")}.`
-        : `${student.firstName} is an exemplary scholar with stellar intellectual and behavioral diligence. Keep up the high standard.`,
-      principalRemarks: isTertiary
-        ? "Official terminal transcript verified and approved."
-        : "Remarkable terminal achievement. Commended for academic excellence and leadership.",
-      resumptionDate: "Monday, 11th January 2027",
+      teacherRemarks: dynamicTeacherRemark,
+      principalRemarks: dynamicPrincipalRemark,
+      resumptionDate: existingReportCard?.nextTermBegins
+        ? new Date(existingReportCard.nextTermBegins).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+        : (isDemo ? "Monday, 11th January 2027" : "To be communicated by institution management"),
     };
 
     // 5. Generate PDF Buffer

@@ -66,6 +66,13 @@ export default async function TenantStaffPortalPage({
 
   // 3. Role-Based Access Control (RBAC) Guard
   const userRole = (session.role || session.userRole || "").toUpperCase();
+
+  // School Administrators (Tenants & School Admins) are strictly barred from the Teacher Dashboard and Gradebook
+  const isSchoolAdmin = ["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(userRole);
+  if (isSchoolAdmin) {
+    redirect(`/${schoolDomain}/dashboard?denied=teacher_portal_restricted`);
+  }
+
   const isStaffAuthorized = [
     "TEACHER",
     "STAFF",
@@ -73,10 +80,8 @@ export default async function TenantStaffPortalPage({
     "BURSAR",
     "PRINCIPAL",
     "HEADMASTER",
-    "SCHOOL_ADMIN",
-    "TENANT_ADMIN",
-    "SUPER_ADMIN",
-    "ADMIN",
+    "LECTURER",
+    "PROFESSOR",
   ].includes(userRole);
 
   if (!isStaffAuthorized) {

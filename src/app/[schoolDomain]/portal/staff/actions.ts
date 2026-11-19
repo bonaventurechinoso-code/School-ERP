@@ -8,6 +8,7 @@ import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
 import { getTierForClass } from "@/lib/school-tier-classes";
+import { getSession } from "@/lib/auth";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -433,6 +434,18 @@ export async function saveClassroomGrades(
   grades: GradeEntryPayload[]
 ) {
   try {
+    // School Admin Authorization Check: Admins cannot record grades in teacher gradebooks
+    const session = await getSession();
+    if (session) {
+      const role = (session.role || session.userRole || "").toUpperCase();
+      if (["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(role)) {
+        return {
+          success: false,
+          error: "Permission Denied: School Administrators do not have access to record or edit marks in teacher gradebooks.",
+        };
+      }
+    }
+
     // 1. Lock Check: If Head Teacher / Principal approved or locked, reject edit
     const lockedReport = await basePrisma.reportCard.findFirst({
       where: {

@@ -408,6 +408,8 @@ interface StudentScore {
   saving?: boolean;
   saved?: boolean;
   error?: string;
+  teacherRemarks?: string | null;
+  principalRemarks?: string | null;
 }
 
 function getOrdinalSuffix(rank: number): string {
@@ -1390,6 +1392,8 @@ function ReportCardsContent() {
                                   overallAverage: student.overallAverage || (student.overallTotal ? Math.round((student.overallTotal / (student.subjectsCount || (student.subjects ? student.subjects.length : 1))) * 100) / 100 : student.total),
                                   overallGrade: student.isCompiled ? grade.grade : (isEarlyYearsTier ? "Needs Support" : "—"),
                                   status: student.status,
+                                  teacherRemarks: student.teacherRemarks ?? undefined,
+                                  principalRemarks: student.principalRemarks ?? undefined,
                                   subjects: resolvedSubjects,
                                 });
                               }}

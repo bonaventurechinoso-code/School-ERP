@@ -12,5 +12,10 @@ export default async function PortalTeacherRedirectPage() {
     redirect("/login");
   }
 
+  const userRole = (session.role || session.userRole || "").toUpperCase();
+  if (["SCHOOL_ADMIN", "TENANT_ADMIN", "ADMIN"].includes(userRole)) {
+    redirect(`/${targetDomain}/dashboard?denied=teacher_portal_restricted`);
+  }
+
   redirect(`/${targetDomain}/portal/staff`);
 }

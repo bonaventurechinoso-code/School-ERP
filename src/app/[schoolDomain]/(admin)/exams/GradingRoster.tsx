@@ -563,33 +563,35 @@ export default function GradingRoster({
       }
     }
 
-    // Check canonical secondary demo profile
-    const demoProfile = getSecondaryDemoProfile(studentId);
-    if (demoProfile && (tierCategory === "SECONDARY" || matchesClass(selectedClass, "JSS 1"))) {
-      const match = demoProfile.subjects.find((s) => s.subject.toLowerCase() === subject.toLowerCase());
-      if (match) {
-        return {
-          ca1: match.ca1,
-          ca2: match.ca2,
-          exam: match.exam,
-          total: match.total,
-          remarks: match.remarks,
-        };
+    // Check canonical secondary demo profile ONLY for public demo tenant
+    if (isDemo) {
+      const demoProfile = getSecondaryDemoProfile(studentId);
+      if (demoProfile && (tierCategory === "SECONDARY" || matchesClass(selectedClass, "JSS 1"))) {
+        const match = demoProfile.subjects.find((s) => s.subject.toLowerCase() === subject.toLowerCase());
+        if (match) {
+          return {
+            ca1: match.ca1,
+            ca2: match.ca2,
+            exam: match.exam,
+            total: match.total,
+            remarks: match.remarks,
+          };
+        }
+      }
+
+      // Check mock student initial values
+      const mockStudent = cohortStudents.find((s) => s.id === studentId);
+      if (mockStudent && (mockStudent as any).initialScores && subject.toLowerCase().includes("math")) {
+        const init = (mockStudent as any).initialScores;
+        const ca1 = Number(init.ca1 || init.assignment || init.observation) || 0;
+        const ca2 = Number(init.ca2 || init.test || init.classwork) || 0;
+        const exam = Number(init.exam || init.affective) || 0;
+        return { ca1, ca2, exam, total: ca1 + ca2 + exam, remarks: "" };
       }
     }
 
-    // Check mock student initial values
-    const mockStudent = cohortStudents.find((s) => s.id === studentId);
-    if (mockStudent && (mockStudent as any).initialScores && subject.toLowerCase().includes("math")) {
-      const init = (mockStudent as any).initialScores;
-      const ca1 = Number(init.ca1 || init.assignment || init.observation) || 0;
-      const ca2 = Number(init.ca2 || init.test || init.classwork) || 0;
-      const exam = Number(init.exam || init.affective) || 0;
-      return { ca1, ca2, exam, total: ca1 + ca2 + exam, remarks: "" };
-    }
-
     return null;
-  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents, tierCategory]);
+  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents, tierCategory, isDemo]);
 
   // 7. Master Broadsheet Computation: One row per student, ALL subjects across
   const broadsheetData = useMemo(() => {
