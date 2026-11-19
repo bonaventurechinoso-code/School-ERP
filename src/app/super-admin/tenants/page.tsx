@@ -300,7 +300,9 @@ export default function SuperAdminTenantsPage() {
   };
 
   const handleCopySlug = (subdomain: string) => {
-    const fullUrl = `${basePlatformUrl}/${subdomain}/dashboard`;
+    const fullUrl = typeof window !== "undefined" && window.location.hostname.includes("localhost")
+      ? `http://${subdomain}.localhost:3000/dashboard`
+      : `https://${subdomain}.bonaveeict.com.ng/dashboard`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedSlug(subdomain);
     setTimeout(() => setCopiedSlug(null), 2000);

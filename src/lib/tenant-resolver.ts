@@ -262,12 +262,21 @@ export function buildTenantUrl(
 ): string {
   const info = parseHostInfo(hostHeader, protoHeader);
   const cleanSlug = slug.toLowerCase().trim();
-  const normalizedPath = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  const normalizedPath = path ? (path.startsWith("/") ? path : `/${path}`) : "/";
+
+  // Prevent slug duplication: if path starts with `/${cleanSlug}` or equals `/${cleanSlug}`
+  let safePath = normalizedPath;
+  if (safePath === `/${cleanSlug}` || safePath === `/${cleanSlug}/`) {
+    safePath = "/";
+  } else if (safePath.startsWith(`/${cleanSlug}/`)) {
+    safePath = safePath.slice(`/${cleanSlug}`.length);
+    if (!safePath.startsWith("/")) safePath = `/${safePath}`;
+  }
 
   // 1. Local development environment
   if (info.baseDomain === "localhost" || info.hostname.includes("localhost") || info.hostname === "127.0.0.1") {
     const portSuffix = info.port ? `:${info.port}` : ":3000";
-    return `http://${cleanSlug}.localhost${portSuffix}${normalizedPath}`;
+    return `http://${cleanSlug}.localhost${portSuffix}${safePath}`;
   }
 
   // 2. Production: Render service or custom domain
@@ -276,5 +285,5 @@ export function buildTenantUrl(
     targetDomain = "bonaveeict.com.ng";
   }
 
-  return `https://${cleanSlug}.${targetDomain}${normalizedPath}`;
+  return `https://${cleanSlug}.${targetDomain}${safePath}`;
 }

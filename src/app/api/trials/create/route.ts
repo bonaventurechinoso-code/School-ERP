@@ -5,6 +5,7 @@ import { createDatabaseSession } from "@/lib/session-manager";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { hashPassword } from "@/lib/security-service";
 import { registerTenantInStore } from "@/app/dashboard/super-admin/mock-data";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -215,7 +216,9 @@ export async function POST(req: Request) {
       userAgent: "Trial Registration",
     });
 
-    const redirectPath = `/onboarding?tenant=${result.school.subdomain}`;
+    const hostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const proto = req.headers.get("x-forwarded-proto") || "https";
+    const redirectPath = buildTenantUrl(result.school.subdomain, hostHeader, "/", proto);
 
     const response = NextResponse.json({
       success: true,

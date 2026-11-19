@@ -300,7 +300,7 @@ export async function checkSSLHealth(subdomain: string): Promise<{
   const isDev = process.env.NODE_ENV === "development";
   const rootDomain = SUPPORTED_BASE_DOMAINS[0] || "bonaveeict.com.ng";
   const targetFqdn = `${subdomain}.${rootDomain}`;
-  const directFallback = `https://${rootDomain}/${subdomain}/dashboard`;
+  const directFallback = `https://${targetFqdn}/dashboard`;
   const targetDashboard = `https://${targetFqdn}/dashboard`;
 
   // 1. Verify tenant in database
@@ -325,7 +325,7 @@ export async function checkSSLHealth(subdomain: string): Promise<{
 
   // In local development, bypass external TLS
   if (isDev || rootDomain.includes("localhost")) {
-    const baseDevUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+    const localDevHost = `http://${subdomain}.localhost:3000/dashboard`;
     return {
       verified: true,
       subdomain,
@@ -333,8 +333,8 @@ export async function checkSSLHealth(subdomain: string): Promise<{
       isRegistered: true,
       dnsResolved: true,
       sslReady: true,
-      directFallbackUrl: `${baseDevUrl}/${subdomain}/dashboard`,
-      targetDashboardUrl: `${baseDevUrl}/${subdomain}/dashboard`,
+      directFallbackUrl: localDevHost,
+      targetDashboardUrl: localDevHost,
       message: "Development environment: local SSL verified."
     };
   }

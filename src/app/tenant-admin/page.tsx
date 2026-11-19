@@ -12,7 +12,7 @@ export default async function TenantAdminRedirect() {
   }
   const slug = session.schoolDomain || (session as any).tenantSlug;
   if (slug) {
-    redirect(`/${slug}/dashboard`);
+    redirect("/dashboard");
   }
   redirect("/login");
 }

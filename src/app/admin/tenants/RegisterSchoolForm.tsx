@@ -212,17 +212,20 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
         </label>
         <div className="flex items-center rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-shadow">
           <span className="bg-slate-100 dark:bg-zinc-800 px-2.5 py-2.5 text-slate-500 dark:text-zinc-400 text-xs font-mono border-r border-slate-200 dark:border-zinc-800">
-            bonaveeict.com.ng/
+            https://
           </span>
           <input
             type="text"
             name="subdomain"
             value={formData.subdomain}
-            onChange={(e) => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "") })}
+            onChange={(e) => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })}
             className="w-full bg-slate-50/50 dark:bg-zinc-950/50 text-slate-900 dark:text-zinc-100 p-2.5 text-xs outline-none font-mono placeholder-slate-400 dark:placeholder-zinc-600"
             placeholder="riverside"
             required
           />
+          <span className="bg-slate-100 dark:bg-zinc-800 px-2.5 py-2.5 text-slate-500 dark:text-zinc-400 text-xs font-mono border-l border-slate-200 dark:border-zinc-800">
+            .bonaveeict.com.ng
+          </span>
         </div>
       </div>
 

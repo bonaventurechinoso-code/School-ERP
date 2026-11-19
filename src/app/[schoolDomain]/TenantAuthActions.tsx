@@ -48,7 +48,7 @@ export function TenantAuthActions({
 
     await performTenantLogout({
       schoolDomain: subdomain,
-      redirectUrl: `/${subdomain}`,
+      redirectUrl: `/`,
     });
   };
 
@@ -77,7 +77,7 @@ export function TenantAuthActions({
 
     return (
       <Link
-        href={`/${subdomain}/login`}
+        href="/login"
         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors"
       >
         <span>Sign In</span>
@@ -114,7 +114,7 @@ export function TenantAuthActions({
 
   return (
     <Link
-      href={`/${subdomain}/login`}
+      href="/login"
       className="inline-flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm border border-slate-800"
     >
       <span>Sign In</span>

@@ -61,7 +61,7 @@ export async function StudentRosterCard({
   } catch {}
 
   return (
-    <Link href={`/${subdomain}/students`} className="block col-span-1 active:scale-[0.98] transition-transform">
+    <Link href="/students" className="block col-span-1 active:scale-[0.98] transition-transform">
       <div 
         className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
         style={{ borderTopColor: accentColor }}
@@ -177,7 +177,7 @@ export async function ApplicantPipelineCard({
   const accentColor = primaryColor || "#4f46e5";
 
   return (
-    <Link href={`/${subdomain}/students`} className="block col-span-1 active:scale-[0.98] transition-transform">
+    <Link href="/students" className="block col-span-1 active:scale-[0.98] transition-transform">
       <div 
         className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
         style={{ borderTopColor: accentColor }}
@@ -234,7 +234,7 @@ export async function FinancialSummaryCard({
     termlyRevenue = 0;
   }
   const accentColor = primaryColor || "#059669";
-  const targetFinanceUrl = subdomain ? `/${subdomain}/finance/fees` : "/dashboard/finance";
+  const targetFinanceUrl = "/finance/fees";
 
   return (
     <Link href={targetFinanceUrl} className="block col-span-1 active:scale-[0.98] transition-transform">
@@ -353,7 +353,7 @@ export async function PendingVerificationsCard({
   const accentColor = primaryColor || "#d97706";
 
   return (
-    <Link href={`/${subdomain}/finance/verifications`} className="block col-span-1 active:scale-[0.98] transition-transform">
+    <Link href="/finance/verifications" className="block col-span-1 active:scale-[0.98] transition-transform">
       <div 
         className="p-6 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between min-h-[165px] sm:min-h-[175px] bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 border-t-[3.5px] text-slate-900 dark:text-zinc-100 relative overflow-hidden group"
         style={{ borderTopColor: accentColor }}
@@ -448,7 +448,7 @@ export async function CollectionBankCard({
       </div>
 
       <Link
-        href={`/${subdomain}/settings/bank`}
+        href="/settings/bank"
         className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 transition shrink-0"
       >
         {isConfigured ? "Edit Bank Settings" : "Setup Bank Account"}

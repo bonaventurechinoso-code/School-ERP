@@ -82,14 +82,14 @@ function OnboardingContent() {
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-3">
           <Link
-            href={`/${tenantSlug}/dashboard`}
+            href="/dashboard"
             className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-6 rounded-xl text-center text-sm transition-all shadow-lg flex items-center justify-center gap-2"
           >
             <span>Enter Dashboard</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
-            href={`/login?school=${tenantSlug}`}
+            href="/login"
             className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold py-3.5 px-6 rounded-xl text-center text-sm transition-all"
           >
             Admin Login

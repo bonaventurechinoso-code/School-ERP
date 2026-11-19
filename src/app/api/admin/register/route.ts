@@ -150,8 +150,8 @@ export async function POST(request: Request) {
       success: true,
       message: "Tenant successfully provisioned.",
       tenant: school,
-      subdomainUrl: buildTenantUrl(formattedSubdomain, hostHeader, "", proto),
-      redirectUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
+      subdomainUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
+      redirectUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
     });
 
   } catch (error: any) {

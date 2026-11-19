@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
 import { TenantAuthActions } from "./TenantAuthActions";
+import LoginPage from "@/app/login/page";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -82,10 +83,16 @@ function getTierCurriculumDetails(tierName: string) {
 
 export default async function PublicGuestPortalPage({
   params: paramsPromise,
+  searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }> | { schoolDomain: string };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 }) {
   const { schoolDomain } = await Promise.resolve(paramsPromise);
+  const searchParams = searchParamsPromise ? await Promise.resolve(searchParamsPromise) : {};
+  const isDemo = (schoolDomain || "").toLowerCase() === "demo" || (schoolDomain || "").toLowerCase() === "sandbox";
+  const viewPortal = searchParams?.view === "portal" || searchParams?.portal === "guest";
+
   const session = await getSession(undefined, schoolDomain).catch(() => null);
 
   const isAuthedUser = Boolean(
@@ -97,23 +104,29 @@ export default async function PublicGuestPortalPage({
     session.role !== "APPLICANT"
   );
 
-  let workspaceHref = `/${schoolDomain}/portal`;
+  // If visitor is unauthenticated on tenant subdomain and not in demo mode or explicit portal view:
+  // Render the school's dedicated login page directly on https://{subdomain}.bonaveeict.com.ng/
+  if (!isAuthedUser && !isDemo && !viewPortal) {
+    return <LoginPage />;
+  }
+
+  let workspaceHref = `/portal`;
   if (isAuthedUser && session) {
     const role = (session.role || "").toUpperCase();
     if (role === "STUDENT") {
-      workspaceHref = `/${schoolDomain}/portal/student`;
+      workspaceHref = `/portal/student`;
     } else if (role === "PARENT") {
-      workspaceHref = `/${schoolDomain}/portal/parent`;
+      workspaceHref = `/portal/parent`;
     } else if (role === "TEACHER" || role === "STAFF") {
-      workspaceHref = `/${schoolDomain}/portal/staff`;
+      workspaceHref = `/portal/staff`;
     } else if (role === "BURSAR") {
-      workspaceHref = `/${schoolDomain}/portal/bursar`;
+      workspaceHref = `/portal/bursar`;
     } else if (role === "PRINCIPAL" || role === "HEADMASTER" || role === "VICE_PRINCIPAL") {
-      workspaceHref = `/${schoolDomain}/portal/principal`;
+      workspaceHref = `/portal/principal`;
     } else if (role === "SUPER_ADMIN") {
       workspaceHref = `/super-admin`;
     } else {
-      workspaceHref = `/${schoolDomain}/dashboard`;
+      workspaceHref = `/dashboard`;
     }
   }
   let school = null;
@@ -171,7 +184,7 @@ export default async function PublicGuestPortalPage({
           )}
           <div className="pt-2">
             <Link
-              href={`/${school.subdomain}/login`}
+              href="/login"
               className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
             >
               <span>Staff & Administrator Sign In</span>
@@ -205,7 +218,6 @@ export default async function PublicGuestPortalPage({
 
   const { heroTitle, aboutUs } = generateTierMockData(preciseTier, school.name);
   
-  const isDemo = school.subdomain.toLowerCase() === "demo";
   const demoDescription =
     preciseTier === "NURSERY"
       ? "A nurturing early childhood center dedicated to toddler milestone development, play-based literacy, and dedicated caregiver guidance."
@@ -361,7 +373,7 @@ export default async function PublicGuestPortalPage({
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto items-stretch sm:items-center">
               <Link 
-                href={`/${school.subdomain}/apply`}
+                href="/apply"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white rounded-xl font-bold text-sm sm:text-base md:text-lg shadow-xl hover:shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5"
               >
                 <span>Apply Online / Start New Application</span>
@@ -435,7 +447,7 @@ export default async function PublicGuestPortalPage({
 
                     <div className="pt-2 border-t border-slate-100">
                       <Link 
-                        href={`/${school.subdomain}/apply?tier=${encodeURIComponent(tier.id)}`}
+                        href={`/apply?tier=${encodeURIComponent(tier.id)}`}
                         className="inline-flex items-center justify-between w-full py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
                       >
                         <span>Apply for {tier.name}</span>

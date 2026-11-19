@@ -40,7 +40,7 @@ interface RegistrationResult {
 
 export default function RegisterTenantPage() {
   const { handleNumericChange } = useNumericInput();
-  
+
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -167,38 +167,40 @@ export default function RegisterTenantPage() {
     };
   }, [formData.subdomain]);
 
-  // Derive target login URL on the tenant's dedicated subdomain
-  const getSubdomainLoginUrl = useCallback((slug?: string) => {
+  // Derive target portal URL on the tenant's dedicated subdomain
+  const getSubdomainUrl = useCallback((slug?: string) => {
     const effectiveSlug = slug || registrationData?.subdomain || formData.subdomain;
-    if (!effectiveSlug) return "/login";
+    if (!effectiveSlug) return "/";
     if (typeof window !== "undefined") {
       const proto = window.location.protocol;
       const host = window.location.host;
       if (host.includes("localhost")) {
-        return `${proto}//${effectiveSlug}.localhost:3000/login`;
+        return `${proto}//${effectiveSlug}.localhost:3000/`;
       }
     }
-    return `https://${effectiveSlug}.${rootDisplay}/login`;
+    return `https://${effectiveSlug}.${rootDisplay}/`;
   }, [registrationData?.subdomain, formData.subdomain, rootDisplay]);
 
-  // 1. After all 3 checks = true, IMMEDIATELY redirect to subdomain login:
+  // 1. After all 3 checks = true, IMMEDIATELY redirect to subdomain root:
   useEffect(() => {
     if (sslVerified) {
       const slug = registrationData?.subdomain || formData.subdomain;
-      window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl(slug);
+      const targetUrl = registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl(slug);
+      window.location.href = targetUrl;
     }
-  }, [sslVerified, registrationData, formData.subdomain, getSubdomainLoginUrl]);
+  }, [sslVerified, registrationData, formData.subdomain, getSubdomainUrl]);
 
   // 2. Add safety timeout so it NEVER spins more than 5 seconds:
   useEffect(() => {
     if (isConfiguring) {
       const slug = registrationData?.subdomain || formData.subdomain;
       const t = setTimeout(() => {
-        window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl(slug);
+        const targetUrl = registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl(slug);
+        window.location.href = targetUrl;
       }, 5000);
       return () => clearTimeout(t);
     }
-  }, [isConfiguring, registrationData, formData.subdomain, getSubdomainLoginUrl]);
+  }, [isConfiguring, registrationData, formData.subdomain, getSubdomainUrl]);
 
   const availableTiers = [
     { id: "NURSERY", label: "Creche / Nursery", desc: "Ages 0-4" },
@@ -303,7 +305,7 @@ export default function RegisterTenantPage() {
   };
 
   const handleTierToggle = (tierId: string) => {
-    setSelectedTiers(prev => 
+    setSelectedTiers(prev =>
       prev.includes(tierId) ? prev.filter(t => t !== tierId) : [...prev, tierId]
     );
   };
@@ -350,7 +352,8 @@ export default function RegisterTenantPage() {
 
             // Execute secure redirect immediately to tenant subdomain
             const slug = data.subdomain || formData.subdomain;
-            window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
+            const targetUrl = data.redirectUrl || data.portalUrl || data.subdomainUrl || getSubdomainUrl(slug);
+            window.location.href = targetUrl;
             return;
           }
         }
@@ -368,7 +371,8 @@ export default function RegisterTenantPage() {
         setConfiguringStatusText("SSL generation bound. Ready to access.");
         setSslVerified(true);
         const slug = data.subdomain || formData.subdomain;
-        window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
+        const targetUrl = data.redirectUrl || data.portalUrl || data.subdomainUrl || getSubdomainUrl(slug);
+        window.location.href = targetUrl;
       }
     };
 
@@ -377,7 +381,8 @@ export default function RegisterTenantPage() {
       setSslVerified(true);
       setConfiguringStatusText("SSL certificate verified! Redirecting to secure school dashboard...");
       const slug = data.subdomain || formData.subdomain;
-      window.location.href = data.subdomainLoginUrl || getSubdomainLoginUrl(slug);
+      const targetUrl = data.redirectUrl || data.portalUrl || data.subdomainUrl || getSubdomainUrl(slug);
+      window.location.href = targetUrl;
       return;
     }
 
@@ -458,7 +463,7 @@ export default function RegisterTenantPage() {
   return (
     <div className="min-h-screen min-h-[100dvh] w-full bg-slate-50 dark:bg-zinc-950 flex flex-col justify-start sm:justify-center py-1 sm:py-8 px-2 sm:px-6 lg:px-8 overflow-y-auto">
       <div className="w-full max-w-3xl lg:max-w-4xl mx-auto my-auto bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
-        
+
         {/* Header (Streamlined for mobile) */}
         <div className="relative z-10 px-3.5 py-2.5 sm:px-8 sm:py-5 text-white bg-slate-900 transition-colors duration-300 flex-shrink-0">
           <div className="flex items-center justify-between gap-2 mb-1 sm:mb-2">
@@ -479,8 +484,8 @@ export default function RegisterTenantPage() {
             )}
           </div>
           <h1 className="text-base sm:text-2xl font-bold leading-tight">
-            {isConfiguring 
-              ? "Configuring secure school portal..." 
+            {isConfiguring
+              ? "Configuring secure school portal..."
               : "Register Your School"}
           </h1>
           <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5">
@@ -507,7 +512,7 @@ export default function RegisterTenantPage() {
           {/* ========================================================================= */}
           {isConfiguring && (
             <div className="space-y-6 text-center py-6 animate-in fade-in duration-300">
-              
+
               {/* Spinner & Shield Graphic */}
               <div className="relative mx-auto w-24 h-24 flex items-center justify-center">
                 <div className="absolute inset-0 rounded-full border-4 border-blue-100 animate-ping opacity-25"></div>
@@ -539,9 +544,8 @@ export default function RegisterTenantPage() {
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-600"
-                  }`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-600"
+                    }`}>
                     {sslVerified ? (
                       <Check className="w-3 h-3 stroke-[3]" />
                     ) : (
@@ -554,9 +558,8 @@ export default function RegisterTenantPage() {
                 </div>
 
                 <div className="flex items-center gap-3 text-xs">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 dark:bg-zinc-700 text-slate-400 dark:text-zinc-400"
-                  }`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${sslVerified ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 dark:bg-zinc-700 text-slate-400 dark:text-zinc-400"
+                    }`}>
                     {sslVerified ? (
                       <Check className="w-3 h-3 stroke-[3]" />
                     ) : (
@@ -581,11 +584,11 @@ export default function RegisterTenantPage() {
                   <span className="truncate pr-2">
                     Target: <span className="font-mono font-semibold text-slate-900 dark:text-white">{registrationData?.subdomainUrl || (formData.subdomain ? `${formData.subdomain}.${rootDisplay}` : "Direct Portal")}</span>
                   </span>
-                  <a 
-                    href={registrationData?.subdomainLoginUrl || getSubdomainLoginUrl()}
+                  <a
+                    href={registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl()}
                     onClick={(e) => {
                       e.preventDefault();
-                      window.location.href = registrationData?.subdomainLoginUrl || getSubdomainLoginUrl();
+                      window.location.href = registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl();
                     }}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold flex-shrink-0 cursor-pointer"
                   >
@@ -611,17 +614,17 @@ export default function RegisterTenantPage() {
                         <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           School Name *
                         </label>
-                        <input 
+                        <input
                           required
                           id="institutionName"
-                          type="text" 
+                          type="text"
                           className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="e.g. Greenwood Academy"
-                          value={formData.schoolName} 
-                          onChange={e => handleSchoolNameChange(e.target.value)} 
+                          value={formData.schoolName}
+                          onChange={e => handleSchoolNameChange(e.target.value)}
                         />
                       </div>
-                      
+
                       <div>
                         <div className="flex items-center justify-between mb-0.5">
                           <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300">
@@ -645,15 +648,15 @@ export default function RegisterTenantPage() {
                           <span className="inline-flex items-center px-1.5 sm:px-2.5 rounded-l-lg sm:rounded-l-xl border border-r-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] sm:text-xs font-mono select-none">
                             https://
                           </span>
-                          <input 
+                          <input
                             required
                             id="subdomain"
                             name="subdomain"
-                            type="text" 
+                            type="text"
                             className="flex-1 min-w-0 block w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-none px-2 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                             placeholder="greenwood"
-                            value={formData.subdomain} 
-                            onChange={e => handleSubdomainChange(e.target.value)} 
+                            value={formData.subdomain}
+                            onChange={e => handleSubdomainChange(e.target.value)}
                           />
                           <span className="inline-flex items-center px-1.5 sm:px-2.5 rounded-r-lg sm:rounded-r-xl border border-l-0 border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] sm:text-xs font-mono select-none">
                             .{rootDisplay}
@@ -683,15 +686,15 @@ export default function RegisterTenantPage() {
                         <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           Admin Email *
                         </label>
-                        <input 
+                        <input
                           required
                           id="adminEmail"
                           name="adminEmail"
-                          type="email" 
+                          type="email"
                           className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="admin@school.edu"
-                          value={formData.adminEmail} 
-                          onChange={e => setFormData({...formData, adminEmail: e.target.value})} 
+                          value={formData.adminEmail}
+                          onChange={e => setFormData({ ...formData, adminEmail: e.target.value })}
                         />
                       </div>
 
@@ -699,16 +702,16 @@ export default function RegisterTenantPage() {
                         <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-0.5">
                           Contact Phone
                         </label>
-                        <input 
-                          type="tel" 
+                        <input
+                          type="tel"
                           id="adminPhone"
                           name="contactPhone"
-                          inputMode="numeric" 
-                          pattern="[0-9+]*" 
+                          inputMode="numeric"
+                          pattern="[0-9+]*"
                           className="w-full border border-slate-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-xs sm:text-sm placeholder:text-slate-400 dark:placeholder:text-zinc-500"
                           placeholder="+234 800 000 0000"
-                          value={formData.contactPhone} 
-                          onChange={e => handleNumericChange(e, (val) => setFormData({...formData, contactPhone: val}))} 
+                          value={formData.contactPhone}
+                          onChange={e => handleNumericChange(e, (val) => setFormData({ ...formData, contactPhone: val }))}
                         />
                       </div>
                     </div>
@@ -720,7 +723,7 @@ export default function RegisterTenantPage() {
                           Admin Password *
                         </label>
                         <div className="relative">
-                          <input 
+                          <input
                             required
                             id="adminPassword"
                             name="adminPassword"
@@ -746,7 +749,7 @@ export default function RegisterTenantPage() {
                           Confirm Password *
                         </label>
                         <div className="relative">
-                          <input 
+                          <input
                             required
                             id="confirmPassword"
                             name="confirmPassword"
@@ -789,24 +792,20 @@ export default function RegisterTenantPage() {
 
                       {/* Compact Inline Checklist */}
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
-                        <span className={`inline-flex items-center gap-1 transition-colors ${
-                          hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 transition-colors ${hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                          }`}>
                           {hasMinLength ? "✓" : "•"} 8+ chars
                         </span>
-                        <span className={`inline-flex items-center gap-1 transition-colors ${
-                          hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 transition-colors ${hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                          }`}>
                           {hasUppercase ? "✓" : "•"} Uppercase
                         </span>
-                        <span className={`inline-flex items-center gap-1 transition-colors ${
-                          hasNumber ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 transition-colors ${hasNumber ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                          }`}>
                           {hasNumber ? "✓" : "•"} Digit
                         </span>
-                        <span className={`inline-flex items-center gap-1 transition-colors ${
-                          hasSpecial ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 transition-colors ${hasSpecial ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-zinc-500"
+                          }`}>
                           {hasSpecial ? "✓" : "•"} Symbol
                         </span>
                       </div>
@@ -814,9 +813,8 @@ export default function RegisterTenantPage() {
                       {/* Password Match Indicator */}
                       {formData.confirmPassword.length > 0 && (
                         <div className="text-[10px]">
-                          <span className={`inline-flex items-center gap-1 font-semibold ${
-                            formData.adminPassword === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                          }`}>
+                          <span className={`inline-flex items-center gap-1 font-semibold ${formData.adminPassword === formData.confirmPassword ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                            }`}>
                             {formData.adminPassword === formData.confirmPassword ? "✓ Passwords match" : "⚠ Passwords do not match"}
                           </span>
                         </div>
@@ -833,8 +831,8 @@ export default function RegisterTenantPage() {
                     <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium sm:hidden">
                       Step 1 of 2
                     </div>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full sm:w-auto px-5 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
                     >
                       <span>Next Step: Select Tiers</span>
@@ -852,23 +850,21 @@ export default function RegisterTenantPage() {
                       <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-0.5">Academic Tier Allocation</h3>
                       <p className="text-slate-600 dark:text-zinc-400 text-xs sm:text-sm">Select the academic tiers your institution operates. You can select multiple.</p>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
                       {availableTiers.map(tier => {
                         const isSelected = selectedTiers.includes(tier.id);
                         return (
-                          <div 
+                          <div
                             key={tier.id}
                             onClick={() => handleTierToggle(tier.id)}
-                            className={`cursor-pointer p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 flex items-start gap-3 ${
-                              isSelected 
-                                ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-500" 
-                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/50 hover:border-blue-300 dark:hover:border-zinc-700 hover:shadow-sm"
-                            }`}
+                            className={`cursor-pointer p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 flex items-start gap-3 ${isSelected
+                              ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-500"
+                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/50 hover:border-blue-300 dark:hover:border-zinc-700 hover:shadow-sm"
+                              }`}
                           >
-                            <div className={`mt-0.5 flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded border flex items-center justify-center transition ${
-                              isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-700"
-                            }`}>
+                            <div className={`mt-0.5 flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded border flex items-center justify-center transition ${isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-700"
+                              }`}>
                               {isSelected && (
                                 <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -887,7 +883,7 @@ export default function RegisterTenantPage() {
 
                   {/* Action Footer (Sticky on mobile and desktop) */}
                   <div className="sticky bottom-0 -mx-3 sm:-mx-6 md:-mx-8 -mb-3 sm:-mb-6 md:-mb-8 mt-3 sm:mt-6 p-3 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-30 shadow-lg sm:shadow-none">
-                    <button 
+                    <button
                       type="button"
                       onClick={() => { setStep(1); setErrorMsg(""); }}
                       className="px-3.5 sm:px-6 py-2 sm:py-3 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-semibold rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition text-xs sm:text-sm cursor-pointer"
@@ -895,7 +891,7 @@ export default function RegisterTenantPage() {
                     >
                       &larr; Back
                     </button>
-                    <button 
+                    <button
                       type="button"
                       onClick={handleSubmit}
                       disabled={isSubmitting || selectedTiers.length === 0}

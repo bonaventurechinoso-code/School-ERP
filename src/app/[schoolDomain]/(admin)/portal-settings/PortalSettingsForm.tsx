@@ -236,6 +236,13 @@ export default function PortalSettingsForm({
   const isBankConfigured = Boolean(bankName && accountNumber.length === 10 && accountName.trim());
 
   // Public Gateway shortcuts
+  const isSubdomainHost = typeof window !== "undefined" && window.location.host.includes(subdomain);
+  const tenantOrigin = isSubdomainHost
+    ? origin
+    : (typeof window !== "undefined" && window.location.host.includes("localhost")
+        ? `http://${subdomain}.localhost:3000`
+        : `https://${subdomain}.bonaveeict.com.ng`);
+
   const gateways = [
     {
       key: "landing",
@@ -244,8 +251,8 @@ export default function PortalSettingsForm({
       badge: "Public Portal",
       badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800",
       icon: Globe,
-      path: `/${subdomain}`,
-      url: `${origin}/${subdomain}`,
+      path: `/`,
+      url: `${tenantOrigin}/`,
       primaryActionLabel: "Visit Landing",
       buttonBg: "bg-blue-600 hover:bg-blue-700 text-white"
     },
@@ -256,8 +263,8 @@ export default function PortalSettingsForm({
       badge: "Admissions",
       badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
       icon: FileText,
-      path: `/${subdomain}/apply`,
-      url: `${origin}/${subdomain}/apply`,
+      path: `/apply`,
+      url: `${tenantOrigin}/apply`,
       primaryActionLabel: "Open Form",
       buttonBg: "bg-emerald-600 hover:bg-emerald-700 text-white"
     },
@@ -268,8 +275,8 @@ export default function PortalSettingsForm({
       badge: "Students",
       badgeColor: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
       icon: GraduationCap,
-      path: `/${subdomain}/portal/student`,
-      url: `${origin}/${subdomain}/portal/student`,
+      path: `/portal/student`,
+      url: `${tenantOrigin}/portal/student`,
       primaryActionLabel: "Open Workspace",
       buttonBg: "bg-indigo-600 hover:bg-indigo-700 text-white"
     },
@@ -280,8 +287,8 @@ export default function PortalSettingsForm({
       badge: "Staff",
       badgeColor: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800",
       icon: ShieldCheck,
-      path: `/${subdomain}/login`,
-      url: `${origin}/${subdomain}/login`,
+      path: `/login`,
+      url: `${tenantOrigin}/login`,
       primaryActionLabel: "Staff Gateway",
       buttonBg: "bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white"
     },

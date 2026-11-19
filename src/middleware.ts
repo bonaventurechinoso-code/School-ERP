@@ -518,12 +518,16 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(apexSuperAdminUrl, 307);
     }
 
-    // C. Redundant slug in path on subdomain (e.g. https://testdemo.bonaveeict.com.ng/testdemo/dashboard -> /dashboard)
+    // C. Redundant slug in path on subdomain: 301 redirect to subdomain-only URL
+    // e.g. https://[slug].bonaveeict.com.ng/[slug] -> https://[slug].bonaveeict.com.ng/
+    // e.g. https://[slug].bonaveeict.com.ng/[slug]/login -> https://[slug].bonaveeict.com.ng/login
+    // e.g. https://[slug].bonaveeict.com.ng/[slug]/dashboard -> https://[slug].bonaveeict.com.ng/dashboard
     if (lowerPath === `/${subdomain}` || lowerPath.startsWith(`/${subdomain}/`)) {
-      const cleanPath = lowerPath.replace(new RegExp(`^/${subdomain}`), "") || "/";
+      const remaining = lowerPath.slice(`/${subdomain}`.length);
+      const cleanPath = remaining.startsWith("/") ? remaining : (remaining ? `/${remaining}` : "/");
       const cleanUrl = new URL(cleanPath, req.url);
       cleanUrl.search = req.nextUrl.search;
-      return NextResponse.redirect(cleanUrl, 307);
+      return NextResponse.redirect(cleanUrl, 301);
     }
 
     // D. API routes & static assets on subdomain pass through with injected tenant context
