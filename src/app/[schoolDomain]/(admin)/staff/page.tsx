@@ -23,7 +23,7 @@ export default async function StaffPage({
   // Strict Request-Scoped Server Auth Verification (bound to target tenant)
   const session = await getSession(undefined, params.schoolDomain);
   if (!session) {
-    redirect(`/login?school=${encodeURIComponent(params.schoolDomain)}`);
+    redirect('/login');
   }
 
   // Enforce granular RBAC route authorization

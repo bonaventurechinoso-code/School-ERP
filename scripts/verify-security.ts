@@ -104,7 +104,7 @@ async function main() {
 
   // 6. Transactional Email Recovery Transmission
   console.log("\n[6] Testing Transactional Email Recovery Pipeline:");
-  const recoveryUrl = `https://bonaveeict.com.ng/${tempSchool.subdomain}/reset-password?token=${token}`;
+  const recoveryUrl = `https://${tempSchool.subdomain}.bonaveeict.com.ng/reset-password?token=${token}`;
   const mailResult = await sendPasswordResetEmail({
     school: tempSchool,
     recipientEmail: staffEmail,

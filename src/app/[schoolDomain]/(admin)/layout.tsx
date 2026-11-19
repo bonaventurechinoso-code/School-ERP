@@ -26,13 +26,13 @@ export default async function AdminLayout({
   const school = await getCachedSchool(params.schoolDomain);
 
   if (!school) {
-    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(params.schoolDomain)}`);
+    redirect('/login?error=tenant_not_found');
   }
 
   // Strict Request-Scoped Server Auth Verification (bound to target tenant)
   const session = await getSession(undefined, params.schoolDomain);
   if (!session) {
-    redirect(`/login?school=${encodeURIComponent(params.schoolDomain)}`);
+    redirect('/login');
   }
 
   const currentTier = cookieStore.get("activeTier")?.value || null;

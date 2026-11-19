@@ -1,4 +1,5 @@
 import { basePrisma } from "./tenant-prisma";
+import { getTenantPortalUrl } from "./tenant-resolver";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 
@@ -543,7 +544,7 @@ export async function sendSuperAdminTenantRegistrationEmail(payload: {
   ).replace(/\/$/, "");
 
   const tenantConsoleUrl = `${baseUrl}/admin/tenants`;
-  const portalUrl = `${baseUrl}/${payload.subdomain}`;
+  const portalUrl = getTenantPortalUrl(payload.subdomain);
   const tiersList = Array.isArray(payload.tiers) && payload.tiers.length > 0 
     ? payload.tiers.join(", ") 
     : "Standard Tier";

@@ -3,6 +3,7 @@ import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
 import { createPasswordResetToken } from "@/lib/security-service";
 import { sendPasswordResetEmail } from "@/lib/mail";
 import { BASE_TENANT_DOMAIN } from "@/lib/session-manager";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 
 export async function POST(req: Request) {
   try {
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
     }
 
     const targetSlug = school.slug || school.subdomain;
-    const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetUrl = buildTenantUrl(targetSlug, hostHeader, `/reset-password?token=${encodeURIComponent(resetToken)}`);
 
     const mailResult = await sendPasswordResetEmail({
       school,

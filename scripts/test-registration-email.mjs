@@ -11,7 +11,7 @@ async function testEmail() {
   const adminEmail = "bonaventure.chinoso@gmail.com";
   const adminPassword = "Password123#";
   const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-  const portalUrl = `${baseUrl}/login?school=${encodeURIComponent(subdomain)}`;
+  const portalUrl = `https://${subdomain}.bonaveeict.com.ng/login`;
   const brandColor = "#4f46e5";
   const subject = `🎉 Welcome to School ERP - ${schoolName} Portal Access Credentials`;
 

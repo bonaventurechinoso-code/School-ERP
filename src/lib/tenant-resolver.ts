@@ -287,3 +287,24 @@ export function buildTenantUrl(
 
   return `https://${cleanSlug}.${targetDomain}${safePath}`;
 }
+
+/**
+ * Canonical helper for tenant login URLs: https://{subdomain}.bonaveeict.com.ng/login
+ */
+export function getTenantLoginUrl(slug: string, hostHeader?: string | null): string {
+  return buildTenantUrl(slug, hostHeader, "/login");
+}
+
+/**
+ * Canonical helper for tenant portal root URLs: https://{subdomain}.bonaveeict.com.ng/
+ */
+export function getTenantPortalUrl(slug: string, hostHeader?: string | null): string {
+  return buildTenantUrl(slug, hostHeader, "/");
+}
+
+/**
+ * Canonical helper for tenant dashboard URLs: https://{subdomain}.bonaveeict.com.ng/dashboard
+ */
+export function getTenantDashboardUrl(slug: string, hostHeader?: string | null): string {
+  return buildTenantUrl(slug, hostHeader, "/dashboard");
+}

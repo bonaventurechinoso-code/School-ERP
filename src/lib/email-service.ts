@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { generateExamAdmitSlipPdf } from "./admit-slip-pdf";
 import { sendMail, resend } from "./mail";
+import { buildTenantUrl, getTenantLoginUrl, getTenantPortalUrl } from "./tenant-resolver";
 export { sendMail, resend };
 
 /**
@@ -103,10 +104,9 @@ export async function sendApplicationReceivedEmail(payload: ApplicationReceivedE
       uploadToken = lead?.uploadToken || undefined;
     }
 
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const trackUrl = `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo)}`;
+    const trackUrl = buildTenantUrl(sub, null, `/admissions/track/${encodeURIComponent(applicationNo)}`);
     const uploadUrl = leadId && uploadToken
-      ? `${baseUrl}/${sub}/admissions/upload/${leadId}?token=${uploadToken}`
+      ? buildTenantUrl(sub, null, `/admissions/upload/${leadId}?token=${uploadToken}`)
       : trackUrl;
 
     const subject = `Application Received (App No: ${applicationNo}) - ${tenantName}`;
@@ -243,8 +243,7 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
     const brandColor = (school as any)?.branding?.primaryColor || "#312e81";
     const secondaryColor = "#4338ca";
 
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const portalUrl = `${baseUrl}/${subdomain}/admissions`;
+    const portalUrl = buildTenantUrl(subdomain, null, "/admissions");
 
     // Ensure or generate secure upload token for applicant credentials submission
     let uploadToken = (lead as any).uploadToken;
@@ -270,7 +269,7 @@ export async function sendInquiryAcknowledgmentEmail(payload: InquiryEmailPayloa
       }
     }
 
-    const uploadPortalUrl = `${baseUrl}/${subdomain}/admissions/upload/${lead.id}?token=${uploadToken}`;
+    const uploadPortalUrl = buildTenantUrl(subdomain, null, `/admissions/upload/${lead.id}?token=${uploadToken}`);
 
     const parentName = lead.parentName || "Parent / Guardian";
     const recipientEmail = lead.parentEmail || lead.studentEmail || (lead.parentContact?.includes("@") ? lead.parentContact : null);
@@ -863,8 +862,7 @@ export async function sendDocumentRejectedEmail(payload: DocumentRejectedEmailPa
 
     const subject = `Application Update: Document Rejected (App No: ${applicationNo}) - ${tenantName}`;
 
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const effectiveTrackUrl = trackUrl || `${baseUrl}/${sub}/admissions/track/${encodeURIComponent(applicationNo)}`;
+    const effectiveTrackUrl = trackUrl || buildTenantUrl(sub, null, `/admissions/track/${encodeURIComponent(applicationNo)}`);
     const effectiveUploadUrl = uploadUrl || effectiveTrackUrl;
 
     const emailHtml = `
@@ -979,8 +977,7 @@ export async function sendAdmissionOfferEmail(
   school: School,
   token: string
 ) {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-  const secureLink = `${baseUrl}/${school.subdomain}/admissions/accept?token=${token}`;
+  const secureLink = buildTenantUrl(school.subdomain, null, `/admissions/accept?token=${token}`);
   const brandColor = (school as any).branding?.primaryColor || "#0f172a";
 
   const emailHtml = `
@@ -1534,8 +1531,7 @@ export interface SchoolRegistrationEmailPayload {
 export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistrationEmailPayload) {
   try {
     const { schoolName, subdomain, adminEmail, adminPassword, contactPhone, schoolId } = payload;
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const portalUrl = `${baseUrl}/login?school=${encodeURIComponent(subdomain)}`;
+    const portalUrl = getTenantLoginUrl(subdomain);
     const brandColor = "#4f46e5";
     const subject = `🎉 Welcome to School ERP - ${schoolName} Portal Access Credentials`;
 
@@ -1640,6 +1636,7 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
       schoolName,
       portalUrl,
       subject,
+      html: emailHtml,
       error: dispatchResult.error,
     };
   } catch (err: any) {
@@ -1714,8 +1711,7 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
     }
 
     const tenantName = schoolName || "School ERP";
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
+    const portalUrl = subdomain ? getTenantLoginUrl(subdomain) : "https://bonaveeict.com.ng/login";
     const brandColor = "#4f46e5";
     const subject = `🎉 Enrollment Confirmation - ${studentName} (${tenantName})`;
 
@@ -1847,6 +1843,8 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
       recipients,
       studentName,
       schoolName: tenantName,
+      portalUrl,
+      html: emailHtml,
       subject,
       error: dispatchResult.error,
     };
@@ -1905,8 +1903,7 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
     }
 
     const tenantName = schoolName || "School ERP";
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const portalUrl = subdomain ? `${baseUrl}/login?school=${encodeURIComponent(subdomain)}` : `${baseUrl}/login`;
+    const portalUrl = subdomain ? getTenantLoginUrl(subdomain) : "https://bonaveeict.com.ng/login";
     const brandColor = "#4f46e5";
     const subject = `🎉 Staff Enrollment Confirmation - Welcome to ${tenantName}`;
 
@@ -2030,6 +2027,8 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
       recipient: normalizedStaffEmail,
       staffName,
       schoolName: tenantName,
+      portalUrl,
+      html: emailHtml,
       subject,
       error: dispatchResult.error,
     };
@@ -2092,8 +2091,7 @@ export async function sendExamAdmitSlipEmail(payload: ExamAdmitSlipEmailPayload)
     const secondaryColor = "#3b82f6";
 
     const subjectsString = Array.isArray(subjects) ? subjects.join(", ") : subjects;
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const admitSlipUrl = propAdmitSlipUrl || `${baseUrl}/${sub}/admissions/admit-slip/${encodeURIComponent(applicationNo || rollNo)}`;
+    const admitSlipUrl = propAdmitSlipUrl || buildTenantUrl(sub, null, `/admissions/admit-slip/${encodeURIComponent(applicationNo || rollNo)}`);
 
     // 1. Dynamically generate high-resolution A4 Examination Admit Slip PDF
     let pdfAttachment: EmailAttachment | undefined = undefined;
@@ -2512,8 +2510,7 @@ export async function sendParentWelcomeEmail(payload: ParentWelcomeEmailPayload)
 
     const tenantName = schoolName || "Bonavee School";
     const code = schoolCode || "demo";
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
-    const loginLink = propLoginUrl || `${baseUrl}/login`;
+    const loginLink = propLoginUrl || (code ? getTenantLoginUrl(code) : "https://bonaveeict.com.ng/login");
     const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
 
     const subject = `Welcome to ${tenantName} Parent Portal`;
@@ -2619,8 +2616,7 @@ export async function sendSchoolApprovalEmail(payload: {
   try {
     const { schoolId, schoolName, adminEmail, subdomain, slug } = payload;
     const code = slug || subdomain;
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
-    const loginLink = `${baseUrl}/login`;
+    const loginLink = code ? getTenantLoginUrl(code) : "https://bonaveeict.com.ng/login";
     const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
     const subject = `🎉 Congratulations! Your School ${schoolName} has been Approved`;
 
@@ -2670,7 +2666,7 @@ export async function sendAcademicResultPublishedNotification(payload: {
   if (!recipient) return { success: false, error: "No recipient email available" };
 
   const tenantName = payload.schoolName || "Bonavee School";
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+  const portalLoginUrl = payload.schoolCode ? getTenantLoginUrl(payload.schoolCode) : "https://bonaveeict.com.ng/login";
   const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
   const subject = `Academic Results Published: ${payload.termOrExamName} - ${tenantName}`;
 
@@ -2678,7 +2674,7 @@ export async function sendAcademicResultPublishedNotification(payload: {
     <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
       <h2 style="color: #4f46e5;">Academic Results Available</h2>
       <p>Academic results for <strong>${payload.studentName}</strong> for <strong>${payload.termOrExamName}</strong> have been published.</p>
-      <p>Log in to view the full report card: <a href="${baseUrl}/login">${baseUrl}/login</a></p>
+      <p>Log in to view the full report card: <a href="${portalLoginUrl}">${portalLoginUrl}</a></p>
       <p style="font-size: 13px; color: #64748b;">School Code: <strong>${payload.schoolCode || "demo"}</strong></p>
     </div>
   `.trim();
@@ -2709,7 +2705,7 @@ export async function sendParentFeeReminderEmail(payload: {
 }) {
   const tenantName = payload.schoolName || "Bonavee School";
   const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonavee.com.ng").replace(/\/$/, "");
+  const portalLoginUrl = payload.schoolCode ? getTenantLoginUrl(payload.schoolCode) : "https://bonaveeict.com.ng/login";
   const subject = `Fee Reminder for ${payload.studentName} - ${tenantName}`;
 
   const html = `
@@ -2721,7 +2717,7 @@ export async function sendParentFeeReminderEmail(payload: {
         <p><strong>Amount Outstanding:</strong> ₦${payload.amountDue.toLocaleString()}</p>
         ${payload.dueDate ? `<p><strong>Due Date:</strong> ${payload.dueDate}</p>` : ""}
       </div>
-      <p>Log in to your parent portal to view invoices and submit payment proof: <a href="${baseUrl}/login">${baseUrl}/login</a></p>
+      <p>Log in to your parent portal to view invoices and submit payment proof: <a href="${portalLoginUrl}">${portalLoginUrl}</a></p>
     </div>
   `.trim();
 
@@ -2782,8 +2778,7 @@ export interface PasswordRecommendationEmailPayload {
 export async function sendPasswordRecommendationEmail(payload: PasswordRecommendationEmailPayload) {
   try {
     const { schoolName, subdomain, adminEmail, schoolId } = payload;
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || "https://bonaveeict.com.ng").replace(/\/$/, "");
-    const securitySettingsUrl = `${baseUrl}/${encodeURIComponent(subdomain)}/settings/security`;
+    const securitySettingsUrl = buildTenantUrl(subdomain, null, "/settings/security");
     const brandColor = "#4f46e5";
     const subject = "Consider strengthening your password (Optional) - You can change it anytime in Settings > Security.";
 

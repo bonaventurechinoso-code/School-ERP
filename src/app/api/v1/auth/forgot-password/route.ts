@@ -5,6 +5,7 @@ import { createPasswordResetToken, hashToken } from "@/lib/security-service";
 import { sendPasswordResetEmail } from "@/lib/mail";
 import { BASE_TENANT_DOMAIN } from "@/lib/session-manager";
 import { resolveTenant } from "@/lib/tenant-service";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 
 export async function POST(req: Request) {
   try {
@@ -74,8 +75,10 @@ export async function POST(req: Request) {
         ip: clientIp,
       });
 
-      const targetSlug = anchorSchool?.slug || anchorSchool?.subdomain || "admin";
-      const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
+      const targetSlug = anchorSchool?.slug || anchorSchool?.subdomain || "";
+      const resetUrl = targetSlug
+        ? buildTenantUrl(targetSlug, req.headers.get("x-forwarded-host") || req.headers.get("host"), `/reset-password?token=${encodeURIComponent(resetToken)}`)
+        : `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
       const mailResult = await sendPasswordResetEmail({
         school: anchorSchool || { name: "School ERP Platform", branding: { primaryColor: "#0B132B" } },
@@ -260,7 +263,7 @@ export async function POST(req: Request) {
 
     // 5. Compile recovery link strictly preserving the tenant slug
     const targetSlug = school.slug || school.subdomain;
-    const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetUrl = buildTenantUrl(targetSlug, req.headers.get("x-forwarded-host") || req.headers.get("host"), `/reset-password?token=${encodeURIComponent(resetToken)}`);
 
     // 6. Transmit transactional email
     const info = await sendPasswordResetEmail({

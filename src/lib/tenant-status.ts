@@ -287,7 +287,7 @@ export async function notifyTenantAdmins(
 
   const message = isSuspended
     ? `Reason: ${reason || "Contact Super Admin at support@bonaveeict.com.ng"}. Access is blocked until reactivated.`
-    : `Your school is now ACTIVE again. You can login at https://${subdomain}.bonaveeict.com.ng/login or https://bonaveeict.com.ng/${slug}/login. Trial extended 30 days.`;
+    : `Your school is now ACTIVE again. You can login at https://${subdomain}.bonaveeict.com.ng/login. Trial extended 30 days.`;
 
   // 2. Persist in-app Notice (scoped strictly to schoolId)
   if (schoolId) {
@@ -345,7 +345,7 @@ export async function notifyTenantAdmins(
             <p>Dear Administrator of <strong>${schoolName}</strong>,</p>
             <p>${message}</p>
             <p style="margin-top:16px;">
-              <a href="https://bonaveeict.com.ng/${slug}/login" style="display:inline-block;background:#16a34a;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">
+              <a href="https://${subdomain}.bonaveeict.com.ng/login" style="display:inline-block;background:#16a34a;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;">
                 Sign In to ${schoolName}
               </a>
             </p>

@@ -1,4 +1,5 @@
 import { basePrisma } from "@/lib/tenant-prisma";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 import {
   sendReceiptReceivedEmail,
   sendReceiptVerifiedEmail,
@@ -557,11 +558,20 @@ export async function verifyPaymentReceipt(params: VerifyReceiptParams) {
 
 
     // Dispatch rejection notification email with re-upload link
-    resolvePayerEmail(receipt).then((email) => {
+    resolvePayerEmail(receipt).then(async (email) => {
       if (email) {
-        const reuploadUrl = receipt.moduleType === "ADMISSION_FORM_FEE"
+        let sub = "";
+        try {
+          const s = await basePrisma.school.findFirst({
+            where: { OR: [{ id: receipt.schoolId || "" }, { id: receipt.tenantId }, { subdomain: receipt.tenantId }] },
+            select: { subdomain: true }
+          });
+          sub = s?.subdomain || "";
+        } catch {}
+        const rawPath = receipt.moduleType === "ADMISSION_FORM_FEE"
           ? `/track/${encodeURIComponent(receipt.referenceNo)}`
           : `/portal/student`;
+        const reuploadUrl = sub ? buildTenantUrl(sub, null, rawPath) : `https://bonaveeict.com.ng${rawPath}`;
         sendReceiptRejectedEmail({
           to: email,
           payerName: receipt.payerName,

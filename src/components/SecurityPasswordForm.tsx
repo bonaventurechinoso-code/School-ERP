@@ -124,8 +124,7 @@ export default function SecurityPasswordForm({
       if (logoutOnSuccess) {
         setTimeout(async () => {
           await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-          const schoolSlug = schoolDomain || "";
-          const callbackUrl = schoolSlug ? `/login?school=${encodeURIComponent(schoolSlug)}` : "/login";
+          const callbackUrl = "/login";
           await signOut({ callbackUrl });
         }, 1500);
         return;

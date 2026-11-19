@@ -33,6 +33,7 @@ import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword } from "@/lib/security-service";
 import { getSession } from "@/lib/auth";
+import { buildTenantUrl } from "@/lib/tenant-resolver";
 import {
   checkRouteAuthorization,
   convertLeadToRegister,
@@ -1698,10 +1699,10 @@ export async function enrollApplicantFromRegisterAction(payload: {
     const recipientPhone = student?.parentPhone || register?.parentPhone || "";
     const applicantNumber = register?.applicationNo || handshakeResult.matricNo || "ADM-OFFER";
     const targetSubdomain = school?.subdomain || schoolDomain || "portal";
-    const offerLetterUrl = `${host}/${targetSubdomain}/admissions/offer/${register?.id || register?.applicationNo || student?.id}`;
+    const offerLetterUrl = buildTenantUrl(targetSubdomain, host, `/admissions/offer/${register?.id || register?.applicationNo || student?.id}`);
     const studentUser = handshakeResult.userEmail || recipientEmail || handshakeResult.matricNo;
     const studentTempPass = handshakeResult.tempPassword || "Welcome@123";
-    const studentLoginUrl = `${host}/${targetSubdomain}/login?code=${encodeURIComponent(targetSubdomain)}&email=${encodeURIComponent(studentUser)}`;
+    const studentLoginUrl = buildTenantUrl(targetSubdomain, host, `/login?email=${encodeURIComponent(studentUser)}`);
 
     // 1. Dispatch Automated Admission Offer Notification to applicant
     try {
@@ -4144,8 +4145,8 @@ export async function enrollAdmissionsApplicationAction(payload: {
     // 6. Dispatch Automated Admission Offer Notification to applicant
     const host = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng";
     const targetSubdomain = school?.subdomain || payload.schoolDomain || "portal";
-    const studentLoginUrl = `${host}/${targetSubdomain}/login?code=${encodeURIComponent(targetSubdomain)}&email=${encodeURIComponent(userEmail)}`;
-    const offerLetterUrl = `${host}/${targetSubdomain}/admissions/offer/${application.id}`;
+    const studentLoginUrl = buildTenantUrl(targetSubdomain, host, `/login?email=${encodeURIComponent(userEmail)}`);
+    const offerLetterUrl = buildTenantUrl(targetSubdomain, host, `/admissions/offer/${application.id}`);
     
     await dispatchAdmissionsNotification({
       tenantId: targetSchoolId,

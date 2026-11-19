@@ -86,8 +86,7 @@ export async function POST(req: Request) {
       baseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || `https://${BASE_TENANT_DOMAIN}`).replace(/\/$/, "");
     }
 
-    const targetSlug = anchorSchool.slug || anchorSchool.subdomain;
-    const resetUrl = `${baseUrl}/${targetSlug}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const mailResult = await sendPasswordResetEmail({
       school: anchorSchool,

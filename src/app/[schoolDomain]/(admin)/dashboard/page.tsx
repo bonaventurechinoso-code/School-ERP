@@ -49,11 +49,11 @@ export default async function TenantDashboard({
   }
 
   if (!school) {
-    redirect(`/login?error=tenant_not_found&school=${encodeURIComponent(schoolDomain)}`);
+    redirect('/login?error=tenant_not_found');
   }
 
   if (!session) {
-    redirect(`/login?school=${encodeURIComponent(schoolDomain)}`);
+    redirect('/login');
   }
 
   // Pre-fetch classrooms with safe fallback
