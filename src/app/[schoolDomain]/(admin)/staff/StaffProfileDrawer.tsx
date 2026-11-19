@@ -297,26 +297,7 @@ export default function StaffProfileDrawer({
     return getPayGradesForTier(resolvedTierCategory, isPolytechnic, isNonTeaching);
   }, [resolvedTierCategory, isPolytechnic, isNonTeaching]);
 
-  useEffect(() => {
-    if (staff && isOpen) {
-      setProfileData(staff);
-      initFormData(staff);
-      // Load full dossier from server
-      fetchStaffFullProfile(schoolDomain, staff.id).then((res) => {
-        if (res.success && res.data) {
-          setProfileData(res.data);
-          initFormData(res.data);
-        }
-      });
-    } else {
-      setIsEditing(false);
-      setAlertMsg(null);
-      setShowVoucherForm(false);
-      setSelectedVoucherForModal(null);
-    }
-  }, [staff, isOpen, schoolDomain]);
-
-  const initFormData = (data: any) => {
+  const initFormData = React.useCallback((data: any) => {
     const meta = data.metadata || {};
     setFormData({
       // Section A: Personal & Contact
@@ -377,7 +358,26 @@ export default function StaffProfileDrawer({
     if (data.baseSalary) {
       setVoucherAmount(data.baseSalary.toString());
     }
-  };
+  }, [availableQualifications]);
+
+  useEffect(() => {
+    if (staff && isOpen) {
+      setProfileData(staff);
+      initFormData(staff);
+      // Load full dossier from server
+      fetchStaffFullProfile(schoolDomain, staff.id).then((res) => {
+        if (res.success && res.data) {
+          setProfileData(res.data);
+          initFormData(res.data);
+        }
+      });
+    } else {
+      setIsEditing(false);
+      setAlertMsg(null);
+      setShowVoucherForm(false);
+      setSelectedVoucherForModal(null);
+    }
+  }, [staff, isOpen, schoolDomain, initFormData]);
 
   if (!isOpen || !staff) return null;
 

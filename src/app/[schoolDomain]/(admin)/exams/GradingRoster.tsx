@@ -589,7 +589,7 @@ export default function GradingRoster({
     }
 
     return null;
-  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents]);
+  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents, tierCategory]);
 
   // 7. Master Broadsheet Computation: One row per student, ALL subjects across
   const broadsheetData = useMemo(() => {
@@ -712,7 +712,7 @@ export default function GradingRoster({
       ...row,
       position: rankMap.get(row.student.id) || "—",
     }));
-  }, [studentsWithRegNo, classSubjects, tierCategory, getStudentSubjectScore, passMarkThreshold]);
+  }, [studentsWithRegNo, classSubjects, tierCategory, isTertiaryTier, getStudentSubjectScore, passMarkThreshold]);
 
   // Filtered by Search query
   const filteredBroadsheet = useMemo(() => {
