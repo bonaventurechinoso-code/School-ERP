@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { basePrisma } from "@/lib/tenant-prisma";
-import { getSchoolsStore } from "@/app/dashboard/super-admin/mock-data";
-import { ensureEgedeAndDemoRestored } from "@/lib/tenant-status";
 import { hardDeleteTenant } from "@/lib/tenant-service";
 
 export const dynamic = "force-dynamic";
@@ -40,21 +38,11 @@ function buildDefaultTiers(
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureEgedeAndDemoRestored();
-
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || "ALL";
     const search = searchParams.get("search")?.trim().toLowerCase() || "";
 
-    // 1. Retrieve in-memory synced store (excluding soft-deleted rows)
-    const storeSchools = [...getSchoolsStore()].filter(
-      (s: any) =>
-        !s.isDeleted &&
-        String(s.status || "").toUpperCase() !== "DELETED" &&
-        s.subdomain?.toLowerCase() !== "greenfield"
-    );
-
-    // 2. Query ALL real database schools from PostgreSQL (where deletedAt IS NULL AND status != 'DELETED')
+    // 1. Query real database schools strictly from PostgreSQL (where deletedAt IS NULL AND status != 'DELETED')
     let dbSchools: any[] = [];
     try {
       dbSchools = await basePrisma.school.findMany({
@@ -86,7 +74,7 @@ export async function GET(req: NextRequest) {
       console.warn("[SuperAdmin:Tenants GET] DB query failed or offline:", dbErr);
     }
 
-    // 3. Map database schools to SchoolTenant format (preserving ACTIVE and SUSPENDED, including Demo)
+    // 2. Map database schools to SchoolTenant format
     const mappedDbSchools: any[] = dbSchools.map((school) => {
       const subLower = (school.subdomain || "").toLowerCase();
       const isDemo = subLower === "demo" || (school.slug || "").toLowerCase() === "demo";
@@ -142,23 +130,8 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 4. Merge DB schools and in-memory store schools (UNION, including Demo School)
+    // 3. Populate combinedMap strictly from database records (no hardcoded mock tenants)
     const combinedMap = new Map<string, any>();
-
-    for (const s of storeSchools) {
-      const subKey = s.subdomain.toLowerCase();
-      const isSusp =
-        s.subscriptionStatus === "Suspended" ||
-        s.planStatus === "Suspended" ||
-        (s as any).status === "SUSPENDED";
-      combinedMap.set(subKey, {
-        ...s,
-        slug: s.subdomain,
-        status: isSusp ? "SUSPENDED" : "ACTIVE",
-        isActive: !isSusp,
-        academic_tiers: buildDefaultTiers((s as any).academic_tiers, null, "PRIMARY"),
-      });
-    }
 
     for (const s of mappedDbSchools) {
       combinedMap.set(s.subdomain.toLowerCase(), s);

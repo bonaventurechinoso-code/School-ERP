@@ -281,6 +281,11 @@ export default function SuperAdminTenantsPage() {
         }).catch(() => null);
       }
 
+      addSoftDeletedId(id);
+      if (tenantToDelete.subdomain) {
+        addSoftDeletedId(tenantToDelete.subdomain);
+      }
+
       pushToast(`${tenantToDelete.name} permanently deleted from production database`, "success");
       setTenants((prev) => prev.filter((t) => t.id !== id && t.subdomain !== tenantToDelete.subdomain));
       setTenantToDelete(null);

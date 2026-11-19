@@ -885,103 +885,58 @@ export async function ensureEgedeAndDemoRestored(): Promise<void> {
       })
       .catch(() => {});
 
-    await prisma.school.upsert({
-      where: { subdomain: "demo" },
-      update: {
-        name: "Apex International Academy",
-        status: "ACTIVE",
-        isActive: true,
-        isBanned: false,
-        deletedAt: null,
-        subscriptionStatus: "ACTIVE",
-        trialEndDate: future30Days,
-        subscriptionExpiresAt: future30Days,
-        isPublicPortalEnabled: true,
-      },
-      create: {
-        name: "Apex International Academy",
+    // 3. Ensure Demo School exists only if not explicitly deleted
+    const isDemoDeleted = await prisma.school.findFirst({
+      where: {
         subdomain: "demo",
-        slug: "demo",
-        status: "ACTIVE",
-        isActive: true,
-        isBanned: false,
-        deletedAt: null,
-        subscriptionStatus: "ACTIVE",
-        trialStartDate: now,
-        trialEndDate: future30Days,
-        subscriptionExpiresAt: future30Days,
-        contactPhone: "+234 800 000 0000",
-        isPublicPortalEnabled: true,
+        OR: [
+          { deletedAt: { not: null } },
+          { status: "DELETED" },
+        ],
       },
     });
 
-    await prisma.tenant.upsert({
-      where: { subdomain: "demo" },
-      update: {
-        schoolName: "Apex International Academy",
-        status: "ACTIVE",
-        subscriptionStatus: "ACTIVE",
-        suspendedReason: null,
-        suspendedAt: null,
-        statusReason: null,
-        statusChangedAt: now,
-        tier: "PRIMARY",
-        isDemo: true,
-        isTrial: false,
-        trialEndsAt: future30Days,
-      },
-      create: {
-        schoolName: "Apex International Academy",
-        subdomain: "demo",
-        adminEmail: "demo.admin@schoolerp.local",
-        contactPhone: "+234 800 000 0000",
-        institutionTypes: ["Primary School", "Secondary School"],
-        tier: "PRIMARY",
-        status: "ACTIVE",
-        subscriptionStatus: "ACTIVE",
-        isDemo: true,
-        isTrial: false,
-        trialEndsAt: future30Days,
-      },
-    });
+    if (!isDemoDeleted) {
+      const existingDemo = await prisma.school.findFirst({
+        where: { subdomain: "demo" },
+      });
 
-    // 4. Ensure all non-deleted schools in DB & in-memory store are ACTIVE (10/10 operational status)
-    await prisma.school
-      .updateMany({
-        where: { deletedAt: null },
-        data: {
-          status: "ACTIVE",
-          isActive: true,
-          isBanned: false,
-          subscriptionStatus: "ACTIVE",
-        },
-      })
-      .catch(() => {});
+      if (!existingDemo) {
+        await prisma.school.create({
+          data: {
+            name: "Apex International Academy",
+            subdomain: "demo",
+            slug: "demo",
+            status: "ACTIVE",
+            isActive: true,
+            isBanned: false,
+            deletedAt: null,
+            subscriptionStatus: "ACTIVE",
+            trialStartDate: now,
+            trialEndDate: future30Days,
+            subscriptionExpiresAt: future30Days,
+            contactPhone: "+234 800 000 0000",
+            isPublicPortalEnabled: true,
+          },
+        }).catch(() => {});
 
-    await prisma.tenant
-      .updateMany({
-        where: { status: { not: "DELETED" } },
-        data: {
-          status: "ACTIVE",
-          subscriptionStatus: "ACTIVE",
-          suspendedReason: null,
-          suspendedAt: null,
-          statusReason: null,
-        },
-      })
-      .catch(() => {});
-
-    try {
-      const store = getSchoolsStore();
-      for (const s of store) {
-        if (!(s as any).isDeleted && String((s as any).status || "").toUpperCase() !== "DELETED") {
-          s.planStatus = "Active";
-          s.subscriptionStatus = "Active";
-          (s as any).status = "ACTIVE";
-          (s as any).isActive = true;
-        }
+        await prisma.tenant.create({
+          data: {
+            schoolName: "Apex International Academy",
+            subdomain: "demo",
+            adminEmail: "demo.admin@schoolerp.local",
+            contactPhone: "+234 800 000 0000",
+            institutionTypes: ["Primary School", "Secondary School"],
+            tier: "PRIMARY",
+            status: "ACTIVE",
+            subscriptionStatus: "ACTIVE",
+            isDemo: true,
+            isTrial: false,
+            trialEndsAt: future30Days,
+          },
+        }).catch(() => {});
       }
-    } catch {}
+    }
 
     await clearTenantCache("demo");
     await clearTenantCache("egede");

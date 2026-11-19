@@ -488,40 +488,64 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
     throw new Error("Tenant identifier is required for hard delete.");
   }
 
-  // 1. Locate School and Tenant records across all aliases
-  const [schools, tenants] = await Promise.all([
-    basePrisma.school.findMany({
-      where: {
-        OR: [
-          { id: cleanId },
-          { subdomain: { equals: cleanId, mode: "insensitive" } },
-          { slug: { equals: cleanId, mode: "insensitive" } },
-        ],
-      },
-    }),
-    basePrisma.tenant.findMany({
-      where: {
-        OR: [
-          { id: cleanId },
-          { subdomain: { equals: cleanId, mode: "insensitive" } },
-          { slug: { equals: cleanId, mode: "insensitive" } },
-        ],
-      },
-    }),
-  ]);
+  // 1. Locate School and Tenant records across all aliases and subdomains
+  const initialSchools = await basePrisma.school.findMany({
+    where: {
+      OR: [
+        { id: cleanId },
+        { subdomain: { equals: cleanId, mode: "insensitive" } },
+        { slug: { equals: cleanId, mode: "insensitive" } },
+      ],
+    },
+  });
+  console.log("[HARD_DELETE] initialSchools found:", initialSchools);
+
+  const discoveredSubdomains = Array.from(
+    new Set(
+      [
+        cleanId.toLowerCase(),
+        ...initialSchools.map((s) => s.subdomain?.toLowerCase()),
+        ...initialSchools.map((s) => s.slug?.toLowerCase()),
+      ].filter(Boolean) as string[]
+    )
+  );
+
+  const initialTenants = await basePrisma.tenant.findMany({
+    where: {
+      OR: [
+        { id: cleanId },
+        { subdomain: { in: discoveredSubdomains, mode: "insensitive" } },
+        { slug: { in: discoveredSubdomains, mode: "insensitive" } },
+      ],
+    },
+  });
+
+  const allSubdomains = Array.from(
+    new Set(
+      [
+        ...discoveredSubdomains,
+        ...initialTenants.map((t) => t.subdomain?.toLowerCase()),
+        ...initialTenants.map((t) => t.slug?.toLowerCase()),
+      ].filter(Boolean) as string[]
+    )
+  );
+
+  const schools = await basePrisma.school.findMany({
+    where: {
+      OR: [
+        { id: cleanId },
+        { subdomain: { in: allSubdomains, mode: "insensitive" } },
+        { slug: { in: allSubdomains, mode: "insensitive" } },
+      ],
+    },
+  });
+  const tenants = initialTenants;
 
   const schoolIds = Array.from(new Set([...schools.map((s) => s.id), cleanId]));
   const tenantIds = Array.from(new Set([...tenants.map((t) => t.id), cleanId]));
   const allTargetIds = Array.from(new Set([...schoolIds, ...tenantIds]));
-  const subdomains = Array.from(
-    new Set(
-      [
-        ...schools.map((s) => s.subdomain),
-        ...tenants.map((t) => t.subdomain),
-        cleanId.toLowerCase(),
-      ].filter(Boolean)
-    )
-  );
+  const subdomains = allSubdomains;
+  console.log("[HARD_DELETE] Targets:", { schoolIds, tenantIds, allTargetIds, subdomains });
 
   const primarySchool = schools[0];
   const primaryTenant = tenants[0];
@@ -635,23 +659,25 @@ export async function hardDeleteTenant(identifier: string): Promise<HardDeleteRe
   }
 
   // 5. Hard delete primary School & Tenant rows
-  await basePrisma.school.deleteMany({
+  const deletedSchools = await basePrisma.school.deleteMany({
     where: {
       OR: [
         { id: { in: schoolIds } },
         { subdomain: { in: subdomains } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => { });
+  }).catch((err) => { console.error("[HARD_DELETE] school.deleteMany error:", err); return { count: 0 }; });
 
-  await basePrisma.tenant.deleteMany({
+  const deletedTenants = await basePrisma.tenant.deleteMany({
     where: {
       OR: [
         { id: { in: allTargetIds } },
         { subdomain: { in: subdomains } },
       ],
     },
-  }).then(() => purgedCount++).catch(() => { });
+  }).catch((err) => { console.error("[HARD_DELETE] tenant.deleteMany error:", err); return { count: 0 }; });
+
+  console.log(`[HARD_DELETE] Result: ${deletedSchools.count} schools, ${deletedTenants.count} tenants deleted.`);
 
   // 6. Record authoritative Audit Log
   await basePrisma.auditLog.create({

@@ -51,7 +51,7 @@ export default function SuperAdminMasterDashboard() {
         if (res.ok) {
           const json = await res.json();
           const list = json?.data?.schools || json?.data?.tenants;
-          if (Array.isArray(list) && list.length > 0 && isMounted) {
+          if (Array.isArray(list) && isMounted) {
             setSchools(list);
           }
         }
