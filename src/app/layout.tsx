@@ -26,9 +26,13 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="School ERP" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
         {/* Apple Touch Startup / Splash Screen for iOS devices */}
         <link rel="apple-touch-startup-image" href="/icon-512.png" />
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
@@ -39,7 +43,7 @@ export default function RootLayout({
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)" />
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)" />
         <link rel="apple-touch-startup-image" href="/icon-512.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" />
-        <meta name="theme-color" content="#4A90E2" />
+        <meta name="theme-color" content="#0284c7" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
