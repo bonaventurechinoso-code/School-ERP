@@ -3,6 +3,14 @@
  * Isomorphic: safe to use in Server Actions, Server Components, and Client Components.
  */
 
+import {
+  getInstitutionTierConfig,
+  INSTITUTION_TIERS,
+  POLYTECHNIC_TIER_DEFINITION,
+  COLLEGE_OF_EDUCATION_TIER_DEFINITION,
+  InstitutionTierKey,
+} from "./institution-tiers";
+
 export type EducationalTierCategory = "NURSERY" | "PRIMARY" | "SECONDARY" | "TERTIARY";
 
 export interface SchoolTierItem {
@@ -198,177 +206,83 @@ export function getTierForClass(className: string): {
 /**
  * Resolves a school's registered educational tiers from its DB attributes.
  * Reads School.tier enum, School.academicTiers relation, and school name/subdomain.
+ * Single Source of Truth: Driven by getInstitutionTierConfig to strictly isolate tiers.
  */
 export function resolveSchoolTiers(input: {
   schoolId?: string;
   name?: string | null;
   subdomain?: string | null;
   tier?: string | null;
+  preciseTier?: string | null;
+  institutionType?: string | null;
   academicTiers?: Array<{ name?: string | null; level?: number | null }> | null;
 }): SchoolTierInfo {
   const subdomain = (input.subdomain || "").toLowerCase().trim();
   const schoolName = (input.name || subdomain || "School").trim();
-  const isDemo = subdomain === "demo" || subdomain.includes("sandbox");
+  const isDemo = subdomain === "demo" || subdomain.includes("sandbox") || subdomain.startsWith("demo-");
 
-  // Collect registered tier entities from academicTiers if present
-  const rawAcademicTiers = Array.isArray(input.academicTiers) ? input.academicTiers : [];
+  // Determine authoritative tier from single source of truth config
+  const authoritativeTier = getInstitutionTierConfig({
+    subdomain,
+    name: schoolName,
+    tier: input.tier,
+    preciseTier: input.preciseTier,
+    institutionType: input.institutionType,
+    academicTiers: input.academicTiers,
+  });
+
+  const registeredTiers: SchoolTierItem[] = [];
 
   let hasNursery = false;
   let hasPrimary = false;
   let hasSecondary = false;
   let hasTertiary = false;
 
-  // 1. Analyze explicit AcademicTier records in DB
-  rawAcademicTiers.forEach((tier) => {
-    const tName = (tier.name || "").toUpperCase();
-    if (
-      tName.includes("CRECHE") ||
-      tName.includes("NURSERY") ||
-      tName.includes("EARLY") ||
-      tName.includes("KINDERGARTEN") ||
-      tName.includes("DAYCARE")
-    ) {
-      hasNursery = true;
-    }
-    if (
-      tName.includes("PRIMARY") ||
-      tName.includes("ELEMENTARY") ||
-      tName.includes("BASIC")
-    ) {
-      hasPrimary = true;
-    }
-    if (
-      tName.includes("SECONDARY") ||
-      tName.includes("HIGH SCHOOL") ||
-      tName.includes("JSS") ||
-      tName.includes("SSS")
-    ) {
-      hasSecondary = true;
-    }
-    if (
-      tName.includes("UNIVERSITY") ||
-      tName.includes("POLYTECHNIC") ||
-      tName.includes("COLLEGE") ||
-      tName.includes("TERTIARY") ||
-      tName.includes("HIGHER")
-    ) {
-      hasTertiary = true;
-    }
-  });
-
-  // 2. Also analyze School.tier enum
-  const schoolTierEnum = (input.tier || "").toUpperCase().trim();
-  if (schoolTierEnum === "CRECHE") {
+  if (authoritativeTier.key === "CRECHE") {
     hasNursery = true;
-  } else if (schoolTierEnum === "PRIMARY") {
-    hasPrimary = true;
-  } else if (schoolTierEnum === "SECONDARY") {
-    hasSecondary = true;
-  } else if (schoolTierEnum === "TERTIARY") {
-    hasTertiary = true;
-  }
-
-  // 3. Fallback to school name / subdomain if no academicTiers were seeded yet
-  if (!hasNursery && !hasPrimary && !hasSecondary && !hasTertiary) {
-    const nameLower = schoolName.toLowerCase();
-    if (nameLower.includes("creche") || nameLower.includes("daycare") || nameLower.includes("nursery")) {
-      hasNursery = true;
-    }
-    if (nameLower.includes("primary") || nameLower.includes("basic") || nameLower.includes("elementary")) {
-      hasPrimary = true;
-    }
-    if (nameLower.includes("secondary") || nameLower.includes("grammar") || nameLower.includes("high school") || nameLower.includes("college")) {
-      hasSecondary = true;
-    }
-    if (nameLower.includes("polytechnic") || nameLower.includes("university") || nameLower.includes("institute")) {
-      hasTertiary = true;
-    }
-  }
-
-  // Demo tenant is intentionally comprehensive/mixed-tier
-  if (isDemo) {
-    hasNursery = true;
-    hasPrimary = true;
-    hasSecondary = true;
-    hasTertiary = true;
-  }
-
-  // Build the list of registered tier items in logical progression order
-  const registeredTiers: SchoolTierItem[] = [];
-
-  if (hasNursery) {
     registeredTiers.push({
       category: "NURSERY",
-      name: "Creche / Nursery",
-      label: "Early Years / Creche & Nursery",
-      badgeCode: "NURSERY",
+      name: authoritativeTier.name,
+      label: authoritativeTier.badgeLabel,
+      badgeCode: authoritativeTier.badgeCode,
       level: 1,
     });
-  }
-
-  if (hasPrimary) {
-    registeredTiers.push({
-      category: "PRIMARY",
-      name: "Primary School",
-      label: "Primary School",
-      badgeCode: "PRIMARY",
-      level: 2,
-    });
-  }
-
-  if (hasSecondary) {
+  } else if (authoritativeTier.key === "SECONDARY") {
+    hasSecondary = true;
     registeredTiers.push({
       category: "SECONDARY",
-      name: "Secondary School",
-      label: "Secondary School",
-      badgeCode: "SECONDARY",
+      name: authoritativeTier.name,
+      label: authoritativeTier.badgeLabel,
+      badgeCode: authoritativeTier.badgeCode,
       level: 3,
     });
-  }
-
-  if (hasTertiary) {
+  } else if (authoritativeTier.key === "TERTIARY") {
+    hasTertiary = true;
     registeredTiers.push({
       category: "TERTIARY",
-      name: "Higher Institution",
-      label: "Higher Education / Tertiary",
-      badgeCode: "TERTIARY",
+      name: authoritativeTier.name,
+      label: authoritativeTier.badgeLabel,
+      badgeCode: authoritativeTier.badgeCode,
       level: 4,
     });
-  }
-
-  // Absolute fallback: if completely unconfigured, default to PRIMARY
-  if (registeredTiers.length === 0) {
+  } else {
     hasPrimary = true;
     registeredTiers.push({
       category: "PRIMARY",
-      name: "Primary School",
-      label: "Primary School",
-      badgeCode: "PRIMARY",
+      name: authoritativeTier.name,
+      label: authoritativeTier.badgeLabel,
+      badgeCode: authoritativeTier.badgeCode,
       level: 2,
     });
   }
 
-  // Determine main tier category & default class
-  // RULE: For a Primary school that includes Early Years, main tier is PRIMARY and default is "Primary 1"
-  let mainTierCategory: EducationalTierCategory = "PRIMARY";
-  let defaultClass = "Primary 1";
+  const mainTierCategory: EducationalTierCategory = authoritativeTier.key === "CRECHE"
+    ? "NURSERY"
+    : authoritativeTier.key;
 
-  if (hasPrimary) {
-    mainTierCategory = "PRIMARY";
-    defaultClass = "Primary 1";
-  } else if (hasSecondary) {
-    mainTierCategory = "SECONDARY";
-    defaultClass = "JSS 1";
-  } else if (hasTertiary) {
-    mainTierCategory = "TERTIARY";
-    defaultClass = "100 Level";
-  } else if (hasNursery) {
-    mainTierCategory = "NURSERY";
-    defaultClass = "Nursery 1";
-  }
-
-  const isMultiTier = registeredTiers.length > 1;
-  const tierSummaryLabel = registeredTiers.map((t) => t.name).join(" • ");
+  const defaultClass = authoritativeTier.defaultClass;
+  const isMultiTier = false;
+  const tierSummaryLabel = authoritativeTier.badgeLabel;
 
   return {
     schoolId: input.schoolId,
@@ -401,6 +315,8 @@ export function getClassesForSchool(
     name?: string | null;
     subdomain?: string | null;
     tier?: string | null;
+    preciseTier?: string | null;
+    institutionType?: string | null;
     academicTiers?: Array<{ name?: string | null; level?: number | null }> | null;
   },
   options?: {
@@ -409,16 +325,20 @@ export function getClassesForSchool(
   }
 ): SchoolClassesResult {
   const tierInfo = resolveSchoolTiers(schoolInput);
+  const authoritativeTier = getInstitutionTierConfig(schoolInput);
 
   // Group classes by each registered tier category
   const groups: TierClassGroup[] = [];
   const allClassesSet = new Set<string>();
 
   tierInfo.registeredTiers.forEach((tier) => {
-    const canonicalClasses = CANONICAL_TIER_CLASSES[tier.category] || [];
+    // Start strictly with the tier's authoritative canonical classes
+    const canonicalClasses = authoritativeTier.classes && authoritativeTier.classes.length > 0
+      ? authoritativeTier.classes
+      : (CANONICAL_TIER_CLASSES[tier.category] || []);
     const classSet = new Set<string>(canonicalClasses);
 
-    // Merge any actual classrooms created for this school that match this tier
+    // Merge any actual classrooms created for this school ONLY IF they belong to this tier
     if (options?.classrooms && Array.isArray(options.classrooms)) {
       options.classrooms.forEach((c) => {
         const cName = c?.name?.trim();
@@ -431,7 +351,7 @@ export function getClassesForSchool(
       });
     }
 
-    // Merge any student currentClass strings that match this tier
+    // Merge any student currentClass strings ONLY IF they belong to this tier
     if (options?.students && Array.isArray(options.students)) {
       options.students.forEach((s) => {
         const sClass = s.currentClass?.trim();

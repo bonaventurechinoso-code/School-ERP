@@ -2,6 +2,7 @@ import React from "react";
 import { cookies } from "next/headers";
 import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 import GradingRoster from "../exams/GradingRoster";
 import AnnualCompiledSheet from "../exams/AnnualCompiledSheet";
 import Link from "next/link";
@@ -111,16 +112,30 @@ export default async function ResultsPage({
 
   const activeTab = searchParams.tab || "annual";
 
+  const institutionTierConfig = getInstitutionTierConfig({
+    id: school.id,
+    name: school.name,
+    subdomain: school.subdomain,
+    tier: (school as any).preciseTier || school.tier,
+    preciseTier: (school as any).preciseTier,
+    institutionType: (school as any).institutionType || (school as any).tertiaryType,
+    academicTiers: school.academicTiers,
+  });
+  const isTertiary = institutionTierConfig.key === "TERTIARY";
+  const isCreche = institutionTierConfig.key === "CRECHE";
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white flex items-center gap-2.5">
             <Award className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-            Result Processing & Annual Master Records
+            {isTertiary ? "Result Processing & Sessional Master Records" : "Result Processing & Annual Master Records"}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm sm:text-base">
-            Enterprise terminal grading broadsheets, annual session compiled sheets, and report card publishing.
+            {isTertiary 
+              ? "Enterprise semester grading broadsheets, sessional senate compiled sheets, and transcript publishing."
+              : "Enterprise terminal grading broadsheets, annual session compiled sheets, and report card publishing."}
           </p>
         </div>
 
@@ -129,7 +144,7 @@ export default async function ResultsPage({
             href={`/${params.schoolDomain}/report-cards`}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-800 transition shadow-2xs"
           >
-            <span>Print Student Report Cards</span>
+            <span>{isTertiary ? "Semester Transcripts" : isCreche ? "Developmental Records" : "Print Student Report Cards"}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -146,7 +161,7 @@ export default async function ResultsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Annual Compiled Sheet (1st + 2nd + 3rd Term)
+            {isTertiary ? "Sessional Master Broadsheet (1st & 2nd Semester)" : "Annual Compiled Sheet (1st + 2nd + 3rd Term)"}
           </a>
           <a
             href={`/${params.schoolDomain}/results?tab=terminal`}
@@ -156,19 +171,19 @@ export default async function ResultsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Terminal Grading Broadsheet
+            {isTertiary ? "Semester Grading Broadsheet" : "Terminal Grading Broadsheet"}
           </a>
           <a
             href={`/${params.schoolDomain}/exams?tab=exams`}
             className="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
           >
-            Scheduled Exams
+            {isTertiary ? "Course Examinations" : "Scheduled Exams"}
           </a>
           <a
             href={`/${params.schoolDomain}/report-cards`}
             className="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
           >
-            Student Report Cards
+            {isTertiary ? "Semester Transcripts" : isCreche ? "Developmental Records" : "Student Report Cards"}
           </a>
         </nav>
       </div>

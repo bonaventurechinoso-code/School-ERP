@@ -438,7 +438,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 8;
 
-      // 5. AFFECTIVE TRAITS & PSYCHOMOTOR SKILLS MATRIX
+      // 5. AFFECTIVE TRAITS / TERTIARY GRADING BENCHMARK
       doc.rect(margin, currentY, contentWidth, 54)
         .fillColor("#F8FAFC")
         .fill()
@@ -446,39 +446,71 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
         .lineWidth(0.5)
         .stroke();
 
-      // Matrix header
-      doc.rect(margin, currentY, contentWidth, 14)
-        .fillColor("#334155")
-        .fill();
-      doc.font("Helvetica-Bold")
-        .fontSize(6.5)
-        .fillColor("#FFFFFF")
-        .text("AFFECTIVE DOMAIN & PSYCHOMOTOR TRAITS ASSESSMENT (RATING KEY: 5 = Excellent, 4 = Very Good, 3 = Good, 2 = Fair, 1 = Needs Work)", margin, currentY + 3.5, {
-          width: contentWidth,
-          align: "center",
+      if (isTertiary) {
+        // Tertiary scale header
+        doc.rect(margin, currentY, contentWidth, 14)
+          .fillColor("#1E3A8A")
+          .fill();
+        doc.font("Helvetica-Bold")
+          .fontSize(6.5)
+          .fillColor("#FFFFFF")
+          .text("TERTIARY ACADEMIC GRADING STANDARD & DEGREE / DIPLOMA CLASSIFICATION (4.00 GP SCALE)", margin, currentY + 3.5, {
+            width: contentWidth,
+            align: "center",
+          });
+
+        const tertColW = contentWidth / 5;
+        const tertScales = [
+          { score: "70% - 100% (A)", gp: "GP: 4.00", class: "First Class / Distinction" },
+          { score: "60% - 69% (B)", gp: "GP: 3.00", class: "2nd Class Upper / Upper Credit" },
+          { score: "50% - 59% (C)", gp: "GP: 2.00", class: "2nd Class Lower / Lower Credit" },
+          { score: "45% - 49% (D)", gp: "GP: 1.00", class: "Third Class / Pass" },
+          { score: "0% - 44% (F)", gp: "GP: 0.00", class: "Fail / Academic Carryover" },
+        ];
+
+        tertScales.forEach((scale, sIdx) => {
+          const sX = margin + sIdx * tertColW + 6;
+          const sY = currentY + 18;
+
+          doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#0F172A").text(scale.score, sX, sY);
+          doc.font("Helvetica-Bold").fontSize(6).fillColor("#1E3A8A").text(scale.gp, sX, sY + 9);
+          doc.font("Helvetica").fontSize(5.5).fillColor("#64748B").text(scale.class, sX, sY + 18, { width: tertColW - 10 });
         });
+      } else {
+        // Matrix header
+        doc.rect(margin, currentY, contentWidth, 14)
+          .fillColor("#334155")
+          .fill();
+        doc.font("Helvetica-Bold")
+          .fontSize(6.5)
+          .fillColor("#FFFFFF")
+          .text("AFFECTIVE DOMAIN & PSYCHOMOTOR TRAITS ASSESSMENT (RATING KEY: 5 = Excellent, 4 = Very Good, 3 = Good, 2 = Fair, 1 = Needs Work)", margin, currentY + 3.5, {
+            width: contentWidth,
+            align: "center",
+          });
 
-      const traitsColW = contentWidth / 4;
-      const traits = [
-        { label: "Punctuality & Attendance", val: "5 (Excellent)" },
-        { label: "Neatness & Organization", val: "5 (Excellent)" },
-        { label: "Politeness & Respect", val: "5 (Excellent)" },
-        { label: "Honesty & Integrity", val: "5 (Excellent)" },
-        { label: "Handwriting & Legibility", val: "4 (Very Good)" },
-        { label: "Verbal Communication", val: "5 (Excellent)" },
-        { label: "Sports & Physical Agility", val: "4 (Very Good)" },
-        { label: "Craft & Creative Ingenuity", val: "5 (Excellent)" },
-      ];
+        const traitsColW = contentWidth / 4;
+        const traits = [
+          { label: "Punctuality & Attendance", val: "5 (Excellent)" },
+          { label: "Neatness & Organization", val: "5 (Excellent)" },
+          { label: "Politeness & Respect", val: "5 (Excellent)" },
+          { label: "Honesty & Integrity", val: "5 (Excellent)" },
+          { label: "Handwriting & Legibility", val: "4 (Very Good)" },
+          { label: "Verbal Communication", val: "5 (Excellent)" },
+          { label: "Sports & Physical Agility", val: "4 (Very Good)" },
+          { label: "Craft & Creative Ingenuity", val: "5 (Excellent)" },
+        ];
 
-      traits.forEach((trait, tIdx) => {
-        const col = tIdx % 4;
-        const row = Math.floor(tIdx / 4);
-        const tX = margin + col * traitsColW + 6;
-        const tY = currentY + 17 + row * 16;
+        traits.forEach((trait, tIdx) => {
+          const col = tIdx % 4;
+          const row = Math.floor(tIdx / 4);
+          const tX = margin + col * traitsColW + 6;
+          const tY = currentY + 17 + row * 16;
 
-        doc.font("Helvetica-Bold").fontSize(6).fillColor("#64748B").text(trait.label, tX, tY);
-        doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#1E3A8A").text(trait.val, tX, tY + 7);
-      });
+          doc.font("Helvetica-Bold").fontSize(6).fillColor("#64748B").text(trait.label, tX, tY);
+          doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#1E3A8A").text(trait.val, tX, tY + 7);
+        });
+      }
 
       currentY += 60;
 

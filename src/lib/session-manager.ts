@@ -262,30 +262,32 @@ export async function validateDatabaseSession(
         };
       }
 
-      if (anyPayload.isDemo || anyPayload.schoolDomain === "demo" || anyPayload.tenantSlug === "demo") {
+      if (
+        anyPayload.isDemo ||
+        anyPayload.schoolDomain === "demo" ||
+        anyPayload.tenantSlug === "demo" ||
+        (typeof anyPayload.schoolDomain === "string" && anyPayload.schoolDomain.startsWith("demo")) ||
+        (typeof anyPayload.tenantSlug === "string" && anyPayload.tenantSlug.startsWith("demo"))
+      ) {
+        const targetDomain = (anyPayload.schoolDomain as string) || (anyPayload.tenantSlug as string) || "demo";
         return {
-          userId: (anyPayload.userId as string) || "demo-admin-staff",
-          email: (anyPayload.email as string) || "demo.admin@schoolerp.local",
-          tenantId: (anyPayload.tenantId as string) || "demo",
-          schoolDomain: "demo",
-          tenantName: (anyPayload.tenantName as string) || "Apex International Academy",
+          userId: (anyPayload.userId as string) || `${targetDomain}-admin-staff`,
+          email: (anyPayload.email as string) || `${targetDomain}.admin@schoolerp.local`,
+          tenantId: (anyPayload.tenantId as string) || targetDomain,
+          schoolDomain: targetDomain,
+          tenantName: (anyPayload.tenantName as string) || (targetDomain === "demo" ? "Apex International Academy" : targetDomain),
           role: "TENANT_ADMIN",
           userRole: "TENANT_ADMIN",
           isDemo: true,
-          assignedTier: "Primary School",
+          assignedTier: (anyPayload.assignedTier as string) || null,
           staffRole: "School Administrator",
-          activeTiers: anyPayload.activeTiers || [
-            "Creche / Nursery",
-            "Primary School",
-            "Secondary School",
-            "Higher Institution / University",
-          ],
+          activeTiers: anyPayload.activeTiers || [],
           permissions: ["*"],
           sessionToken: sessionTokenId,
           sessionId: sessionTokenId,
           token: token,
           dbSessionId: sessionTokenId,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          expiresAt: new Date(Date.now() + SESSION_MAX_AGE_MS),
           mustChangePassword: false,
           forceChangePassword: false,
         };

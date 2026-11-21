@@ -783,6 +783,40 @@ export async function middleware(req: NextRequest) {
     const targetSlug = firstSegment;
     const remainingSegments = segments.slice(1);
     const remainingPath = remainingSegments.length > 0 ? "/" + remainingSegments.join("/") : "";
+
+    // On localhost, allow direct path-based access to demo tenants to avoid Windows *.localhost DNS failure
+    if (hostInfo.baseDomain === "localhost" || hostInfo.hostname === "localhost" || hostInfo.hostname === "127.0.0.1") {
+      if (targetSlug.startsWith("demo") || targetSlug === "sandbox") {
+        const demoToken = await new jose.SignJWT({
+          userId: `${targetSlug}-admin-staff`,
+          email: `${targetSlug}.admin@schoolerp.local`,
+          role: "TENANT_ADMIN",
+          userRole: "TENANT_ADMIN",
+          tenantSlug: targetSlug,
+          schoolDomain: targetSlug,
+          tenantName: targetSlug,
+          isDemo: true,
+          type: "demo_sso",
+        })
+          .setProtectedHeader({ alg: "HS256" })
+          .setIssuedAt()
+          .setExpirationTime(Math.floor(Date.now() / 1000) + 24 * 60 * 60)
+          .sign(SECRET_KEY);
+
+        const cookieOpts = {
+          httpOnly: true,
+          secure: false,
+          sameSite: "lax" as const,
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        };
+        const res = NextResponse.next();
+        res.cookies.set("session", demoToken, cookieOpts);
+        res.cookies.set("accessToken", demoToken, cookieOpts);
+        return res;
+      }
+    }
+
     const targetUrl = buildTenantUrl(targetSlug, hostHeader, remainingPath, protoHeader);
     const redirectUrl = new URL(targetUrl);
     redirectUrl.search = req.nextUrl.search;
@@ -807,7 +841,7 @@ export async function middleware(req: NextRequest) {
 
       redirectUrl.searchParams.set("sso_token", ssoToken);
       return NextResponse.redirect(redirectUrl, 307);
-    } else if (targetSlug === "demo" || targetSlug === "sandbox") {
+    } else if (targetSlug.startsWith("demo") || targetSlug === "sandbox") {
       const demoToken = await new jose.SignJWT({
         userId: `${targetSlug}-admin-staff`,
         email: `${targetSlug}.admin@schoolerp.local`,

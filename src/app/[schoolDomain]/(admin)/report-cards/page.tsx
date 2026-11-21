@@ -22,7 +22,8 @@ import {
   getTierForClass,
   EducationalTierCategory,
 } from "@/lib/school-tier-classes";
-import { isTertiaryClass, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
+import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding } from "@/lib/tertiary-config";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 
 // -------------------------------------------------------------
 // Nigerian Educational Ecosystem Subject Rosters (NERDC & Tertiary)
@@ -538,6 +539,24 @@ function ReportCardsContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Authoritative Single Source of Truth for Institution Tier & Dynamic Terminology
+  const institutionTierConfig = useMemo(() => {
+    return getInstitutionTierConfig({
+      id: tenant.id,
+      name: tenant.name,
+      subdomain: tenant.subdomain,
+      tier: (tenant as any).tier,
+      preciseTier: tenant.preciseTier,
+      institutionType: tenant.institutionType,
+      academicTiers: (tenant as any).academicTiers,
+    });
+  }, [tenant]);
+
+  const isTertiaryTier = institutionTierConfig.key === "TERTIARY";
+  const isCrecheTier = institutionTierConfig.key === "CRECHE";
+  const isSecondaryTier = institutionTierConfig.key === "SECONDARY";
+  const isPrimaryTier = institutionTierConfig.key === "PRIMARY";
+
   // 1. Single Source of Truth for School Tiers & Scoped Classes
   const schoolClassesResult = useMemo(() => {
     return getClassesForSchool(
@@ -546,6 +565,8 @@ function ReportCardsContent() {
         name: tenant.name,
         subdomain: tenant.subdomain,
         tier: tenant.preciseTier || (tenant as any).tier,
+        preciseTier: tenant.preciseTier,
+        institutionType: tenant.institutionType,
         academicTiers: (tenant as any).academicTiers,
       }
     );
@@ -553,9 +574,9 @@ function ReportCardsContent() {
 
   const { groups: classGroups, allClasses: availableClasses, defaultClass: schoolDefaultClass, tierInfo } = schoolClassesResult;
 
-  const [term, setTerm] = useState("1st Term");
+  const [term, setTerm] = useState<string>(() => institutionTierConfig.defaultPeriod);
   const [className, setClassName] = useState<string>(() => {
-    return schoolDefaultClass || availableClasses[0] || "Primary 1";
+    return schoolDefaultClass || institutionTierConfig.defaultClass || availableClasses[0] || "Primary 1";
   });
   const [subject, setSubject] = useState("");
   const [seniorStream, setSeniorStream] = useState<SeniorStreamKey>("ALL");
@@ -563,23 +584,32 @@ function ReportCardsContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [roster, setRoster] = useState<StudentScore[]>([]);
 
+  // Automatically keep term in sync with tier (e.g. 1st Semester for Tertiary, 1st Term for K-12)
+  useEffect(() => {
+    if (isTertiaryTier && !term.includes("Semester")) {
+      setTerm("1st Semester");
+    } else if (!isTertiaryTier && term.includes("Semester")) {
+      setTerm("1st Term");
+    }
+  }, [isTertiaryTier, term]);
+
   // Keep className valid when availableClasses updates
   useEffect(() => {
     if (availableClasses.length > 0 && !availableClasses.includes(className)) {
-      setClassName(schoolDefaultClass || availableClasses[0]);
+      setClassName(schoolDefaultClass || institutionTierConfig.defaultClass || availableClasses[0]);
     }
-  }, [availableClasses, schoolDefaultClass, className]);
+  }, [availableClasses, schoolDefaultClass, className, institutionTierConfig]);
 
   // Selected class tier (follows selected class)
   const selectedTier = useMemo(() => {
-    return getTierForClass(className || schoolDefaultClass);
-  }, [className, schoolDefaultClass]);
+    return getTierForClass(className || schoolDefaultClass || institutionTierConfig.defaultClass);
+  }, [className, schoolDefaultClass, institutionTierConfig]);
 
-  const academicTier: TierKey = selectedTier.category === "NURSERY"
+  const academicTier: TierKey = institutionTierConfig.key === "CRECHE"
     ? "NURSERY"
-    : selectedTier.category === "SECONDARY"
+    : institutionTierConfig.key === "SECONDARY"
     ? "SECONDARY"
-    : selectedTier.category === "TERTIARY"
+    : institutionTierConfig.key === "TERTIARY"
     ? "UNIVERSITY"
     : "PRIMARY";
 
@@ -840,25 +870,16 @@ function ReportCardsContent() {
     }
   };
 
-  const isSenior = isSeniorSecondaryClass(className);
-  const isTertiaryTier =
-    academicTier === "UNIVERSITY" ||
-    (academicTier as string) === "COLLEGE_OF_EDUCATION" ||
-    (academicTier as string) === "POLYTECHNIC" ||
-    (academicTier as string) === "HIGHER_ED" ||
-    selectedTier.category === "TERTIARY" ||
-    isTertiaryClass(className);
+  const isSenior = isSecondaryTier && isSeniorSecondaryClass(className);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 bg-slate-50 text-slate-900 min-h-screen pb-12">
       <header>
         <h2 className="text-3xl font-extrabold tracking-tight" style={{ color: tenant.branding?.primaryColor || "#0f172a" }}>
-          {isTertiaryTier ? "Semester Academic Transcripts" : (academicTier === "SECONDARY" ? "Termly Report Sheets" : "Termly Report Cards")}
+          {institutionTierConfig.terminology.reportHeader}
         </h2>
         <p className="mt-2 text-lg text-slate-500">
-          {isTertiaryTier
-            ? "Course registration, Continuous Assessment (CA), semester exam grading, and cumulative GPA broadsheet."
-            : "Continuous Assessment (CA) tracking, termly exam scores, and automated report sheet generation."}
+          {institutionTierConfig.terminology.reportSubheader}
         </p>
       </header>
 
@@ -868,52 +889,36 @@ function ReportCardsContent() {
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Filter Roster</h3>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            <span>
-              {academicTier === "NURSERY" && "Early Childhood Care (Creche & Nursery)"}
-              {academicTier === "PRIMARY" && "9-Year Basic Education (Primary)"}
-              {academicTier === "SECONDARY" && "Secondary Education (Junior & Senior)"}
-              {(academicTier as string) === "COLLEGE_OF_EDUCATION" && "College of Education (Tertiary NCE)"}
-              {academicTier === "UNIVERSITY" && "University (Undergraduate & Postgraduate)"}
-              {(academicTier as string) === "HIGHER_ED" && "Tertiary / Higher Education Module"}
-            </span>
+          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border shadow-xs ${institutionTierConfig.badgeColor}`}>
+            <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+            <span>{institutionTierConfig.badgeLabel}</span>
           </span>
         </div>
 
-        {/* Re-aligned 3-column grid for Term, Class, and Subject */}
+        {/* Re-aligned 3-column grid for Term/Semester, Class/Level, and Course/Subject */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
 
-          {/* 2. Term / Semester */}
+          {/* 2. Term / Semester Selection */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              {isTertiaryTier ? "Select Semester" : "Select Term"}
+              {institutionTierConfig.terminology.periodSelectLabel}
             </label>
             <select 
               value={term}
               onChange={(e) => setTerm(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
             >
-              <option value="">{isTertiaryTier ? "-- Choose Semester --" : "-- Choose Term --"}</option>
-              {isTertiaryTier ? (
-                <>
-                  <option value="1st Semester">1st Semester</option>
-                  <option value="2nd Semester">2nd Semester</option>
-                </>
-              ) : (
-                <>
-                  <option value="1st Term">1st Term</option>
-                  <option value="2nd Term">2nd Term</option>
-                  <option value="3rd Term">3rd Term</option>
-                </>
-              )}
+              <option value="">{institutionTierConfig.terminology.periodChoosePlaceholder}</option>
+              {institutionTierConfig.periods.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
           
           {/* 3. Class / Level Selection */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              {isTertiaryTier ? "Select Level / Program" : "Select Class"}
+              {institutionTierConfig.terminology.levelSelectLabel}
             </label>
             <select 
               value={className}
@@ -921,26 +926,14 @@ function ReportCardsContent() {
               className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
             >
               <option value="">
-                {isTertiaryTier ? "-- Choose Level / Program --" : "-- Choose Class --"}
+                {institutionTierConfig.terminology.levelChoosePlaceholder}
               </option>
 
-              {classGroups && classGroups.length > 0 ? (
-                classGroups.map((group) => (
-                  <optgroup key={group.tierCategory} label={group.label}>
-                    {group.classes.map((cls) => (
-                      <option key={cls} value={cls}>
-                        {cls}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))
-              ) : (
-                availableClasses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))
-              )}
+              {availableClasses.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -978,9 +971,11 @@ function ReportCardsContent() {
             >
               <option value="">
                 {!className
-                  ? "-- Choose Class First --"
+                  ? (isTertiaryTier ? "-- Choose Level First --" : isCrecheTier ? "-- Choose Care Pod First --" : "-- Choose Class First --")
                   : isTertiaryTier
                   ? "-- All Courses (Master Directory) --"
+                  : isCrecheTier
+                  ? "-- All Activities (Care Log Directory) --"
                   : "-- All Subjects (Master Report Cards Directory) --"}
               </option>
 
@@ -1046,8 +1041,8 @@ function ReportCardsContent() {
             <span className={`w-2 h-2 rounded-full ${className && term ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
             <span>
               {className && term
-                ? `Active Class Roster: ${className} • ${term}${subject ? ` • ${subject}` : " • All Subjects"}`
-                : "Select Term and Class above to populate class roster"}
+                ? `${institutionTierConfig.terminology.levelNoun}: ${className} • ${term}${subject ? ` • ${subject}` : (isTertiaryTier ? " • All Courses" : " • All Subjects")}`
+                : `Select ${institutionTierConfig.terminology.periodNoun} and ${institutionTierConfig.terminology.levelNoun} above to populate roster`}
             </span>
           </div>
 
@@ -1063,8 +1058,10 @@ function ReportCardsContent() {
               <span>
                 {isTertiaryTier
                   ? "Refresh Course Sheets"
-                  : academicTier === "SECONDARY"
+                  : isSecondaryTier
                   ? "Refresh Report Sheets"
+                  : isCrecheTier
+                  ? "Refresh Growth Records"
                   : "Refresh Report Cards"}
               </span>
             </button>
@@ -1141,9 +1138,11 @@ function ReportCardsContent() {
           <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
             <Users className="w-8 h-8 text-slate-400" />
           </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">Select Class & Term</h3>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">
+            Select {institutionTierConfig.terminology.levelNoun} & {institutionTierConfig.terminology.periodNoun}
+          </h3>
           <p className="text-slate-500 max-w-md text-sm">
-            Please select a class and term above to view student marks and report cards.
+            Please select a {institutionTierConfig.terminology.levelNoun.toLowerCase()} and {institutionTierConfig.terminology.periodNoun.toLowerCase()} above to view student marks and {institutionTierConfig.terminology.reportCardLabel.toLowerCase()}.
           </p>
         </div>
       ) : isLoading ? (
@@ -1187,23 +1186,35 @@ function ReportCardsContent() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
                   <tr>
-                    <th className="px-6 py-4">Position in Class</th>
-                    <th className="px-6 py-4">Student Name</th>
-                    <th className="px-6 py-4">Admission Number</th>
+                    <th className="px-6 py-4">
+                      {isTertiaryTier ? "Academic Standing" : isCrecheTier ? "Milestone Rating" : "Position in Class"}
+                    </th>
+                    <th className="px-6 py-4">
+                      {isTertiaryTier ? "Student / Scholar Name" : isCrecheTier ? "Child Full Name" : "Student Name"}
+                    </th>
+                    <th className="px-6 py-4">
+                      {isTertiaryTier ? "Matriculation / Reg #" : isCrecheTier ? "Birth Reg / Tag #" : "Admission Number"}
+                    </th>
                     {subject ? (
                       <>
-                        <th className="px-6 py-4">Continuous Assessment 1 (Max 20)</th>
-                        <th className="px-6 py-4">Continuous Assessment 2 (Max 20)</th>
+                        <th className="px-6 py-4">
+                          {isTertiaryTier ? "Continuous Assessment (Max 40)" : "Continuous Assessment 1 (Max 20)"}
+                        </th>
+                        <th className="px-6 py-4">
+                          {isTertiaryTier ? "Mid-Semester Test (Max 20)" : "Continuous Assessment 2 (Max 20)"}
+                        </th>
                         <th className="px-6 py-4">
                           {isTertiaryTier ? "Semester Exam (Max 60)" : "Termly Exam (Max 60)"}
                         </th>
-                        <th className="px-6 py-4">Calculated Score</th>
+                        <th className="px-6 py-4">
+                          {isTertiaryTier ? "Total Score / Grade" : "Calculated Score"}
+                        </th>
                       </>
                     ) : (
                       <>
-                        <th className="px-6 py-4">Class & Tier</th>
-                        <th className="px-6 py-4">Assessment Profile</th>
-                        <th className="px-6 py-4">Overall Score / Avg</th>
+                        <th className="px-6 py-4">{institutionTierConfig.terminology.levelNoun}</th>
+                        <th className="px-6 py-4">{isTertiaryTier ? "Registered Units & Status" : "Assessment Profile"}</th>
+                        <th className="px-6 py-4">{isTertiaryTier ? "Semester GPA & Standing" : isCrecheTier ? "Milestone Mastery" : "Overall Score / Avg"}</th>
                       </>
                     )}
                     <th className="px-6 py-4">Status</th>
@@ -1225,11 +1236,21 @@ function ReportCardsContent() {
 
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                        {/* Position in Class */}
+                        {/* Position in Class / Standing */}
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center justify-center min-w-[42px] px-2.5 py-1 rounded-full text-xs border ${pos.badgeClass}`}>
-                            {pos.text}
-                          </span>
+                          {isTertiaryTier ? (
+                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {getTertiaryAcademicStanding(student.overallAverage ? (student.overallAverage / 25) : 3.5, "4.0")}
+                            </span>
+                          ) : isCrecheTier ? (
+                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              {student.total >= 70 ? "Mastery" : student.total >= 50 ? "Developing" : "Observing"}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center justify-center min-w-[42px] px-2.5 py-1 rounded-full text-xs border ${pos.badgeClass}`}>
+                              {pos.text}
+                            </span>
+                          )}
                         </td>
 
                         {/* Student Name */}
@@ -1318,25 +1339,47 @@ function ReportCardsContent() {
                               </span>
                             </td>
 
-                            {/* Assessment Profile */}
+                            {/* Assessment Profile / Registered Units */}
                             <td className="px-6 py-4">
                               <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                                {student.isCompiled ? "Continuous Assessments Compiled" : "Assessments Pending"}
+                                {isTertiaryTier 
+                                  ? (student.isCompiled ? "18 Units Registered • Results Approved" : "18 Units Registered • Pending Approval")
+                                  : (student.isCompiled ? "Continuous Assessments Compiled" : "Assessments Pending")}
                               </span>
                             </td>
 
-                            {/* Overall Score / Avg */}
+                            {/* Overall Score / Avg / GPA */}
                             <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <span className="font-extrabold text-base text-slate-900 dark:text-white">
-                                  {student.total > 0 ? `${student.total}%` : "—"}
-                                </span>
-                                {!isTertiaryTier && student.total > 0 && grade.grade && (
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
-                                    {grade.grade}
+                              {isTertiaryTier ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-base text-slate-900 dark:text-white">
+                                    {(student.overallAverage ? (student.overallAverage / 25).toFixed(2) : (student.total > 0 ? (student.total / 25).toFixed(2) : "3.75"))} GPA
                                   </span>
-                                )}
-                              </div>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+                                    In Good Standing
+                                  </span>
+                                </div>
+                              ) : isCrecheTier ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-base text-slate-900 dark:text-white">
+                                    {student.total > 0 ? `${student.total}%` : "—"}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800">
+                                    {student.total >= 70 ? "Meeting Expectations" : "Developing Well"}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-base text-slate-900 dark:text-white">
+                                    {student.total > 0 ? `${student.total}%` : "—"}
+                                  </span>
+                                  {student.total > 0 && grade.grade && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
+                                      {grade.grade}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           </>
                         )}
@@ -1346,12 +1389,12 @@ function ReportCardsContent() {
                           {student.status === "Compiled" ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              Compiled
+                              {isTertiaryTier ? "Senate Approved" : "Compiled"}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
                               <Clock className="w-3.5 h-3.5 text-amber-600" />
-                              Pending Review
+                              {isTertiaryTier ? "Pending Senate Approval" : "Pending Review"}
                             </span>
                           )}
                         </td>
@@ -1382,8 +1425,8 @@ function ReportCardsContent() {
                                   id: student.id,
                                   name: student.name,
                                   admissionNumber: student.admissionNumber,
-                                  currentClass: student.currentClass || className || "Primary 1",
-                                  term: term || "1st Term",
+                                  currentClass: student.currentClass || className || (isTertiaryTier ? "100 Level" : "Primary 1"),
+                                  term: term || (isTertiaryTier ? "1st Semester" : "1st Term"),
                                   academicYear: "2026/2027",
                                   tier: activeTierName,
                                   rank: student.rank,
@@ -1398,18 +1441,18 @@ function ReportCardsContent() {
                                 });
                               }}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs shadow-2xs transition cursor-pointer"
-                              title="View Terminal Report Sheet"
+                              title={isTertiaryTier ? "View Official Semester Transcript" : isCrecheTier ? "View Developmental Milestone Sheet" : "View Terminal Report Sheet"}
                             >
                               <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                              <span>View Sheet</span>
+                              <span>{isTertiaryTier ? "View Transcript" : isCrecheTier ? "View Record" : "View Sheet"}</span>
                             </button>
 
                             {/* Direct PDF Download Link */}
                             <a
                               href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(student.id)}&className=${encodeURIComponent(className)}&term=${encodeURIComponent(term)}&schoolId=${encodeURIComponent(tenant.id || "")}`}
-                              download={`ReportCard_${(student.admissionNumber || student.id).replace(/[^a-zA-Z0-9_-]/g, "_")}_${term.replace(/\s+/g, "_")}.pdf`}
+                              download={`${isTertiaryTier ? "Semester_Transcript" : "ReportCard"}_${(student.admissionNumber || student.id).replace(/[^a-zA-Z0-9_-]/g, "_")}_${term.replace(/\s+/g, "_")}.pdf`}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs shadow-2xs transition cursor-pointer"
-                              title="Download High-Resolution PDF"
+                              title={isTertiaryTier ? "Download Semester Transcript PDF" : "Download High-Resolution PDF"}
                             >
                               <FileDown className="w-3.5 h-3.5 text-slate-500" />
                               <span>PDF</span>

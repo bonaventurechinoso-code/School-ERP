@@ -239,12 +239,12 @@ export default function StudentReportCardModal({
           <div className="flex items-center gap-2.5">
             <a
               href={`/api/v1/report-cards/pdf?studentId=${encodeURIComponent(studentData.id)}&className=${encodeURIComponent(studentData.currentClass || "")}&term=${encodeURIComponent(isHigherEd ? formatTertiarySemester(studentData.term) : (studentData.term || "First Term"))}`}
-              download={`ReportCard_${(studentData.admissionNumber || studentData.name).replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
+              download={`${isHigherEd ? "Semester_Transcript" : "ReportCard"}_${(studentData.admissionNumber || studentData.name).replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
-              title="Download High-Resolution PDF"
+              title={isHigherEd ? "Download Official Semester Transcript PDF" : "Download High-Resolution PDF"}
             >
               <FileDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Download PDF</span>
+              <span>{isHigherEd ? "Download Transcript" : "Download PDF"}</span>
             </a>
 
             <button
@@ -253,7 +253,7 @@ export default function StudentReportCardModal({
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-sm hover:shadow transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Sheet</span>
+              <span>{isHigherEd ? "Print Transcript" : "Print Sheet"}</span>
             </button>
 
             <button
@@ -287,7 +287,7 @@ export default function StudentReportCardModal({
                     {schoolName}
                   </h1>
                   <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5 uppercase tracking-wide">
-                    Motto: Discipline, Knowledge & Excellence
+                    {isHigherEd ? "Office of the Registrar • Directorate of Academic Affairs" : "Motto: Discipline, Knowledge & Excellence"}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Plot 12, Academic Boulevard, Off Federal Secretariat Way • info@{schoolDomain}.edu.ng
@@ -298,7 +298,7 @@ export default function StudentReportCardModal({
               {/* Official Document Banner */}
               <div className="text-center sm:text-right">
                 <span className="inline-block px-4 py-1.5 rounded-lg bg-slate-900 text-white font-mono font-bold text-xs uppercase tracking-wider print:bg-black print:text-white">
-                  {isHigherEd ? "Semester Academic Transcript" : "Termly Academic Report Sheet"}
+                  {isHigherEd ? "Official Semester Academic Transcript" : isCreche ? "Early Childhood Developmental Record" : "Termly Academic Report Sheet"}
                 </span>
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1.5">
                   {studentData.academicYear} Academic Session
@@ -317,7 +317,7 @@ export default function StudentReportCardModal({
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs">
             <div>
               <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
-                Student Full Name
+                {isHigherEd ? "Scholar / Student Full Name" : isCreche ? "Child Full Name" : "Student Full Name"}
               </span>
               <span className="font-extrabold text-slate-900 dark:text-white text-sm block mt-0.5">
                 {studentData.name}
@@ -326,16 +326,16 @@ export default function StudentReportCardModal({
 
             <div>
               <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
-                Registration / Adm No
+                {isHigherEd ? "Matriculation / Reg No" : isCreche ? "Birth Reg / Tag No" : "Registration / Adm No"}
               </span>
               <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
-                {studentData.admissionNumber || "GW/2026/001"}
+                {studentData.admissionNumber || (isHigherEd ? "U/2026/CS/001" : "GW/2026/001")}
               </span>
             </div>
 
             <div>
               <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
-                Class / Level
+                {isHigherEd ? "Academic Level / Programme" : isCreche ? "Care Pod / Group" : "Class / Level"}
               </span>
               <span className="font-bold text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
                 {studentData.currentClass} ({tierName})
@@ -345,24 +345,24 @@ export default function StudentReportCardModal({
             <div>
               <span
                 className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block cursor-help"
-                title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc."
+                title={isHigherEd ? "Academic Programme / Department" : "Cohort = Admission Year Group"}
               >
-                COHORT
+                {isHigherEd ? "PROGRAMME / FACULTY" : "COHORT"}
               </span>
               <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
-                {studentData.cohort || (studentData.admissionNumber ? studentData.admissionNumber.split("/")[1] : "2026")}
+                {isHigherEd ? "B.Sc Computing / Science" : (studentData.cohort || (studentData.admissionNumber ? studentData.admissionNumber.split("/")[1] : "2026"))}
               </span>
               <span className="text-[9px] text-slate-400 italic block">
-                Started together
+                {isHigherEd ? "4-Year Honours Degree" : "Started together"}
               </span>
             </div>
 
             <div>
               <span className="text-slate-400 uppercase tracking-wider font-bold text-[10px] block">
-                Attendance Record
+                {isHigherEd ? "Semester Enrolment Status" : "Attendance Record"}
               </span>
               <span className="font-bold text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
-                62 / 65 Days (95.4%)
+                {isHigherEd ? "Full-Time Enrolled" : "62 / 65 Days (95.4%)"}
               </span>
             </div>
           </div>
@@ -433,10 +433,10 @@ export default function StudentReportCardModal({
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <Award className="w-4 h-4 text-blue-600" />
-                Subjects Academic Performance Broadsheet
+                {isHigherEd ? "Course Academic Evaluation Broadsheet" : "Subjects Academic Performance Broadsheet"}
               </h4>
               <span className="text-xs text-slate-500 font-mono">
-                {evaluatedSubjects.length} Evaluated Subjects
+                {isHigherEd ? `${evaluatedSubjects.length} Registered Courses` : `${evaluatedSubjects.length} Evaluated Subjects`}
               </span>
             </div>
 
@@ -521,7 +521,7 @@ export default function StudentReportCardModal({
                   {evaluatedSubjects.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-5 py-8 text-center text-slate-400 dark:text-slate-500 italic">
-                        No subject scores have been entered for this pupil.
+                        {isHigherEd ? "No semester course scores have been submitted yet for this student." : isCreche ? "No developmental milestones recorded yet for this child." : "No subject scores have been entered for this student."}
                       </td>
                     </tr>
                   )}
@@ -716,7 +716,7 @@ export default function StudentReportCardModal({
                   {evaluatedSubjects.length === 0 && (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-slate-400 dark:text-slate-500 italic">
-                        No grade records found for this student. Grades appear here once entered in the Teacher Gradebook.
+                        {isHigherEd ? "No grade records found for this student. Grades appear here once submitted by course lecturers." : "No grade records found for this student. Grades appear here once entered in the Teacher Gradebook."}
                       </td>
                     </tr>
                   )}
@@ -726,88 +726,127 @@ export default function StudentReportCardModal({
           </div>
 
           {/* ========================================================= */}
-          {/* 5. AFFECTIVE & PSYCHOMOTOR DOMAIN EVALUATION MATRIX       */}
+          {/* 5. AFFECTIVE TRAITS / TERTIARY GRADING BENCHMARK          */}
           {/* ========================================================= */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-            
-            {/* Affective Behavioral Traits */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
+          {isHigherEd ? (
+            <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
                 <span className="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Affective Traits Evaluation
+                  Approved Academic Grading Scale & Degree / Diploma Classification
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">Rating (1 - 5)</span>
+                <span className="text-[10px] text-slate-500 font-mono">4.00 Grade Point Benchmark</span>
               </div>
-
-              <div className="grid grid-cols-2 gap-y-2 text-xs">
-                <div className="flex justify-between pr-4"><span>Punctuality:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Neatness & Appearance:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Politeness & Manners:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Honesty & Reliability:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Self-Control & Focus:</span> <strong className="font-mono text-blue-600">{isDemo ? "4" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Relationship with Peers:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 block text-sm">70 - 100% (A)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] block mt-0.5">GP: 4.00 • First Class / Distinction</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="font-bold text-teal-600 dark:text-teal-400 block text-sm">60 - 69% (B)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] block mt-0.5">GP: 3.00 • 2nd Class Upper / Upper Credit</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="font-bold text-blue-600 dark:text-blue-400 block text-sm">50 - 59% (C)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] block mt-0.5">GP: 2.00 • 2nd Class Lower / Lower Credit</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="font-bold text-amber-600 dark:text-amber-400 block text-sm">45 - 49% (D)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] block mt-0.5">GP: 1.00 • Pass / Third Class</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                  <span className="font-bold text-rose-600 dark:text-rose-400 block text-sm">0 - 44% (F)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] block mt-0.5">GP: 0.00 • Fail / Carryover</span>
+                </div>
               </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+              {/* Affective Behavioral Traits */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                  <span className="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Affective Traits Evaluation
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Rating (1 - 5)</span>
+                </div>
 
-            {/* Psychomotor Practical Skills */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-                <span className="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Psychomotor Skills Evaluation
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">Rating (1 - 5)</span>
+                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                  <div className="flex justify-between pr-4"><span>Punctuality:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Neatness & Appearance:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Politeness & Manners:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Honesty & Reliability:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Self-Control & Focus:</span> <strong className="font-mono text-blue-600">{isDemo ? "4" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Relationship with Peers:</span> <strong className="font-mono text-blue-600">{isDemo ? "5" : "—"}</strong></div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-2 text-xs">
-                <div className="flex justify-between pr-4"><span>Handwriting & Penmanship:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Verbal Fluency:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Sports & Athleticism:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Crafts & Creativity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Musical & Artistic Skill:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
-                <div className="flex justify-between pr-4"><span>Manual Dexterity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+              {/* Psychomotor Practical Skills */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                  <span className="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Psychomotor Skills Evaluation
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Rating (1 - 5)</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                  <div className="flex justify-between pr-4"><span>Handwriting & Penmanship:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Verbal Fluency:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Sports & Athleticism:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Crafts & Creativity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "5" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Musical & Artistic Skill:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                  <div className="flex justify-between pr-4"><span>Manual Dexterity:</span> <strong className="font-mono text-emerald-600">{isDemo ? "4" : "—"}</strong></div>
+                </div>
               </div>
             </div>
-
-          </div>
+          )}
 
           {/* ========================================================= */}
           {/* 6. ADMINISTRATIVE REMARKS & OFFICIAL SIGN-OFF             */}
           {/* ========================================================= */}
           <div className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
             
-            {/* Class Teacher Remark (Routed from Gradebook) */}
+            {/* Teacher / Course Adviser Remark */}
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div className="space-y-1">
                 <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">
-                  Class Teacher&apos;s Remark:
+                  {isHigherEd ? "Course Adviser / Level Coordinator's Official Remark:" : "Class Teacher's Remark:"}
                 </span>
                 <p className="text-slate-800 dark:text-slate-200 font-medium italic">
-                  &ldquo;{dynamicClassTeacherRemark}&rdquo;
+                  &ldquo;{isHigherEd ? (studentData.teacherRemarks || "Consistent academic dedication and satisfactory course engagement maintained throughout the semester.") : dynamicClassTeacherRemark}&rdquo;
                 </p>
               </div>
               <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-                <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">{dynamicClassTeacherName}</div>
-                <span className="text-[10px] text-slate-400">Class Teacher&apos;s Signature</span>
+                <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">
+                  {isHigherEd ? "Dr. A. E. Okon (Course Adviser)" : dynamicClassTeacherName}
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  {isHigherEd ? "Course Adviser's Signature" : "Class Teacher's Signature"}
+                </span>
               </div>
             </div>
 
-            {/* Principal Remark */}
+            {/* Principal / Dean Remark */}
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div className="space-y-1">
                 <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider block">
-                  Principal&apos;s Official Remark:
+                  {isHigherEd ? "Dean of Faculty / HOD's Official Endorsement:" : "Principal's Official Remark:"}
                 </span>
                 <p className="text-slate-800 dark:text-slate-200 font-medium italic">
-                  &ldquo;{dynamicPrincipalRemark}&rdquo;
+                  &ldquo;{isHigherEd ? (studentData.principalRemarks || "Good standing confirmed by Faculty Board of Examiners. Cleared for subsequent semester registration.") : dynamicPrincipalRemark}&rdquo;
                 </p>
               </div>
               <div className="text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full border border-dashed border-amber-500/80 flex items-center justify-center text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase text-center rotate-[-12deg]">
-                  Official<br />Stamp
+                  {isHigherEd ? <>Official<br />Registry<br />Seal</> : <>Official<br />Stamp</>}
                 </div>
                 <div>
-                  <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">{dynamicPrincipalName}</div>
-                  <span className="text-[10px] text-slate-400">Principal&apos;s Signature</span>
+                  <div className="font-serif italic text-sm text-slate-700 dark:text-slate-300">
+                    {isHigherEd ? "Prof. E. B. Sanusi (Dean / Academic Board)" : dynamicPrincipalName}
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {isHigherEd ? "Dean / Registrar's Signature" : "Principal's Signature"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -816,7 +855,7 @@ export default function StudentReportCardModal({
             <div className="p-3.5 rounded-xl bg-slate-900 text-white flex items-center justify-between text-xs font-semibold print:bg-black print:text-white">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-amber-400" />
-                <span>Next Term Resumption Date:</span>
+                <span>{isHigherEd ? "Next Semester Resumption Date:" : "Next Term Resumption Date:"}</span>
               </div>
               <span className="font-mono text-amber-300">{dynamicResumptionDate}</span>
             </div>
@@ -824,10 +863,10 @@ export default function StudentReportCardModal({
             {/* Official Verification Footer */}
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2">
               <div>
-                Generated from Teacher Gradebook • {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                {isHigherEd ? "Generated from Senate Academic Records Database" : "Generated from Teacher Gradebook"} • {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
               </div>
               <div className="font-semibold text-slate-700 dark:text-slate-300">
-                Approved By Principal / Head Teacher
+                {isHigherEd ? "Certified Official Senate Academic Transcript" : "Approved By Principal / Head Teacher"}
               </div>
             </div>
 
