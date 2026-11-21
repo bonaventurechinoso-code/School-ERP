@@ -2,7 +2,18 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const prisma = new PrismaClient();
+let rawDbUrl = process.env.DATABASE_URL || '';
+// Strip channel_binding if present as Prisma Rust query engine does not support channel_binding
+const dbUrl = rawDbUrl.replace(/&channel_binding=[^&]+/g, '').replace(/\?channel_binding=[^&]+&?/g, '?');
+const hostMatch = dbUrl.match(/@([^/:]+)/);
+const targetHost = hostMatch ? hostMatch[1] : 'unknown';
+console.log(`[SEED_DEMO_TENANTS] Target database host: ${targetHost}`);
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: { url: dbUrl }
+  }
+});
 
 const DEMO_TENANTS = [
   {
