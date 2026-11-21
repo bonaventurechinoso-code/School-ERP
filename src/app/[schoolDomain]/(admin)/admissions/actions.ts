@@ -30,6 +30,8 @@ import { sendPaymentInstructionEmail } from "@/lib/email";
 import { triggerInquiryNotification } from "@/lib/admissions-events";
 import { generateAdmissionNumber, getExamSubjectsForTier } from "@/lib/tenant-tier-utils";
 import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
+import { isClassInTier } from "@/lib/tier-config";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword } from "@/lib/security-service";
 import { getSession } from "@/lib/auth";
@@ -1754,10 +1756,15 @@ export async function enrollApplicantFromRegisterAction(payload: {
       console.warn("[enrollApplicantFromRegisterAction] Warning dispatching ENROLLED notification:", notifErr);
     }
 
+    await invalidateStudentNamespace(schoolId);
     await invalidateAdmissionsNamespace(schoolId);
+    clearL1TenantCache(schoolId);
     safeRevalidate(`/${schoolDomain}/admissions`);
     safeRevalidate(`/${schoolDomain}/students`);
+    safeRevalidate(`/${schoolDomain}/dashboard`);
     safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/students", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
 
     return {
       success: true,
@@ -3847,12 +3854,21 @@ export async function enrollAdmissionsApplicationAction(payload: {
       return { success: false, error: "School institution record not found." };
     }
 
-    const targetTierId = payload.tierId || school.academicTiers[0]?.id;
+    const targetProgram = payload.classArm || application.programId || "";
+    let resolvedTier = (school.academicTiers || []).find((t: any) => t.id === payload.tierId);
+    if (!resolvedTier && targetProgram) {
+      resolvedTier = (school.academicTiers || []).find((t: any) => isClassInTier(targetProgram, t.name));
+    }
+    if (!resolvedTier) {
+      resolvedTier = (school.academicTiers || []).find((t: any) => t.id === payload.tierId) || school.academicTiers[0];
+    }
+
+    const targetTierId = resolvedTier?.id || payload.tierId || school.academicTiers[0]?.id;
     if (!targetTierId) {
       return { success: false, error: "Academic tier is required for student enrollment." };
     }
 
-    const targetTier = (school.academicTiers || []).find((t: any) => t.id === targetTierId) || school.academicTiers[0];
+    const targetTier = resolvedTier || school.academicTiers[0];
     const tenantDb = await getPrismaClientForTier(targetSchoolId, targetTier.name);
 
     // 3. Compute Admission/Matriculation Number via Tenant Formula
@@ -3895,14 +3911,25 @@ export async function enrollAdmissionsApplicationAction(payload: {
       const existingUser = await tx.user.findFirst({
         where: {
           schoolId: targetSchoolId,
-          email: { equals: userEmail, mode: "insensitive" },
+          OR: [
+            { email: { equals: userEmail, mode: "insensitive" } },
+            ...(application.email ? [{ email: { equals: application.email, mode: "insensitive" } }] : []),
+          ],
         },
       });
 
       const existingStudent = await tx.student.findFirst({
         where: {
           schoolId: targetSchoolId,
-          email: { equals: userEmail, mode: "insensitive" },
+          OR: [
+            ...(existingUser ? [{ userId: existingUser.id }] : []),
+            { email: { equals: userEmail, mode: "insensitive" } },
+            ...(application.email ? [{ email: { equals: application.email, mode: "insensitive" } }] : []),
+            {
+              firstName: { equals: application.firstName.trim(), mode: "insensitive" },
+              lastName: { equals: application.lastName.trim(), mode: "insensitive" },
+            },
+          ],
         },
       });
 
@@ -4189,11 +4216,18 @@ export async function enrollAdmissionsApplicationAction(payload: {
       isSelfServiceApplicant: isApplicantSelfService,
     }).catch((err) => console.warn("[dispatchAdmissionsNotification:ENROLLED]", err));
 
-    await invalidateStudentNamespace(targetSchoolId);
+    await invalidateStudentNamespace(targetSchoolId, targetTier.name);
     await invalidateAdmissionsNamespace(targetSchoolId);
+    clearL1TenantCache(targetSchoolId);
     if (payload.schoolDomain) {
       safeRevalidate(`/${payload.schoolDomain}/admissions`);
+      safeRevalidate(`/${payload.schoolDomain}/students`);
+      safeRevalidate(`/${payload.schoolDomain}/dashboard`);
+      safeRevalidate(`/${payload.schoolDomain}/scheduling`);
     }
+    safeRevalidate("/[schoolDomain]/(admin)/students", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/admissions", "page");
+    safeRevalidate("/[schoolDomain]/(admin)/dashboard", "page");
 
     return {
       success: true,

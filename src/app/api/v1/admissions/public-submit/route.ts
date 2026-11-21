@@ -5,6 +5,9 @@ import bcrypt from "bcryptjs";
 import { setUserMustChangePassword, validatePasswordStrength } from "@/lib/security-service";
 import * as jose from "jose";
 import crypto from "crypto";
+import { isClassInTier } from "@/lib/tier-config";
+import { invalidateAdmissionsNamespace, invalidateStudentNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,19 +86,19 @@ export async function POST(request: NextRequest) {
       academicTierName = derivedTierName;
     }
 
-    // Match tier in school's AcademicTiers
-    let matchedTier = school.academicTiers.find((t) => {
-      const tName = t.name.toLowerCase();
-      const targetName = academicTierName.toLowerCase();
-      return tName === targetName || tName.includes(targetName) || targetName.includes(tName);
-    });
+    // Match tier in school's AcademicTiers via isClassInTier or explicit tierId/name
+    let matchedTier = school.academicTiers.find((t) => isClassInTier(effectiveTargetGrade, t.name));
 
     if (!matchedTier && tierId) {
-      const explicitTier = school.academicTiers.find((t) => t.id === tierId);
-      // If explicit tier is not mismatched with class
-      if (explicitTier && !(explicitTier.name.toLowerCase().includes("creche") && derivedTierName === "Secondary School")) {
-        matchedTier = explicitTier;
-      }
+      matchedTier = school.academicTiers.find((t) => t.id === tierId);
+    }
+
+    if (!matchedTier) {
+      matchedTier = school.academicTiers.find((t) => {
+        const tName = t.name.toLowerCase();
+        const targetName = academicTierName.toLowerCase();
+        return tName === targetName || tName.includes(targetName) || targetName.includes(tName);
+      });
     }
 
     if (!matchedTier) {
@@ -521,6 +524,11 @@ export async function POST(request: NextRequest) {
     } catch (notifErr) {
       console.warn("[PUBLIC_SUBMIT] Notification error:", notifErr);
     }
+
+    // Invalidate admissions & student cache
+    await invalidateAdmissionsNamespace(school.id);
+    await invalidateStudentNamespace(school.id, finalTierName);
+    clearL1TenantCache(school.id);
 
     // Persist Session for Document Upload:
     // Sign a 24-hour "guest applicant session" token so applicant remains authorized

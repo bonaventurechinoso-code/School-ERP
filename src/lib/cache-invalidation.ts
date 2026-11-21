@@ -1,4 +1,5 @@
 import { safeRedisScanDel } from "./redis";
+import { clearL1TenantCache } from "./cache";
 
 /**
  * Write-Through Cache Invalidation Pipeline:
@@ -26,12 +27,14 @@ export async function invalidateNamespace(pattern: string): Promise<number> {
  */
 export async function invalidateStudentNamespace(schoolId: string, tierName?: string): Promise<void> {
   const sanitizedTier = tierName ? tierName.toLowerCase().replace(/[^a-z0-9_-]/g, "") : "*";
+  clearL1TenantCache(schoolId);
   await Promise.all([
     invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:table:students:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:students:enrolled*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:${sanitizedTier}:students:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:students:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:*students*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:*dashboard*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:dashboard:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:transcripts:*`),
   ]);
@@ -77,11 +80,14 @@ export async function invalidateGradingNamespace(schoolId: string, tierName?: st
  * Invalidate admissions, applicant pipeline, and enrollment leads.
  */
 export async function invalidateAdmissionsNamespace(schoolId: string): Promise<void> {
+  clearL1TenantCache(schoolId);
   await Promise.all([
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:admissions:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:*admissions*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:leads:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:students:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:dashboard:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:*dashboard*`),
   ]);
 }
 

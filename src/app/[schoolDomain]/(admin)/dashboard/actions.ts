@@ -28,10 +28,31 @@ export async function getEnrolledStudentsCount(schoolId: string, tierContext?: s
 
   return cacheAside({
     key: cacheKey,
-    ttlSeconds: 300, // 5 minutes sliding TTL
+    ttlSeconds: 60, // 60 seconds sliding TTL for responsive updates
     fetchFn: async () => {
       const tenantDb = await getPrismaClientForTier(schoolId, activeTier || "");
-      return await tenantDb.student.count({ where: { status: "ENROLLED" } }).catch(() => 0);
+
+      let tierFilter: any = {};
+      if (activeTier && activeTier !== "all") {
+        const tierInDb = await tenantDb.academicTier.findFirst({
+          where: {
+            schoolId,
+            name: { contains: activeTier, mode: "insensitive" },
+          },
+        }).catch(() => null);
+
+        if (tierInDb) {
+          tierFilter = { tierId: tierInDb.id };
+        }
+      }
+
+      return await tenantDb.student.count({
+        where: {
+          schoolId,
+          status: "ENROLLED",
+          ...tierFilter,
+        },
+      }).catch(() => 0);
     },
   });
 }

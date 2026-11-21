@@ -278,7 +278,10 @@ export default function StudentTable({
 
   const refreshMetrics = async () => {
     try {
-      const res = await fetchStudentMetrics(schoolId, activeTier);
+      const matchingTier = tiers.find(t =>
+        activeTier && (t.name.toLowerCase() === activeTier.toLowerCase() || t.name.toLowerCase().includes(activeTier.toLowerCase()))
+      );
+      const res = await fetchStudentMetrics(schoolId, activeTier, matchingTier?.id);
       if (res.success) {
         setMetrics((prev) => ({
           ...prev,

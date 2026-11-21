@@ -1,6 +1,8 @@
 import { basePrisma, isDemoSchool, getDemoPrismaClient } from "@/lib/tenant-prisma";
 import bcrypt from "bcryptjs";
 import { setUserMustChangePassword } from "@/lib/security-service";
+import { invalidateStudentNamespace, invalidateAdmissionsNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 
 export interface EnrollmentHandshakeInput {
   registerId: string;
@@ -192,31 +194,76 @@ export async function executeEnrollmentHandshake(
         });
       }
 
-      const student = await tx.student.create({
-        data: {
+      let existingStudent = await tx.student.findFirst({
+        where: {
           schoolId: tenantId,
-          userId: user.id,
-          tierId: academicTier.id,
-          firstName: register.firstName.trim(),
-          lastName: register.lastName.trim(),
-          email: userEmail,
-          admissionNumber: matricNo,
-          currentClass: assignedClass,
-          parentName: guardianName,
-          parentPhone: register.parentPhone || null,
-          parentEmail: personal.guardianEmail || register.email || null,
-          status: "ENROLLED",
-          enrolledAt: new Date(),
-          mustChangePassword: !isSelfService,
-          dynamicFields: {
-            matricNo,
-            applicationNo: register.applicationNo,
-            enrolledVia: "Admissions Enterprise Handshake",
-            password: isSelfService && user.passwordHash ? user.passwordHash : defaultPasswordHash,
-            isTemporaryPassword: !isSelfService,
-          },
+          OR: [
+            ...(user ? [{ userId: user.id }] : []),
+            { email: { equals: userEmail, mode: "insensitive" } },
+            { admissionNumber: matricNo },
+            {
+              firstName: { equals: register.firstName.trim(), mode: "insensitive" },
+              lastName: { equals: register.lastName.trim(), mode: "insensitive" },
+            },
+          ],
         },
       });
+
+      let student;
+      if (existingStudent) {
+        student = await tx.student.update({
+          where: { id: existingStudent.id },
+          data: {
+            userId: user.id,
+            tierId: academicTier.id,
+            firstName: register.firstName.trim(),
+            lastName: register.lastName.trim(),
+            email: userEmail,
+            admissionNumber: existingStudent.admissionNumber || matricNo,
+            currentClass: assignedClass || existingStudent.currentClass,
+            parentName: guardianName || existingStudent.parentName,
+            parentPhone: register.parentPhone || existingStudent.parentPhone,
+            parentEmail: personal.guardianEmail || register.email || existingStudent.parentEmail,
+            status: "ENROLLED",
+            enrolledAt: existingStudent.enrolledAt || new Date(),
+            mustChangePassword: !isSelfService,
+            dynamicFields: {
+              ...((existingStudent.dynamicFields as any) || {}),
+              matricNo: existingStudent.admissionNumber || matricNo,
+              applicationNo: register.applicationNo,
+              enrolledVia: "Admissions Enterprise Handshake",
+              password: isSelfService && user.passwordHash ? user.passwordHash : defaultPasswordHash,
+              isTemporaryPassword: !isSelfService,
+            },
+          },
+        });
+      } else {
+        student = await tx.student.create({
+          data: {
+            schoolId: tenantId,
+            userId: user.id,
+            tierId: academicTier.id,
+            firstName: register.firstName.trim(),
+            lastName: register.lastName.trim(),
+            email: userEmail,
+            admissionNumber: matricNo,
+            currentClass: assignedClass,
+            parentName: guardianName,
+            parentPhone: register.parentPhone || null,
+            parentEmail: personal.guardianEmail || register.email || null,
+            status: "ENROLLED",
+            enrolledAt: new Date(),
+            mustChangePassword: !isSelfService,
+            dynamicFields: {
+              matricNo,
+              applicationNo: register.applicationNo,
+              enrolledVia: "Admissions Enterprise Handshake",
+              password: isSelfService && user.passwordHash ? user.passwordHash : defaultPasswordHash,
+              isTemporaryPassword: !isSelfService,
+            },
+          },
+        });
+      }
 
       // 6. PARENT / GUARDIAN AUTO-PROVISIONING & STUDENT_PARENT LINK
       const rawGuardianEmail = personal.guardianEmail || register.email;
@@ -405,6 +452,10 @@ export async function executeEnrollmentHandshake(
       } catch (secErr) {
         console.warn("[executeEnrollmentHandshake] Warning synchronizing password security flag:", secErr);
       }
+
+      await invalidateStudentNamespace(tenantId);
+      await invalidateAdmissionsNamespace(tenantId);
+      clearL1TenantCache(tenantId);
     }
 
     return result;

@@ -485,12 +485,15 @@ export async function getPrismaClientForTier(tenantId: string, tier: string) {
     }
 
     // Check JSON config: tierDatabasesConfig
-    if (!tierDbUrl && school?.tierDatabasesConfig && typeof school.tierDatabasesConfig === 'object') {
-      const config = school.tierDatabasesConfig as Record<string, string>;
+    if (!tierDbUrl && upperTier.length > 0 && school?.tierDatabasesConfig && typeof school.tierDatabasesConfig === 'object') {
+      const config = school.tierDatabasesConfig as Record<string, any>;
       for (const [key, url] of Object.entries(config)) {
-        if (upperTier.includes(key.toUpperCase()) || key.toUpperCase().includes(upperTier)) {
-          tierDbUrl = url;
-          break;
+        if (typeof url === "string" && (url.startsWith("postgres") || url.startsWith("mysql") || url.startsWith("file:"))) {
+          const kUpper = key.toUpperCase();
+          if (upperTier.includes(kUpper) || kUpper.includes(upperTier)) {
+            tierDbUrl = url;
+            break;
+          }
         }
       }
     }
