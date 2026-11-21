@@ -30,6 +30,7 @@ import {
   getClassesForSchool,
   EducationalTierCategory,
 } from "@/lib/school-tier-classes";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 import {
   formatTertiarySemester,
   resolveTertiaryCourse,
@@ -324,6 +325,17 @@ const DEFAULT_MOCK_NURSERY_STUDENTS = [
   { id: "mock-nur-004", firstName: "Fatima", lastName: "Garba", admissionNumber: "GW/2026/NUR1/004", currentClass: "Nursery 1", status: "ENROLLED" },
 ];
 
+const DEFAULT_MOCK_TERTIARY_STUDENTS = [
+  { id: "mock-uni-001", firstName: "Chukwuebuka", lastName: "Okeke", admissionNumber: "UNI/2026/001", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-002", firstName: "Hauwa", lastName: "Aliyu", admissionNumber: "UNI/2026/002", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-003", firstName: "Olumide", lastName: "Bakare", admissionNumber: "UNI/2026/003", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-004", firstName: "Chidinma", lastName: "Eze", admissionNumber: "UNI/2026/004", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-005", firstName: "Nnamdi", lastName: "Nwosu", admissionNumber: "UNI/2026/005", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-006", firstName: "Zainab", lastName: "Bello", admissionNumber: "UNI/2026/006", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-007", firstName: "Tolani", lastName: "Adeyemi", admissionNumber: "UNI/2026/007", currentClass: "100 Level", status: "ENROLLED" },
+  { id: "mock-uni-008", firstName: "Franklin", lastName: "Okafor", admissionNumber: "UNI/2026/008", currentClass: "100 Level", status: "ENROLLED" },
+];
+
 interface ScoreModalState {
   isOpen: boolean;
   student: any;
@@ -355,10 +367,27 @@ export default function GradingRoster({
   const [isPending, startTransition] = useTransition();
 
   const effectiveDomain = schoolDomain || (tenant as any)?.subdomain || "";
-  const isDemo = effectiveDomain.toLowerCase().trim() === "demo";
+  const isDemo = effectiveDomain.toLowerCase().trim() === "demo" || effectiveDomain.toLowerCase().includes("demo");
   const schoolDisplayName = schoolName || (tenant as any)?.name || effectiveDomain || "School";
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [isClearingDemo, setIsClearingDemo] = useState(false);
+
+  // Authoritative Nigerian Institution Tier Configuration
+  const institutionTierConfig = useMemo(() => {
+    return getInstitutionTierConfig({
+      id: schoolId,
+      schoolId,
+      name: schoolDisplayName,
+      subdomain: effectiveDomain,
+      tier: schoolTier,
+      academicTiers,
+    });
+  }, [schoolId, schoolDisplayName, effectiveDomain, schoolTier, academicTiers]);
+
+  const isSchoolTertiary = institutionTierConfig.key === "TERTIARY";
+  const isSchoolCreche = institutionTierConfig.key === "CRECHE";
+  const isSchoolSecondary = institutionTierConfig.key === "SECONDARY";
+  const isSchoolPrimary = institutionTierConfig.key === "PRIMARY";
 
   // 1. Resolve Registered School Tiers & Scoped Classes (Single Source of Truth)
   const schoolClassesResult = useMemo(() => {
@@ -386,27 +415,38 @@ export default function GradingRoster({
       const matched = availableClasses.find((c) => matchesClass(c, paramClass));
       if (matched) return matched;
     }
-    return schoolDefaultClass || availableClasses[0] || "Primary 1";
+    return schoolDefaultClass || availableClasses[0] || institutionTierConfig.defaultClass;
   });
 
   // Ensure selectedClass remains valid when availableClasses updates
   useEffect(() => {
     if (availableClasses.length > 0 && !availableClasses.some((c) => matchesClass(c, selectedClass))) {
-      setSelectedClass(schoolDefaultClass || availableClasses[0]);
+      setSelectedClass(schoolDefaultClass || availableClasses[0] || institutionTierConfig.defaultClass);
     }
-  }, [availableClasses, schoolDefaultClass, selectedClass]);
+  }, [availableClasses, schoolDefaultClass, selectedClass, institutionTierConfig.defaultClass]);
 
   // 3. Dynamic Tier resolution for the SELECTED class (Requirement E: Tier badge follows selected class)
   const selectedClassTier = useMemo(() => {
+    if (isSchoolTertiary) {
+      return {
+        category: "TERTIARY" as EducationalTierCategory,
+        name: institutionTierConfig.name,
+        badgeLabel: institutionTierConfig.badgeLabel,
+        badgeCode: institutionTierConfig.badgeCode,
+        badgeColor: institutionTierConfig.badgeColor,
+      };
+    }
     return getTierForClass(selectedClass);
-  }, [selectedClass]);
+  }, [selectedClass, isSchoolTertiary, institutionTierConfig]);
 
   const activeTierDisplay = selectedClassTier.name;
   const activeTierCode = selectedClassTier.badgeCode;
-  const tierCategory: EducationalTierCategory = selectedClassTier.category;
-  const isTertiaryTier = tierCategory === "TERTIARY";
+  const tierCategory: EducationalTierCategory = isSchoolTertiary ? "TERTIARY" : selectedClassTier.category;
+  const isTertiaryTier = tierCategory === "TERTIARY" || isSchoolTertiary;
 
-  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
+  const [selectedTerm, setSelectedTerm] = useState<string>(() => {
+    return isTertiaryTier ? "1st Semester" : institutionTierConfig.defaultPeriod;
+  });
   const [academicSession, setAcademicSession] = useState<string>("2026/2027");
   const [passMarkThreshold, setPassMarkThreshold] = useState<number>(50);
   const [searchQuery, setSearchQuery] = useState("");
@@ -455,6 +495,9 @@ export default function GradingRoster({
     }
     // Clean mock student data rows ONLY for public DEMO tenant
     if (isDemo) {
+      if (isTertiaryTier) {
+        return DEFAULT_MOCK_TERTIARY_STUDENTS;
+      }
       if (tierCategory === "SECONDARY" && (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
         return DEFAULT_MOCK_JSS1_STUDENTS;
       }
@@ -466,7 +509,7 @@ export default function GradingRoster({
       }
     }
     return rawFilteredStudents;
-  }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory, isDemo]);
+  }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory, isDemo, isTertiaryTier]);
 
   // Assign Permanent Registration Numbers
   const studentsWithRegNo = useMemo(() => {
@@ -476,10 +519,11 @@ export default function GradingRoster({
         .replace(/Basic\s*/i, "PRI")
         .replace(/SSS\s*/i, "SS")
         .replace(/Grade\s*/i, "G")
+        .replace(/Level\s*/i, "L")
         .replace(/\s+/g, "")
-        .toUpperCase() || "JSS1";
+        .toUpperCase() || "100L";
 
-    const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || "GW";
+    const schoolPrefix = (tenant?.subdomain ? resolveSchoolPrefix(tenant.subdomain) : "GW") || (isTertiaryTier ? "UNI" : "GW");
 
     const stableList = [...cohortStudents].sort((a, b) => {
       if (a.admissionNumber && b.admissionNumber) {
@@ -489,6 +533,12 @@ export default function GradingRoster({
     });
 
     return stableList.map((student, stableIndex) => {
+      if (isTertiaryTier && student.admissionNumber && (student.admissionNumber.includes("UNI") || student.admissionNumber.includes("/"))) {
+        return {
+          ...student,
+          regNo: student.admissionNumber,
+        };
+      }
       const regSequence = String(stableIndex + 1).padStart(3, "0");
       const regNo =
         student.admissionNumber && student.admissionNumber.includes(`/${classCode}/`)
@@ -500,7 +550,7 @@ export default function GradingRoster({
         regNo,
       };
     });
-  }, [cohortStudents, selectedClass, tenant?.subdomain]);
+  }, [cohortStudents, selectedClass, tenant?.subdomain, isTertiaryTier]);
 
   // 6. Fast Score Lookup Engine (Combines GradeRecord, AcademicRecord, ExamResult)
   const [localScoresOverride, setLocalScoresOverride] = useState<Record<string, { ca1: number; ca2: number; exam: number; total: number; remarks: string }>>({});
@@ -941,13 +991,17 @@ export default function GradingRoster({
             </div>
             <div>
               <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                Grading Broadsheet & Roster
+                {isTertiaryTier ? "Semester Course Grade Broadsheet" : isSchoolCreche ? "Milestone Evaluation Broadsheet" : "Grading Broadsheet & Roster"}
                 <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${selectedClassTier.badgeColor}`}>
                   {selectedClassTier.badgeLabel}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Master terminal broadsheet displaying all assigned subjects across, class averages, grades, and positions.
+                {isTertiaryTier
+                  ? "NUC 5.0-point grading system, Total Credit Units, Quality Points (TQP), Semester GPA, and Academic Standing."
+                  : isSchoolCreche
+                  ? "Observational growth assessment, habit evaluation, and developmental milestones."
+                  : "Master terminal broadsheet displaying all assigned subjects across, class averages, grades, and positions."}
               </p>
               {/* Admin Verification Label for School Tiers */}
               <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -964,7 +1018,7 @@ export default function GradingRoster({
           {/* Class Selector (Grouped by Tier if multi-tier) */}
           <div>
             <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Class:
+              {institutionTierConfig.terminology.levelNoun}:
             </label>
             <select
               value={selectedClass}
@@ -1003,8 +1057,8 @@ export default function GradingRoster({
             >
               {isTertiaryTier ? (
                 <>
-                  <option value="1st Semester">1st Semester</option>
-                  <option value="2nd Semester">2nd Semester</option>
+                  <option value="1st Semester">1st Semester (Harmattan)</option>
+                  <option value="2nd Semester">2nd Semester (Rain)</option>
                 </>
               ) : (
                 <>
@@ -1031,20 +1085,32 @@ export default function GradingRoster({
             </select>
           </div>
 
-          {/* Auto-Promotion Benchmark Selector */}
+          {/* Auto-Promotion / Standing Benchmark Selector */}
           <div>
             <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Promotion Benchmark:
+              {isTertiaryTier ? "Standing Benchmark:" : isSchoolCreche ? "Milestone Baseline:" : "Promotion Benchmark:"}
             </label>
             <select
               value={passMarkThreshold}
               onChange={(e) => setPassMarkThreshold(Number(e.target.value) || 50)}
               className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value={40}>40% Pass Mark</option>
-              <option value={45}>45% Pass Mark</option>
-              <option value={50}>50% Pass Mark (Standard)</option>
-              <option value={60}>60% Pass Mark (Merit)</option>
+              {isTertiaryTier ? (
+                <>
+                  <option value={40}>1.00 GP (Pass Degree Min)</option>
+                  <option value={45}>1.50 GP (Good Academic Standing)</option>
+                  <option value={50}>2.40 GP (Second Class Lower)</option>
+                  <option value={60}>3.50 GP (Second Class Upper)</option>
+                  <option value={70}>4.50 GP (First Class Honours)</option>
+                </>
+              ) : (
+                <>
+                  <option value={40}>40% Pass Mark</option>
+                  <option value={45}>45% Pass Mark</option>
+                  <option value={50}>50% Pass Mark (Standard)</option>
+                  <option value={60}>60% Pass Mark (Merit)</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -1115,14 +1181,20 @@ export default function GradingRoster({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Filter ${selectedClass} students...`}
+            placeholder={
+              isTertiaryTier
+                ? "Search undergraduates by name or matric number..."
+                : isSchoolCreche
+                ? "Search children by name..."
+                : `Filter ${selectedClass} students...`
+            }
             className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-          <span>Subjects: <strong className="text-slate-900 dark:text-white">{classSubjects.length}</strong></span>
+          <span>{isTertiaryTier ? "Courses:" : isSchoolCreche ? "Modules:" : "Subjects:"} <strong className="text-slate-900 dark:text-white">{classSubjects.length}</strong></span>
           <span>•</span>
-          <span>Students: <strong className="text-slate-900 dark:text-white">{broadsheetData.length}</strong></span>
+          <span>{isTertiaryTier ? "Undergraduates:" : isSchoolCreche ? "Children:" : "Students:"} <strong className="text-slate-900 dark:text-white">{broadsheetData.length}</strong></span>
         </div>
       </div>
 
@@ -1130,10 +1202,10 @@ export default function GradingRoster({
       {filteredBroadsheet.length === 0 ? (
         <div className="p-12 text-center text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
           <p className="font-bold text-base text-slate-700 dark:text-slate-200">
-            No students found in {selectedClass}
+            No {isTertiaryTier ? "undergraduates" : isSchoolCreche ? "children" : "students"} found in {selectedClass}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            No enrolled students match this stream or query.
+            No enrolled {isTertiaryTier ? "undergraduates" : isSchoolCreche ? "children" : "students"} match this stream or query.
           </p>
         </div>
       ) : (
@@ -1144,13 +1216,13 @@ export default function GradingRoster({
               <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-[11px] uppercase tracking-wider">
                 <tr>
                   <th className="px-3 py-3 text-center w-14 sticky left-0 z-20 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700">
-                    Pos
+                    {isTertiaryTier ? "S/N" : "Pos"}
                   </th>
                   <th className="px-4 py-3 text-left sticky left-14 z-20 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 min-w-[180px]">
-                    Student Name
+                    {isTertiaryTier ? "Undergraduate / Candidate" : isSchoolCreche ? "Child Name" : "Student Name"}
                   </th>
                   <th className="px-3 py-3 text-left border-r border-slate-200 dark:border-slate-800 font-mono text-[10px]">
-                    Reg No
+                    {isTertiaryTier ? "Matric No" : "Reg No"}
                   </th>
 
                   {/* ALL Subjects Columns */}

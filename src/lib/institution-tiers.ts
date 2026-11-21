@@ -344,6 +344,7 @@ export const COLLEGE_OF_EDUCATION_TIER_DEFINITION: InstitutionTierDefinition = {
  */
 export function getInstitutionTierConfig(input?: {
   id?: string;
+  schoolId?: string;
   subdomain?: string | null;
   name?: string | null;
   tier?: string | null;

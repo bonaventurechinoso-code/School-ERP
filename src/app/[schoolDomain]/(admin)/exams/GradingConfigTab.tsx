@@ -7,6 +7,7 @@ import {
   TIER_DEFAULT_WEIGHTS,
   WeightComponent,
 } from "@/lib/assessmentEngine";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 import { saveTierAssessmentConfig } from "./actions";
 import { Sliders, AlertTriangle, CheckCircle2, Save, RotateCcw } from "lucide-react";
 
@@ -23,12 +24,27 @@ export default function GradingConfigTab({
   initialTierName = "Secondary School",
   savedConfigs = {},
 }: GradingConfigTabProps) {
-  // Resolve starting tier to one of the 6 canonical tiers
+  // Authoritative Nigerian Institution Tier Resolution
+  const tierConfig = getInstitutionTierConfig({
+    schoolId,
+    subdomain: schoolDomain,
+  });
+
+  const allowedTiers: InstitutionalTier[] = React.useMemo(() => {
+    if (tierConfig.key === "TERTIARY") {
+      if (tierConfig.name.toLowerCase().includes("polytechnic")) return ["Polytechnic"];
+      if (tierConfig.name.toLowerCase().includes("college")) return ["College of Education"];
+      return ["University"];
+    }
+    if (tierConfig.key === "CRECHE") return ["Creche / Nursery"];
+    if (tierConfig.key === "PRIMARY") return ["Primary School"];
+    if (tierConfig.key === "SECONDARY") return ["Secondary School"];
+    return ["Secondary School"];
+  }, [tierConfig]);
+
+  // Resolve starting tier strictly from allowed tiers
   const resolveInitialTier = (): InstitutionalTier => {
-    const match = ACTIVE_INSTITUTIONAL_TIERS.find(
-      (t) => t.toLowerCase() === initialTierName.toLowerCase() || initialTierName.toLowerCase().includes(t.toLowerCase())
-    );
-    return match || "Secondary School";
+    return allowedTiers[0] || "Secondary School";
   };
 
   const [selectedTier, setSelectedTier] = useState<InstitutionalTier>(resolveInitialTier);
@@ -132,7 +148,7 @@ export default function GradingConfigTab({
               onChange={(e) => setSelectedTier(e.target.value as InstitutionalTier)}
               className="border border-slate-300 dark:border-slate-700 rounded-xl py-2 px-3.5 text-sm font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-xs"
             >
-              {ACTIVE_INSTITUTIONAL_TIERS.map((tier) => (
+              {allowedTiers.map((tier) => (
                 <option key={tier} value={tier}>
                   {tier}
                 </option>

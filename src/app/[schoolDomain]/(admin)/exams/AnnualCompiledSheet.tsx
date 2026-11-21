@@ -696,20 +696,31 @@ export default function AnnualCompiledSheet({
             </div>
             <div>
               <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                Annual Compiled Master Sheet
+                {tierCategory === "TERTIARY"
+                  ? "Sessional CGPA Master Broadsheet"
+                  : tierCategory === "NURSERY"
+                  ? "Annual Developmental Milestone Profile"
+                  : "Annual Compiled Master Sheet"}
                 <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${selectedClassTier.badgeColor}`}>
                   {selectedClassTier.badgeLabel}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Session-wide cumulative compilation across 1st, 2nd, and 3rd Terms with auto-calculated promotion verdicts.
+                {tierCategory === "TERTIARY"
+                  ? "Session-wide cumulative course compilation across 1st and 2nd Semesters with NUC CGPA standing."
+                  : tierCategory === "NURSERY"
+                  ? "Session-wide cumulative milestone progression across early childhood learning modules."
+                  : "Session-wide cumulative compilation across 1st, 2nd, and 3rd Terms with auto-calculated promotion verdicts."}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <span>School: <strong className="text-slate-700 dark:text-slate-200">{schoolDisplayName}</strong></span>
                 <span>•</span>
                 <span>Session: <strong className="text-indigo-600 dark:text-indigo-400">{academicSession}</strong></span>
                 <span>•</span>
-                <span>Next Class Destination: <strong className="text-emerald-600 dark:text-emerald-400">{getNextClass(selectedClass)}</strong></span>
+                <span>
+                  {tierCategory === "TERTIARY" ? "Progression Standing: " : "Next Class Destination: "}
+                  <strong className="text-emerald-600 dark:text-emerald-400">{getNextClass(selectedClass)}</strong>
+                </span>
               </div>
             </div>
           </div>

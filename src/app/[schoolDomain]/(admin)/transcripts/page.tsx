@@ -2,6 +2,7 @@ import React from "react";
 import { notFound } from "next/navigation";
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { aggregateTranscripts } from "@/lib/gpa";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 import AnnualBroadsheetClient from "./AnnualBroadsheetClient";
 import { fetchAnnualBroadsheet } from "./actions";
 
@@ -25,14 +26,21 @@ export default async function TranscriptsPage({
     return notFound();
   }
 
+  const tierConfig = getInstitutionTierConfig({
+    id: school.id,
+    name: school.name,
+    subdomain: school.subdomain,
+    tier: school.tier,
+    academicTiers: school.academicTiers,
+  });
+
   const academicTiersList = school.academicTiers.map((t) => t.name);
   const defaultTier =
     searchParams?.tier ||
-    academicTiersList.find((t) => t.toLowerCase().includes("secondary")) ||
     academicTiersList[0] ||
-    "Secondary School";
+    tierConfig.name;
   
-  const defaultClass = searchParams?.className || (defaultTier.toLowerCase().includes("primary") ? "Primary 1" : "JSS 1");
+  const defaultClass = searchParams?.className || tierConfig.defaultClass;
   const academicSession = searchParams?.session || "2026/2027";
 
   // 2. Fetch Annual Broadsheet Data

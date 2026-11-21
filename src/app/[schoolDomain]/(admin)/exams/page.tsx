@@ -2,6 +2,7 @@ import React from "react";
 import { cookies } from "next/headers";
 import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 import ExamsList from "./ExamsList";
 import GradingRoster from "./GradingRoster";
 import GradingConfigTab from "./GradingConfigTab";
@@ -56,7 +57,21 @@ export default async function ExamsPage({
     return false;
   }) || school.academicTiers[0];
 
-  const activeTierName = activeTierObj ? activeTierObj.name : "";
+  // Authoritative Nigerian Institution Tier Configuration
+  const tierConfig = getInstitutionTierConfig({
+    schoolId: school.id,
+    name: school.name,
+    subdomain: params.schoolDomain,
+    tier: school.tier,
+    institutionType: (school as any).institutionType || (school as any).tertiaryType,
+    academicTiers: school.academicTiers,
+  });
+
+  const activeTierName = activeTierObj ? activeTierObj.name : tierConfig.name;
+  const isTertiary = tierConfig.key === "TERTIARY";
+  const isCreche = tierConfig.key === "CRECHE";
+  const isSecondary = tierConfig.key === "SECONDARY";
+  const isPrimary = tierConfig.key === "PRIMARY";
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
   const [courses, exams, students, examResults, rawStaff, gradeRecords, academicRecords, classrooms] = await Promise.all([
@@ -143,11 +158,23 @@ export default async function ExamsPage({
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <header>
+        <div className="flex items-center gap-2 mb-2">
+          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase border ${tierConfig.badgeColor}`}>
+            {tierConfig.badgeLabel}
+          </span>
+          <span className="text-xs text-slate-400 font-medium">Session 2026/2027</span>
+        </div>
         <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-          Assessments
+          {isTertiary
+            ? "Course Examinations & Assessment Records"
+            : isCreche
+            ? "Early Years Milestone Reviews & Assessments"
+            : isSecondary
+            ? "Examinations & Continuous Assessment"
+            : "Continuous Assessment & Terminal Examinations"}
         </h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
-          Schedule assessments, manage grading rosters, and configure grading metrics.
+        <p className="text-slate-500 dark:text-slate-400 mt-2 text-base max-w-4xl">
+          {tierConfig.terminology.assessmentSubtitle}
         </p>
       </header>
       
@@ -162,7 +189,11 @@ export default async function ExamsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Scheduled Exams
+            {isTertiary
+              ? "Course Examination Schedules"
+              : isCreche
+              ? "Developmental Milestone Reviews"
+              : "Scheduled Examinations & CAs"}
           </a>
           <a
             href={`/${params.schoolDomain}/exams?tab=grading`}
@@ -172,7 +203,11 @@ export default async function ExamsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Grading Broadsheet
+            {isTertiary
+              ? "Semester Course Grade Roster"
+              : isCreche
+              ? "Milestone Evaluation Broadsheet"
+              : "Continuous Assessment Broadsheet"}
           </a>
           <a
             href={`/${params.schoolDomain}/exams?tab=annual`}
@@ -182,13 +217,19 @@ export default async function ExamsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Annual Compiled Sheet
+            {isTertiary
+              ? "Sessional CGPA Master Broadsheet (1st & 2nd Semester)"
+              : isCreche
+              ? "Annual Developmental Profile"
+              : isSecondary
+              ? "Annual Promotion Broadsheet"
+              : "Annual Compiled Broadsheet"}
           </a>
           <a
             href={`/${params.schoolDomain}/report-cards`}
             className="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
           >
-            Report Cards / Result Processing
+            {tierConfig.terminology.reportCardLabel}
           </a>
           <a
             href={`/${params.schoolDomain}/exams?tab=config`}
@@ -198,7 +239,9 @@ export default async function ExamsPage({
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
             }`}
           >
-            Grading Configuration
+            {isTertiary
+              ? "NUC / NBTE CGPA & Degree Classification"
+              : "Grading Configuration"}
           </a>
         </nav>
       </div>

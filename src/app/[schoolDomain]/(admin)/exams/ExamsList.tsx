@@ -91,6 +91,7 @@ import {
   getSubjectsForClassAndTier,
 } from "@/lib/curriculum-data";
 import { getClassesForSchool } from "@/lib/school-tier-classes";
+import { getInstitutionTierConfig } from "@/lib/institution-tiers";
 
 export {
   NURSERY_SUBJECTS,
@@ -212,11 +213,31 @@ export default function ExamsList({
   const tenantPreciseTier = tenant.preciseTier;
   const tenantType = tenant.institutionType;
 
+  // Authoritative Single Source of Truth for Nigerian Institution Tier
+  const institutionTierConfig = useMemo(() => {
+    return getInstitutionTierConfig({
+      id: schoolId,
+      schoolId,
+      name: schoolName,
+      subdomain: schoolDomain,
+      tier: schoolTier,
+      academicTiers,
+    });
+  }, [schoolId, schoolName, schoolDomain, schoolTier, academicTiers]);
+
+  const isTertiary = institutionTierConfig.key === "TERTIARY";
+  const isCreche = institutionTierConfig.key === "CRECHE";
+  const isSecondary = institutionTierConfig.key === "SECONDARY";
+  const isPrimary = institutionTierConfig.key === "PRIMARY";
+
   const tierCategory: StaffTierCategory = useMemo(() => {
+    if (isTertiary) return "TERTIARY";
+    if (isCreche) return "CRECHE";
+    if (isSecondary) return "SECONDARY";
     return resolveStaffTierCategory(
       tierName || paramTier || tenantActiveTier || tenantPreciseTier || (tenantType === "HIGHER_ED" ? "TERTIARY" : "PRIMARY")
     );
-  }, [tierName, paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
+  }, [isTertiary, isCreche, isSecondary, tierName, paramTier, tenantActiveTier, tenantPreciseTier, tenantType]);
 
   // 1. Dynamic 'bonavee_classes' strictly scoped to this school's registered tiers
   const schoolClassesResult = useMemo(() => {
@@ -238,9 +259,8 @@ export default function ExamsList({
     if (schoolClassesResult.allClasses.length > 0) {
       return schoolClassesResult.allClasses;
     }
-    const standard = BONAVEE_CLASSES_MAP[tierCategory] || BONAVEE_CLASSES_MAP.PRIMARY;
-    return standard;
-  }, [schoolClassesResult, tierCategory]);
+    return institutionTierConfig.classes;
+  }, [schoolClassesResult, institutionTierConfig.classes]);
 
   // Modal & Notification UI States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,13 +279,13 @@ export default function ExamsList({
         id: se.id,
         tenant_id: se.tenant_id,
         title: se.title || se.name,
-        class_name: se.class_name || "General Class",
-        subject: se.subject || se.course?.name || "General Subject",
+        class_name: se.class_name || institutionTierConfig.defaultClass,
+        subject: se.subject || se.course?.name || (isTertiary ? "GST 111 - Communication in English (2 Units)" : isCreche ? "Literacy & Phonics Foundation" : isSecondary ? "English Language" : "English Studies"),
         assessment_type: se.assessment_type || "EXAM",
         exam_date: se.exam_date || se.date,
         start_time: se.start_time || "09:00",
         duration: Number(se.duration) || 60,
-        venue: se.venue || "Examination Hall A",
+        venue: se.venue || (isTertiary ? "Lecture Theatre 1" : "Examination Hall A"),
         invigilator_id: se.invigilator_id,
         invigilator_name: se.invigilator_name,
         max_score: Number(se.max_score || se.maxScore || 100),
@@ -282,8 +302,8 @@ export default function ExamsList({
           id: ex.id,
           tenant_id: ex.schoolId,
           title: ex.name,
-          class_name: ex.semester?.includes(" - ") ? ex.semester.split(" - ")[0] : "Primary 1",
-          subject: ex.course?.name || "Mathematics",
+          class_name: ex.semester?.includes(" - ") ? ex.semester.split(" - ")[0] : institutionTierConfig.defaultClass,
+          subject: ex.course?.name || (isTertiary ? "GST 111 - Communication in English (2 Units)" : isCreche ? "Literacy & Phonics Foundation" : isSecondary ? "English Language" : "English Studies"),
           assessment_type: ex.name?.toUpperCase().includes("CA1")
             ? "CA1"
             : ex.name?.toUpperCase().includes("CA2")
@@ -294,7 +314,7 @@ export default function ExamsList({
           exam_date: ex.date,
           start_time: "09:00",
           duration: 60,
-          venue: "Examination Hall A",
+          venue: isTertiary ? "Lecture Theatre 1" : "Examination Hall A",
           invigilator_id: null,
           invigilator_name: null,
           max_score: Number(ex.maxScore || 100),
@@ -310,7 +330,7 @@ export default function ExamsList({
       const dateB = new Date(b.exam_date).getTime();
       return dateB - dateA;
     });
-  }, [scheduledExams, exams]);
+  }, [scheduledExams, exams, institutionTierConfig, isTertiary, isCreche, isSecondary]);
 
   const [examList, setExamList] = useState<ScheduledExamRecord[]>(initialNormalizedList);
 
@@ -328,18 +348,18 @@ export default function ExamsList({
   }, [initialNormalizedList]);
 
   // Form input states
-  const initialClass = schoolClassesResult.defaultClass || bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+  const initialClass = schoolClassesResult.defaultClass || bonavee_classes[0] || institutionTierConfig.defaultClass;
   const initialSubjects = getSubjectsForClassAndTier(initialClass, tierCategory);
 
   const defaultFormData = {
     title: "",
     className: initialClass,
-    subject: initialSubjects[0] || "Mathematics",
+    subject: initialSubjects[0] || (isTertiary ? "GST 111 - Communication in English (2 Units)" : isCreche ? "Literacy & Phonics Foundation" : isSecondary ? "English Language" : "English Studies"),
     assessmentType: "CA1" as AssessmentTypeEnum,
     examDate: new Date().toISOString().split("T")[0],
     startTime: "09:00",
     duration: 60,
-    venue: "Examination Hall A",
+    venue: isTertiary ? "Lecture Theatre 1" : "Examination Hall A",
     invigilatorId: staff[0]?.id || "",
     maxScore: 20,
   };
@@ -354,7 +374,7 @@ export default function ExamsList({
   // Auto-align class and subject selections with active tier
   useEffect(() => {
     if (!bonavee_classes.includes(formData.className) && bonavee_classes.length > 0) {
-      const fallbackClass = bonavee_classes[0] || "Primary 1";
+      const fallbackClass = bonavee_classes[0] || institutionTierConfig.defaultClass;
       const fallbackSubjects = getSubjectsForClassAndTier(fallbackClass, tierCategory);
       setFormData((prev) => ({
         ...prev,
@@ -362,7 +382,13 @@ export default function ExamsList({
         subject: fallbackSubjects[0] || "",
       }));
     }
-  }, [bonavee_classes, formData.className, tierCategory]);
+  }, [bonavee_classes, formData.className, tierCategory, institutionTierConfig.defaultClass]);
+
+  useEffect(() => {
+    if (!bonavee_subjects.includes(formData.subject) && bonavee_subjects.length > 0) {
+      setFormData((prev) => ({ ...prev, subject: bonavee_subjects[0] || "" }));
+    }
+  }, [bonavee_subjects, formData.subject]);
 
   useEffect(() => {
     if (!bonavee_subjects.includes(formData.subject) && bonavee_subjects.length > 0) {
@@ -392,7 +418,7 @@ export default function ExamsList({
   // --- BULK EXAM SCHEDULING SYSTEM (Global for all schools) ---
   const [modalMode, setModalMode] = useState<"single" | "bulk">("single");
   const [bulkRows, setBulkRows] = useState<BulkExamRow[]>([]);
-  const [bulkTargetClass, setBulkTargetClass] = useState<string>(bonavee_classes[0] || "JSS 1");
+  const [bulkTargetClass, setBulkTargetClass] = useState<string>(bonavee_classes[0] || institutionTierConfig.defaultClass);
   const [bulkApplyValues, setBulkApplyValues] = useState<{
     examDate: string;
     startTime: string;
@@ -406,9 +432,9 @@ export default function ExamsList({
     startTime: "09:00",
     duration: 60,
     assessmentType: "CA1",
-    venue: "Main Examination Hall",
+    venue: isTertiary ? "Lecture Theatre 1" : "Main Examination Hall",
     invigilatorId: staff[0]?.id || "",
-    termPrefix: "1st Term",
+    termPrefix: institutionTierConfig.defaultPeriod,
   });
 
   // Multi-Class Matrix Generator State
@@ -418,9 +444,9 @@ export default function ExamsList({
 
   // Create single empty bulk row
   const createEmptyBulkRow = useCallback((defaultClass?: string): BulkExamRow => {
-    const targetClass = defaultClass || bulkTargetClass || bonavee_classes[0] || (tierCategory === "SECONDARY" ? "JSS 1" : "Primary 1");
+    const targetClass = defaultClass || bulkTargetClass || bonavee_classes[0] || institutionTierConfig.defaultClass;
     const validSubs = getSubjectsForClassAndTier(targetClass, tierCategory);
-    const sub = validSubs[0] || "Mathematics";
+    const sub = validSubs[0] || (isTertiary ? "GST 111 - Communication in English (2 Units)" : isCreche ? "Literacy & Phonics Foundation" : "English Language");
     return {
       id: `row-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       className: targetClass,
@@ -430,11 +456,11 @@ export default function ExamsList({
       examDate: bulkApplyValues.examDate || new Date().toISOString().split("T")[0],
       startTime: bulkApplyValues.startTime || "09:00",
       duration: bulkApplyValues.duration || 60,
-      venue: bulkApplyValues.venue || "Main Examination Hall",
+      venue: bulkApplyValues.venue || (isTertiary ? "Lecture Theatre 1" : "Main Examination Hall"),
       invigilatorId: bulkApplyValues.invigilatorId || (staff[0]?.id || ""),
       maxScore: bulkApplyValues.assessmentType === "EXAM" ? 60 : 20,
     };
-  }, [bulkTargetClass, bonavee_classes, tierCategory, bulkApplyValues, staff]);
+  }, [bulkTargetClass, bonavee_classes, tierCategory, bulkApplyValues, staff, institutionTierConfig.defaultClass, isTertiary, isCreche]);
 
   // Bulk duplicate detector
   const bulkDuplicates = useMemo(() => {
@@ -987,13 +1013,13 @@ export default function ExamsList({
                       Title &amp; Type
                     </th>
                     <th scope="col" className="py-3.5 px-4">
-                      Class &amp; Subject
+                      {isTertiary ? "Academic Level & Course" : isCreche ? "Care Pod & Learning Module" : "Class & Subject"}
                     </th>
                     <th scope="col" className="py-3.5 px-4">
                       Schedule
                     </th>
                     <th scope="col" className="py-3.5 px-4">
-                      Venue &amp; Invigilator
+                      {isTertiary ? "Venue & Course Lecturer" : isCreche ? "Venue & Caregiver" : "Venue & Invigilator"}
                     </th>
                     <th scope="col" className="py-3.5 px-4 text-center">
                       Max Score
@@ -1411,7 +1437,13 @@ export default function ExamsList({
                   <input
                     required
                     type="text"
-                    placeholder="e.g. First Term Mathematics Examination or CA1 Test"
+                    placeholder={
+                      isTertiary
+                        ? "e.g. First Semester GST 111 Examination or Mid-Semester Test"
+                        : isCreche
+                        ? "e.g. 1st Term Phonics Milestone Review"
+                        : "e.g. First Term Mathematics Examination or CA1 Test"
+                    }
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
@@ -1423,7 +1455,7 @@ export default function ExamsList({
                   {/* Class Selection Dropdown */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                      Class Selection <span className="text-rose-500">*</span>
+                      {isTertiary ? "Academic Level" : isCreche ? "Care Pod" : "Class Selection"} <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
@@ -1450,7 +1482,7 @@ export default function ExamsList({
                   {/* Subject Selection Dropdown */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                      Subject Selection <span className="text-rose-500">*</span>
+                      {isTertiary ? "Course Selection" : isCreche ? "Developmental Module" : "Subject Selection"} <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
@@ -1584,7 +1616,13 @@ export default function ExamsList({
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Examination Hall A, Science Lab"
+                      placeholder={
+                        isTertiary
+                          ? "e.g. Lecture Theatre 1, Main Auditorium"
+                          : isCreche
+                          ? "e.g. Early Years Activity Hall"
+                          : "e.g. Examination Hall A, Science Lab"
+                      }
                       value={formData.venue}
                       onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
@@ -1595,14 +1633,16 @@ export default function ExamsList({
                 {/* Invigilator ID Selection */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    Invigilator Assignment
+                    {isTertiary ? "Course Lecturer / Examiner" : isCreche ? "Caregiver Assignment" : "Invigilator Assignment"}
                   </label>
                   <select
                     value={formData.invigilatorId}
                     onChange={(e) => setFormData({ ...formData, invigilatorId: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
                   >
-                    <option value="">-- Assign Invigilator (Optional) --</option>
+                    <option value="">
+                      {isTertiary ? "-- Assign Lecturer (Optional) --" : isCreche ? "-- Assign Caregiver (Optional) --" : "-- Assign Invigilator (Optional) --"}
+                    </option>
                     {staff.map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.firstName} {st.lastName} ({st.role})
@@ -1814,6 +1854,25 @@ export default function ExamsList({
                   <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] shrink-0">
                     Quick Set All Rows:
                   </span>
+                  <select
+                    value={bulkApplyValues.termPrefix}
+                    onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, termPrefix: e.target.value })}
+                    className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    title={isTertiary ? "Academic Semester" : "Academic Term"}
+                  >
+                    {isTertiary ? (
+                      <>
+                        <option value="1st Semester">1st Semester</option>
+                        <option value="2nd Semester">2nd Semester</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="1st Term">1st Term</option>
+                        <option value="2nd Term">2nd Term</option>
+                        <option value="3rd Term">3rd Term</option>
+                      </>
+                    )}
+                  </select>
                   <input
                     type="date"
                     value={bulkApplyValues.examDate}
@@ -1853,7 +1912,7 @@ export default function ExamsList({
                   </div>
                   <input
                     type="text"
-                    placeholder="Shared Venue (e.g. Hall A)"
+                    placeholder={isTertiary ? "Shared Venue (e.g. Lecture Hall)" : "Shared Venue (e.g. Hall A)"}
                     value={bulkApplyValues.venue}
                     onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, venue: e.target.value })}
                     className="w-36 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none"
@@ -1863,9 +1922,9 @@ export default function ExamsList({
                     value={bulkApplyValues.invigilatorId}
                     onChange={(e) => setBulkApplyValues({ ...bulkApplyValues, invigilatorId: e.target.value })}
                     className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white max-w-[150px] truncate focus:outline-none"
-                    title="Shared Invigilator"
+                    title={isTertiary ? "Shared Course Lecturer" : "Shared Invigilator"}
                   >
-                    <option value="">No Invigilator</option>
+                    <option value="">{isTertiary ? "No Lecturer" : "No Invigilator"}</option>
                     {staff.map((st) => (
                       <option key={st.id} value={st.id}>{st.firstName} {st.lastName}</option>
                     ))}
@@ -1886,15 +1945,15 @@ export default function ExamsList({
                     <thead className="bg-slate-50 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-extrabold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800 text-[11px]">
                       <tr>
                         <th className="py-2.5 px-2.5 w-8 text-center">#</th>
-                        <th className="py-2.5 px-2.5 min-w-[110px]">Class</th>
-                        <th className="py-2.5 px-2.5 min-w-[150px]">Subject (Filtered)</th>
+                        <th className="py-2.5 px-2.5 min-w-[110px]">{isTertiary ? "Level" : isCreche ? "Care Pod" : "Class"}</th>
+                        <th className="py-2.5 px-2.5 min-w-[150px]">{isTertiary ? "Course Code & Title" : isCreche ? "Learning Module" : "Subject"}</th>
                         <th className="py-2.5 px-2.5 min-w-[85px]">Type</th>
                         <th className="py-2.5 px-2.5 min-w-[170px]">Assessment Title</th>
                         <th className="py-2.5 px-2.5 min-w-[125px]">Exam Date</th>
                         <th className="py-2.5 px-2.5 min-w-[105px]">Time</th>
                         <th className="py-2.5 px-2.5 min-w-[85px]">Duration</th>
                         <th className="py-2.5 px-2.5 min-w-[130px]">Venue</th>
-                        <th className="py-2.5 px-2.5 min-w-[130px]">Invigilator</th>
+                        <th className="py-2.5 px-2.5 min-w-[130px]">{isTertiary ? "Course Lecturer" : isCreche ? "Caregiver" : "Invigilator"}</th>
                         <th className="py-2.5 px-2.5 w-16 text-center">Actions</th>
                       </tr>
                     </thead>
