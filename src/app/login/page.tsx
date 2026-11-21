@@ -77,11 +77,35 @@ function LoginPageContent() {
     }
   }, [resolvedSubdomain]);
 
-  // Auto-fill username/email from query params if supplied (e.g. from notification link)
+  // Auto-fill username/email from query params if supplied (e.g. from notification link or demo chooser)
   useEffect(() => {
     const queryEmail = searchParams.get("email") || searchParams.get("username") || searchParams.get("login");
+    const querySchool = searchParams.get("school") || searchParams.get("schoolDomain") || searchParams.get("tenant") || searchParams.get("code");
+
+    const demoMap: Record<string, string> = {
+      "demo-creche@demo.com": "demo-creche",
+      "demo-nursery@demo.com": "demo-nursery",
+      "demo-primary@demo.com": "demo-primary",
+      "demo-secondary@demo.com": "demo-secondary",
+      "demo-university@demo.com": "demo-university",
+    };
+
     if (queryEmail) {
-      setEmail((prev) => (prev ? prev : queryEmail.trim()));
+      const cleanEmail = queryEmail.trim();
+      setEmail((prev) => (prev ? prev : cleanEmail));
+      if (demoMap[cleanEmail.toLowerCase()]) {
+        const matchingSchool = demoMap[cleanEmail.toLowerCase()];
+        setResolvedSubdomain(matchingSchool);
+        setSchoolCode(matchingSchool);
+      }
+    }
+
+    if (querySchool) {
+      const cleanSchool = querySchool.trim().toLowerCase();
+      if (!["localhost", "root", "default", "admin"].includes(cleanSchool)) {
+        setResolvedSubdomain(cleanSchool);
+        setSchoolCode(cleanSchool);
+      }
     }
   }, [searchParams]);
 
@@ -181,8 +205,13 @@ function LoginPageContent() {
     }
 
     // 1. Query parameters (?school=..., ?subdomain=..., ?tenant=..., ?mockTenant=...)
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     const querySchool =
+      searchParams.get("school") ||
+      searchParams.get("schoolDomain") ||
+      searchParams.get("tenant") ||
+      searchParams.get("mockTenant") ||
+      searchParams.get("code") ||
       params.get("school") ||
       params.get("schoolDomain") ||
       params.get("tenant") ||
@@ -259,7 +288,7 @@ function LoginPageContent() {
       } catch { }
       return;
     }
-  }, [routeSchool]);
+  }, [routeSchool, searchParams]);
 
   // FIX 4: Session Isolation — verify existing token on page load,
   // clear stale/mismatched sessions, never auto-redirect from localStorage alone.
@@ -374,8 +403,19 @@ function LoginPageContent() {
 
   const isDemoTenant =
     (resolvedSubdomain || "").trim().toLowerCase() === "demo" ||
+    (resolvedSubdomain || "").trim().toLowerCase().startsWith("demo-") ||
     (schoolCode || "").trim().toLowerCase() === "demo" ||
-    (routeSchool || "").trim().toLowerCase() === "demo";
+    (schoolCode || "").trim().toLowerCase().startsWith("demo-") ||
+    (routeSchool || "").trim().toLowerCase() === "demo" ||
+    (routeSchool || "").trim().toLowerCase().startsWith("demo-");
+
+  const DEMO_TENANT_MAP: Record<string, string> = {
+    "demo-creche@demo.com": "demo-creche",
+    "demo-nursery@demo.com": "demo-nursery",
+    "demo-primary@demo.com": "demo-primary",
+    "demo-secondary@demo.com": "demo-secondary",
+    "demo-university@demo.com": "demo-university",
+  };
 
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const performLogin = async (customEmail?: string, customPassword?: string, customSchoolCode?: string) => {
@@ -389,18 +429,19 @@ function LoginPageContent() {
     const normalizedEmail = emailToUse.trim().toLowerCase();
     const effectiveSchoolCode = isSuperAdmin
       ? ""
-      : (schoolCodeToUse.trim() || resolvedSubdomain || "").trim().toLowerCase();
+      : (schoolCodeToUse.trim() || resolvedSubdomain || DEMO_TENANT_MAP[normalizedEmail] || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
 
-    // Check if authenticating without a school code as super admin
+    // Check if authenticating without a school code as super admin or demo tenant
     const isKnownSuperAdmin =
       isSuperAdmin ||
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
       normalizedEmail === "superadmin@platform.com";
+    const isKnownDemoAccount = Boolean(DEMO_TENANT_MAP[normalizedEmail]);
 
     // Immediate client-side validation guard: School code is mandatory for institutional workspace access
-    if (!isSuperAdmin && !effectiveSchoolCode && !isKnownSuperAdmin) {
+    if (!isSuperAdmin && !effectiveSchoolCode && !isKnownSuperAdmin && !isKnownDemoAccount) {
       const errorMsg = "School Code is required to access your workspace.";
       setSchoolCodeError(errorMsg);
       showToast(errorMsg, "error");

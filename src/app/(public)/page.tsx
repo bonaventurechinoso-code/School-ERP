@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users, Loader2, Menu, X, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, Building, Baby, ArrowRight, ShieldCheck, Zap, Globe, Users, Loader2, Menu, X, Eye, EyeOff, Copy, Check, School, GraduationCap, BookOpen, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SessionProvider, useSession } from "@/lib/session-context";
@@ -258,6 +258,108 @@ export default function LandingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [loadingGateway, setLoadingGateway] = useState<"trial" | "demo" | null>(null);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, key: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    }
+  };
+
+  const demoTenantsList = [
+    {
+      id: "creche",
+      name: "Demo Creche",
+      tier: "Creche",
+      subdomain: "demo-creche",
+      tagline: "Early Childhood & Toddler Care",
+      classes: "Creche 1, Creche 2",
+      badge: "Ages 0 - 2",
+      badgeColor: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800",
+      accentBorder: "hover:border-pink-500/50",
+      accentBg: "from-pink-500/10 via-transparent to-transparent",
+      icon: Baby,
+      email: "demo-creche@demo.com",
+      password: "Demo@123",
+      features: ["Sensory Development Tracking", "Daily Care Logs & Attendance", "Guardian Contact Directory"],
+    },
+    {
+      id: "nursery",
+      name: "Demo Nursery",
+      tier: "Nursery",
+      subdomain: "demo-nursery",
+      tagline: "Foundation, Phonics & KG",
+      classes: "Nursery 1, Nursery 2, KG",
+      badge: "Ages 3 - 5",
+      badgeColor: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+      accentBorder: "hover:border-amber-500/50",
+      accentBg: "from-amber-500/10 via-transparent to-transparent",
+      icon: School,
+      email: "demo-nursery@demo.com",
+      password: "Demo@123",
+      features: ["Early Numeracy & Phonics", "Montessori Milestone Scoring", "Classroom Activity Logs"],
+    },
+    {
+      id: "primary",
+      name: "Demo Primary",
+      tier: "Primary",
+      subdomain: "demo-primary",
+      tagline: "Basic Education Curriculum",
+      classes: "Primary 1 – Primary 6",
+      badge: "Basic 1 - 6",
+      badgeColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+      accentBorder: "hover:border-emerald-500/50",
+      accentBg: "from-emerald-500/10 via-transparent to-transparent",
+      icon: BookOpen,
+      email: "demo-primary@demo.com",
+      password: "Demo@123",
+      features: ["CA1, CA2 & Exam Continuous Grading", "Term Broadsheets & Report Cards", "Tuition & Fee Verification"],
+    },
+    {
+      id: "secondary",
+      name: "Demo Secondary",
+      tier: "Secondary",
+      subdomain: "demo-secondary",
+      tagline: "Junior & Senior Secondary",
+      classes: "JSS 1–3, SSS 1–3",
+      badge: "WAEC / NECO",
+      badgeColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+      accentBorder: "hover:border-blue-500/50",
+      accentBg: "from-blue-500/10 via-transparent to-transparent",
+      icon: Building,
+      email: "demo-secondary@demo.com",
+      password: "Demo@123",
+      features: ["Senior WAEC/NECO Examination Tracks", "Subject Teachers & Form Masters", "Cumulative GPA & Transcripts"],
+    },
+    {
+      id: "university",
+      name: "Demo University",
+      tier: "University",
+      subdomain: "demo-university",
+      tagline: "Higher Institution & Faculties",
+      classes: "Departments: Computer Science, Business Admin • Levels: 100–400",
+      badge: "Tertiary Degree",
+      badgeColor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+      accentBorder: "hover:border-purple-500/50",
+      accentBg: "from-purple-500/10 via-transparent to-transparent",
+      icon: GraduationCap,
+      email: "demo-university@demo.com",
+      password: "Demo@123",
+      features: ["Departmental Course Registration", "Credit Unit Grade Point Average", "Faculty & Senate Roster"],
+    },
+  ];
+
+  const handleLaunchDemo = (demo: typeof demoTenantsList[0]) => {
+    const baseUrl =
+      typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? window.location.origin
+        : (process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng");
+    const targetUrl = `${baseUrl}/login?email=${encodeURIComponent(demo.email)}&school=${encodeURIComponent(demo.subdomain)}`;
+    window.location.assign(targetUrl);
+  };
   const [isTrialSubmitting, setIsTrialSubmitting] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
   const [trialForm, setTrialForm] = useState({
@@ -423,17 +525,15 @@ export default function LandingPage() {
               <span>Start Free Trial</span>
               <ArrowRight className="h-5 w-5" />
             </button>
-            <Link
-              href="/api/auth/demo-session"
+            <button
+              type="button"
               id="explore-demo-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                handleGatewayNavigation("demo", "/api/auth/demo-session");
-              }}
+              onClick={() => setIsDemoModalOpen(true)}
               className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>{loadingGateway === "demo" ? "Entering Demo..." : "Explore Demo Environment"}</span>
-            </Link>
+              <Sparkles className="h-5 w-5 text-amber-300" />
+              <span>Explore Demo Environment</span>
+            </button>
           </div>
         </div>
       </section>
@@ -628,16 +728,13 @@ export default function LandingPage() {
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Platform Gateways</h4>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <Link
-                    href="/api/auth/demo-session"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleGatewayNavigation("demo", "/api/auth/demo-session");
-                    }}
-                    className="hover:text-blue-400 transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => setIsDemoModalOpen(true)}
+                    className="text-left hover:text-blue-400 transition-colors cursor-pointer"
                   >
-                    Apex International Academy (Demo)
-                  </Link>
+                    Institutional Demo Environments (5 Tiers)
+                  </button>
                 </li>
                 <li><Link href="/portal/student" className="hover:text-blue-400 transition-colors">Student Learning Portal</Link></li>
                 <li><Link href="/portal/staff" className="hover:text-blue-400 transition-colors">Staff & Faculty Portal</Link></li>
@@ -677,6 +774,135 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      {/* Demo Chooser Modal */}
+      {isDemoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[92vh] overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setIsDemoModalOpen(false)}
+              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="mb-8 text-center max-w-2xl mx-auto">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                Live Demo Environments • 5 Institutional Tiers
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                Select an Institutional Demo
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                Experience full administrative and academic workflows with pre-populated pupil rosters, courses, grading, invoices, and attendance records inside the Main App.
+              </p>
+            </div>
+
+            {/* 5 Demo Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {demoTenantsList.map((demo) => {
+                const IconComponent = demo.icon;
+                return (
+                  <div
+                    key={demo.id}
+                    className={`relative flex flex-col justify-between rounded-2xl p-5 bg-gradient-to-b ${demo.accentBg} bg-white dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-800 ${demo.accentBorder} transition-all duration-300 hover:shadow-xl group`}
+                  >
+                    <div>
+                      {/* Tier Header */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700/60 shadow-xs shrink-0 text-slate-800 dark:text-slate-100">
+                          <IconComponent className="w-6 h-6" />
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${demo.badgeColor}`}>
+                          {demo.badge}
+                        </span>
+                      </div>
+
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                        {demo.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                        {demo.tagline}
+                      </p>
+
+                      {/* Class / Department badges */}
+                      <div className="mb-4 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 rounded-lg p-2.5 border border-slate-200/60 dark:border-slate-700/60">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Classes & Scope</span>
+                        {demo.classes}
+                      </div>
+
+                      {/* Credentials Box */}
+                      <div className="bg-slate-50 dark:bg-slate-900/90 rounded-xl p-3 border border-slate-200 dark:border-slate-800 text-xs space-y-2 mb-4">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[11px] font-semibold text-slate-400">Email:</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-mono text-slate-900 dark:text-slate-100 truncate text-[11px]">
+                              {demo.email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(demo.email, `${demo.id}-email`)}
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0"
+                              title="Copy Email"
+                            >
+                              {copiedKey === `${demo.id}-email` ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 border-t border-slate-200/60 dark:border-slate-800 pt-1.5">
+                          <span className="text-[11px] font-semibold text-slate-400">Password:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-[11px]">
+                              {demo.password}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(demo.password, `${demo.id}-pass`)}
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0"
+                              title="Copy Password"
+                            >
+                              {copiedKey === `${demo.id}-pass` ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleLaunchDemo(demo)}
+                      className="w-full mt-2 bg-slate-900 hover:bg-blue-600 dark:bg-slate-800 dark:hover:bg-blue-600 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm group-hover:shadow-md cursor-pointer"
+                    >
+                      <span>Launch {demo.tier} Demo</span>
+                      <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer Note */}
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
+              <span>All demo data is isolated and filtered by school tenant ID.</span>
+              <span>Credentials auto-fill upon launching the Main App login.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Free Trial Modal */}
       {isTrialModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">

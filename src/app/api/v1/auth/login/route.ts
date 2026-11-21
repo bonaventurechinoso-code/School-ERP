@@ -316,9 +316,18 @@ export async function POST(req: Request) {
     const rawIdentifier = (admissionNumber || email || "").trim();
     const parsedInst = parseInstitutionalIdentifier(rawIdentifier, explicitSchool);
     const searchVariants = getAdmissionNumberSearchVariants(rawIdentifier);
+
+    const DEMO_TENANT_EMAILS: Record<string, string> = {
+      "demo-creche@demo.com": "demo-creche",
+      "demo-nursery@demo.com": "demo-nursery",
+      "demo-primary@demo.com": "demo-primary",
+      "demo-secondary@demo.com": "demo-secondary",
+      "demo-university@demo.com": "demo-university",
+    };
+
     // Tenant context for this request: explicit school code, or the school token
-    // embedded in an institutional identifier (e.g. admission number).
-    const targetSchoolCode = (explicitSchool || parsedInst.schoolToken || "").trim().toLowerCase();
+    // embedded in an institutional identifier (e.g. admission number), or auto-matched demo tenant.
+    const targetSchoolCode = (explicitSchool || parsedInst.schoolToken || DEMO_TENANT_EMAILS[normalizedEmail] || "").trim().toLowerCase();
     const accountKey = `${targetSchoolCode || "global"}:${normalizedEmail}`;
 
 //     const ipCheck = checkIpRateLimit(clientIp);
@@ -745,7 +754,7 @@ export async function POST(req: Request) {
           normalizedEmail === "principal@sandbox.edu.ng" ||
           !localUser.passwordHash ||
           localUser.passwordHash.length < 5) &&
-        (password === "Password123" || password === "Password123#" || password === "Password@123" || (normalizedEmail === "headmaster@demo.edu.ng" && password === "Password123"))
+        (password === "Password123" || password === "Password123#" || password === "Password@123" || password === "Demo@123" || (normalizedEmail === "headmaster@demo.edu.ng" && password === "Password123"))
       ) {
         isValid = true;
         // Self-heal: If user has empty or corrupt passwordHash, automatically persist valid hash now
@@ -1084,7 +1093,12 @@ export async function POST(req: Request) {
     const permissions = getDefaultPermissionsForRole(resolvedRole as UserRole);
     const distinctSessionToken = crypto.randomUUID();
     const effectiveSlug = tenant.slug || tenant.subdomain;
-    const isTenantDemo = Boolean(tenant.isDemo) || tenant.subdomain?.toLowerCase() === "demo" || tenant.slug?.toLowerCase() === "demo";
+    const isTenantDemo =
+      Boolean(tenant.isDemo) ||
+      tenant.subdomain?.toLowerCase() === "demo" ||
+      tenant.slug?.toLowerCase() === "demo" ||
+      tenant.subdomain?.toLowerCase()?.startsWith("demo-") ||
+      DEMO_TENANT_EMAILS[normalizedEmail] !== undefined;
     if (isTenantDemo) {
       mustChangePassword = false;
     }
