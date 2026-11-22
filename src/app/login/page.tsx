@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams, usePathname } from "next/navigation";
@@ -65,6 +65,7 @@ function LoginPageContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [schoolCodeError, setSchoolCodeError] = useState<string | null>(null);
+  const isLoggingInRef = useRef(false);
 
   // Multi-tenant branding states
   const [resolvedSubdomain, setResolvedSubdomain] = useState<string | null>(null);
@@ -296,8 +297,11 @@ function LoginPageContent() {
     if (typeof window === "undefined") return;
 
     const verifyAndIsolate = async () => {
+      // Never interfere with an active login attempt or ongoing navigation
+      if (isLoggingInRef.current || isSubmitting) return;
+
       // Clear any stored session that belongs to a DIFFERENT school than the
-      // school code currently on screen (prevents cross-tenant leakage).
+      // school code currently on screen (prevents cross-tenant leakage on tenant-specific URLs).
       const stored = getStoredSession();
       const storedDomain = (stored?.schoolDomain || "").trim().toLowerCase();
       const pageDomain = (resolvedSubdomain || "").trim().toLowerCase();
@@ -305,12 +309,11 @@ function LoginPageContent() {
       if (stored) {
         const storedRole = (stored.role || stored.userRole || "").toUpperCase();
         const storedIsSuperAdmin = storedRole === "SUPER_ADMIN" || storedDomain === "admin";
-        // A Super Admin session must never carry over onto a school login page,
-        // a session from one school must never carry over onto another school,
-        // and a tenant session must never carry over onto the root platform login.
+        // A Super Admin session must never carry over onto a specific school login page,
+        // and a session from one school must never carry over onto another school's login page.
+        // On the root platform login page (pageDomain is empty), any valid tenant or admin session is accepted.
         const isMismatch =
-          (Boolean(pageDomain) && (storedIsSuperAdmin || storedDomain !== pageDomain)) ||
-          (!pageDomain && Boolean(storedDomain) && storedDomain !== "admin");
+          Boolean(pageDomain) && (storedIsSuperAdmin || storedDomain !== pageDomain);
 
         if (isMismatch) {
           clearStoredSession();
@@ -347,10 +350,9 @@ function LoginPageContent() {
         const isSuperAdminSrv = srvRole === "SUPER_ADMIN" || Boolean(srv.isSuperAdmin);
 
         // Server-side tenant boundary check:
-        // Stale tenant session on root login, or mismatched tenant on school login -> wipe immediately
+        // Mismatched tenant or super-admin on a specific school login page -> wipe
         const srvMismatch =
-          (pageDomain && (srvDomain !== pageDomain || isSuperAdminSrv)) ||
-          (!pageDomain && srvDomain && !isSuperAdminSrv);
+          Boolean(pageDomain) && (srvDomain !== pageDomain || isSuperAdminSrv);
 
         if (srvMismatch) {
           clearStoredSession();
@@ -419,6 +421,7 @@ function LoginPageContent() {
 
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const performLogin = async (customEmail?: string, customPassword?: string, customSchoolCode?: string) => {
+    isLoggingInRef.current = true;
     setSchoolCodeError(null);
     setIsSubmitting(true);
 
@@ -445,6 +448,7 @@ function LoginPageContent() {
       const errorMsg = "School Code is required to access your workspace.";
       setSchoolCodeError(errorMsg);
       showToast(errorMsg, "error");
+      isLoggingInRef.current = false;
       setIsSubmitting(false);
       setAuthToken(null);
       return;
@@ -486,6 +490,7 @@ function LoginPageContent() {
         const resData = await loginRes.json().catch(() => null);
 
         if (!loginRes.ok) {
+          isLoggingInRef.current = false;
           setIsSubmitting(false);
           setAuthToken(null);
           const errorMsg =
@@ -514,19 +519,24 @@ function LoginPageContent() {
           redirect: false,
         });
       } catch (signInErr: any) {
-        setIsSubmitting(false);
-        setAuthToken(null);
-        const errMsg = !effectiveSchoolCode && !isSuperAdmin
-          ? "School Code is required to access your workspace."
-          : (signInErr?.message || "Invalid credentials. Please verify your email and password.");
-        if (!effectiveSchoolCode && !isSuperAdmin) {
-          setSchoolCodeError(errMsg);
+        if (!apiLoginData?.success) {
+          isLoggingInRef.current = false;
+          setIsSubmitting(false);
+          setAuthToken(null);
+          const errMsg = !effectiveSchoolCode && !isSuperAdmin
+            ? "School Code is required to access your workspace."
+            : (signInErr?.message || "Invalid credentials. Please verify your email and password.");
+          if (!effectiveSchoolCode && !isSuperAdmin) {
+            setSchoolCodeError(errMsg);
+          }
+          showToast(errMsg, "error");
+          return;
         }
-        showToast(errMsg, "error");
-        return;
+        console.warn("[Login] NextAuth signIn notice, proceeding with verified API session:", signInErr);
       }
 
       if (res?.error && !apiLoginData?.success) {
+        isLoggingInRef.current = false;
         setAuthToken(null);
         setIsSubmitting(false);
         const rawErr = typeof res.error === "string" ? res.error : "";
@@ -637,8 +647,6 @@ function LoginPageContent() {
         window.dispatchEvent(new Event(AUTH_UPDATE_EVENT));
       }
 
-      router.refresh();
-
       // Explicit role & global SaaS context resolution
       const rawRole = (sessionPayload?.role || sessionPayload?.userRole || "").toUpperCase();
       const staffRole = (sessionPayload?.staffRole || "").toUpperCase();
@@ -649,78 +657,76 @@ function LoginPageContent() {
         (!effectiveSchoolCode &&
         (rawRole === "SUPER_ADMIN" || Boolean(sessionPayload?.isSuperAdmin)));
 
+      let destination = "";
+
       // Super Admin Golden Key: Always forward directly to /super-admin
       if (isSuperAdmin || isSuperAdminUser || rawRole === "SUPER_ADMIN") {
-        router.push("/super-admin");
-        return;
-      }
+        destination = "/super-admin";
+      } else {
+        // Check forced initial password reset for standard accounts (bypassed conditionally for demo tenant)
+        const isLoginDemoTenant = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase() === "demo";
+        if (!isLoginDemoTenant && sessionPayload?.mustChangePassword) {
+          destination = "/change-password";
+        } else if (callbackUrl && !callbackUrl.includes("/login")) {
+          const isRestrictedRole = (rawRole || staffRole || "").toUpperCase() === "STUDENT" || (rawRole || staffRole || "").toUpperCase() === "PARENT";
+          const isAdminPath = /\/(dashboard|finance|students|staff|settings|academics|bursary|admin)(\/|$)/i.test(callbackUrl);
+          if (!(isRestrictedRole && isAdminPath)) {
+            destination = callbackUrl;
+          }
+        }
 
-      // Check forced initial password reset for standard accounts (bypassed conditionally for demo tenant)
-      const isLoginDemoTenant = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase() === "demo";
-      if (!isLoginDemoTenant && sessionPayload?.mustChangePassword) {
-        router.push("/change-password");
-        return;
-      }
+        if (!destination) {
+          const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
+          if (!isSuperAdmin && !targetCode) {
+            const missingSchoolMsg = "School Code is required to access your workspace.";
+            setSchoolCodeError(missingSchoolMsg);
+            showToast(missingSchoolMsg, "error");
+            isLoggingInRef.current = false;
+            setIsSubmitting(false);
+            setAuthToken(null);
+            return;
+          }
 
-      // Respect explicit callback URL if specified and not a login loop
-      if (callbackUrl && !callbackUrl.includes("/login")) {
-        const isRestrictedRole = (rawRole || staffRole || "").toUpperCase() === "STUDENT" || (rawRole || staffRole || "").toUpperCase() === "PARENT";
-        const isAdminPath = /\/(dashboard|finance|students|staff|settings|academics|bursary|admin)(\/|$)/i.test(callbackUrl);
-        if (!(isRestrictedRole && isAdminPath)) {
-          router.push(callbackUrl);
-          return;
+          const effectiveRole = (rawRole || staffRole || "").toUpperCase();
+          if (effectiveRole === "BURSAR") {
+            destination = `/${targetCode}/portal/bursar`;
+          } else if (
+            effectiveRole === "PRINCIPAL" ||
+            effectiveRole === "HEADMASTER" ||
+            effectiveRole === "VICE_PRINCIPAL"
+          ) {
+            destination = `/${targetCode}/portal/principal`;
+          } else if (
+            effectiveRole === "SCHOOL_ADMIN" ||
+            effectiveRole === "TENANT_ADMIN" ||
+            effectiveRole === "ADMIN" ||
+            effectiveRole.includes("ADMIN")
+          ) {
+            destination = `/${targetCode}/dashboard`;
+          } else if (
+            effectiveRole === "TEACHER" ||
+            effectiveRole === "STAFF" ||
+            staffRole.includes("TEACHER") ||
+            staffRole.includes("STAFF")
+          ) {
+            destination = `/${targetCode}/portal/staff`;
+          } else if (effectiveRole === "STUDENT") {
+            destination = `/${targetCode}/portal/student`;
+          } else if (effectiveRole === "PARENT") {
+            destination = `/${targetCode}/portal/parent`;
+          } else {
+            destination = `/${targetCode}/portal`;
+          }
         }
       }
 
-      // RBAC role redirect mapping:
-      // super_admin -> /super-admin
-      // school_admin -> /[tenant]/dashboard
-      // principal -> /[tenant]/portal/principal
-      // bursar -> /[tenant]/portal/bursar
-      // teacher/staff -> /[tenant]/portal/staff
-      // student -> /[tenant]/portal/student
-      // parent -> /[tenant]/portal/parent
-      const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
-      if (!isSuperAdmin && !targetCode) {
-        const missingSchoolMsg = "School Code is required to access your workspace.";
-        setSchoolCodeError(missingSchoolMsg);
-        showToast(missingSchoolMsg, "error");
-        setIsSubmitting(false);
-        setAuthToken(null);
+      if (destination) {
+        // Immediate, atomic document navigation ensuring cookies are transmitted in the first request
+        window.location.replace(destination);
         return;
       }
-
-      const effectiveRole = (rawRole || staffRole || "").toUpperCase();
-      if (effectiveRole === "BURSAR") {
-        router.push(`/${targetCode}/portal/bursar`);
-      } else if (
-        effectiveRole === "PRINCIPAL" ||
-        effectiveRole === "HEADMASTER" ||
-        effectiveRole === "VICE_PRINCIPAL"
-      ) {
-        router.push(`/${targetCode}/portal/principal`);
-      } else if (
-        effectiveRole === "SCHOOL_ADMIN" ||
-        effectiveRole === "TENANT_ADMIN" ||
-        effectiveRole === "ADMIN" ||
-        effectiveRole.includes("ADMIN")
-      ) {
-        router.push(`/${targetCode}/dashboard`);
-      } else if (
-        effectiveRole === "TEACHER" ||
-        effectiveRole === "STAFF" ||
-        staffRole.includes("TEACHER") ||
-        staffRole.includes("STAFF")
-      ) {
-        router.push(`/${targetCode}/portal/staff`);
-      } else if (effectiveRole === "STUDENT") {
-        router.push(`/${targetCode}/portal/student`);
-      } else if (effectiveRole === "PARENT") {
-        router.push(`/${targetCode}/portal/parent`);
-      } else {
-        router.push(`/${targetCode}/portal`);
-      }
     } catch (err: any) {
+      isLoggingInRef.current = false;
       setIsSubmitting(false);
       setAuthToken(null);
       const errMsg = err?.message || "An unexpected error occurred during authentication.";
