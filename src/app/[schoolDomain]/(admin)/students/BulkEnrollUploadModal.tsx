@@ -81,8 +81,8 @@ export default function BulkEnrollUploadModal({
 
   if (!isOpen) return null;
 
-  // Download CSV Template with exact columns & example rows requested
-  const handleDownloadTemplate = () => {
+  // Download Official Template (Excel .xlsx with Text phone & DD/MM/YYYY date formatting, plus CSV fallback)
+  const handleDownloadTemplate = (format: "xlsx" | "csv" = "xlsx") => {
     let headers: string[];
     let exampleRows: string[][];
 
@@ -107,8 +107,8 @@ export default function BulkEnrollUploadModal({
         "PreviousSchool",
       ];
       exampleRows = [
-        ["Emeka", "Okafor", "Paul", "M", "2004-05-12", sampleClass1, "A", currentYear, "08031234567", "emeka.okafor@student.edu", "Mr Okafor", "08029998877", "Community High School"],
-        ["Adaeze", "Nnaji", "Grace", "F", "2003-09-01", sampleClass1, "B", currentYear, "08029876543", "adaeze.nnaji@student.edu", "Mrs Nnaji", "08031112233", "Federal College"],
+        ["Emeka", "Okafor", "Paul", "M", "12/05/2004", sampleClass1, "A", currentYear, "08030000001", "emeka.okafor@student.edu", "Mr Okafor", "08020000002", "Community High School"],
+        ["Adaeze", "Nnaji", "Grace", "F", "09/01/2003", sampleClass1, "B", currentYear, "08020000003", "adaeze.nnaji@student.edu", "Mrs Nnaji", "08030000004", "Federal College"],
       ];
     } else {
       headers = [
@@ -127,26 +127,118 @@ export default function BulkEnrollUploadModal({
         "PreviousSchool",
       ];
       exampleRows = [
-        ["Joseph", "Okonkwo", "Chukwu", "M", "2019-05-12", sampleClass1, "A", currentYear, "Mr Okonkwo", "Father", "08031234567", "okonkwo@gmail.com", "Grace Nursery"],
-        ["Adaeze", "Nnaji", "Chioma", "F", "2018-09-01", sampleClass2, "B", currentYear, "Mrs Nnaji", "Mother", "08029876543", "nnaji@gmail.com", "Little Angels Academy"],
-        ["Emeka", "Okafor", "David", "M", "2018-02-10", sampleClass1, "A", currentYear, "Mrs Okafor", "Mother", "08061112233", "", "St. Joseph Nursery"],
+        ["Joseph", "Okonkwo", "Chukwu", "M", "12/05/2019", sampleClass1, "A", currentYear, "Mr Okonkwo", "Father", "08030000001", "okonkwo@gmail.com", "Grace Nursery"],
+        ["Adaeze", "Nnaji", "Chioma", "F", "09/01/2018", sampleClass2, "B", currentYear, "Mrs Nnaji", "Mother", "08020000002", "nnaji@gmail.com", "Little Angels Academy"],
+        ["Emeka", "Okafor", "David", "M", "10/02/2018", sampleClass1, "A", currentYear, "Mrs Okafor", "Mother", "08060000003", "okafor@gmail.com", "St. Joseph Nursery"],
       ];
     }
 
-    const csvContent =
-      headers.join(",") +
-      "\n" +
-      exampleRows
-        .map((r) => r.map((c) => (c.includes(",") ? `"${c}"` : c)).join(","))
-        .join("\n");
+    if (format === "csv") {
+      const csvContent =
+        headers.join(",") +
+        "\n" +
+        exampleRows
+          .map((r) => r.map((c) => (c.includes(",") ? `"${c}"` : `"${c}"`)).join(","))
+          .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `official_student_enrollment_template_${schoolDomain || "school"}_${isTertiary ? "tertiary" : "k12"}.csv`
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    // Generate formatted .XLSX Excel Workbook
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleRows]);
+
+    // Generous column widths so no column is truncated, no scientific notation, and no ########
+    ws["!cols"] = isTertiary
+      ? [
+          { wch: 18 }, // FirstName
+          { wch: 18 }, // LastName
+          { wch: 16 }, // MiddleName
+          { wch: 12 }, // Gender
+          { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
+          { wch: 18 }, // Class
+          { wch: 10 }, // Arm
+          { wch: 18 }, // AdmissionYear
+          { wch: 24 }, // StudentPhone
+          { wch: 30 }, // StudentEmail
+          { wch: 26 }, // NextOfKinName
+          { wch: 24 }, // NextOfKinPhone
+          { wch: 28 }, // PreviousSchool
+        ]
+      : [
+          { wch: 18 }, // FirstName
+          { wch: 18 }, // LastName
+          { wch: 16 }, // MiddleName
+          { wch: 12 }, // Gender
+          { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
+          { wch: 18 }, // Class
+          { wch: 10 }, // Arm
+          { wch: 18 }, // AdmissionYear
+          { wch: 26 }, // GuardianName
+          { wch: 24 }, // GuardianRelationship
+          { wch: 24 }, // GuardianPhone (wide enough for 0803... or +234...)
+          { wch: 30 }, // GuardianEmail (wide enough for email address)
+          { wch: 28 }, // PreviousSchool (wide enough for school name)
+        ];
+
+    // Freeze top header row so it stays visible on scroll
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    ws["!views"] = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
+
+    // Format every cell in Phone column as explicit TEXT ('s') with format '@'
+    // Format DateOfBirth column as explicit DD/MM/YYYY
+    const phoneColIdx = isTertiary ? 8 : 10;
+    const nextOfKinPhoneColIdx = isTertiary ? 11 : -1;
+    const dobColIdx = 4;
+
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:M4");
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[cellAddress];
+        if (!cell) continue;
+
+        if (R > 0) {
+          // Phone columns: force string type ('s') and text format ('@')
+          if (C === phoneColIdx || C === nextOfKinPhoneColIdx) {
+            cell.t = "s";
+            cell.z = "@";
+            cell.v = String(cell.v);
+          }
+          // Date of birth column: text type with DD/MM/YYYY format
+          if (C === dobColIdx) {
+            cell.t = "s";
+            cell.z = "DD/MM/YYYY";
+            cell.v = String(cell.v);
+          }
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.setAttribute(
       "download",
-      `official_student_enrollment_template_${schoolDomain || "school"}_${isTertiary ? "tertiary" : "k12"}.csv`
+      `official_student_enrollment_template_${schoolDomain || "school"}_${isTertiary ? "tertiary" : "k12"}.xlsx`
     );
     document.body.appendChild(link);
     link.click();
@@ -233,7 +325,7 @@ export default function BulkEnrollUploadModal({
             if (typeof row[cDob] === "number") {
               const dateObj = XLSX.SSF.parse_date_code(row[cDob]);
               if (dateObj) {
-                dobStr = `${dateObj.y}-${String(dateObj.m).padStart(2, "0")}-${String(dateObj.d).padStart(2, "0")}`;
+                dobStr = `${String(dateObj.d).padStart(2, "0")}/${String(dateObj.m).padStart(2, "0")}/${dateObj.y}`;
               }
             } else {
               dobStr = String(row[cDob]).trim();
@@ -248,6 +340,19 @@ export default function BulkEnrollUploadModal({
           const rawGender = String(cGender !== -1 ? row[cGender] || "" : "").trim().toUpperCase();
           const normGender = rawGender.startsWith("M") ? "M" : rawGender.startsWith("F") ? "F" : "";
 
+          // Clean phone numbers: if numeric stripped leading zero (10-digits starting with 7/8/9), restore leading 0
+          let gPhone = cPhone !== -1 && row[cPhone] !== undefined && row[cPhone] !== null ? String(row[cPhone]).trim() : "";
+          if (/^[789]\d{9}$/.test(gPhone)) {
+            gPhone = `0${gPhone}`;
+          }
+
+          let sPhone = isTertiary && cStudentPhone !== -1 && row[cStudentPhone] !== undefined && row[cStudentPhone] !== null
+            ? String(row[cStudentPhone]).trim()
+            : "";
+          if (/^[789]\d{9}$/.test(sPhone)) {
+            sPhone = `0${sPhone}`;
+          }
+
           return {
             firstName: fn,
             lastName: ln,
@@ -258,10 +363,10 @@ export default function BulkEnrollUploadModal({
             arm: cArm !== -1 ? String(row[cArm] || "").trim() : "",
             admissionYear: resolvedYear,
             guardianName: cGuardian !== -1 ? String(row[cGuardian] || "").trim() : "",
-            guardianPhone: cPhone !== -1 ? String(row[cPhone] || "").trim() : "",
+            guardianPhone: gPhone,
             guardianEmail: cEmail !== -1 ? String(row[cEmail] || "").trim() : "",
             previousSchool: cPrev !== -1 ? String(row[cPrev] || "").trim() : "",
-            studentPhone: isTertiary && cStudentPhone !== -1 ? String(row[cStudentPhone] || "").trim() : "",
+            studentPhone: sPhone,
             studentEmail: isTertiary && cStudentEmail !== -1 ? String(row[cStudentEmail] || "").trim() : "",
           };
         })
@@ -443,13 +548,18 @@ export default function BulkEnrollUploadModal({
         {step === "UPLOAD" && (
           <div className="flex-1 p-6 sm:p-8 space-y-6 overflow-y-auto">
             {/* Step 1: Download Template */}
-            <div className="p-5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="p-5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="space-y-1 max-w-2xl">
-                <h4 className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">
-                  Step 1: Download Official CSV Template
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">
+                    Step 1: Download Official Enrollment Template
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                    Excel Formatted (.XLSX)
+                  </span>
+                </div>
                 <p className="text-xs text-indigo-700/80 dark:text-indigo-300">
-                  Pre-formatted with exact column order:
+                  Includes pre-sized columns, frozen headers, and Text format for phone numbers (prevents scientific notation and date truncation):
                 </p>
                 <div className="text-[11px] font-mono bg-white/80 dark:bg-zinc-900/80 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900 text-indigo-950 dark:text-indigo-300 break-words">
                   {isTertiary
@@ -457,14 +567,24 @@ export default function BulkEnrollUploadModal({
                     : "FirstName, LastName, MiddleName, Gender, DateOfBirth, Class, Arm, AdmissionYear, GuardianName, GuardianRelationship, GuardianPhone, GuardianEmail, PreviousSchool"}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition cursor-pointer self-start sm:self-auto shrink-0"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Template (.CSV)</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadTemplate("xlsx")}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Excel (.XLSX)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadTemplate("csv")}
+                  className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-bold transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Download (.CSV)</span>
+                </button>
+              </div>
             </div>
 
             {/* Step 2: Upload Zone */}

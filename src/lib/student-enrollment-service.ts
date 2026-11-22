@@ -13,30 +13,102 @@ import { clearL1TenantCache } from "@/lib/cache";
 import { revalidatePath } from "next/cache";
 
 /**
- * Normalizes phone numbers to standard Nigerian international format +234...
+ * Detects if a phone value was corrupted into scientific notation by Excel (e.g. 8.03E+09, 8.06e+09)
  */
-export function normalizePhoneNumber(phone?: string | null): string | undefined {
+export function isScientificNotationOrCorruptedPhone(phone?: string | number | null): boolean {
+  if (phone === undefined || phone === null) return false;
+  const str = String(phone).trim();
+  if (!str) return false;
+  // Check for E+, e+, E-, e-, or number containing '.' and 'E' e.g. 8.03E+09
+  if (/[eE][+-]?\d+/.test(str)) return true;
+  if (str.includes(".") && /[eE]/i.test(str)) return true;
+  return false;
+}
+
+/**
+ * Parses flexible date inputs supporting DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, or Date instances.
+ * Prevents V8 from misinterpreting DD/MM/YYYY as MM/DD/YYYY.
+ */
+export function parseFlexibleDate(val?: string | Date | null): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // DD/MM/YYYY or DD-MM-YYYY (e.g. 09/01/2018, 25/05/2019)
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const d = new Date(Date.UTC(year, month, day));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const d = new Date(Date.UTC(year, month, day));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Normalizes phone numbers to standard Nigerian international format +234...
+ * Automatically strips spaces/hyphens, prepends 0 if 10-digit, and strictly rejects scientific notation.
+ */
+export function normalizePhoneNumber(phone?: string | number | null): string | undefined {
   if (!phone) return undefined;
-  const digits = phone.replace(/[^0-9]/g, "");
+  const rawStr = String(phone).trim();
+  if (!rawStr) return undefined;
+
+  // Reject scientific notation
+  if (isScientificNotationOrCorruptedPhone(rawStr)) {
+    return undefined;
+  }
+
+  // Strip spaces, dashes, dots, parentheses, commas
+  const cleaned = rawStr.replace(/[\s\-\(\)\.,]/g, "");
+  const digits = cleaned.replace(/[^0-9]/g, "");
   if (!digits) return undefined;
 
-  // Local Nigerian format 080... (11 digits starting with 0)
-  if (digits.startsWith("0") && digits.length === 11) {
-    return `+234${digits.slice(1)}`;
-  }
-  // Nigerian format without plus 23480... (13 digits starting with 234)
-  if (digits.startsWith("234") && digits.length === 13) {
-    return `+${digits}`;
-  }
-  // Already with plus
-  if (phone.trim().startsWith("+")) {
-    return `+${digits}`;
-  }
-  // 10 digits without leading zero e.g. 8031234567
-  if (digits.length === 10) {
+  // 10 digits starting with 7, 8, or 9 (e.g. 8030000001, 8061112233) -> Prepend 0, convert to +234
+  if (digits.length === 10 && /^[789]/.test(digits)) {
     return `+234${digits}`;
   }
-  return phone.trim();
+
+  // 11 digits starting with 0 (e.g. 08030000001) -> Convert to +234
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return `+234${digits.slice(1)}`;
+  }
+
+  // 13 digits starting with 234 (e.g. 2348030000001) -> Convert to +234
+  if (digits.length === 13 && digits.startsWith("234")) {
+    return `+${digits}`;
+  }
+
+  // 14 chars starting with +234 (e.g. +2348030000001)
+  if (cleaned.startsWith("+234") && digits.length === 13) {
+    return `+${digits}`;
+  }
+
+  // If already with plus and at least 10 digits
+  if (cleaned.startsWith("+") && digits.length >= 10) {
+    return `+${digits}`;
+  }
+
+  // Valid 11-digit local Nigerian number e.g. 0803...
+  if (digits.length === 11 && /^0[789]\d{9}$/.test(digits)) {
+    return `+234${digits.slice(1)}`;
+  }
+
+  return cleaned;
 }
 
 /**
@@ -341,7 +413,7 @@ export async function createStudentWithCredentials(
         currentClass: resolvedClass,
         cohort,
         admissionNumber: finalAdmissionNumber,
-        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+        dateOfBirth: parseFlexibleDate(input.dateOfBirth),
         parentName: guardianName,
         parentPhone: normGuardianPhone || null,
         parentEmail: normGuardianEmail || null,
@@ -441,7 +513,7 @@ export async function createStudentWithCredentials(
           currentClass: resolvedClass,
           cohort,
           admissionNumber: finalAdmissionNumber,
-          dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+          dateOfBirth: parseFlexibleDate(input.dateOfBirth),
           parentName: guardianName !== "Parent / Guardian" ? guardianName : null,
           parentPhone: normGuardianPhone || null,
           parentEmail: normGuardianEmail || null,
@@ -462,7 +534,7 @@ export async function createStudentWithCredentials(
           currentClass: resolvedClass,
           cohort,
           admissionNumber: finalAdmissionNumber,
-          dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+          dateOfBirth: parseFlexibleDate(input.dateOfBirth),
           parentName: guardianName !== "Parent / Guardian" ? guardianName : null,
           parentPhone: normGuardianPhone || null,
           parentEmail: normGuardianEmail || null,
@@ -642,7 +714,40 @@ export async function validateEnrollmentBatch(
       errors.push("Class / Grade is required");
     }
 
-    // Delivery channel check based on Tier
+    // Delivery channel check based on Tier & phone corruption checks
+    if (row.guardianPhone) {
+      const rawGPhone = String(row.guardianPhone).trim();
+      if (isScientificNotationOrCorruptedPhone(rawGPhone)) {
+        errors.push(
+          `Corrupted Guardian Phone "${rawGPhone}": Excel converted this number to scientific notation (e.g. 8.03E+09). Format column as Text and enter a standard number like 08030000001.`
+        );
+      } else if (rawGPhone && (!normGuardianPhone || normGuardianPhone.length < 11)) {
+        errors.push(
+          `Invalid Guardian Phone "${rawGPhone}". Must be a valid 11-digit Nigerian number (e.g. 08030000001).`
+        );
+      }
+    }
+
+    if (row.studentPhone) {
+      const rawSPhone = String(row.studentPhone).trim();
+      if (isScientificNotationOrCorruptedPhone(rawSPhone)) {
+        errors.push(
+          `Corrupted Student Phone "${rawSPhone}": Excel converted this number to scientific notation (e.g. 8.03E+09). Format column as Text and enter a standard number like 08030000001.`
+        );
+      } else if (rawSPhone && (!normStudentPhone || normStudentPhone.length < 11)) {
+        errors.push(
+          `Invalid Student Phone "${rawSPhone}". Must be a valid 11-digit phone number (e.g. 08030000001).`
+        );
+      }
+    }
+
+    if (row.dateOfBirth) {
+      const parsedDob = parseFlexibleDate(row.dateOfBirth);
+      if (!parsedDob) {
+        errors.push(`Invalid DateOfBirth "${row.dateOfBirth}". Please format as DD/MM/YYYY (e.g. 09/01/2018).`);
+      }
+    }
+
     if (!isTertiary) {
       if (!normGuardianPhone && !normGuardianEmail) {
         errors.push("Delivery Channel Required: Enter Guardian Phone or Guardian Email to deliver login credentials.");
