@@ -298,6 +298,17 @@ export async function POST(request: NextRequest) {
           appNo = canonicalAppNo;
         }
 
+        // Align the newly created/merged register record with the canonical application number
+        // to prevent application number divergence between AdmissionRegister and AdmissionsApplication
+        if (transitionResult?.registerRecord?.id && transitionResult.registerRecord.applicationNo !== canonicalAppNo) {
+          await tenantDb.admissionRegister
+            .update({
+              where: { id: transitionResult.registerRecord.id },
+              data: { applicationNo: canonicalAppNo },
+            })
+            .catch(() => null);
+        }
+
         admissionsApp = await basePrisma.admissionsApplication.update({
           where: { id: existingApp.id },
           data: {

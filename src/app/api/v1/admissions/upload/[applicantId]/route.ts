@@ -1550,6 +1550,9 @@ export async function POST(
         }
 
         // Register or update in PaymentReceipt for Bursary visibility (without creating duplicates on re-upload)
+        const canonicalAppNo = appRecord?.applicationNumber || appNo;
+        const normalizedPayerName = (lead.applicantName || "").trim().toLowerCase();
+
         const existingReceipt = await basePrisma.paymentReceipt.findFirst({
           where: {
             moduleType: "ADMISSION_FORM_FEE",
@@ -1558,16 +1561,17 @@ export async function POST(
               {
                 OR: [
                   { payerId: lead.id },
+                  ...(appRecord?.id ? [{ payerId: appRecord.id }] : []),
+                  ...(registerRecord?.id ? [{ payerId: registerRecord.id }] : []),
                   { referenceNo: appNo },
-                  ...(appRecord?.applicationNumber ? [{ referenceNo: appRecord.applicationNumber }] : []),
+                  { referenceNo: canonicalAppNo },
+                  ...(normalizedPayerName ? [{ payerName: { equals: lead.applicantName, mode: "insensitive" as const } }] : []),
                 ],
               },
             ],
           },
           orderBy: { createdAt: "desc" },
         });
-
-        const canonicalAppNo = appRecord?.applicationNumber || appNo;
 
         if (existingReceipt && existingReceipt.status !== "VERIFIED") {
           await basePrisma.paymentReceipt.update({

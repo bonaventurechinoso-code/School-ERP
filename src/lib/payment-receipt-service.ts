@@ -1270,359 +1270,487 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
       return null;
     };
 
-    // Build unified candidate map keyed by canonical application, transaction, or lead identity
-    type CandidateReceiptInfo = {
-      tenantId: string;
-      schoolId: string;
-      payerId: string;
-      leadId?: string;
-      appId?: string;
-      regId?: string;
-      payerName: string;
-      referenceNo: string;
-      legacyAppRef?: string;
-      fileUrl: string;
-      fileName?: string;
-      depositorName?: string;
-      transferReference?: string;
-      amount: number;
-      isVerified: boolean;
-      paymentMethod?: string;
-      paymentMode?: string;
+    const normalizeName = (val?: string | null): string => {
+      if (!val) return "";
+      return val.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
     };
 
-    const candidates: CandidateReceiptInfo[] = [];
-    const seenIds = new Set<string>();
+    const isInstitutionalRef = (ref?: string | null): boolean => {
+      if (!ref) return false;
+      const clean = ref.trim().toUpperCase();
+      return (
+        !clean.startsWith("APP-") &&
+        !clean.startsWith("FEE-") &&
+        !clean.startsWith("TRX-") &&
+        !clean.startsWith("POS-") &&
+        !clean.startsWith("RCP-")
+      );
+    };
 
+    // 1. PRE-SCAN GLOBAL DEDUPLICATION:
+    // If redundant duplicate PaymentReceipt records already exist for the same applicant & module in the DB,
+    // consolidate them immediately into a single primary record and permanently delete the duplicates.
+    const receiptPayerGroups = new Map<string, typeof existingReceipts>();
+    for (const r of existingReceipts) {
+      const pName = normalizeName(r.payerName);
+      if (!pName) continue;
+      const key = `${r.tenantId || r.schoolId}::${r.moduleType}::${pName}`;
+      const group = receiptPayerGroups.get(key) || [];
+      group.push(r);
+      receiptPayerGroups.set(key, group);
+    }
+
+    const purgedReceiptIds = new Set<string>();
+
+    for (const [, group] of receiptPayerGroups.entries()) {
+      if (group.length <= 1) continue;
+
+      const scoreReceipt = (r: any): number => {
+        let score = 0;
+        if (r.status === "VERIFIED") score += 1000;
+        else if (r.status === "PENDING") score += 500;
+        if (r.fileUrl && !["DESK_SETTLED_RECEIPT", "POS_RECEIPT", "CASH_COUNTER_RECEIPT"].includes(r.fileUrl)) {
+          score += 200;
+        } else if (r.fileUrl) {
+          score += 100;
+        }
+        if (isInstitutionalRef(r.referenceNo)) score += 50;
+        if (r.createdAt) score += new Date(r.createdAt).getTime() / 1e12;
+        return score;
+      };
+
+      const sorted = [...group].sort((a, b) => scoreReceipt(b) - scoreReceipt(a));
+      const primary = sorted[0];
+      const redundantDuplicates = sorted.slice(1);
+
+      let needsPrimaryUpdate = false;
+      const primaryUpdateData: any = {};
+
+      if (!isInstitutionalRef(primary.referenceNo)) {
+        const institutionalPartner = group.find((r) => isInstitutionalRef(r.referenceNo));
+        if (institutionalPartner) {
+          primaryUpdateData.referenceNo = institutionalPartner.referenceNo;
+          primary.referenceNo = institutionalPartner.referenceNo;
+          needsPrimaryUpdate = true;
+        }
+      }
+
+      if (!primary.fileUrl || primary.fileUrl === "DESK_SETTLED_RECEIPT") {
+        const filePartner = group.find(
+          (r) => r.fileUrl && !["DESK_SETTLED_RECEIPT", "POS_RECEIPT", "CASH_COUNTER_RECEIPT"].includes(r.fileUrl)
+        );
+        if (filePartner) {
+          primaryUpdateData.fileUrl = filePartner.fileUrl;
+          primaryUpdateData.proofOfPaymentUrl = filePartner.proofOfPaymentUrl || filePartner.fileUrl;
+          primary.fileUrl = filePartner.fileUrl;
+          needsPrimaryUpdate = true;
+        }
+      }
+
+      if (needsPrimaryUpdate) {
+        await basePrisma.paymentReceipt
+          .update({
+            where: { id: primary.id },
+            data: primaryUpdateData,
+          })
+          .catch(() => null);
+      }
+
+      const dupIds = redundantDuplicates.map((d) => d.id);
+      if (dupIds.length > 0) {
+        await basePrisma.paymentReceipt
+          .deleteMany({
+            where: { id: { in: dupIds } },
+          })
+          .catch(() => null);
+        dupIds.forEach((id) => purgedReceiptIds.add(id));
+      }
+    }
+
+    const liveReceipts = existingReceipts.filter((r) => !purgedReceiptIds.has(r.id));
+
+    // 2. UNIFIED APPLICANT CLUSTERING:
+    // Unify AdmissionsApplication, AdmissionRegister, and AdmissionLead into single applicant dossiers.
+    // This completely prevents multiple disparate entities for the same person from generating duplicate candidate receipts.
+    interface UnifiedApplicantCluster {
+      tenantId: string;
+      schoolId: string;
+      fullName: string;
+      normalizedName: string;
+      allIds: Set<string>;
+      allRefs: Set<string>;
+      canonicalRef: string;
+      fileUrl: string | null;
+      fileName: string | null;
+      depositorName: string | null;
+      transferReference: string | null;
+      amount: number;
+      isVerified: boolean;
+      paymentMethod: string;
+      paymentMode: string;
+      hasPaymentEvidence: boolean;
+      appRecord?: any;
+      regRecord?: any;
+      leadRecord?: any;
+    }
+
+    const applicantClusters: UnifiedApplicantCluster[] = [];
+
+    const findOrCreateCluster = (
+      targetSchoolId: string,
+      name: string,
+      email?: string | null,
+      phone?: string | null,
+      knownIds: (string | undefined | null)[] = [],
+      knownRefs: (string | undefined | null)[] = []
+    ): UnifiedApplicantCluster => {
+      const normName = normalizeName(name);
+      const normEmail = (email || "").trim().toLowerCase();
+      const normPhone = (phone || "").replace(/[^0-9]/g, "");
+      const validIds = knownIds.filter(Boolean) as string[];
+      const validRefs = knownRefs.filter(Boolean) as string[];
+
+      const match = applicantClusters.find((c) => {
+        const sameSchool =
+          c.schoolId === targetSchoolId ||
+          c.tenantId === targetSchoolId ||
+          resolvedTenantIds.includes(c.schoolId) ||
+          resolvedTenantIds.includes(c.tenantId);
+        if (!sameSchool) return false;
+
+        // 1. Explicit database ID linkage
+        if (validIds.some((id) => c.allIds.has(id))) return true;
+
+        // 2. Exact institutional application number linkage
+        if (
+          validRefs.some(
+            (ref) => (c.allRefs.has(ref) || c.canonicalRef === ref) && isInstitutionalRef(ref)
+          ) &&
+          (!normName || c.normalizedName === normName)
+        ) {
+          return true;
+        }
+
+        // 3. Exact student email linkage
+        if (normEmail && normEmail.includes("@") && !normEmail.includes("example.com")) {
+          if (c.appRecord?.email?.toLowerCase() === normEmail) return true;
+          if (c.regRecord?.email?.toLowerCase() === normEmail) return true;
+          if (c.leadRecord?.studentEmail?.toLowerCase() === normEmail) return true;
+        }
+
+        // 4. Exact normalized applicant name within the same tenant
+        if (normName && normName.length >= 3 && c.normalizedName === normName) return true;
+
+        return false;
+      });
+
+      if (match) {
+        validIds.forEach((id) => match.allIds.add(id));
+        validRefs.forEach((ref) => match.allRefs.add(ref));
+        return match;
+      }
+
+      const newCluster: UnifiedApplicantCluster = {
+        tenantId: targetSchoolId,
+        schoolId: targetSchoolId,
+        fullName: name.trim() || "Applicant",
+        normalizedName: normName,
+        allIds: new Set(validIds),
+        allRefs: new Set(validRefs),
+        canonicalRef: "",
+        fileUrl: null,
+        fileName: null,
+        depositorName: null,
+        transferReference: null,
+        amount: 5000,
+        isVerified: false,
+        paymentMethod: "BANK_TRANSFER",
+        paymentMode: "MANUAL_TRANSFER",
+        hasPaymentEvidence: false,
+      };
+      applicantClusters.push(newCluster);
+      return newCluster;
+    };
+
+    // 2a. Ingest AdmissionsApplication records
     for (const app of apps) {
       const meta: any = (app.metadata as any) || {};
       const tierData: any = (app.tierSpecificData as any) || {};
       const metaDocs: any = meta.documents || {};
       const tierDocs: any = tierData.documents || {};
-      const linkedLeadId = meta.leadId || tierData.leadId;
-
-      const linkedLead = leads.find(
-        (l) =>
-          l.id === app.id ||
-          (linkedLeadId && l.id === linkedLeadId) ||
-          (app.email && l.studentEmail && l.studentEmail.toLowerCase() === app.email.toLowerCase())
-      );
-      const linkedReg = registers.find(
-        (r) =>
-          r.id === app.id ||
-          r.applicationNo === app.applicationNumber ||
-          (linkedLeadId && r.id === linkedLeadId) ||
-          (app.email && r.email && r.email.toLowerCase() === app.email.toLowerCase())
-      );
-
-      const leadDocs: any = (linkedLead?.documents as any) || {};
-      const regCreds: any =
-        typeof linkedReg?.credentialsJson === "object" && linkedReg?.credentialsJson
-          ? (linkedReg.credentialsJson as any)
-          : {};
-
       const appFeeDoc = (app.documents || []).find((d: any) =>
-        ["APPLICATION_FEE_RECEIPT", "applicationFeeReceipt", "FORM_FEE_RECEIPT"].includes(
-          d.documentType
-        )
+        ["APPLICATION_FEE_RECEIPT", "applicationFeeReceipt", "FORM_FEE_RECEIPT"].includes(d.documentType)
       );
 
-      const resolvedDocUrl =
+      const resolvedAppDocUrl =
         extractUrl(appFeeDoc?.storageKey) ||
         extractUrl(metaDocs.applicationFeeReceipt) ||
         extractUrl(metaDocs.applicationFeeReceiptUrl) ||
         extractUrl(metaDocs.formFeeReceiptUrl) ||
         extractUrl(tierDocs.applicationFeeReceipt) ||
-        extractUrl(tierDocs.applicationFeeReceiptUrl) ||
-        extractUrl(linkedReg?.applicationFeeReceiptUrl) ||
-        extractUrl(linkedReg?.formFeeReceiptUrl) ||
-        extractUrl(regCreds.applicationFeeReceipt) ||
-        extractUrl(regCreds.applicationFeeReceiptUrl) ||
-        extractUrl(leadDocs.applicationFeeReceipt) ||
-        extractUrl(leadDocs.applicationFeeReceiptUrl) ||
-        extractUrl(leadDocs.formFeeReceiptUrl);
+        extractUrl(tierDocs.applicationFeeReceiptUrl);
 
-      const payerName =
-        `${app.firstName || ""} ${app.lastName || ""}`.trim() ||
-        linkedLead?.applicantName ||
-        "Applicant";
-      const canonicalRef =
-        app.applicationNumber ||
-        linkedReg?.applicationNo ||
-        `APP-${app.id.slice(0, 6).toUpperCase()}`;
-      const legacyAppRef = linkedLead
-        ? `APP-${linkedLead.id.slice(0, 6).toUpperCase()}`
-        : `APP-${app.id.slice(0, 6).toUpperCase()}`;
+      const name = `${app.firstName || ""} ${app.lastName || ""}`.trim() || "Applicant";
+      const ids = [app.id, meta.leadId, tierData.leadId, meta.registerId, meta.enrolledStudentId];
+      const refs = [app.applicationNumber, meta.matriculationNumber];
 
-      seenIds.add(app.id);
-      if (linkedLead) seenIds.add(linkedLead.id);
-      if (linkedReg) seenIds.add(linkedReg.id);
+      const cluster = findOrCreateCluster(
+        app.tenantId || app.schoolId,
+        name,
+        app.email,
+        app.phoneNumber,
+        ids,
+        refs
+      );
+      cluster.appRecord = app;
 
-      const transactions =
-        app.feeTransactions && app.feeTransactions.length > 0 ? app.feeTransactions : [null];
+      if (app.applicationNumber && isInstitutionalRef(app.applicationNumber)) {
+        cluster.canonicalRef = app.applicationNumber;
+      }
 
-      for (const tx of transactions) {
-        const txMethod = tx?.paymentMethod || "MANUAL_BANK_TRANSFER";
-        const txStatus = tx?.paymentStatus;
-        const txProofUrl = extractUrl(tx?.proofOfPaymentUrl);
+      if (app.status === "ENROLLED") {
+        cluster.isVerified = true;
+        cluster.hasPaymentEvidence = true;
+      }
 
-        let fileUrl = txProofUrl || resolvedDocUrl;
-        if (!fileUrl) {
-          if (txMethod === "POS_COUNTER") fileUrl = "POS_RECEIPT";
-          else if (txMethod === "CASH") fileUrl = "CASH_COUNTER_RECEIPT";
-          else if (txStatus === "SETTLED") fileUrl = "DESK_SETTLED_RECEIPT";
+      const txs = app.feeTransactions && app.feeTransactions.length > 0 ? app.feeTransactions : [];
+      for (const tx of txs) {
+        if (tx.amount) cluster.amount = Number(tx.amount) || 5000;
+        if (tx.paymentMethod) {
+          cluster.paymentMethod =
+            tx.paymentMethod === "CASH" ? "CASH" : tx.paymentMethod === "POS_COUNTER" ? "POS_COUNTER" : "BANK_TRANSFER";
+          cluster.paymentMode =
+            tx.paymentMethod === "CASH" ? "CASH_COUNTER" : tx.paymentMethod === "POS_COUNTER" ? "POS_TERMINAL" : "MANUAL_TRANSFER";
         }
-
-        const hasPaymentEvidence =
-          Boolean(fileUrl) ||
-          Boolean(tx) ||
-          Boolean(linkedReg?.formFeePaid) ||
-          Boolean(regCreds.formFeePaid) ||
-          Boolean(leadDocs.formFeePaid) ||
-          metaDocs.formFeePaid === true ||
-          tierDocs.formFeePaid === true;
-
-        if (!hasPaymentEvidence) continue;
-
-        if (!fileUrl) {
-          fileUrl = "DESK_SETTLED_RECEIPT";
+        if (tx.paymentReference) cluster.transferReference = tx.paymentReference;
+        const txProof = extractUrl(tx.proofOfPaymentUrl);
+        if (txProof) {
+          cluster.fileUrl = txProof;
+          cluster.hasPaymentEvidence = true;
         }
-
-        const isVerified =
-          txStatus === "SETTLED" ||
-          (!tx &&
-            (appFeeDoc?.verificationStatus === "MANUALLY_VERIFIED" ||
-              Boolean(linkedReg?.formFeePaid) ||
-              Boolean(regCreds.formFeePaid) ||
-              Boolean(leadDocs.formFeePaid) ||
-              metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
-              tierDocs.applicationFeeReceipt?.status === "VERIFIED"));
-
-        const paymentMethod =
-          txMethod === "CASH" ? "CASH" : txMethod === "POS_COUNTER" ? "POS_COUNTER" : "BANK_TRANSFER";
-        const paymentMode =
-          txMethod === "CASH"
-            ? "CASH_COUNTER"
-            : txMethod === "POS_COUNTER"
-            ? "POS_TERMINAL"
-            : "MANUAL_TRANSFER";
-
-        const transferReference =
-          tx?.paymentReference ||
-          metaDocs.transferReference ||
-          leadDocs.transferReference ||
-          canonicalRef;
-
-        candidates.push({
-          tenantId: app.tenantId || app.schoolId,
-          schoolId: app.schoolId || app.tenantId,
-          payerId: linkedLead?.id || app.id,
-          leadId: linkedLead?.id,
-          appId: app.id,
-          regId: linkedReg?.id,
-          payerName,
-          referenceNo: canonicalRef,
-          legacyAppRef,
-          fileUrl,
-          fileName:
-            metaDocs.applicationFeeReceipt?.fileName ||
-            leadDocs.applicationFeeReceipt?.fileName ||
-            `${paymentMethod.toLowerCase()}_receipt.jpg`,
-          depositorName:
-            metaDocs.depositorName ||
-            leadDocs.depositorName ||
-            regCreds.depositorName ||
-            payerName,
-          transferReference,
-          amount: Number(tx?.amount) || 5000,
-          isVerified,
-          paymentMethod,
-          paymentMode,
-        });
-
-        // If tx exists but lacked proofOfPaymentUrl and we have a resolved fileUrl, wire it up
-        if (tx && !tx.proofOfPaymentUrl && fileUrl) {
-          await basePrisma.admissionsFeeTransaction
-            .update({
-              where: { id: tx.id },
-              data: { proofOfPaymentUrl: fileUrl },
-            })
-            .catch(() => null);
+        if (tx.paymentStatus === "SETTLED") {
+          cluster.isVerified = true;
+          cluster.hasPaymentEvidence = true;
         }
       }
 
-      // Ensure AdmissionsFeeTransaction exists in DB for this application
-      if (!app.feeTransactions || app.feeTransactions.length === 0) {
-        const appCand = candidates.find((c) => c.appId === app.id);
-        if (appCand) {
-          await basePrisma.admissionsFeeTransaction
-            .create({
-              data: {
-                tenantId: app.tenantId || app.schoolId,
-                applicationId: app.id,
-                paymentMethod:
-                  appCand.paymentMethod === "CASH"
-                    ? "CASH"
-                    : appCand.paymentMethod === "POS_COUNTER"
-                    ? "POS_COUNTER"
-                    : "MANUAL_BANK_TRANSFER",
-                amount: appCand.amount || 5000,
-                currency: "NGN",
-                paymentReference: `FEE-${canonicalRef}`,
-                proofOfPaymentUrl: appCand.fileUrl,
-                paymentStatus: appCand.isVerified ? "SETTLED" : "PENDING",
-                verifiedAt: appCand.isVerified ? new Date() : null,
-              },
-            })
-            .catch(() => null);
-        }
+      if (!cluster.fileUrl && resolvedAppDocUrl) {
+        cluster.fileUrl = resolvedAppDocUrl;
+        cluster.hasPaymentEvidence = true;
+      }
+
+      if (
+        metaDocs.formFeePaid === true ||
+        tierDocs.formFeePaid === true ||
+        metaDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+        tierDocs.applicationFeeReceipt?.status === "VERIFIED" ||
+        appFeeDoc?.verificationStatus === "MANUALLY_VERIFIED"
+      ) {
+        cluster.isVerified = true;
+        cluster.hasPaymentEvidence = true;
       }
     }
 
-    // Check remaining registers not yet matched to an AdmissionsApplication
+    // 2b. Ingest AdmissionRegister records
     for (const reg of registers) {
-      if (seenIds.has(reg.id)) continue;
       const regCreds: any =
-        typeof reg.credentialsJson === "object" && reg.credentialsJson
-          ? (reg.credentialsJson as any)
-          : {};
-      const fileUrl =
+        typeof reg.credentialsJson === "object" && reg.credentialsJson ? (reg.credentialsJson as any) : {};
+      const name = `${reg.firstName || ""} ${reg.lastName || ""}`.trim() || "Applicant";
+      const cluster = findOrCreateCluster(
+        reg.tenantId,
+        name,
+        reg.email,
+        reg.parentPhone,
+        [reg.id],
+        [reg.applicationNo]
+      );
+      cluster.regRecord = reg;
+
+      if (!cluster.canonicalRef && reg.applicationNo && isInstitutionalRef(reg.applicationNo)) {
+        cluster.canonicalRef = reg.applicationNo;
+      }
+
+      const regFileUrl =
         extractUrl(reg.applicationFeeReceiptUrl) ||
         extractUrl(reg.formFeeReceiptUrl) ||
         extractUrl(regCreds.applicationFeeReceipt) ||
         extractUrl(regCreds.applicationFeeReceiptUrl);
-      if (!fileUrl && !reg.formFeePaid && !regCreds.formFeePaid) continue;
 
-      seenIds.add(reg.id);
-      const payerName = `${reg.firstName || ""} ${reg.lastName || ""}`.trim() || "Applicant";
-      const appNo = reg.applicationNo || `APP-${reg.id.slice(0, 6).toUpperCase()}`;
-      candidates.push({
-        tenantId: reg.tenantId,
-        schoolId: reg.tenantId,
-        payerId: reg.id,
-        regId: reg.id,
-        payerName,
-        referenceNo: appNo,
-        legacyAppRef: `APP-${reg.id.slice(0, 6).toUpperCase()}`,
-        fileUrl: fileUrl || "DESK_SETTLED_RECEIPT",
-        depositorName: regCreds.depositorName || payerName,
-        transferReference: regCreds.transferReference || appNo,
-        amount: 5000,
-        isVerified: Boolean(reg.formFeePaid || regCreds.formFeePaid),
-        paymentMethod: "BANK_TRANSFER",
-        paymentMode: "MANUAL_TRANSFER",
-      });
+      if (regFileUrl && (!cluster.fileUrl || cluster.fileUrl === "DESK_SETTLED_RECEIPT")) {
+        cluster.fileUrl = regFileUrl;
+        cluster.hasPaymentEvidence = true;
+      }
+
+      if (reg.formFeePaid || regCreds.formFeePaid) {
+        cluster.isVerified = true;
+        cluster.hasPaymentEvidence = true;
+      }
+
+      if (regCreds.depositorName && !cluster.depositorName) {
+        cluster.depositorName = regCreds.depositorName;
+      }
+      if (regCreds.transferReference && !cluster.transferReference) {
+        cluster.transferReference = regCreds.transferReference;
+      }
     }
 
-    // Check remaining leads not yet matched
+    // 2c. Ingest AdmissionLead records
     for (const lead of leads) {
-      if (seenIds.has(lead.id)) continue;
       const leadDocs: any = (lead.documents as any) || {};
-      const fileUrl =
+      const name = lead.applicantName || "Applicant";
+      const cluster = findOrCreateCluster(
+        lead.schoolId,
+        name,
+        lead.studentEmail || lead.parentEmail,
+        lead.studentPhone || lead.parentContact,
+        [lead.id],
+        []
+      );
+      cluster.leadRecord = lead;
+
+      const leadFileUrl =
+        extractUrl(lead.applicationFeeReceiptUrl) ||
+        extractUrl(lead.formFeeReceiptUrl) ||
         extractUrl(leadDocs.applicationFeeReceipt) ||
         extractUrl(leadDocs.applicationFeeReceiptUrl) ||
         extractUrl(leadDocs.formFeeReceiptUrl);
-      if (!fileUrl && !leadDocs.formFeePaid) continue;
 
-      seenIds.add(lead.id);
-      const appNo = `APP-${lead.id.slice(0, 6).toUpperCase()}`;
-      candidates.push({
-        tenantId: lead.schoolId,
-        schoolId: lead.schoolId,
-        payerId: lead.id,
-        leadId: lead.id,
-        payerName: lead.applicantName || "Applicant",
-        referenceNo: appNo,
-        legacyAppRef: appNo,
-        fileUrl: fileUrl || "DESK_SETTLED_RECEIPT",
-        depositorName: leadDocs.depositorName || lead.applicantName,
-        transferReference: leadDocs.transferReference || appNo,
-        amount: 5000,
-        isVerified: Boolean(leadDocs.formFeePaid),
-        paymentMethod: "BANK_TRANSFER",
-        paymentMode: "MANUAL_TRANSFER",
-      });
+      if (leadFileUrl && (!cluster.fileUrl || cluster.fileUrl === "DESK_SETTLED_RECEIPT")) {
+        cluster.fileUrl = leadFileUrl;
+        cluster.hasPaymentEvidence = true;
+      }
+
+      if (lead.formFeePaid || leadDocs.formFeePaid) {
+        cluster.isVerified = true;
+        cluster.hasPaymentEvidence = true;
+      }
+
+      if (leadDocs.depositorName && !cluster.depositorName) {
+        cluster.depositorName = leadDocs.depositorName;
+      }
+      if (leadDocs.transferReference && !cluster.transferReference) {
+        cluster.transferReference = leadDocs.transferReference;
+      }
     }
 
-    // Reconcile each candidate with PaymentReceipt table
-    for (const cand of candidates) {
-      const matchingReceipts = existingReceipts.filter((r) => {
-        const sameTenant =
-          resolvedTenantIds.length === 0 ||
+    // 3. CANDIDATE RECONCILIATION WITH PAYMENTRECEIPT:
+    // Process each applicant cluster once and only once.
+    for (const cluster of applicantClusters) {
+      if (!cluster.canonicalRef) {
+        const instRef = Array.from(cluster.allRefs).find((r) => isInstitutionalRef(r));
+        if (instRef) {
+          cluster.canonicalRef = instRef;
+        } else if (cluster.allRefs.size > 0) {
+          cluster.canonicalRef = Array.from(cluster.allRefs)[0];
+        } else {
+          const firstId = Array.from(cluster.allIds)[0];
+          cluster.canonicalRef = `APP-${(firstId || "REC").slice(0, 6).toUpperCase()}`;
+        }
+      }
+
+      const hasEvidence =
+        cluster.hasPaymentEvidence ||
+        Boolean(cluster.fileUrl) ||
+        cluster.isVerified ||
+        Boolean(cluster.appRecord?.feeTransactions && cluster.appRecord.feeTransactions.length > 0) ||
+        cluster.appRecord?.status === "ENROLLED";
+
+      if (!hasEvidence) continue;
+
+      if (!cluster.fileUrl) {
+        cluster.fileUrl = "DESK_SETTLED_RECEIPT";
+      }
+
+      // Find all matching receipts for this unified applicant
+      const matchingReceipts = liveReceipts.filter((r) => {
+        const sameSchool =
+          r.tenantId === cluster.schoolId ||
+          r.schoolId === cluster.schoolId ||
+          r.tenantId === cluster.tenantId ||
+          r.schoolId === cluster.tenantId ||
           resolvedTenantIds.includes(r.tenantId) ||
           Boolean(r.schoolId && resolvedTenantIds.includes(r.schoolId));
-        if (!sameTenant) return false;
+        if (!sameSchool) return false;
 
+        const normPayer = normalizeName(r.payerName);
+        const matchName =
+          r.moduleType === "ADMISSION_FORM_FEE" && normPayer === cluster.normalizedName;
+        const matchId = r.payerId && cluster.allIds.has(r.payerId);
         const matchTxnRef =
-          cand.transferReference &&
-          cand.transferReference.length >= 4 &&
-          (r.transferReference === cand.transferReference || r.txnRef === cand.transferReference);
-
-        const matchPayerId =
-          r.payerId &&
-          (r.payerId === cand.payerId ||
-            r.payerId === cand.appId ||
-            r.payerId === cand.leadId ||
-            r.payerId === cand.regId);
-
+          cluster.transferReference &&
+          cluster.transferReference.length >= 4 &&
+          (r.transferReference === cluster.transferReference || r.txnRef === cluster.transferReference) &&
+          (!normPayer || normPayer === cluster.normalizedName);
         const matchRef =
-          r.referenceNo === cand.referenceNo ||
-          (cand.legacyAppRef && r.referenceNo === cand.legacyAppRef);
+          isInstitutionalRef(cluster.canonicalRef) &&
+          r.referenceNo === cluster.canonicalRef &&
+          (!normPayer || normPayer === cluster.normalizedName);
 
-        return Boolean(matchTxnRef || matchPayerId || matchRef);
+        return Boolean(matchName || matchId || matchTxnRef || matchRef);
       });
 
       if (matchingReceipts.length === 0) {
-        // Backfill missing PaymentReceipt so Bursar sees it immediately
+        // Backfill missing PaymentReceipt for this applicant
+        const payerId =
+          cluster.appRecord?.id ||
+          cluster.regRecord?.id ||
+          cluster.leadRecord?.id ||
+          Array.from(cluster.allIds)[0] ||
+          "APPLICANT";
+
         const created = await basePrisma.paymentReceipt
           .create({
             data: {
-              tenantId: cand.tenantId,
-              schoolId: cand.schoolId,
+              tenantId: cluster.tenantId,
+              schoolId: cluster.schoolId,
               moduleType: "ADMISSION_FORM_FEE",
               payerType: "APPLICANT",
-              payerId: cand.payerId,
-              payerName: cand.payerName,
-              referenceNo: cand.referenceNo,
-              amount: cand.amount,
-              paymentMethod: (cand.paymentMethod as any) || "BANK_TRANSFER",
-              paymentMode: (cand.paymentMode as any) || "MANUAL_TRANSFER",
-              fileUrl: cand.fileUrl,
-              proofOfPaymentUrl: cand.fileUrl,
-              fileName: cand.fileName || "application_fee_receipt.jpg",
-              depositorName: cand.depositorName || cand.payerName,
-              transferReference: cand.transferReference || cand.referenceNo,
-              txnRef: cand.transferReference || cand.referenceNo,
-              status: cand.isVerified ? "VERIFIED" : "PENDING",
-              state: cand.isVerified ? "SETTLED" : "PENDING_VERIFICATION",
-              verifiedBy: cand.isVerified ? "Admissions / Bursar Sync" : null,
-              verifiedAt: cand.isVerified ? new Date() : null,
+              payerId,
+              payerName: cluster.fullName,
+              referenceNo: cluster.canonicalRef,
+              amount: cluster.amount,
+              paymentMethod: (cluster.paymentMethod as any) || "BANK_TRANSFER",
+              paymentMode: (cluster.paymentMode as any) || "MANUAL_TRANSFER",
+              fileUrl: cluster.fileUrl,
+              proofOfPaymentUrl: cluster.fileUrl,
+              fileName: cluster.fileName || "application_fee_receipt.jpg",
+              depositorName: cluster.depositorName || cluster.fullName,
+              transferReference: cluster.transferReference || cluster.canonicalRef,
+              txnRef: cluster.transferReference || cluster.canonicalRef,
+              status: cluster.isVerified ? "VERIFIED" : "PENDING",
+              state: cluster.isVerified ? "SETTLED" : "PENDING_VERIFICATION",
+              verifiedBy: cluster.isVerified ? "Admissions / Bursar Sync" : null,
+              verifiedAt: cluster.isVerified ? new Date() : null,
             },
           })
           .catch(() => null);
-        if (created) (existingReceipts as any[]).unshift(created);
+        if (created) (liveReceipts as any[]).unshift(created);
       } else {
         const primary =
           matchingReceipts.find((r) => r.status === "VERIFIED") ||
           matchingReceipts.find((r) => r.status === "PENDING") ||
           matchingReceipts[0];
 
-        const shouldVerify = cand.isVerified && primary.status !== "VERIFIED";
-        const needsFileUrl = !primary.fileUrl && cand.fileUrl;
-        const needsProofUrl = !primary.proofOfPaymentUrl && cand.fileUrl;
+        const shouldVerify = cluster.isVerified && primary.status !== "VERIFIED";
+        const needsFileUrl =
+          (!primary.fileUrl || primary.fileUrl === "DESK_SETTLED_RECEIPT") &&
+          cluster.fileUrl &&
+          cluster.fileUrl !== "DESK_SETTLED_RECEIPT";
+        const needsProofUrl =
+          (!primary.proofOfPaymentUrl || primary.proofOfPaymentUrl === "DESK_SETTLED_RECEIPT") &&
+          cluster.fileUrl &&
+          cluster.fileUrl !== "DESK_SETTLED_RECEIPT";
         const needsRefUpdate =
-          primary.referenceNo !== cand.referenceNo && !primary.referenceNo.startsWith("RCP-");
+          !isInstitutionalRef(primary.referenceNo) && isInstitutionalRef(cluster.canonicalRef);
 
         if (shouldVerify || needsFileUrl || needsProofUrl || needsRefUpdate) {
           await basePrisma.paymentReceipt
             .update({
               where: { id: primary.id },
               data: {
-                ...(needsRefUpdate ? { referenceNo: cand.referenceNo } : {}),
-                ...(cand.fileUrl && !primary.fileUrl ? { fileUrl: cand.fileUrl } : {}),
-                ...(cand.fileUrl && !primary.proofOfPaymentUrl
-                  ? { proofOfPaymentUrl: cand.fileUrl }
-                  : {}),
+                ...(needsRefUpdate ? { referenceNo: cluster.canonicalRef } : {}),
+                ...(needsFileUrl ? { fileUrl: cluster.fileUrl! } : {}),
+                ...(needsProofUrl ? { proofOfPaymentUrl: cluster.fileUrl! } : {}),
                 ...(shouldVerify
                   ? {
                       status: "VERIFIED",
@@ -1636,22 +1764,19 @@ export async function reconcileAdmissionFeeReceipts(tenantFilter?: string) {
             .catch(() => null);
         }
 
-        // Clean up redundant PENDING clones created by repeated uploads for the same applicant
-        // ONLY if they have the exact same referenceNo AND the exact same payerId
+        // Clean up any other duplicate receipts in DB matching this applicant
         if (matchingReceipts.length > 1) {
-          const redundantClones = matchingReceipts.filter(
-            (r) =>
-              r.id !== primary.id &&
-              r.status === "PENDING" &&
-              r.referenceNo === cand.referenceNo &&
-              r.payerId === cand.payerId
-          );
+          const redundantClones = matchingReceipts.filter((r) => r.id !== primary.id);
           if (redundantClones.length > 0) {
             await basePrisma.paymentReceipt
               .deleteMany({
                 where: { id: { in: redundantClones.map((c) => c.id) } },
               })
               .catch(() => null);
+            redundantClones.forEach((c) => {
+              const idx = liveReceipts.findIndex((lr) => lr.id === c.id);
+              if (idx !== -1) liveReceipts.splice(idx, 1);
+            });
           }
         }
       }
@@ -1719,6 +1844,9 @@ export async function getPaymentReceipts(params: {
   }
   if (params.status && params.status !== "ALL") {
     where.status = params.status;
+  } else {
+    // Exclude soft-deleted / superseded duplicate records from active verification list
+    where.status = { not: "DUPLICATE" };
   }
   if (params.startDate || params.endDate) {
     where.paymentDate = {};
@@ -1927,12 +2055,34 @@ export async function getPaymentReceipts(params: {
     }),
   ]);
 
+  // 3. Client List Deduplication Safeguard:
+  // Ensure that no applicant/payer appears more than once in the verification list table
+  const seenPayerKey = new Set<string>();
+  const deduplicatedReceipts: typeof enrichedReceipts = [];
+
+  for (const r of enrichedReceipts) {
+    const normPayer = (r.payerName || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const dedupKey = normPayer
+      ? `${r.tenantId || r.schoolId}::${r.moduleType}::${normPayer}`
+      : `${r.tenantId || r.schoolId}::${r.referenceNo || r.id}`;
+    if (seenPayerKey.has(dedupKey)) {
+      continue;
+    }
+    seenPayerKey.add(dedupKey);
+    deduplicatedReceipts.push(r);
+  }
+
+  const adjustedTotal = Math.max(
+    deduplicatedReceipts.length,
+    totalCount - (enrichedReceipts.length - deduplicatedReceipts.length)
+  );
+
   return {
-    receipts: enrichedReceipts,
-    total: totalCount,
+    receipts: deduplicatedReceipts,
+    total: adjustedTotal,
     page,
     limit,
-    totalPages: Math.ceil(totalCount / limit),
+    totalPages: Math.ceil(adjustedTotal / limit),
     stats: {
       pendingCount,
       verifiedToday: verifiedTodayAgg,
