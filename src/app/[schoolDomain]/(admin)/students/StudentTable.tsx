@@ -64,6 +64,7 @@ interface StudentTableProps {
   initialNextCursor?: string | null;
   initialHasMore?: boolean;
   schoolId: string;
+  schoolDomain?: string;
   tiers: AcademicTier[];
   activeTier?: string;
   classrooms?: Array<{ id: string; name: string }>;
@@ -190,6 +191,7 @@ export default function StudentTable({
   initialNextCursor,
   initialHasMore,
   schoolId,
+  schoolDomain,
   tiers,
   activeTier,
   classrooms = [],
@@ -198,6 +200,7 @@ export default function StudentTable({
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
   const router = useRouter();
+  const effectiveDomain = schoolDomain || tenant?.subdomain || "demo";
   const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Administrative enrollment permissions: Allowed for ADMIN, SCHOOL_ADMIN, SUPER_ADMIN, PRINCIPAL, HEADMASTER, REGISTRAR, or unconstrained admin portal users
@@ -206,8 +209,13 @@ export default function StudentTable({
     !["TEACHER", "STUDENT", "PARENT"].includes(tenant.userRole.toUpperCase());
 
   useEffect(() => {
-    if (students) {
-      setStudentList(students);
+    if (students && Array.isArray(students)) {
+      setStudentList((prev) => {
+        if (prev && prev.length > students.length && prev.some((p) => !students.some((s) => s.id === p.id))) {
+          return prev;
+        }
+        return students;
+      });
     }
   }, [students]);
 
@@ -495,13 +503,18 @@ export default function StudentTable({
         (t.name.toLowerCase() === activeTier.toLowerCase() ||
           t.name.toLowerCase().includes(activeTier.toLowerCase()))
       );
+
+      // Reset class filter to "ALL" so that any newly enrolled student is immediately visible in the table
+      setFilterClass("ALL");
+
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
         tierId: matchingTier?.id,
         status: "ENROLLED",
-        className: filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : undefined,
+        className: undefined,
         cursor: null,
         limit: 25,
+        bypassCache: true,
       });
       if (res && Array.isArray(res.items)) {
         setStudentList(res.items);
@@ -1952,9 +1965,9 @@ export default function StudentTable({
             await reloadRoster();
           }}
           schoolId={schoolId}
-          schoolDomain={tenant?.subdomain || "egede"}
+          schoolDomain={effectiveDomain}
           schoolName={tenant?.name || "Institution"}
-          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          schoolPrefix={resolveSchoolPrefix(effectiveDomain)}
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
           classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
@@ -1980,9 +1993,9 @@ export default function StudentTable({
             await reloadRoster();
           }}
           schoolId={schoolId}
-          schoolDomain={tenant?.subdomain || "egede"}
+          schoolDomain={effectiveDomain}
           schoolName={tenant?.name || "Institution"}
-          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          schoolPrefix={resolveSchoolPrefix(effectiveDomain)}
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
           classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
@@ -1996,7 +2009,7 @@ export default function StudentTable({
           isOpen={showPrintableModal}
           onClose={() => setShowPrintableModal(false)}
           schoolName={tenant?.name || "Institution"}
-          schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
+          schoolPrefix={resolveSchoolPrefix(effectiveDomain)}
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
           activeTier={activeTier}

@@ -366,7 +366,12 @@ export default function ManualStudentGridModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                if (enrolledResult && enrolledResult.enrolledCount > 0) {
+                  onSuccess();
+                }
+                onClose();
+              }}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition cursor-pointer"
             >
               <X className="w-5 h-5" />

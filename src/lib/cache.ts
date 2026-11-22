@@ -16,6 +16,7 @@ export interface CacheAsideOptions<T> {
   fetchFn: () => Promise<T>;
   ttlSeconds?: number; // Default: 1800 seconds (30 minutes)
   compressThresholdBytes?: number; // Default: 1024 bytes (1 KB)
+  bypassCache?: boolean;
 }
 
 /**
@@ -86,25 +87,28 @@ export async function cacheAside<T>(options: CacheAsideOptions<T>): Promise<T> {
 
   const now = Date.now();
 
-  // 1. Check L1 Memory Cache
-  const l1Entry = l1MemoryCache.get(key);
-  if (l1Entry && l1Entry.expiresAt > now) {
-    return l1Entry.data as T;
-  }
-
-  // 2. Try reading from L2 Redis cache
-  try {
-    const cachedData = await safeRedisGet(key);
-    if (cachedData !== null) {
-      const decompressed = decompressPayload<T>(cachedData);
-      if (decompressed !== null && decompressed !== undefined) {
-        // Populate L1 cache
-        l1MemoryCache.set(key, { data: decompressed, expiresAt: now + ttlSeconds * 1000 });
-        return decompressed;
-      }
+  // If bypassCache is requested, skip L1 and L2 cache lookups and fetch fresh from DB
+  if (!options.bypassCache) {
+    // 1. Check L1 Memory Cache
+    const l1Entry = l1MemoryCache.get(key);
+    if (l1Entry && l1Entry.expiresAt > now) {
+      return l1Entry.data as T;
     }
-  } catch (cacheReadErr) {
-    // Suppress and seamlessly proceed to direct DB fetch
+
+    // 2. Try reading from L2 Redis cache
+    try {
+      const cachedData = await safeRedisGet(key);
+      if (cachedData !== null) {
+        const decompressed = decompressPayload<T>(cachedData);
+        if (decompressed !== null && decompressed !== undefined) {
+          // Populate L1 cache
+          l1MemoryCache.set(key, { data: decompressed, expiresAt: now + ttlSeconds * 1000 });
+          return decompressed;
+        }
+      }
+    } catch (cacheReadErr) {
+      // Suppress and seamlessly proceed to direct DB fetch
+    }
   }
 
   // 3. Fetch directly from DB via provided fetch function

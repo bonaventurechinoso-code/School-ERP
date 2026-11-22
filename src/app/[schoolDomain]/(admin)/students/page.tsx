@@ -170,7 +170,8 @@ export default async function StudentsPage({
           students={(studentsPagination?.items ?? []) as any}
           initialNextCursor={studentsPagination?.nextCursor ?? null}
           initialHasMore={studentsPagination?.hasMore ?? false}
-          schoolId={school.id} 
+          schoolId={school.id}
+          schoolDomain={params.schoolDomain}
           tiers={school.academicTiers}
           activeTier={activeTierName}
           classrooms={classrooms}

@@ -58,6 +58,7 @@ export async function fetchStudentsPaginated(
     cursor?: string | null;
     limit?: number;
     search?: string;
+    bypassCache?: boolean;
   }
 ): Promise<CursorPaginationResult<any>> {
   const activeTier = options?.tierName || "all";
@@ -81,6 +82,7 @@ export async function fetchStudentsPaginated(
     const result = await cacheAside<CursorPaginationResult<any>>({
       key: cacheKey,
       ttlSeconds: 1800, // 30 minutes safe sliding TTL
+      bypassCache: options?.bypassCache,
       fetchFn: async () => {
         const tenantDb = await resolveDbForAction(schoolId, options?.tierName, options?.tierId);
 
@@ -117,19 +119,23 @@ export async function fetchStudentsPaginated(
           },
         });
 
-        // Resolve tierId if provided across isolated tier DB and central DB schemas
-        if (options?.tierId) {
+        // Resolve tierId if provided across isolated tier DB and central DB schemas (scoped to current schoolId!)
+        if (options?.tierId || options?.tierName) {
           const tierInDb = await tenantDb.academicTier.findFirst({
             where: {
-              OR: [
-                { id: options.tierId },
-                ...(options?.tierName ? [{ name: { equals: options.tierName, mode: "insensitive" as const } }] : []),
-              ],
+              schoolId,
+              ...(options?.tierId
+                ? { id: options.tierId }
+                : options?.tierName
+                ? { name: { equals: options.tierName, mode: "insensitive" as const } }
+                : {}),
             },
           }).catch(() => null);
 
           if (tierInDb) {
             andConditions.push({ tierId: tierInDb.id });
+          } else if (options?.tierId) {
+            andConditions.push({ tierId: options.tierId });
           }
         }
 
@@ -255,6 +261,7 @@ export async function createStudent(
     const res = await createStudentWithCredentials(
       schoolId,
       {
+        tierId: data.tierId,
         firstName: data.firstName,
         lastName: data.lastName,
         gender: currentDynamic?.gender || "M",
@@ -556,20 +563,24 @@ export async function fetchStudentMetrics(
   try {
     const tenantDb = await resolveDbForAction(schoolId, tierContext, tierId);
     
-    // Resolve tier filter across isolated tier DB and central DB schemas
+    // Resolve tier filter across isolated tier DB and central DB schemas (scoped to schoolId!)
     let tierFilter: any = {};
-    if (tierId) {
+    if (tierId || tierContext) {
       const tierInDb = await tenantDb.academicTier.findFirst({
         where: {
-          OR: [
-            { id: tierId },
-            ...(tierContext ? [{ name: { equals: tierContext, mode: "insensitive" as const } }] : []),
-          ],
+          schoolId,
+          ...(tierId
+            ? { id: tierId }
+            : tierContext
+            ? { name: { equals: tierContext, mode: "insensitive" as const } }
+            : {}),
         },
       }).catch(() => null);
 
       if (tierInDb) {
         tierFilter = { tierId: tierInDb.id };
+      } else if (tierId) {
+        tierFilter = { tierId };
       }
     }
 

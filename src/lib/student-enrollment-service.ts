@@ -126,6 +126,7 @@ export function generateTemporaryPassword(schoolPrefix: string = "School", year:
 
 export interface StudentEnrollmentInput {
   id?: string;
+  tierId?: string;
   firstName: string;
   lastName: string;
   middleName?: string;
@@ -209,6 +210,7 @@ export async function createStudentWithCredentials(
   
   const isTertiary = isHigherEdTier(resolvedTierName) || school.tier === "TERTIARY";
   const tierObj = school.academicTiers.find((t) =>
+    (input.tierId && t.id === input.tierId) ||
     t.name.toLowerCase() === resolvedTierName.toLowerCase() ||
     t.name.toLowerCase().includes(resolvedTierName.toLowerCase())
   ) || school.academicTiers[0];
