@@ -490,8 +490,14 @@ export default function StudentTable({
 
   const reloadRoster = async () => {
     try {
+      const matchingTier = tiers.find((t) =>
+        activeTier &&
+        (t.name.toLowerCase() === activeTier.toLowerCase() ||
+          t.name.toLowerCase().includes(activeTier.toLowerCase()))
+      );
       const res = await fetchStudentsPaginated(schoolId, {
         tierName: activeTier,
+        tierId: matchingTier?.id,
         status: "ENROLLED",
         className: filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : undefined,
         cursor: null,

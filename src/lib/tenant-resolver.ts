@@ -64,15 +64,24 @@ export function parseHostInfo(hostHeader?: string | null, protoHeader?: string |
   const protocol = (protoHeader || "").split(",")[0].trim() || fallbackProto;
 
   if (!hostHeader) {
+    const rawRoot = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "bonaveeict.com.ng")
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0]
+      .split(":")[0]
+      .trim();
+
+    const isLocal = rawRoot === "localhost" || rawRoot === "127.0.0.1";
     return {
-      rawHost: "bonaveeict.com.ng",
-      hostname: "bonaveeict.com.ng",
-      port: null,
-      baseDomain: "bonaveeict.com.ng",
+      rawHost: rawRoot || "bonaveeict.com.ng",
+      hostname: rawRoot || "bonaveeict.com.ng",
+      port: isLocal ? "3000" : null,
+      baseDomain: isLocal ? "localhost" : (rawRoot || "bonaveeict.com.ng"),
       subdomain: null,
       isApex: true,
       isWww: false,
-      protocol,
+      protocol: isLocal ? "http" : protocol,
     };
   }
 
