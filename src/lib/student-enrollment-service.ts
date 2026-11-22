@@ -11,6 +11,7 @@ import { logAuditEvent } from "@/lib/audit-logger";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { clearL1TenantCache } from "@/lib/cache";
 import { revalidatePath } from "next/cache";
+import { sendStudentEnrollmentConfirmationEmail } from "@/lib/email-service";
 
 /**
  * Detects if a phone value was corrupted into scientific notation by Excel (e.g. 8.03E+09, 8.06e+09)
@@ -564,6 +565,54 @@ export async function createStudentWithCredentials(
     },
   }).catch(() => null);
 
+  // 8. Automated Email Dispatch (Enrollment Confirmation & Credentials Notification)
+  const recipientEmail = !isTertiary ? normGuardianEmail : normStudentEmail;
+  if (recipientEmail) {
+    try {
+      await sendStudentEnrollmentConfirmationEmail({
+        schoolId,
+        studentId: createdStudent.id,
+        studentName: `${firstName} ${lastName}`,
+        admissionNumber: finalAdmissionNumber,
+        currentClass: createdStudent.currentClass,
+        tierName: resolvedTierName,
+        studentEmail: isTertiary ? normStudentEmail : null,
+        parentEmail: normGuardianEmail || null,
+        parentName: guardianName !== "Parent / Guardian" ? guardianName : undefined,
+        parentPhone: normGuardianPhone || null,
+        username,
+        loginOwner,
+        temporaryPassword: rawTempPassword,
+        schoolName: school.name,
+        subdomain: school.subdomain,
+      });
+    } catch (emailErr) {
+      console.warn("[STUDENT_ENROLLMENT_EMAIL_WARN]: Could not dispatch enrollment confirmation email:", emailErr);
+    }
+  }
+
+  // 9. Write-Through Cache Invalidation & Path Revalidation
+  try {
+    await invalidateStudentNamespace(schoolId, resolvedTierName);
+    clearL1TenantCache(schoolId);
+    if (school.subdomain) {
+      clearL1TenantCache(school.subdomain);
+      try {
+        revalidatePath(`/${school.subdomain}/students`);
+        revalidatePath(`/${school.subdomain}/students`, "page");
+        revalidatePath(`/${school.subdomain}/students`, "layout");
+        revalidatePath(`/${school.subdomain}/portal/staff`);
+        revalidatePath(`/teacher/students`);
+      } catch {}
+    }
+    try {
+      revalidatePath(`/[schoolDomain]/students`, "page");
+      revalidatePath(`/[schoolDomain]/students`, "layout");
+    } catch {}
+  } catch (cacheErr) {
+    console.warn("[STUDENT_ENROLLMENT_CACHE_WARN]:", cacheErr);
+  }
+
   return {
     studentId: createdStudent.id,
     studentName: `${firstName} ${lastName}`,
@@ -847,10 +896,11 @@ export async function executeBatchEnrollmentWithCredentials(
   const validation = await validateEnrollmentBatch(schoolId, session, rows, safeTierName);
   
   // Filter out invalid rows, and handle duplicate actions (default SKIP)
-  const rowsToEnroll = validation.rows.filter((r) => {
+  const rowsToEnroll = validation.rows.filter((r, idx) => {
     if (!r.isValid) return false;
+    const requestedAction = rows[idx]?.duplicateAction || r.duplicateAction;
     if (r.isDuplicate) {
-      return r.duplicateAction === "ENROLL_ANYWAY" || r.duplicateAction === "MERGE_UPDATE";
+      return requestedAction === "ENROLL_ANYWAY" || requestedAction === "MERGE_UPDATE";
     }
     return true;
   });
@@ -880,11 +930,14 @@ export async function executeBatchEnrollmentWithCredentials(
   try {
     const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
     if (school) {
-      await invalidateStudentNamespace(schoolId);
+      await invalidateStudentNamespace(schoolId, safeTierName);
       clearL1TenantCache(school.subdomain);
       clearL1TenantCache(schoolId);
       revalidatePath(`/${school.subdomain}/students`);
       revalidatePath(`/${school.subdomain}/students`, "page");
+      revalidatePath(`/${school.subdomain}/students`, "layout");
+      revalidatePath(`/[schoolDomain]/students`, "page");
+      revalidatePath(`/[schoolDomain]/students`, "layout");
       revalidatePath(`/${school.subdomain}/portal/staff`);
       revalidatePath(`/teacher/students`);
     }

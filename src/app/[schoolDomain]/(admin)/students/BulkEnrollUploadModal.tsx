@@ -430,7 +430,11 @@ export default function BulkEnrollUploadModal({
   const handleConfirmEnroll = () => {
     setParseError(null);
     startTransition(async () => {
-      const res = await executeBulkEnrollmentAction(schoolId, session, eligibleRows, true, activeTier);
+      const preparedEligibleRows = eligibleRows.map((r) => ({
+        ...r,
+        duplicateAction: r.isDuplicate ? ("ENROLL_ANYWAY" as const) : undefined,
+      }));
+      const res = await executeBulkEnrollmentAction(schoolId, session, preparedEligibleRows, false, activeTier);
 
       if (!res.success) {
         setParseError(res.error || "Failed to enroll students.");

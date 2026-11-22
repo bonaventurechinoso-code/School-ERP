@@ -252,7 +252,7 @@ export default function ManualStudentGridModal({
     setActionError(null);
     startTransition(async () => {
       const validRowsToEnroll = validatedRows.filter((r) => r.isValid && !r.isDuplicate);
-      const res = await executeBulkEnrollmentAction(schoolId, session, validRowsToEnroll, true, activeTier);
+      const res = await executeBulkEnrollmentAction(schoolId, session, validRowsToEnroll, false, activeTier);
 
       if (!res.success) {
         setActionError(res.error || "Failed to enroll students.");

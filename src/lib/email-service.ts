@@ -1657,6 +1657,9 @@ export interface StudentEnrollmentConfirmationEmailPayload {
   studentEmail?: string | null;
   parentEmail?: string | null;
   parentName?: string | null;
+  parentPhone?: string | null;
+  username?: string | null;
+  loginOwner?: "GUARDIAN" | "STUDENT" | string;
   temporaryPassword?: string | null;
 }
 
@@ -1689,6 +1692,9 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
       studentEmail,
       parentEmail,
       parentName,
+      parentPhone,
+      username,
+      loginOwner,
       temporaryPassword,
     } = payload;
 
@@ -1713,7 +1719,12 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
     const tenantName = schoolName || "School ERP";
     const portalUrl = subdomain ? getTenantLoginUrl(subdomain) : "https://bonaveeict.com.ng/login";
     const brandColor = "#4f46e5";
-    const subject = `🎉 Enrollment Confirmation - ${studentName} (${tenantName})`;
+    const subject = `🎉 Enrollment Confirmation & Login Credentials - ${studentName} (${tenantName})`;
+
+    // Determine login role and owner
+    const isGuardianLogin = loginOwner === "GUARDIAN" || (!loginOwner && !studentEmail && !!parentEmail);
+    const resolvedOwnerName = isGuardianLogin ? (parentName || "Parent / Guardian") : studentName;
+    const resolvedUsername = username || (isGuardianLogin ? (parentEmail || parentPhone || admissionNumber) : (studentEmail || admissionNumber));
 
     // Collect valid recipients (student email and/or parent email)
     const rawRecipients = [parentEmail, studentEmail].filter(
@@ -1756,11 +1767,13 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
         <div class="container">
           <div class="header">
             <h1>${tenantName}</h1>
-            <p>Student Enrollment Confirmation</p>
+            <p>Student Enrollment Confirmation &amp; Portal Credentials</p>
           </div>
           <div class="content">
             <p class="welcome-text">
-              ${parentName ? `Dear <strong>${parentName}</strong>,<br/><br/>` : ""}Congratulations! We are delighted to confirm that <strong>${studentName}</strong> has been successfully enrolled at <strong>${tenantName}</strong>. Welcome to our academic community!
+              ${isGuardianLogin
+                ? `Dear <strong>${resolvedOwnerName}</strong>,<br/><br/>Congratulations! We are delighted to confirm that your child, <strong>${studentName}</strong>, has been successfully enrolled at <strong>${tenantName}</strong>. Your parent portal credentials have been provisioned below so you can monitor academic progress, attendance, and fee statements.`
+                : `Dear <strong>${studentName}</strong>,<br/><br/>Congratulations! You have been successfully enrolled at <strong>${tenantName}</strong>. Welcome to our academic community! Your portal access credentials are provided below.`}
             </p>
 
             <div class="credentials-card">
@@ -1770,7 +1783,7 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
               </div>
               ${admissionNumber ? `
               <div class="cred-row">
-                <span class="cred-label">Admission Number</span>
+                <span class="cred-label">Admission / Reg No</span>
                 <span class="cred-value">${admissionNumber}</span>
               </div>` : ""}
               ${currentClass ? `
@@ -1784,24 +1797,32 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
                 <span class="cred-value">${tierName}</span>
               </div>` : ""}
               <div class="cred-row">
-                <span class="cred-label">Portal URL</span>
-                <span class="cred-value">${portalUrl}</span>
+                <span class="cred-label">Login Account</span>
+                <span class="cred-value">${isGuardianLogin ? `Guardian Portal (${resolvedOwnerName})` : `Student Portal (${studentName})`}</span>
               </div>
-              ${studentEmail ? `
               <div class="cred-row">
-                <span class="cred-label">Student Login</span>
-                <span class="cred-value">${studentEmail}</span>
-              </div>` : ""}
+                <span class="cred-label">Portal Username</span>
+                <span class="cred-value">${resolvedUsername}</span>
+              </div>
               ${temporaryPassword ? `
               <div class="cred-row">
                 <span class="cred-label">Temporary Password</span>
-                <span class="cred-value">${temporaryPassword}</span>
+                <span class="cred-value" style="font-family: monospace; background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px;">${temporaryPassword}</span>
               </div>` : ""}
+              <div class="cred-row">
+                <span class="cred-label">Portal Access URL</span>
+                <span class="cred-value"><a href="${portalUrl}" style="color: ${brandColor}; text-decoration: underline;">${portalUrl}</a></span>
+              </div>
             </div>
+
+            ${temporaryPassword ? `
+            <p style="font-size: 13px; color: #4338ca; background: #eef2ff; padding: 10px 14px; border-radius: 8px; margin: 16px 0;">
+              ℹ️ <strong>Security Notice:</strong> You will be prompted to change your temporary password upon your first login.
+            </p>` : ""}
 
             <div class="action-area">
               <a href="${portalUrl}" class="login-btn" target="_blank" rel="noopener noreferrer">
-                Access Student Portal &rarr;
+                ${isGuardianLogin ? "Access Parent Portal &rarr;" : "Access Student Portal &rarr;"}
               </a>
             </div>
 

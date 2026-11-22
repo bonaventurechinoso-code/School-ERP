@@ -473,11 +473,42 @@ export default function StudentTable({
             }
             return s;
           }));
+          setEditingStudentId(null);
+          await refreshMetrics();
+        } else {
+          setEditingStudentId(null);
+          await reloadRoster();
+          setActionFeedback({
+            type: "success",
+            message: "Student enrolled successfully with credentials issued.",
+          });
+          setTimeout(() => setActionFeedback(null), 5000);
         }
-        setEditingStudentId(null);
-        await refreshMetrics();
       }
     });
+  };
+
+  const reloadRoster = async () => {
+    try {
+      const res = await fetchStudentsPaginated(schoolId, {
+        tierName: activeTier,
+        status: "ENROLLED",
+        className: filterClass !== "ALL" && filterClass !== "All Classes" ? filterClass : undefined,
+        cursor: null,
+        limit: 25,
+      });
+      if (res && Array.isArray(res.items)) {
+        setStudentList(res.items);
+        setNextCursor(res.nextCursor);
+        setHasMore(res.hasMore);
+        setCursorHistory([]);
+        setPageIndex(0);
+      }
+    } catch (err) {
+      console.error("Failed to reload student roster:", err);
+    }
+    await refreshMetrics();
+    router.refresh();
   };
 
   const handleDelete = async (studentId: string) => {
@@ -1907,8 +1938,12 @@ export default function StudentTable({
           onClose={() => setShowManualGridModal(false)}
           onSuccess={async () => {
             setShowManualGridModal(false);
-            await refreshMetrics();
-            router.refresh();
+            setActionFeedback({
+              type: "success",
+              message: "Students enrolled successfully with credentials issued.",
+            });
+            setTimeout(() => setActionFeedback(null), 7000);
+            await reloadRoster();
           }}
           schoolId={schoolId}
           schoolDomain={tenant?.subdomain || "egede"}
@@ -1932,12 +1967,11 @@ export default function StudentTable({
             setActionFeedback({
               type: "success",
               message: countNum > 0
-                ? `${countNum} students imported successfully.`
-                : "Students imported successfully.",
+                ? `${countNum} students imported successfully with credentials issued.`
+                : "Students imported successfully with credentials issued.",
             });
             setTimeout(() => setActionFeedback(null), 7000);
-            await refreshMetrics();
-            router.refresh();
+            await reloadRoster();
           }}
           schoolId={schoolId}
           schoolDomain={tenant?.subdomain || "egede"}
@@ -1970,8 +2004,12 @@ export default function StudentTable({
           onClose={() => setShowPromotionModal(false)}
           onSuccess={async () => {
             setShowPromotionModal(false);
-            await refreshMetrics();
-            router.refresh();
+            setActionFeedback({
+              type: "success",
+              message: "Session promotion completed successfully.",
+            });
+            setTimeout(() => setActionFeedback(null), 7000);
+            await reloadRoster();
           }}
           schoolId={schoolId}
           availableSessions={["2024/2025", "2025/2026", "2026/2027", "2027/2028"]}
