@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { MessageSquare, X, Send, Bot, AlertCircle, RefreshCw, Minus, RotateCcw, Sparkles } from "lucide-react";
-import { useParams, usePathname } from "next/navigation";
+import { X, Send, Bot, AlertCircle, RefreshCw, Minus, RotateCcw, Sparkles } from "lucide-react";
+import { useParams } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { useTenant } from "@/lib/tenant-context";
 import { useSession } from "@/lib/session-context";
 
-const POS_STORAGE_KEY = "institutional_ai_btn_pos";
 const CHAT_STORAGE_KEY = "institutional_ai_chat_history";
 
 const QUICK_SUGGESTIONS = [
@@ -25,10 +24,6 @@ export default function AIChatWidget() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  const pathname = usePathname();
-  const isDashboard = Boolean(pathname?.endsWith("/dashboard"));
 
   useEffect(() => {
     const handleOpenAi = () => setIsOpen(true);
@@ -90,19 +85,6 @@ export default function AIChatWidget() {
     }
   }, [messages]);
 
-  // Floating draggable position state
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
-  const dragInfo = useRef({
-    startX: 0,
-    startY: 0,
-    btnStartX: 0,
-    btnStartY: 0,
-    isDragging: false,
-    hasMoved: false,
-  });
-
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
@@ -130,190 +112,6 @@ export default function AIChatWidget() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
-
-  // Restore button position from sessionStorage
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(POS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          const btnWidth = buttonRef.current?.offsetWidth || 48;
-          const btnHeight = buttonRef.current?.offsetHeight || 48;
-          const clampedX = Math.min(Math.max(8, parsed.x), Math.max(8, window.innerWidth - btnWidth - 8));
-          const clampedY = Math.min(Math.max(8, parsed.y), Math.max(8, window.innerHeight - btnHeight - 8));
-          setPosition({ x: clampedX, y: clampedY });
-        }
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }, []);
-
-  // Keep button within screen bounds on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      setPosition((prev) => {
-        if (!prev) return null;
-        const btnWidth = buttonRef.current?.offsetWidth || 48;
-        const btnHeight = buttonRef.current?.offsetHeight || 48;
-        const clampedX = Math.min(Math.max(8, prev.x), Math.max(8, window.innerWidth - btnWidth - 8));
-        const clampedY = Math.min(Math.max(8, prev.y), Math.max(8, window.innerHeight - btnHeight - 8));
-        if (clampedX !== prev.x || clampedY !== prev.y) {
-          const next = { x: clampedX, y: clampedY };
-          try {
-            sessionStorage.setItem(POS_STORAGE_KEY, JSON.stringify(next));
-          } catch {}
-          return next;
-        }
-        return prev;
-      });
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  // Mouse drag handler
-  const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
-    const btn = buttonRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-
-    dragInfo.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      btnStartX: rect.left,
-      btnStartY: rect.top,
-      isDragging: true,
-      hasMoved: false,
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!dragInfo.current.isDragging) return;
-      const dx = moveEvent.clientX - dragInfo.current.startX;
-      const dy = moveEvent.clientY - dragInfo.current.startY;
-
-      if (!dragInfo.current.hasMoved && Math.hypot(dx, dy) > 5) {
-        dragInfo.current.hasMoved = true;
-        setIsDragging(true);
-      }
-
-      if (dragInfo.current.hasMoved) {
-        const btnWidth = btn.offsetWidth;
-        const btnHeight = btn.offsetHeight;
-        const newX = dragInfo.current.btnStartX + dx;
-        const newY = dragInfo.current.btnStartY + dy;
-
-        const clampedX = Math.min(Math.max(8, newX), Math.max(8, window.innerWidth - btnWidth - 8));
-        const clampedY = Math.min(Math.max(8, newY), Math.max(8, window.innerHeight - btnHeight - 8));
-
-        setPosition({ x: clampedX, y: clampedY });
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (dragInfo.current.isDragging) {
-        if (dragInfo.current.hasMoved) {
-          setPosition((latestPos) => {
-            if (latestPos) {
-              try {
-                sessionStorage.setItem(POS_STORAGE_KEY, JSON.stringify(latestPos));
-              } catch {}
-            }
-            return latestPos;
-          });
-        }
-        dragInfo.current.isDragging = false;
-        setIsDragging(false);
-      }
-
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  };
-
-  // Touch drag handler for mobile
-  const handleTouchStart = (e: React.TouchEvent<HTMLButtonElement>) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    const btn = buttonRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-
-    dragInfo.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      btnStartX: rect.left,
-      btnStartY: rect.top,
-      isDragging: true,
-      hasMoved: false,
-    };
-
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      if (!dragInfo.current.isDragging || moveEvent.touches.length !== 1) return;
-      const curTouch = moveEvent.touches[0];
-      const dx = curTouch.clientX - dragInfo.current.startX;
-      const dy = curTouch.clientY - dragInfo.current.startY;
-
-      if (!dragInfo.current.hasMoved && Math.hypot(dx, dy) > 5) {
-        dragInfo.current.hasMoved = true;
-        setIsDragging(true);
-      }
-
-      if (dragInfo.current.hasMoved) {
-        if (moveEvent.cancelable) {
-          moveEvent.preventDefault();
-        }
-        const btnWidth = btn.offsetWidth;
-        const btnHeight = btn.offsetHeight;
-        const newX = dragInfo.current.btnStartX + dx;
-        const newY = dragInfo.current.btnStartY + dy;
-
-        const clampedX = Math.min(Math.max(8, newX), Math.max(8, window.innerWidth - btnWidth - 8));
-        const clampedY = Math.min(Math.max(8, newY), Math.max(8, window.innerHeight - btnHeight - 8));
-
-        setPosition({ x: clampedX, y: clampedY });
-      }
-    };
-
-    const handleTouchEnd = () => {
-      if (dragInfo.current.isDragging) {
-        if (dragInfo.current.hasMoved) {
-          setPosition((latestPos) => {
-            if (latestPos) {
-              try {
-                sessionStorage.setItem(POS_STORAGE_KEY, JSON.stringify(latestPos));
-              } catch {}
-            }
-            return latestPos;
-          });
-        }
-        dragInfo.current.isDragging = false;
-        setIsDragging(false);
-      }
-
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleTouchEnd);
-      window.removeEventListener("touchcancel", handleTouchEnd);
-    };
-
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("touchend", handleTouchEnd);
-    window.addEventListener("touchcancel", handleTouchEnd);
-  };
-
-  const handleButtonClick = () => {
-    if (dragInfo.current.hasMoved) {
-      dragInfo.current.hasMoved = false;
-      return;
-    }
-    setIsOpen(true);
-  };
 
   const executeSend = async (queryText: string) => {
     const userMessage = queryText.trim();
@@ -390,23 +188,6 @@ export default function AIChatWidget() {
       sessionStorage.removeItem(CHAT_STORAGE_KEY);
     } catch {}
   };
-
-  // Button position style: fixed, z-index 50, bottom 90px, right 16px by default or persisted (x, y)
-  const buttonStyle: React.CSSProperties = position
-    ? {
-        position: "fixed",
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        bottom: "auto",
-        right: "auto",
-        zIndex: 50,
-      }
-    : {
-        position: "fixed",
-        bottom: "90px",
-        right: "16px",
-        zIndex: 50,
-      };
 
   // Helper to render text with bold formatting
   const renderFormattedText = (text: string) => {
@@ -571,27 +352,6 @@ export default function AIChatWidget() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* Draggable Floating Button: Hidden on dashboard since anchored in the top utility toolbar */}
-      {!isOpen && !isDashboard && (
-        <button
-          ref={buttonRef}
-          style={buttonStyle}
-          onClick={handleButtonClick}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          aria-label="Ask Institutional AI"
-          title="Ask Institutional AI (Press and drag anywhere)"
-          className={`select-none touch-none bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-full font-semibold shadow-xl border border-slate-700 dark:border-zinc-200 transition-shadow flex items-center justify-center gap-2 group ${
-            isDragging
-              ? "cursor-grabbing scale-105 shadow-2xl opacity-90"
-              : "cursor-grab hover:shadow-2xl hover:-translate-y-0.5"
-          } w-12 h-12 lg:w-auto lg:h-auto lg:max-w-[200px] lg:px-4 lg:py-[10px] text-sm`}
-        >
-          <MessageSquare className="w-5 h-5 text-blue-400 dark:text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-          <span className="hidden lg:inline whitespace-nowrap truncate">Ask Institutional AI</span>
-        </button>
       )}
     </>
   );
