@@ -11,6 +11,7 @@ import { executeCursorPagination, CursorPaginationResult } from "@/lib/paginatio
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { generateAdmissionNumber } from "@/lib/tenant-tier-utils";
 import { sendStudentEnrollmentConfirmationEmail, sendParentWelcomeEmail } from "@/lib/mail";
+import { createStudentWithCredentials } from "@/lib/student-enrollment-service";
 
 function safeRevalidatePath(path: string, type?: "page" | "layout") {
   try {
@@ -246,267 +247,36 @@ export async function createStudent(
     // Non-blocking in testing environments
   }
 
-  const tenantDb = await resolveDbForAction(schoolId, tierContext, data.tierId);
-  
   try {
-    let passwordToSave = "Welcome123";
-    let isTemporary = true;
-
-    if (data.password && typeof data.password === "string" && data.password.trim().length > 0) {
-      const validation = validatePasswordStrength(data.password.trim());
-      if (!validation.valid) {
-        return { success: false, error: validation.error || "Password does not meet complexity requirements." };
-      }
-      passwordToSave = data.password.trim();
-      isTemporary = false;
-    }
-
-    const hashedPassword = await bcrypt.hash(passwordToSave, 12);
-
-    const timestampData: any = {};
-    if (data.status === "PROSPECT") timestampData.prospectAt = new Date();
-    if (data.status === "APPLICANT") timestampData.applicantAt = new Date();
-    if (data.status === "SCREENED") timestampData.screenedAt = new Date();
-    if (data.status === "ENROLLED") timestampData.enrolledAt = new Date();
-
-    let finalAdmissionNumber = data.admissionNumber;
-    const school = await basePrisma.school.findUnique({ where: { id: schoolId } });
     const currentDynamic = (data.dynamicFields as any) || {};
     const admissionYear = currentDynamic?.admissionYear || currentDynamic?.cohort || new Date().getFullYear().toString();
-    const resolvedCohort = String(admissionYear);
+    const session = currentDynamic?.session || `${admissionYear}/${parseInt(admissionYear, 10) + 1}`;
 
-    if (!finalAdmissionNumber) {
-      // Find highest existing sequence for this school + admissionYear
-      const existing = await basePrisma.student.findMany({
-        where: { schoolId },
-        select: { admissionNumber: true },
-      });
-      let maxSeq = 0;
-      existing.forEach((s) => {
-        if (s.admissionNumber) {
-          const parts = s.admissionNumber.split("/");
-          if (parts.length >= 4 && parts[1] === admissionYear) {
-            const num = parseInt(parts[3], 10);
-            if (!isNaN(num) && num > maxSeq) maxSeq = num;
-          }
-        }
-      });
-
-      finalAdmissionNumber = generateAdmissionNumber({
-        schoolSubdomain: school?.subdomain,
-        currentClass: data.currentClass,
-        studentSequence: maxSeq + 1,
-        year: parseInt(admissionYear, 10),
-      });
-    }
-
-    const userEmail =
-      (data.email && data.email.trim().toLowerCase()) ||
-      `${finalAdmissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school?.subdomain || "portal"}`;
-
-    // 1. Authoritative User record with role=STUDENT and mustChangePassword=true
-    const user = await basePrisma.user.upsert({
-      where: { schoolId_email: { schoolId, email: userEmail } },
-      update: {
-        passwordHash: hashedPassword,
-        mustChangePassword: true,
-        role: "STUDENT",
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        status: "ACTIVE",
+    const res = await createStudentWithCredentials(
+      schoolId,
+      {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        gender: currentDynamic?.gender || "M",
+        dateOfBirth: data.dateOfBirth,
+        currentClass: data.currentClass || "Primary 1",
+        arm: currentDynamic?.arm || "A",
+        admissionYear,
+        session,
+        admissionNumber: data.admissionNumber,
+        status: data.status || "ENROLLED",
+        stateOfOrigin: data.stateOfOrigin,
+        guardianName: data.parentName,
+        guardianPhone: data.parentPhone,
+        guardianEmail: data.parentEmail,
+        guardianRelationship: data.relationship || "Parent",
+        studentPhone: data.parentPhone,
+        studentEmail: data.email,
+        customPassword: data.password,
+        deliveryMethod: "PRINT",
       },
-      create: {
-        schoolId,
-        email: userEmail,
-        passwordHash: hashedPassword,
-        mustChangePassword: true,
-        role: "STUDENT",
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        status: "ACTIVE",
-      },
-    });
-
-    // 2. Compute fee status from existing invoices or payments
-    let computedFeeStatus = "UNPAID";
-    const existingInvoices = await basePrisma.invoice.findMany({
-      where: { schoolId, student: { admissionNumber: finalAdmissionNumber } },
-    }).catch(() => []);
-
-    if (existingInvoices.length > 0) {
-      const totalDue = existingInvoices.reduce((sum, inv) => sum + (inv.amountDue || 0), 0);
-      const totalPaid = existingInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
-      if (totalPaid >= totalDue && totalDue > 0) {
-        computedFeeStatus = "PAID";
-      } else if (totalPaid > 0) {
-        computedFeeStatus = "PARTIAL";
-      }
-    }
-
-    // Phone normalization
-    let cleanPhone = data.parentPhone?.trim();
-    if (cleanPhone) {
-      const digits = cleanPhone.replace(/[^0-9]/g, "");
-      if (digits.startsWith("0") && digits.length === 11) {
-        cleanPhone = `+234${digits.slice(1)}`;
-      } else if (digits.startsWith("234") && digits.length === 13) {
-        cleanPhone = `+${digits}`;
-      } else if (cleanPhone.startsWith("+")) {
-        cleanPhone = `+${digits}`;
-      }
-    }
-
-    const createdStudent = await tenantDb.student.create({
-      data: {
-        schoolId,
-        userId: user.id,
-        tierId: data.tierId,
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        email: userEmail,
-        status: data.status,
-        feeStatus: computedFeeStatus,
-        mustChangePassword: true,
-        cohort: resolvedCohort,
-        dynamicFields: {
-          ...currentDynamic,
-          cohort: resolvedCohort,
-          admissionYear,
-          password: hashedPassword,
-          isTemporaryPassword: true,
-        },
-        admissionNumber: finalAdmissionNumber,
-        currentClass: data.currentClass || null,
-        dateOfBirth: data.dateOfBirth || null,
-        stateOfOrigin: data.stateOfOrigin || null,
-        parentName: data.parentName || null,
-        parentOccupation: data.parentOccupation || null,
-        parentEmail: data.parentEmail || null,
-        parentPhone: cleanPhone || null,
-        parentWhatsApp: data.parentWhatsApp || null,
-        ...timestampData
-      }
-    });
-
-    // =========================================================================
-    // 3. PREMIUM PARENT CREATION, LINKING & WELCOME EMAIL DISPATCH
-    // =========================================================================
-    const rawParentEmail = (data.parentEmail || "").trim().toLowerCase();
-    const rawParentName = (data.parentName || "").trim();
-    const rawParentPhone = (data.parentPhone || "").trim();
-    const rawRelationship = data.relationship?.trim() || "Parent";
-
-    if (rawParentEmail && rawParentEmail.includes("@")) {
-      try {
-        let parentRecord = await basePrisma.parent.findFirst({
-          where: {
-            schoolId,
-            email: { equals: rawParentEmail, mode: "insensitive" },
-          },
-        });
-
-        const defaultParentPassword = "Parent123";
-        const defaultParentHash = await bcrypt.hash(defaultParentPassword, 10);
-
-        if (!parentRecord) {
-          parentRecord = await basePrisma.parent.create({
-            data: {
-              schoolId,
-              name: rawParentName || "Parent / Guardian",
-              email: rawParentEmail,
-              phone: rawParentPhone || null,
-              passwordHash: defaultParentHash,
-              relationship: rawRelationship,
-              isActive: true,
-            },
-          });
-        }
-
-        // Link parent to student in student_parents table (handles many children to one parent)
-        await basePrisma.studentParent.upsert({
-          where: {
-            studentId_parentId: {
-              studentId: createdStudent.id,
-              parentId: parentRecord.id,
-            },
-          },
-          create: {
-            studentId: createdStudent.id,
-            parentId: parentRecord.id,
-            schoolId,
-          },
-          update: {},
-        });
-
-        // Ensure Parent also has a User auth record for universal login
-        const parentNames = (rawParentName || "Parent Guardian").split(" ");
-        const parentFirstName = parentNames[0] || "Parent";
-        const parentLastName = parentNames.slice(1).join(" ") || "Guardian";
-
-        await basePrisma.user.upsert({
-          where: {
-            schoolId_email: { schoolId, email: rawParentEmail },
-          },
-          update: {
-            role: "PARENT",
-            firstName: parentFirstName,
-            lastName: parentLastName,
-            status: "ACTIVE",
-          },
-          create: {
-            schoolId,
-            email: rawParentEmail,
-            passwordHash: defaultParentHash,
-            role: "PARENT",
-            firstName: parentFirstName,
-            lastName: parentLastName,
-            status: "ACTIVE",
-          },
-        });
-
-        // Trigger Resend email IMMEDIATELY
-        await sendParentWelcomeEmail({
-          schoolId,
-          parentName: rawParentName || "Parent / Guardian",
-          parentEmail: rawParentEmail,
-          studentName: `${data.firstName.trim()} ${data.lastName.trim()}`,
-          schoolName: school?.name,
-          schoolCode: school?.slug || school?.subdomain,
-          defaultPassword: defaultParentPassword,
-        });
-      } catch (parentErr) {
-        console.error("[PARENT_FLOW_ERROR] Failed to process parent creation/linking:", parentErr);
-      }
-    }
-
-    // Record user security status: assign mustChangePassword: true
-    await setUserMustChangePassword(user.id, schoolId, true);
-
-    // Dispatch enrollment confirmation email if enrolled
-    if (data.status === "ENROLLED" || !data.status) {
-      try {
-        const emailResult = await sendStudentEnrollmentConfirmationEmail({
-          schoolId,
-          studentId: createdStudent.id,
-          schoolName: school?.name,
-          subdomain: school?.subdomain,
-          studentName: `${data.firstName.trim()} ${data.lastName.trim()}`,
-          admissionNumber: finalAdmissionNumber,
-          currentClass: data.currentClass || null,
-          tierName: tierContext,
-          studentEmail: userEmail,
-          parentEmail: data.parentEmail || null,
-          parentName: data.parentName || null,
-          temporaryPassword: isTemporary ? passwordToSave : undefined,
-        });
-
-        if (!emailResult.success) {
-          console.error(`[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Delivery failure for student ${createdStudent.id}:`, emailResult.error);
-        }
-      } catch (emailErr) {
-        console.error("[EMAIL_SYNC_ERROR] [STUDENT_ENROLLMENT] Student enrollment confirmation error:", emailErr);
-      }
-    }
+      tierContext
+    );
 
     // Write-Through Cache Invalidation
     await invalidateStudentNamespace(schoolId, tierContext);
@@ -522,7 +292,7 @@ export async function createStudent(
     }
 
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
-    return { success: true };
+    return { success: true, credentials: res };
   } catch (error: any) {
     console.error("[Server Action] Failed to create student:", error);
     return { success: false, error: error.message || "Failed to create student." };

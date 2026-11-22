@@ -376,17 +376,31 @@ export default function StudentTable({
     setErrorMsg(null);
 
     if (!editingStudentId) {
-      if (!formData.parentName?.trim()) {
-        setErrorMsg("Guardian / Parent Full Name is required.");
-        return;
-      }
-      if (!formData.parentEmail?.trim() || !formData.parentEmail.includes("@")) {
-        setErrorMsg("Valid Parent Email (real Gmail) is required for parent portal activation.");
-        return;
-      }
-      if (!formData.parentPhone?.trim()) {
-        setErrorMsg("Parent Phone Number is required.");
-        return;
+      const isTertiaryTier = activeTier?.toLowerCase().includes("tertiary") ||
+        activeTier?.toLowerCase().includes("university") ||
+        activeTier?.toLowerCase().includes("polytechnic") ||
+        activeTier?.toLowerCase().includes("higher");
+
+      if (isTertiaryTier) {
+        if (!formData.email?.trim() || !formData.email.includes("@")) {
+          setErrorMsg("Student Email is required for Tertiary student login.");
+          return;
+        }
+        if (!formData.parentPhone?.trim()) {
+          setErrorMsg("Student Phone Number is required for Tertiary credentials delivery.");
+          return;
+        }
+      } else {
+        if (!formData.parentName?.trim()) {
+          setErrorMsg("Guardian / Parent Full Name is required.");
+          return;
+        }
+        const hasPhone = Boolean(formData.parentPhone?.trim());
+        const hasEmail = Boolean(formData.parentEmail?.trim() && formData.parentEmail.includes("@"));
+        if (!hasPhone && !hasEmail) {
+          setErrorMsg("Delivery Channel Required: At least ONE Guardian Phone or Guardian Email is required for Creche/Primary/Secondary enrollment.");
+          return;
+        }
       }
     }
 
@@ -1903,6 +1917,7 @@ export default function StudentTable({
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
           classes={classOptions.filter((c) => c !== "ALL" && c !== "All Classes")}
+          activeTier={activeTier}
         />
       )}
 
@@ -1944,6 +1959,7 @@ export default function StudentTable({
           schoolPrefix={resolveSchoolPrefix(tenant?.subdomain || "egede")}
           currentSession="2026/2027"
           availableSessions={["2025/2026", "2026/2027", "2027/2028"]}
+          activeTier={activeTier}
         />
       )}
 

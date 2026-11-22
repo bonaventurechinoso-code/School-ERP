@@ -3,26 +3,22 @@
 import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { resolveSchoolPrefix, resolveTierCode } from "@/lib/tenant-tier-utils";
+import { resolveSchoolPrefix, resolveTierCode, isHigherEdTier } from "@/lib/tenant-tier-utils";
 import { getClassesForTier } from "@/lib/tier-config";
 import { invalidateStudentNamespace } from "@/lib/cache-invalidation";
 import { clearL1TenantCache } from "@/lib/cache";
+import {
+  StudentEnrollmentInput,
+  EnrollmentResultItem,
+  createStudentWithCredentials,
+  validateEnrollmentBatch,
+  executeBatchEnrollmentWithCredentials,
+  generateCredentialsSheetCsv,
+  normalizePhoneNumber,
+  generateTemporaryPassword,
+} from "@/lib/student-enrollment-service";
 
-export interface StudentRowInput {
-  id?: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string;
-  gender: string; // M or F
-  dateOfBirth?: string; // YYYY-MM-DD
-  currentClass: string;
-  arm?: string;
-  admissionYear: string; // e.g. 2026
-  guardianName?: string;
-  guardianPhone?: string;
-  guardianEmail?: string;
-  previousSchool?: string;
-}
+export type StudentRowInput = StudentEnrollmentInput;
 
 export interface ValidatedStudentRow extends StudentRowInput {
   rowIndex: number;
@@ -33,33 +29,23 @@ export interface ValidatedStudentRow extends StudentRowInput {
   duplicateReason?: string;
   normalizedPhone?: string;
   calculatedRegNo?: string;
+  assignedRegNo?: string;
+  duplicateAction?: "SKIP" | "MERGE_UPDATE" | "ENROLL_ANYWAY";
+  credentials?: {
+    username: string;
+    tempPassword: string;
+    loginOwnerName: string;
+    loginOwnerRole: string;
+    deliveryContact: string;
+    deliveryMethod: string;
+  };
 }
 
 /**
  * Normalizes phone numbers to standard Nigerian international format +234...
  */
-function normalizeNigerianPhone(phone?: string): string | undefined {
-  if (!phone) return undefined;
-  const digits = phone.replace(/[^0-9]/g, "");
-  if (!digits) return undefined;
-
-  // Local Nigerian format 080... (11 digits starting with 0)
-  if (digits.startsWith("0") && digits.length === 11) {
-    return `+234${digits.slice(1)}`;
-  }
-  // Nigerian format without plus 23480... (13 digits starting with 234)
-  if (digits.startsWith("234") && digits.length === 13) {
-    return `+${digits}`;
-  }
-  // Already with plus
-  if (phone.trim().startsWith("+")) {
-    return `+${digits}`;
-  }
-  // Fallback if 10 digits (without leading zero e.g. 8031234567)
-  if (digits.length === 10) {
-    return `+234${digits}`;
-  }
-  return phone.trim();
+export async function normalizeNigerianPhone(phone?: string | null): Promise<string | undefined> {
+  return normalizePhoneNumber(phone);
 }
 
 /**
@@ -67,7 +53,6 @@ function normalizeNigerianPhone(phone?: string): string | undefined {
  */
 function getDefaultAcademicSessions(): { currentSession: string; sessions: string[] } {
   const currentYear = new Date().getFullYear();
-  // Academic sessions: 2026/2027, etc.
   const currentSession = `${currentYear}/${currentYear + 1}`;
   const sessions = [
     `${currentYear - 2}/${currentYear - 1}`,
@@ -145,7 +130,7 @@ export async function getBulkEnrollmentContext(schoolId: string) {
 }
 
 /**
- * 2. Validate a batch of student rows against school rules, tiers, duplicates, and requirements
+ * 2. Validate a batch of student rows using shared enterprise enrollment validator
  */
 export async function validateBulkStudentBatch(
   schoolId: string,
@@ -158,158 +143,23 @@ export async function validateBulkStudentBatch(
   validCount: number;
   errorCount: number;
   duplicateCount: number;
+  isTertiary: boolean;
+  tierName: string;
 }> {
-  const context = await getBulkEnrollmentContext(schoolId);
-  const validClasses = new Set(context.classes.map((c) => c.toLowerCase().trim()));
-
-  const tenantDb = await getPrismaClientForTier(schoolId, tierName || "");
-
-  // Fetch all existing students in this school for duplicate checking
-  const existingStudents = await tenantDb.student.findMany({
-    where: { schoolId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      dateOfBirth: true,
-      parentPhone: true,
-      admissionNumber: true,
-      currentClass: true,
-      cohort: true,
-    },
-  }).catch(() => basePrisma.student.findMany({
-    where: { schoolId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      dateOfBirth: true,
-      parentPhone: true,
-      admissionNumber: true,
-      currentClass: true,
-      cohort: true,
-    },
-  }));
-
-  const existingMap = new Map<string, typeof existingStudents[0]>();
-  existingStudents.forEach((s) => {
-    // Key by RegNo if present
-    if (s.admissionNumber) {
-      existingMap.set(s.admissionNumber.toUpperCase().trim(), s);
-    }
-    // Key by identity: name + dob + phone
-    const dobStr = s.dateOfBirth ? s.dateOfBirth.toISOString().split("T")[0] : "";
-    const phoneNorm = normalizeNigerianPhone(s.parentPhone || "") || "";
-    const idKey = `${s.firstName.toLowerCase().trim()}|${s.lastName.toLowerCase().trim()}|${dobStr}|${phoneNorm}`;
-    existingMap.set(idKey, s);
-  });
-
-  const validatedRows: ValidatedStudentRow[] = [];
-  const batchSeenKeys = new Set<string>();
-
-  rows.forEach((row, index) => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    let isDuplicate = false;
-    let duplicateReason = "";
-
-    const firstName = (row.firstName || "").trim();
-    const lastName = (row.lastName || "").trim();
-    const currentClass = (row.currentClass || "").trim();
-    let admissionYear = (row.admissionYear || "").trim();
-    const gender = (row.gender || "").trim().toUpperCase();
-
-    // Default admissionYear / cohort to active session start year if omitted in CSV
-    if (!admissionYear) {
-      admissionYear = session ? session.split("/")[0] : new Date().getFullYear().toString();
-    }
-
-    // Required fields check
-    if (!firstName) errors.push("FirstName is required");
-    if (!lastName) errors.push("LastName is required");
-    if (!gender || !["M", "F", "MALE", "FEMALE"].includes(gender)) {
-      errors.push("Gender is required (M/F)");
-    }
-    if (!currentClass) {
-      errors.push("Class is required");
-    } else if (validClasses.size > 0) {
-      // Validate class belongs to school tier with flexible formatting
-      const normClass = currentClass.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const isClassAllowed = Array.from(validClasses).some((vc) => {
-        const normVc = vc.toLowerCase().replace(/[^a-z0-9]/g, "");
-        return normClass === normVc || normClass.startsWith(normVc) || normVc.startsWith(normClass);
-      });
-      if (!isClassAllowed) {
-        errors.push(`${currentClass} not in this school's tier`);
-      }
-    }
-
-    if (!/^\d{4}$/.test(admissionYear)) {
-      errors.push("AdmissionYear must be a 4-digit year (e.g. 2026)");
-    }
-
-    // Phone normalization
-    const normalizedPhone = normalizeNigerianPhone(row.guardianPhone);
-
-    // Duplicate check
-    const dobStr = row.dateOfBirth ? row.dateOfBirth.trim() : "";
-    const phoneKey = normalizedPhone || "";
-    const identityKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${dobStr}|${phoneKey}`;
-
-    if (existingMap.has(identityKey)) {
-      isDuplicate = true;
-      duplicateReason = "Possible Duplicate: A student with this Name, DOB, and Phone is already enrolled.";
-      warnings.push(duplicateReason);
-    }
-
-    // Batch duplicate check
-    if (batchSeenKeys.has(identityKey) && firstName && lastName) {
-      isDuplicate = true;
-      duplicateReason = "Duplicate within this batch: Identical student appears more than once.";
-      warnings.push(duplicateReason);
-    }
-    batchSeenKeys.add(identityKey);
-
-    validatedRows.push({
-      ...row,
-      rowIndex: index + 1,
-      firstName,
-      lastName,
-      currentClass,
-      admissionYear,
-      gender: gender.startsWith("M") ? "M" : "F",
-      normalizedPhone,
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      isDuplicate,
-      duplicateReason,
-    });
-  });
-
-  const validCount = validatedRows.filter((r) => r.isValid).length;
-  const errorCount = validatedRows.filter((r) => !r.isValid).length;
-  const duplicateCount = validatedRows.filter((r) => r.isDuplicate).length;
-
+  const result = await validateEnrollmentBatch(schoolId, session, rows, tierName);
   return {
-    rows: validatedRows,
-    totalCount: validatedRows.length,
-    validCount,
-    errorCount,
-    duplicateCount,
+    rows: result.rows as ValidatedStudentRow[],
+    totalCount: result.totalCount,
+    validCount: result.readyCount,
+    errorCount: result.errorCount,
+    duplicateCount: result.duplicateCount,
+    isTertiary: result.isTertiary,
+    tierName: result.tierName,
   };
 }
 
 /**
- * 3. Execute Bulk Enrollment on confirmed valid rows
- * Auto-creates:
- * - class = CSV/Grid class
- * - arm = CSV/Grid arm or default
- * - session = selectedSession (e.g. 2026/2027)
- * - admissionYear = row.admissionYear
- * - cohort = admissionYear (Cohort = Year group that started together at this school)
- * - regNo = [SCHOOL_PREFIX]/[AdmissionYear]/[CLASSCODE]/[SEQUENCE] (e.g. EGED/2026/PRIM/0011)
- * Idempotent: Skips or updates existing records without duplicate generation.
+ * 3. Execute Bulk Enrollment on confirmed rows via shared createStudentWithCredentials() service
  */
 export async function executeBulkEnrollmentAction(
   schoolId: string,
@@ -319,185 +169,25 @@ export async function executeBulkEnrollmentAction(
   tierName?: string
 ) {
   try {
-    const context = await getBulkEnrollmentContext(schoolId);
-    if (!context.success) {
-      throw new Error(context.error || "Failed to load school context");
-    }
-
-    const validation = await validateBulkStudentBatch(schoolId, session, students, tierName);
-    const validRows = validation.rows.filter((r) => r.isValid && (!skipDuplicates || !r.isDuplicate));
-
-    if (validRows.length === 0) {
-      return {
-        success: false,
-        error: "No valid student rows to enroll. Please check errors in the preview.",
-        enrolledCount: 0,
-        skippedCount: validation.errorCount + (skipDuplicates ? validation.duplicateCount : 0),
-      };
-    }
-
-    const school = await basePrisma.school.findUnique({
-      where: { id: schoolId },
-      include: { academicTiers: true },
-    });
-
-    if (!school) throw new Error("School not found");
-
-    const schoolPrefix = resolveSchoolPrefix(school.subdomain);
-    const targetTier = (tierName && school.academicTiers.find((t) =>
-      t.name.toLowerCase() === tierName.toLowerCase() ||
-      t.name.toLowerCase().includes(tierName.toLowerCase())
-    )) || school.academicTiers[0];
-
-    if (!targetTier) throw new Error("School has no configured academic tier");
-
-    const tenantDb = await getPrismaClientForTier(schoolId, targetTier.name);
-
-    // Pre-calculate max sequence for each admissionYear to guarantee atomic non-conflicting increment
-    const yearSequenceCounters = new Map<string, number>();
-
-    // Fetch all existing admission numbers for this school
-    const existingAdmissions = await tenantDb.student.findMany({
-      where: { schoolId },
-      select: { admissionNumber: true, cohort: true },
-    }).catch(() => basePrisma.student.findMany({
-      where: { schoolId },
-      select: { admissionNumber: true, cohort: true },
+    // If skipDuplicates is true, set duplicateAction: "SKIP" on duplicate rows
+    const preparedRows = students.map((s) => ({
+      ...s,
+      duplicateAction: s.duplicateAction || (skipDuplicates ? "SKIP" : "ENROLL_ANYWAY"),
     }));
 
-    existingAdmissions.forEach((s) => {
-      if (s.admissionNumber) {
-        // Match [PREFIX]/[YEAR]/[CLASSCODE]/[SEQ] e.g. EGED/2026/PRIM/0010
-        const parts = s.admissionNumber.split("/");
-        if (parts.length >= 4) {
-          const year = parts[1];
-          const seq = parseInt(parts[3], 10);
-          if (!isNaN(seq) && year) {
-            const currentMax = yearSequenceCounters.get(year) || 0;
-            if (seq > currentMax) {
-              yearSequenceCounters.set(year, seq);
-            }
-          }
-        }
-      }
-    });
-
-    const enrolledStudents: any[] = [];
-    const defaultPasswordHash = await bcrypt.hash("Welcome123", 10);
-
-    // Perform database operations in safe transaction
-    await tenantDb.$transaction(async (tx) => {
-      for (const row of validRows) {
-        const admissionYear = row.admissionYear || (session ? session.split("/")[0] : "2026");
-        const currentCounter = yearSequenceCounters.get(admissionYear) || 0;
-        const nextSequence = currentCounter + 1;
-        yearSequenceCounters.set(admissionYear, nextSequence);
-
-        const classCode = resolveTierCode(targetTier.name, row.currentClass);
-        const seqFormatted = String(nextSequence).padStart(4, "0");
-        const regNo = `${schoolPrefix}/${admissionYear}/${classCode}/${seqFormatted}`;
-
-        // Cohort definition: Year student started at this school
-        const cohort = admissionYear;
-
-        // Class formatting (include arm if provided)
-        let resolvedClass = row.currentClass.trim();
-        if (row.arm && row.arm.trim()) {
-          const armTrim = row.arm.trim();
-          if (!resolvedClass.toLowerCase().includes(armTrim.toLowerCase())) {
-            resolvedClass = `${resolvedClass} ${armTrim}`;
-          }
-        }
-
-        const normalizedPhone = normalizeNigerianPhone(row.guardianPhone);
-        const dob = row.dateOfBirth ? new Date(row.dateOfBirth) : null;
-
-        const dynamicFields: Record<string, any> = {
-          cohort,
-          admissionYear,
-          arm: row.arm || "A",
-          gender: row.gender,
-          session,
-          previousSchool: row.previousSchool || null,
-          middleName: row.middleName || null,
-        };
-
-        const student = await tx.student.create({
-          data: {
-            schoolId,
-            tierId: targetTier.id,
-            firstName: row.firstName.trim(),
-            lastName: row.lastName.trim(),
-            currentClass: resolvedClass,
-            cohort,
-            admissionNumber: regNo,
-            dateOfBirth: dob,
-            parentName: row.guardianName || null,
-            parentPhone: normalizedPhone || null,
-            parentEmail: row.guardianEmail || null,
-            status: "ENROLLED",
-            enrolledAt: new Date(),
-            feeStatus: "UNPAID",
-            dynamicFields,
-          },
-        });
-
-        // Also create authoritative portal User account for the student
-        const studentPortalEmail =
-          (row.guardianEmail && row.guardianEmail.trim().toLowerCase()) ||
-          `${regNo.toLowerCase().replace(/[^a-z0-9]/g, "")}@student.${school.subdomain}`;
-
-        try {
-          await basePrisma.user.upsert({
-            where: { schoolId_email: { schoolId, email: studentPortalEmail } },
-            update: {
-              firstName: row.firstName.trim(),
-              lastName: row.lastName.trim(),
-              role: "STUDENT",
-              status: "ACTIVE",
-            },
-            create: {
-              schoolId,
-              email: studentPortalEmail,
-              passwordHash: defaultPasswordHash,
-              firstName: row.firstName.trim(),
-              lastName: row.lastName.trim(),
-              role: "STUDENT",
-              status: "ACTIVE",
-              mustChangePassword: true,
-            },
-          });
-        } catch {}
-
-        enrolledStudents.push({
-          id: student.id,
-          name: `${student.firstName} ${student.lastName}`,
-          regNo: student.admissionNumber,
-          currentClass: student.currentClass,
-          cohort: student.cohort,
-          session,
-        });
-      }
-    });
-
-    try {
-      await invalidateStudentNamespace(schoolId);
-      clearL1TenantCache(school.subdomain);
-      clearL1TenantCache(schoolId);
-      revalidatePath(`/${school.subdomain}/students`);
-      revalidatePath(`/${school.subdomain}/students`, "page");
-      revalidatePath(`/${school.subdomain}/portal/staff`);
-      revalidatePath(`/${school.subdomain}/portal/staff`, "page");
-      revalidatePath(`/teacher/attendance`);
-      revalidatePath(`/teacher/gradebook`);
-      revalidatePath(`/teacher/students`);
-    } catch {}
+    const result = await executeBatchEnrollmentWithCredentials(
+      schoolId,
+      session,
+      preparedRows,
+      tierName
+    );
 
     return {
-      success: true,
-      enrolledCount: enrolledStudents.length,
-      skippedCount: validation.errorCount + (skipDuplicates ? validation.duplicateCount : 0),
-      students: enrolledStudents,
+      success: result.success,
+      enrolledCount: result.enrolledCount,
+      skippedCount: result.skippedCount,
+      credentialsSheet: result.credentialsSheet,
+      error: result.error,
     };
   } catch (error: any) {
     console.error("[executeBulkEnrollmentAction] Error:", error);
@@ -506,9 +196,11 @@ export async function executeBulkEnrollmentAction(
       error: error.message || "Bulk enrollment execution failed.",
       enrolledCount: 0,
       skippedCount: 0,
+      credentialsSheet: [],
     };
   }
 }
+
 
 /**
  * Progression Map helper: Calculates the next class level in Nigerian standard progression
