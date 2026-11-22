@@ -12,15 +12,15 @@ import { clearL1TenantCache } from "@/lib/cache";
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { 
-      schoolDomain, 
-      applicantName, 
+    const {
+      schoolDomain,
+      applicantName,
       studentEmail,
       studentPhone,
-      parentName, 
-      parentContact, 
-      parentEmail, 
-      tierId, 
+      parentName,
+      parentContact,
+      parentEmail,
+      tierId,
       targetGrade,
       password,
     } = data;

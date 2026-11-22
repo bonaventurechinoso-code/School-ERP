@@ -133,7 +133,7 @@ export default async function ResultsPage({
             {isTertiary ? "Result Processing & Sessional Master Records" : "Result Processing & Annual Master Records"}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm sm:text-base">
-            {isTertiary 
+            {isTertiary
               ? "Enterprise semester grading broadsheets, sessional senate compiled sheets, and transcript publishing."
               : "Enterprise terminal grading broadsheets, annual session compiled sheets, and report card publishing."}
           </p>
@@ -155,21 +155,19 @@ export default async function ResultsPage({
         <nav className="-mb-px flex space-x-6 overflow-x-auto">
           <a
             href={`/${params.schoolDomain}/results?tab=annual`}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === "annual"
-                ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400 font-bold"
-                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
-            }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "annual"
+              ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400 font-bold"
+              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+              }`}
           >
             {isTertiary ? "Sessional Master Broadsheet (1st & 2nd Semester)" : "Annual Compiled Sheet (1st + 2nd + 3rd Term)"}
           </a>
           <a
             href={`/${params.schoolDomain}/results?tab=terminal`}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === "terminal"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-bold"
-                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
-            }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "terminal"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 font-bold"
+              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700"
+              }`}
           >
             {isTertiary ? "Semester Grading Broadsheet" : "Terminal Grading Broadsheet"}
           </a>
