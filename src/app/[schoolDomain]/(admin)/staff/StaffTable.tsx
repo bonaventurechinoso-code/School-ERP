@@ -367,14 +367,19 @@ export default function StaffTable({
   };
 
   const handleDeleteStaff = async (staffId: string, name: string) => {
-    if (!confirm(`Are you sure you want to deactivate and remove staff member "${name}"?`)) return;
+    if (
+      !confirm(
+        `Are you sure you want to permanently delete staff member "${name}"?\n\nThis will permanently delete their staff record, linked user login credentials, assignments, and portal access. This action cannot be undone.`
+      )
+    )
+      return;
 
     startTransition(async () => {
       const res = await deleteStaff(schoolDomain, staffId);
       if (res?.success) {
         setCurrentStaff((prev) => prev.filter((s) => s.id !== staffId));
       } else {
-        alert(res?.error || "Failed to remove staff member.");
+        alert(res?.error || "Failed to permanently delete staff member.");
       }
     });
   };
@@ -922,7 +927,7 @@ export default function StaffTable({
                           <button
                             onClick={() => handleDeleteStaff(staff.id, `${staff.firstName} ${staff.lastName}`)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Deactivate Staff"
+                            title="Permanently Delete Staff"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

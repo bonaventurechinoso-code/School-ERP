@@ -764,22 +764,84 @@ export async function updateStaff(
   return updateStaffProfile(schoolIdentifier, staffId, data);
 }
 
+/**
+ * Hard delete a staff member and all associated records (User account, assignments, attendance, payroll, metadata)
+ */
 export async function deleteStaff(schoolIdentifier: string, staffId: string) {
   try {
-    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
-    const tenantDb = getTenantClient(schoolId);
-    
-    await tenantDb.staff.delete({
-      where: { id: staffId }
+    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+
+    // Look up staff record first to obtain userId and email for full cascade
+    const staff = await basePrisma.staff.findFirst({
+      where: { id: staffId, schoolId },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
     });
 
-    // Cleanup metadata
-    try {
-      await basePrisma.$executeRawUnsafe(`DELETE FROM bonavee_staff_metadata WHERE staff_id = $1`, staffId);
-    } catch {
-      // non-blocking
+    if (!staff) {
+      return { success: false, error: "Staff record not found." };
     }
 
+    // Atomic transaction for thorough hard deletion across all relational tables
+    await basePrisma.$transaction(async (tx) => {
+      // 1. Delete timetable assignments for this staff
+      await tx.timetable.deleteMany({
+        where: { staffId },
+      });
+
+      // 2. Delete staff class and subject assignments
+      await tx.staffAssignment.deleteMany({
+        where: { staffId },
+      });
+
+      // 3. Delete attendance records
+      await tx.staffAttendance.deleteMany({
+        where: { staffId },
+      });
+
+      // 4. Delete payroll records
+      await tx.payrollRecord.deleteMany({
+        where: { staffId },
+      });
+
+      // 5. Unlink any direct reports where this staff was their line manager
+      await tx.staff.updateMany({
+        where: { reportingToId: staffId },
+        data: { reportingToId: null },
+      });
+
+      // 6. Delete metadata
+      try {
+        await tx.$executeRawUnsafe(`DELETE FROM bonavee_staff_metadata WHERE staff_id = $1`, staffId);
+      } catch {
+        // non-blocking
+      }
+
+      // 7. Delete the Staff table record
+      await tx.staff.delete({
+        where: { id: staffId },
+      });
+
+      // 8. Hard-delete the authoritative User authentication account and security tokens
+      if (staff.userId) {
+        await tx.passwordResetToken.deleteMany({ where: { userId: staff.userId } });
+        await tx.refreshToken.deleteMany({ where: { userId: staff.userId } });
+        await tx.user.delete({ where: { id: staff.userId } });
+      } else if (staff.email) {
+        await tx.user.deleteMany({
+          where: { schoolId, email: staff.email.trim().toLowerCase() },
+        });
+      }
+    });
+
+    console.log(`[HARD_DELETE_STAFF] Successfully hard-deleted staff member ${staff.firstName} ${staff.lastName} (${staff.email}) and associated User account.`);
+
+    // Invalidate caches & revalidate paths
     await invalidateStaffNamespace(schoolId);
     if (subdomain) {
       clearL1TenantCache(subdomain);
@@ -795,8 +857,8 @@ export async function deleteStaff(schoolIdentifier: string, staffId: string) {
     safeRevalidate(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
-    console.error("[deleteStaff] Failed to delete staff:", error);
-    return { success: false, error: error.message || "Failed to delete staff." };
+    console.error("[deleteStaff] Failed to hard delete staff:", error);
+    return { success: false, error: error.message || "Failed to permanently delete staff member." };
   }
 }
 
