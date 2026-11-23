@@ -1059,7 +1059,7 @@ export async function fetchSchoolClassesAction(schoolIdentifier: string) {
   try {
     const schoolId = await resolveSchoolId(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
-    const classrooms = await tenantDb.classroom.findMany({
+    let classrooms = await tenantDb.classroom.findMany({
       where: { schoolId },
       select: {
         id: true,
@@ -1068,8 +1068,22 @@ export async function fetchSchoolClassesAction(schoolIdentifier: string) {
         tier: { select: { id: true, name: true } },
       },
       orderBy: { name: "asc" },
-    });
-    return { success: true, data: classrooms };
+    }).catch(() => []);
+
+    if (!classrooms || classrooms.length === 0) {
+      classrooms = await basePrisma.classroom.findMany({
+        where: { schoolId },
+        select: {
+          id: true,
+          name: true,
+          tierId: true,
+          tier: { select: { id: true, name: true } },
+        },
+        orderBy: { name: "asc" },
+      }).catch(() => []);
+    }
+
+    return { success: true, data: classrooms || [] };
   } catch (error: any) {
     console.error("[fetchSchoolClassesAction] Error:", error);
     return { success: false, data: [] };

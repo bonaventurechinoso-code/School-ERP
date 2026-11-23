@@ -41,6 +41,26 @@ interface Props {
   lineManagers?: Array<{ id: string; firstName: string; lastName: string; staffId?: string }>;
 }
 
+export const DEFAULT_SECONDARY_CLASSES: Array<{ id: string; name: string }> = [
+  { id: "sec-jss1-a", name: "JSS 1A" },
+  { id: "sec-jss1-b", name: "JSS 1B" },
+  { id: "sec-jss1-c", name: "JSS 1C" },
+  { id: "sec-jss2-a", name: "JSS 2A" },
+  { id: "sec-jss2-b", name: "JSS 2B" },
+  { id: "sec-jss2-c", name: "JSS 2C" },
+  { id: "sec-jss3-a", name: "JSS 3A" },
+  { id: "sec-jss3-b", name: "JSS 3B" },
+  { id: "sec-jss3-c", name: "JSS 3C" },
+  { id: "sec-sss1-a", name: "SSS 1A (Sciences)" },
+  { id: "sec-sss1-b", name: "SSS 1B (Arts / Humanities)" },
+  { id: "sec-sss1-c", name: "SSS 1C (Commercial)" },
+  { id: "sec-sss2-a", name: "SSS 2A (Sciences)" },
+  { id: "sec-sss2-b", name: "SSS 2B (Arts / Humanities)" },
+  { id: "sec-sss2-c", name: "SSS 2C (Commercial)" },
+  { id: "sec-sss3-a", name: "SSS 3A (WAEC / NECO Sciences)" },
+  { id: "sec-sss3-b", name: "SSS 3B (WAEC / NECO Arts & Commercial)" },
+];
+
 export const SECONDARY_STANDARD_SUBJECTS = [
   "English Language",
   "Mathematics",
@@ -89,10 +109,12 @@ export default function SecondaryStaffOnboardingModal({
   const [trcnExpiry, setTrcnExpiry] = useState("");
 
   // Section D: Secondary Assignments
-  const [availableClasses, setAvailableClasses] = useState<Array<{ id: string; name: string }>>(propClassrooms);
+  const initialClasses = propClassrooms && propClassrooms.length > 0 ? propClassrooms : DEFAULT_SECONDARY_CLASSES;
+  const [availableClasses, setAvailableClasses] = useState<Array<{ id: string; name: string }>>(initialClasses);
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
   const [formTutorClassId, setFormTutorClassId] = useState<string>("");
   const [teachingClassIds, setTeachingClassIds] = useState<string[]>([]);
+  const [classDropdownSelection, setClassDropdownSelection] = useState<string>("");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [customSubjectInput, setCustomSubjectInput] = useState("");
 
@@ -112,11 +134,20 @@ export default function SecondaryStaffOnboardingModal({
       setIsLoadingClasses(true);
       try {
         const res = await fetchSchoolClassesAction(schoolDomain);
-        if (isMounted && res.success && res.data && res.data.length > 0) {
-          setAvailableClasses(res.data.map((c: any) => ({ id: c.id, name: c.name })));
+        if (isMounted) {
+          if (res.success && res.data && res.data.length > 0) {
+            setAvailableClasses(res.data.map((c: any) => ({ id: c.id, name: c.name })));
+          } else if (propClassrooms && propClassrooms.length > 0) {
+            setAvailableClasses(propClassrooms);
+          } else {
+            setAvailableClasses(DEFAULT_SECONDARY_CLASSES);
+          }
         }
       } catch (err) {
         console.error("Failed to load classes for secondary modal:", err);
+        if (isMounted) {
+          setAvailableClasses(propClassrooms && propClassrooms.length > 0 ? propClassrooms : DEFAULT_SECONDARY_CLASSES);
+        }
       } finally {
         if (isMounted) setIsLoadingClasses(false);
       }
@@ -127,13 +158,13 @@ export default function SecondaryStaffOnboardingModal({
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, schoolDomain]);
+  }, [isOpen, schoolDomain, propClassrooms]);
 
   if (!isOpen) return null;
 
   const isNonTeaching = isNonTeachingRole(formData.role);
   const isFormTutor = formData.role.includes("Form Tutor") || formData.role === "Class Teacher";
-  const isSubjectTeacher = formData.role === "Subject Teacher";
+  const isSubjectTeacher = formData.role.includes("Subject Teacher") || formData.role === "Teacher";
   const isHod = formData.role.includes("HOD") || formData.role.includes("Head of Department");
   const isLeadership =
     formData.role.includes("Principal") ||
@@ -143,9 +174,17 @@ export default function SecondaryStaffOnboardingModal({
   const isTrcnExpired = trcnExpiry ? new Date(trcnExpiry) < new Date() : false;
 
   const toggleTeachingClass = (clsId: string) => {
-    setTeachingClassIds((prev) =>
-      prev.includes(clsId) ? prev.filter((id) => id !== clsId) : [...prev, clsId]
-    );
+    setTeachingClassIds((prev) => {
+      const next = prev.includes(clsId) ? prev.filter((id) => id !== clsId) : [...prev, clsId];
+      return next;
+    });
+    if (errors.teachingClasses) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.teachingClasses;
+        return next;
+      });
+    }
   };
 
   const toggleSubject = (subj: string) => {
@@ -221,8 +260,8 @@ export default function SecondaryStaffOnboardingModal({
         localErrors.formTutorClass = "Please select the assigned Class / Arm for this Form Tutor.";
       }
       if (isSubjectTeacher) {
-        if (teachingClassIds.length === 0) {
-          localErrors.teachingClasses = "Select at least 1 secondary class/arm.";
+        if (teachingClassIds.length === 0 && !formTutorClassId) {
+          localErrors.teachingClasses = "Select at least 1 secondary class/arm taught.";
         }
         if (selectedSubjects.length === 0) {
           localErrors.subjects = "Select at least 1 secondary subject.";
@@ -243,20 +282,33 @@ export default function SecondaryStaffOnboardingModal({
     try {
       let assignmentsPayload: any[] = [];
       if (!isNonTeaching) {
-        if (isFormTutor) {
+        const effectiveTeachingClassIds =
+          teachingClassIds.length > 0
+            ? teachingClassIds
+            : formTutorClassId
+            ? [formTutorClassId]
+            : [];
+
+        if (formTutorClassId) {
           const selectedClass = availableClasses.find((c) => c.id === formTutorClassId);
           assignmentsPayload.push({
             assignmentType: "FormTutor",
             classroomId: formTutorClassId,
             metadata: {
               className: selectedClass?.name || "Assigned Form Class",
-              roleTitle: "Form Tutor",
+              roleTitle: isFormTutor ? "Form Tutor" : "Assigned Class",
               subjects: selectedSubjects,
             },
           });
         }
-        if (isSubjectTeacher || (isHod && selectedSubjects.length > 0)) {
-          teachingClassIds.forEach((clsId) => {
+        if (effectiveTeachingClassIds.length > 0) {
+          effectiveTeachingClassIds.forEach((clsId) => {
+            if (
+              clsId === formTutorClassId &&
+              assignmentsPayload.some((a) => a.classroomId === clsId && a.assignmentType === "FormTutor")
+            ) {
+              return;
+            }
             const cls = availableClasses.find((c) => c.id === clsId);
             assignmentsPayload.push({
               assignmentType: "SubjectTeacher",
@@ -674,137 +726,249 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               )}
 
-              {/* FORM TUTOR ALLOCATION */}
-              {isFormTutor && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Assigned Form Class / Arm <span className="text-red-500">*</span>
+              {/* 1. ASSIGNED FORM CLASS / ARM (FORM TUTOR / CLASS TEACHER DROPDOWN) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="secondary-form-class-dropdown" className="block text-xs font-bold text-slate-700">
+                    Assigned Form Class / Arm (Form Tutor / Class Teacher)
+                    {isFormTutor && <span className="text-red-500"> *</span>}
                   </label>
-                  <select
-                    value={formTutorClassId}
-                    onChange={(e) => {
-                      setFormTutorClassId(e.target.value);
-                      if (errors.formTutorClass) {
-                        setErrors((prev) => {
-                          const n = { ...prev };
-                          delete n.formTutorClass;
-                          return n;
-                        });
-                      }
-                    }}
-                    className={`w-full text-xs font-semibold border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500 ${
-                      errors.formTutorClass ? "border-red-400 bg-red-50/30" : "border-slate-300"
-                    }`}
-                  >
-                    <option value="">-- Select Class / Arm --</option>
-                    {availableClasses.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.formTutorClass && (
-                    <p className="text-[11px] text-red-600 font-medium">{errors.formTutorClass}</p>
-                  )}
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {isFormTutor ? "Mandatory for Form Tutor" : "Optional Form Class Designation"}
+                  </span>
                 </div>
-              )}
+                <select
+                  id="secondary-form-class-dropdown"
+                  value={formTutorClassId}
+                  onChange={(e) => {
+                    setFormTutorClassId(e.target.value);
+                    if (errors.formTutorClass) {
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.formTutorClass;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full text-xs font-semibold border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500 ${
+                    errors.formTutorClass ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                  }`}
+                >
+                  <option value="">-- Select Class / Arm (e.g. JSS 1A, SSS 2 Science) --</option>
+                  {availableClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.formTutorClass && (
+                  <p className="text-[11px] text-red-600 font-medium">{errors.formTutorClass}</p>
+                )}
+                <p className="text-[11px] text-slate-500">
+                  Assigns this teacher as Form Tutor / Master responsible for student pastoral care, morning register, and report card compilations.
+                </p>
+              </div>
 
-              {/* SUBJECT TEACHER OR HOD TEACHING CLASSES */}
-              {(isSubjectTeacher || isHod) && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Classes / Arms Taught <span className="text-red-500">*</span>
+              {/* 2. CLASSES / ARMS TAUGHT (FORM INPUT DROPDOWN & MULTI-CLASS SELECTOR) */}
+              <div className="space-y-3 pt-2 border-t border-slate-200">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="secondary-classes-taught-dropdown" className="block text-xs font-bold text-slate-700">
+                      Classes / Arms Taught Dropdown
+                      {(isSubjectTeacher || (!formData.role && !formTutorClassId)) && (
+                        <span className="text-red-500"> *</span>
+                      )}
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {availableClasses.map((cls) => {
-                        const isChecked = teachingClassIds.includes(cls.id);
-                        return (
-                          <button
-                            key={cls.id}
-                            type="button"
-                            onClick={() => toggleTeachingClass(cls.id)}
-                            className={`px-3 py-2 rounded-xl text-xs font-semibold border text-left flex items-center justify-between transition cursor-pointer ${
-                              isChecked
-                                ? "bg-emerald-50 border-emerald-400 text-emerald-800 shadow-2xs"
-                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                            }`}
-                          >
-                            <span className="truncate">{cls.name}</span>
-                            {isChecked && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.teachingClasses && (
-                      <p className="text-[11px] text-red-600 font-medium mt-1">{errors.teachingClasses}</p>
-                    )}
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {teachingClassIds.length} class(es) selected
+                    </span>
                   </div>
 
-                  {/* Secondary Subjects Multi-select Chips */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-700">
-                        Subjects Taught <span className="text-red-500">*</span>
-                      </label>
-                      <span className="text-[10px] text-slate-500">
-                        {selectedSubjects.length} selected
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto p-2 bg-white rounded-xl border border-slate-200">
-                      {SECONDARY_STANDARD_SUBJECTS.map((subj) => {
-                        const isSelected = selectedSubjects.includes(subj);
-                        return (
-                          <button
-                            key={subj}
-                            type="button"
-                            onClick={() => toggleSubject(subj)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1 ${
-                              isSelected
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                            }`}
-                          >
-                            <span>{subj}</span>
-                            {isSelected ? (
-                              <X className="w-3 h-3" />
-                            ) : (
-                              <span className="text-slate-400">+</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.subjects && (
-                      <p className="text-[11px] text-red-600 font-medium mt-1">{errors.subjects}</p>
-                    )}
-
-                    {/* Custom Subject Addition */}
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        type="text"
-                        value={customSubjectInput}
-                        onChange={(e) => setCustomSubjectInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddCustomSubject();
+                  {/* Form Input Dropdown */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        id="secondary-classes-taught-dropdown"
+                        value={classDropdownSelection}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            if (!teachingClassIds.includes(val)) {
+                              setTeachingClassIds((prev) => [...prev, val]);
+                              if (errors.teachingClasses) {
+                                setErrors((prev) => {
+                                  const n = { ...prev };
+                                  delete n.teachingClasses;
+                                  return n;
+                                });
+                              }
+                            }
+                            setClassDropdownSelection("");
                           }
                         }}
-                        placeholder="Add another secondary subject (e.g. Visual Arts)..."
-                        className="text-xs border border-slate-300 rounded-xl px-3 py-1.5 flex-1 bg-white focus:ring-2 focus:ring-emerald-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCustomSubject}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                        className={`w-full text-xs font-semibold border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500 ${
+                          errors.teachingClasses ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                        }`}
                       >
-                        + Add Subject
-                      </button>
+                        <option value="">-- Select Class / Arm to Add (e.g. JSS 1B, SSS 3 Arts) --</option>
+                        {availableClasses.map((cls) => {
+                          const isAdded = teachingClassIds.includes(cls.id);
+                          return (
+                            <option key={cls.id} value={cls.id} disabled={isAdded}>
+                              {cls.name} {isAdded ? "✓ (Added)" : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (teachingClassIds.length === availableClasses.length) {
+                          setTeachingClassIds([]);
+                        } else {
+                          setTeachingClassIds(availableClasses.map((c) => c.id));
+                          if (errors.teachingClasses) {
+                            setErrors((prev) => {
+                              const n = { ...prev };
+                              delete n.teachingClasses;
+                              return n;
+                            });
+                          }
+                        }
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer whitespace-nowrap"
+                    >
+                      {teachingClassIds.length === availableClasses.length ? "Deselect All" : "Select All Classes"}
+                    </button>
+                  </div>
+
+                  {errors.teachingClasses && (
+                    <p className="text-[11px] text-red-600 font-medium mt-1">{errors.teachingClasses}</p>
+                  )}
+                </div>
+
+                {/* Selected Classes Tags / Badges with Removal */}
+                {teachingClassIds.length > 0 && (
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Assigned Teaching Classes / Arms ({teachingClassIds.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {teachingClassIds.map((clsId) => {
+                        const cls = availableClasses.find((c) => c.id === clsId) || { id: clsId, name: clsId };
+                        return (
+                          <span
+                            key={clsId}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
+                          >
+                            <span>{cls.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setTeachingClassIds((prev) => prev.filter((id) => id !== clsId))}
+                              className="hover:text-red-600 cursor-pointer"
+                              title="Remove class"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
+                )}
+
+                {/* Quick Selection Buttons Grid */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-slate-600">Quick Class Toggles:</span>
+                    <span className="text-[10px] text-slate-400">Click any class/arm to toggle</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto p-2 bg-white rounded-xl border border-slate-200">
+                    {availableClasses.map((cls) => {
+                      const isChecked = teachingClassIds.includes(cls.id);
+                      return (
+                        <button
+                          key={cls.id}
+                          type="button"
+                          onClick={() => toggleTeachingClass(cls.id)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border text-left flex items-center justify-between transition cursor-pointer ${
+                            isChecked
+                              ? "bg-emerald-50 border-emerald-400 text-emerald-800 font-bold"
+                              : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
+                          }`}
+                        >
+                          <span className="truncate">{cls.name}</span>
+                          {isChecked && <Check className="w-3 h-3 text-emerald-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
+
+                {/* Secondary Subjects Multi-select Chips */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Subjects Taught <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500">
+                      {selectedSubjects.length} selected
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto p-2 bg-white rounded-xl border border-slate-200">
+                    {SECONDARY_STANDARD_SUBJECTS.map((subj) => {
+                      const isSelected = selectedSubjects.includes(subj);
+                      return (
+                        <button
+                          key={subj}
+                          type="button"
+                          onClick={() => toggleSubject(subj)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          <span>{subj}</span>
+                          {isSelected ? (
+                            <X className="w-3 h-3" />
+                          ) : (
+                            <span className="text-slate-400">+</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {errors.subjects && (
+                    <p className="text-[11px] text-red-600 font-medium mt-1">{errors.subjects}</p>
+                  )}
+
+                  {/* Custom Subject Addition */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="text"
+                      value={customSubjectInput}
+                      onChange={(e) => setCustomSubjectInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomSubject();
+                        }
+                      }}
+                      placeholder="Add another secondary subject (e.g. Visual Arts)..."
+                      className="text-xs border border-slate-300 rounded-xl px-3 py-1.5 flex-1 bg-white focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSubject}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                    >
+                      + Add Subject
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* LEADERSHIP (PRINCIPAL / VICE PRINCIPALS) */}
               {isLeadership && (

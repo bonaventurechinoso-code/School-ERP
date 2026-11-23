@@ -100,6 +100,7 @@ export default async function StaffPage({
     teachersCount,
     adminsCount,
     todayTurnoutCount,
+    classrooms,
   ] = await Promise.all([
     fetchStaffPaginated(params.schoolDomain, { limit: 25 }).catch((err) => {
       console.error("[StaffPage] fetchStaffPaginated error:", err);
@@ -128,6 +129,14 @@ export default async function StaffPage({
         status: { in: ["PRESENT", "LATE"] }
       }
     }).catch(() => 0),
+    tenantDb.classroom.findMany({
+      where: {
+        schoolId: school.id,
+        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }).catch(() => []),
   ]);
 
   const turnoutRate = totalActive > 0 ? Math.round((todayTurnoutCount / totalActive) * 100) : 100;
@@ -239,6 +248,7 @@ export default async function StaffPage({
           schoolDomain={params.schoolDomain}
           schoolName={school.name}
           activeTier={activeTierName}
+          classrooms={classrooms}
         />
       </Suspense>
       

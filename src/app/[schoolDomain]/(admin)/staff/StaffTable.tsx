@@ -62,6 +62,7 @@ export interface StaffTableProps {
   schoolDomain?: string;
   schoolName?: string;
   activeTier?: string;
+  classrooms?: Array<{ id: string; name: string }>;
 }
 
 const NIGERIAN_BANKS = [
@@ -187,6 +188,7 @@ export default function StaffTable({
   schoolDomain: propDomain,
   schoolName: propSchoolName,
   activeTier,
+  classrooms: propClassrooms = [],
 }: StaffTableProps) {
   const [isPending, startTransition] = useTransition();
   const tenant = useTenant();
@@ -210,6 +212,23 @@ export default function StaffTable({
   const staffAssignmentLabel = useMemo(() => {
     return getStaffAssignmentLabel(effectiveTier);
   }, [effectiveTier]);
+
+  // Classrooms resolution & auto-fetching for modal dropdowns
+  const [tableClassrooms, setTableClassrooms] = useState<Array<{ id: string; name: string }>>(propClassrooms);
+
+  useEffect(() => {
+    if (propClassrooms && propClassrooms.length > 0) {
+      setTableClassrooms(propClassrooms);
+    } else if (schoolDomain) {
+      fetchSchoolClassesAction(schoolDomain)
+        .then((res) => {
+          if (res.success && res.data && res.data.length > 0) {
+            setTableClassrooms(res.data.map((c: any) => ({ id: c.id, name: c.name })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [schoolDomain, propClassrooms]);
 
   // Roster & Pagination state
   const [currentStaff, setCurrentStaff] = useState<any[]>(staffList);
@@ -979,6 +998,7 @@ export default function StaffTable({
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
+          classrooms={tableClassrooms}
           lineManagers={lineManagers}
         />
       )}
@@ -993,6 +1013,7 @@ export default function StaffTable({
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
+          classrooms={tableClassrooms}
           lineManagers={lineManagers}
         />
       )}
@@ -1007,6 +1028,7 @@ export default function StaffTable({
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
+          classrooms={tableClassrooms}
           lineManagers={lineManagers}
         />
       )}
@@ -1021,6 +1043,7 @@ export default function StaffTable({
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
+          classrooms={tableClassrooms}
           lineManagers={lineManagers}
         />
       )}
