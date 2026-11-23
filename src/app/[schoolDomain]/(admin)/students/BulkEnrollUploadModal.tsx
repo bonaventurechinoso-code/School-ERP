@@ -162,35 +162,35 @@ export default function BulkEnrollUploadModal({
     // Generous column widths so no column is truncated, no scientific notation, and no ########
     ws["!cols"] = isTertiary
       ? [
-          { wch: 18 }, // FirstName
-          { wch: 18 }, // LastName
-          { wch: 16 }, // MiddleName
-          { wch: 12 }, // Gender
-          { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
-          { wch: 18 }, // Class
-          { wch: 10 }, // Arm
-          { wch: 18 }, // AdmissionYear
-          { wch: 24 }, // StudentPhone
-          { wch: 30 }, // StudentEmail
-          { wch: 26 }, // NextOfKinName
-          { wch: 24 }, // NextOfKinPhone
-          { wch: 28 }, // PreviousSchool
-        ]
+        { wch: 18 }, // FirstName
+        { wch: 18 }, // LastName
+        { wch: 16 }, // MiddleName
+        { wch: 12 }, // Gender
+        { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
+        { wch: 18 }, // Class
+        { wch: 10 }, // Arm
+        { wch: 18 }, // AdmissionYear
+        { wch: 24 }, // StudentPhone
+        { wch: 30 }, // StudentEmail
+        { wch: 26 }, // NextOfKinName
+        { wch: 24 }, // NextOfKinPhone
+        { wch: 28 }, // PreviousSchool
+      ]
       : [
-          { wch: 18 }, // FirstName
-          { wch: 18 }, // LastName
-          { wch: 16 }, // MiddleName
-          { wch: 12 }, // Gender
-          { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
-          { wch: 18 }, // Class
-          { wch: 10 }, // Arm
-          { wch: 18 }, // AdmissionYear
-          { wch: 26 }, // GuardianName
-          { wch: 24 }, // GuardianRelationship
-          { wch: 24 }, // GuardianPhone (wide enough for 0803... or +234...)
-          { wch: 30 }, // GuardianEmail (wide enough for email address)
-          { wch: 28 }, // PreviousSchool (wide enough for school name)
-        ];
+        { wch: 18 }, // FirstName
+        { wch: 18 }, // LastName
+        { wch: 16 }, // MiddleName
+        { wch: 12 }, // Gender
+        { wch: 18 }, // DateOfBirth (wide enough for DD/MM/YYYY, never ########)
+        { wch: 18 }, // Class
+        { wch: 10 }, // Arm
+        { wch: 18 }, // AdmissionYear
+        { wch: 26 }, // GuardianName
+        { wch: 24 }, // GuardianRelationship
+        { wch: 24 }, // GuardianPhone (wide enough for 0803... or +234...)
+        { wch: 30 }, // GuardianEmail (wide enough for email address)
+        { wch: 28 }, // PreviousSchool (wide enough for school name)
+      ];
 
     // Freeze top header row so it stays visible on scroll
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
@@ -708,8 +708,8 @@ export default function BulkEnrollUploadModal({
                           isError
                             ? "bg-rose-50/40 dark:bg-rose-950/30"
                             : isDuplicate
-                            ? "bg-amber-50/40 dark:bg-amber-950/30"
-                            : "hover:bg-slate-50 dark:hover:bg-zinc-800/40"
+                              ? "bg-amber-50/40 dark:bg-amber-950/30"
+                              : "hover:bg-slate-50 dark:hover:bg-zinc-800/40"
                         }
                       >
                         <td className="p-2.5 text-center font-bold text-slate-400">{v.rowIndex}</td>
@@ -862,11 +862,10 @@ export default function BulkEnrollUploadModal({
                         </td>
                         <td className="p-2.5">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              v.credentials?.loginOwnerRole === "STUDENT"
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${v.credentials?.loginOwnerRole === "STUDENT"
                                 ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
                                 : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                            }`}
+                              }`}
                           >
                             {v.credentials?.loginOwnerRole || (isTertiary ? "STUDENT" : "PARENT")}
                           </span>
@@ -1003,8 +1002,8 @@ export default function BulkEnrollUploadModal({
                     {dispatchStatus === "sending"
                       ? "Dispatching..."
                       : dispatchStatus === "sent"
-                      ? "Dispatched Successfully!"
-                      : "Send All Credentials"}
+                        ? "Dispatched Successfully!"
+                        : "Send All Credentials"}
                   </span>
                 </button>
               </div>
