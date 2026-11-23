@@ -37,28 +37,36 @@ export async function resolveSchoolId(schoolIdentifier: string): Promise<string>
 }
 
 /**
- * Resolves both schoolId and subdomain safely for tenant-specific cache and path revalidation
+ * Resolves both schoolId, subdomain, and schoolName safely for tenant-specific cache and path revalidation
  */
-export async function resolveSchoolInfo(schoolIdentifier: string): Promise<{ schoolId: string; subdomain: string }> {
+export async function resolveSchoolInfo(schoolIdentifier: string): Promise<{ schoolId: string; subdomain: string; schoolName: string }> {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolIdentifier);
   if (isUuid) {
     const school = await basePrisma.school.findUnique({
       where: { id: schoolIdentifier },
-      select: { id: true, subdomain: true },
+      select: { id: true, subdomain: true, name: true },
     });
     return {
       schoolId: schoolIdentifier,
       subdomain: school?.subdomain || "",
+      schoolName: school?.name || "",
     };
   }
 
-  const school = await basePrisma.school.findUnique({
-    where: { subdomain: schoolIdentifier },
-    select: { id: true, subdomain: true },
+  const school = await basePrisma.school.findFirst({
+    where: {
+      OR: [
+        { subdomain: { equals: schoolIdentifier, mode: "insensitive" } },
+        { slug: { equals: schoolIdentifier, mode: "insensitive" } },
+        { id: schoolIdentifier },
+      ],
+    },
+    select: { id: true, subdomain: true, name: true },
   });
   return {
     schoolId: school?.id || schoolIdentifier,
     subdomain: school?.subdomain || schoolIdentifier,
+    schoolName: school?.name || "",
   };
 }
 
@@ -390,7 +398,7 @@ export async function createStaff(
   }
 ) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
 
@@ -594,7 +602,7 @@ export async function updateStaffProfile(
   }
 ) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     await ensureStaffMetadataTable();
 
@@ -758,7 +766,7 @@ export async function updateStaff(
 
 export async function deleteStaff(schoolIdentifier: string, staffId: string) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     
     await tenantDb.staff.delete({
@@ -798,7 +806,7 @@ export async function updateStaffStatus(
   newStatus: string
 ) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     const data: any = { status: newStatus };
     
@@ -1025,7 +1033,7 @@ export async function deletePayrollVoucherAction(
   voucherId: string
 ) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
 
     await tenantDb.payrollRecord.delete({
@@ -1292,7 +1300,7 @@ export async function createEnterpriseStaffAction(
   payload: EnterpriseStaffPayload
 ) {
   try {
-    const { schoolId, subdomain } = await resolveSchoolInfo(schoolIdentifier);
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
 
     // 1. Mandatory Validations
     if (!payload.firstName?.trim()) return { success: false, error: "First Name is required." };
@@ -1547,21 +1555,66 @@ export async function createEnterpriseStaffAction(
         }
       }
 
-      return staff;
+      return { staff, user };
     });
 
-    safeRevalidate(`/${subdomain}/staff`, "page");
+    // Ensure security policies are synchronized
+    try {
+      await setUserMustChangePassword(result.user.id, schoolId, true);
+    } catch {}
+
+    // Invalidate caches & revalidate paths across all portal pages
+    await invalidateStaffNamespace(schoolId);
+    if (subdomain) {
+      clearL1TenantCache(subdomain);
+      safeRevalidate(`/${subdomain}/staff`, "page");
+      safeRevalidate(`/${subdomain}/staff`, "layout");
+      safeRevalidate(`/${subdomain}/portal/staff`, "page");
+      safeRevalidate(`/${subdomain}/portal/staff`, "layout");
+      safeRevalidate(`/${subdomain}/dashboard`, "page");
+    }
+
+    // 12. Dispatch automated staff enrollment confirmation email with login credentials
+    let emailDispatched = false;
+    let emailDeliveryStatus = "UNATTEMPTED";
+    try {
+      const emailResult = await sendStaffEnrollmentConfirmationEmail({
+        schoolId,
+        staffId: result.staff.id,
+        schoolName: schoolName || undefined,
+        subdomain: subdomain || undefined,
+        staffName: `${payload.firstName.trim()} ${payload.lastName.trim()}`,
+        staffEmail: normalizedEmail,
+        role: payload.role || canonicalRole,
+        departmentId: payload.departmentId || null,
+        departmentName: payload.departmentName || null,
+        temporaryPassword: tempPassword,
+      });
+
+      emailDispatched = emailResult.success;
+      emailDeliveryStatus = emailResult.deliveryStatus || (emailResult.success ? "DELIVERED" : "FAILED");
+      if (!emailResult.success) {
+        console.error(`[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Delivery failure for staff ${result.staff.id} (${normalizedEmail}):`, emailResult.error);
+      } else {
+        console.log(`[STAFF_ENROLLMENT] Successfully dispatched credential email to ${normalizedEmail} (Status: ${emailDeliveryStatus})`);
+      }
+    } catch (emailErr) {
+      console.error("[EMAIL_SYNC_ERROR] [STAFF_ENROLLMENT] Staff enrollment confirmation error in createEnterpriseStaffAction:", emailErr);
+    }
 
     return {
       success: true,
       data: {
-        id: result.id,
-        staffId: result.staffId,
-        firstName: result.firstName,
-        lastName: result.lastName,
-        email: result.email,
+        id: result.staff.id,
+        staffId: result.staff.staffId,
+        firstName: result.staff.firstName,
+        lastName: result.staff.lastName,
+        email: result.staff.email,
         role: payload.role,
-        status: result.status,
+        status: result.staff.status,
+        tempPassword,
+        emailDispatched,
+        emailDeliveryStatus,
       },
     };
   } catch (error: any) {
@@ -1573,6 +1626,117 @@ export async function createEnterpriseStaffAction(
       };
     }
     return { success: false, error: error.message || "Failed to onboard staff member." };
+  }
+}
+
+/**
+ * 1-Click Server Action: Resend Login Credentials to an existing staff member
+ */
+export async function resendStaffCredentialsAction(
+  schoolIdentifier: string,
+  staffId: string
+): Promise<{ success: boolean; error?: string; message?: string; tempPassword?: string }> {
+  try {
+    const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
+
+    // Look up staff record
+    const staff = await basePrisma.staff.findFirst({
+      where: { id: staffId, schoolId },
+      include: {
+        user: true,
+        department: true,
+      },
+    });
+
+    if (!staff) {
+      return { success: false, error: "Staff record not found." };
+    }
+
+    if (!staff.email) {
+      return { success: false, error: "Staff member does not have a registered email address." };
+    }
+
+    const normalizedEmail = staff.email.trim().toLowerCase();
+
+    // Generate a secure temporary password
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%";
+    let tempPassword = "";
+    for (let i = 0; i < 10; i++) {
+      tempPassword += chars.charAt(crypto.randomInt(0, chars.length));
+    }
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // Update or link authoritative User account
+    let userId = staff.userId;
+    if (userId) {
+      await basePrisma.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          status: "ACTIVE",
+        },
+      });
+      await setUserMustChangePassword(userId, schoolId, true);
+    } else {
+      const user = await basePrisma.user.upsert({
+        where: { schoolId_email: { schoolId, email: normalizedEmail } },
+        update: {
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          status: "ACTIVE",
+        },
+        create: {
+          schoolId,
+          email: normalizedEmail,
+          passwordHash: hashedPassword,
+          mustChangePassword: true,
+          role: "TEACHER",
+          firstName: staff.firstName,
+          lastName: staff.lastName,
+          status: "ACTIVE",
+        },
+      });
+      userId = user.id;
+      await basePrisma.staff.update({
+        where: { id: staff.id },
+        data: { userId: user.id },
+      });
+      await setUserMustChangePassword(user.id, schoolId, true);
+    }
+
+    // Dispatch credentials email
+    const emailResult = await sendStaffEnrollmentConfirmationEmail({
+      schoolId,
+      staffId: staff.id,
+      schoolName: schoolName || undefined,
+      subdomain: subdomain || undefined,
+      staffName: `${staff.firstName} ${staff.lastName}`,
+      staffEmail: normalizedEmail,
+      role: staff.user?.role || "TEACHER",
+      departmentId: staff.departmentId || null,
+      departmentName: staff.department?.name || staff.departmentName || null,
+      temporaryPassword: tempPassword,
+    });
+
+    if (!emailResult.success) {
+      return {
+        success: false,
+        error: emailResult.error || "Failed to dispatch credential email.",
+      };
+    }
+
+    return {
+      success: true,
+      message: `Login credentials successfully sent to ${staff.email}.`,
+      tempPassword,
+    };
+  } catch (error: any) {
+    console.error("[resendStaffCredentialsAction] Error:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to resend credentials.",
+    };
   }
 }
 

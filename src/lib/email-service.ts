@@ -1912,10 +1912,21 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
     let subdomain = payload.subdomain;
     if ((!schoolName || !subdomain) && schoolId) {
       try {
-        const school = await basePrisma.school.findUnique({
-          where: { id: schoolId },
-          select: { name: true, subdomain: true },
-        });
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolId);
+        const school = isUuid
+          ? await basePrisma.school.findUnique({
+              where: { id: schoolId },
+              select: { name: true, subdomain: true },
+            })
+          : await basePrisma.school.findFirst({
+              where: {
+                OR: [
+                  { subdomain: { equals: schoolId, mode: "insensitive" } },
+                  { slug: { equals: schoolId, mode: "insensitive" } },
+                ],
+              },
+              select: { name: true, subdomain: true },
+            });
         if (school) {
           schoolName = schoolName || school.name;
           subdomain = subdomain || school.subdomain;
