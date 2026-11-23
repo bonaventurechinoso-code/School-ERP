@@ -1480,14 +1480,60 @@ export async function createEnterpriseStaffAction(
         },
       });
 
-      // Create StaffAssignment records
+      // Create StaffAssignment records (Option 1 Mapping: Arm is UI label only, deduplicate base classes)
       if (payload.assignments && payload.assignments.length > 0) {
+        const seenAssignmentKeys = new Set<string>();
+
         for (const assign of payload.assignments) {
+          let resolvedClassroomId = assign.classroomId || null;
+
+          // Verify foreign key integrity against Classroom for this tenant
+          if (resolvedClassroomId) {
+            const exists = await tx.classroom.findFirst({
+              where: { id: resolvedClassroomId, schoolId },
+              select: { id: true },
+            });
+            if (!exists) {
+              // If not found by UUID, attempt match by metadata className (e.g. "JSS 1")
+              const baseName = assign.metadata?.className;
+              if (baseName) {
+                const matched = await tx.classroom.findFirst({
+                  where: {
+                    schoolId,
+                    name: { equals: baseName, mode: "insensitive" },
+                  },
+                  select: { id: true },
+                });
+                resolvedClassroomId = matched ? matched.id : null;
+              } else {
+                resolvedClassroomId = null;
+              }
+            }
+          } else if (assign.metadata?.className) {
+            const matched = await tx.classroom.findFirst({
+              where: {
+                schoolId,
+                name: { equals: assign.metadata.className, mode: "insensitive" },
+              },
+              select: { id: true },
+            });
+            resolvedClassroomId = matched ? matched.id : null;
+          }
+
+          // Deduplication: prevent duplicate StaffAssignment rows for the same classroom & assignment type
+          if (resolvedClassroomId) {
+            const dedupeKey = `${resolvedClassroomId}_${assign.assignmentType}`;
+            if (seenAssignmentKeys.has(dedupeKey)) {
+              continue;
+            }
+            seenAssignmentKeys.add(dedupeKey);
+          }
+
           await tx.staffAssignment.create({
             data: {
               schoolId,
               staffId: staff.id,
-              classroomId: assign.classroomId || null,
+              classroomId: resolvedClassroomId,
               courseId: assign.courseId || null,
               assignmentType: assign.assignmentType,
               assignedRole: payload.role,
@@ -1520,6 +1566,12 @@ export async function createEnterpriseStaffAction(
     };
   } catch (error: any) {
     console.error("[createEnterpriseStaffAction] Fatal Error:", error);
+    if (error?.code === "P2003" || (error?.message && error.message.includes("Foreign key constraint failed"))) {
+      return {
+        success: false,
+        error: "A database foreign key constraint check failed (P2003). Please verify that the selected class exists in Settings > Classes.",
+      };
+    }
     return { success: false, error: error.message || "Failed to onboard staff member." };
   }
 }

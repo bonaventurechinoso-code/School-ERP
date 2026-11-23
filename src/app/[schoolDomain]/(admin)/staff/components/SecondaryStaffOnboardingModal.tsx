@@ -41,19 +41,24 @@ export const NIGERIAN_STATES = [
 ];
 
 // STRICTLY 12 CLASSES ONLY: JSS 1A to SSS 3B (Arms A & B ONLY, NO sub-text, NO Arms C-F)
-export const FIXED_SECONDARY_12_CLASSES: Array<{ id: string; name: string }> = [
-  { id: "sec-jss1-a", name: "JSS 1A" },
-  { id: "sec-jss1-b", name: "JSS 1B" },
-  { id: "sec-jss2-a", name: "JSS 2A" },
-  { id: "sec-jss2-b", name: "JSS 2B" },
-  { id: "sec-jss3-a", name: "JSS 3A" },
-  { id: "sec-jss3-b", name: "JSS 3B" },
-  { id: "sec-sss1-a", name: "SSS 1A" },
-  { id: "sec-sss1-b", name: "SSS 1B" },
-  { id: "sec-sss2-a", name: "SSS 2A" },
-  { id: "sec-sss2-b", name: "SSS 2B" },
-  { id: "sec-sss3-a", name: "SSS 3A" },
-  { id: "sec-sss3-b", name: "SSS 3B" },
+export const FIXED_SECONDARY_12_CLASSES: Array<{
+  id: string;
+  name: string;
+  baseName: string;
+  arm: string;
+}> = [
+  { id: "JSS 1A", name: "JSS 1A", baseName: "JSS 1", arm: "A" },
+  { id: "JSS 1B", name: "JSS 1B", baseName: "JSS 1", arm: "B" },
+  { id: "JSS 2A", name: "JSS 2A", baseName: "JSS 2", arm: "A" },
+  { id: "JSS 2B", name: "JSS 2B", baseName: "JSS 2", arm: "B" },
+  { id: "JSS 3A", name: "JSS 3A", baseName: "JSS 3", arm: "A" },
+  { id: "JSS 3B", name: "JSS 3B", baseName: "JSS 3", arm: "B" },
+  { id: "SSS 1A", name: "SSS 1A", baseName: "SSS 1", arm: "A" },
+  { id: "SSS 1B", name: "SSS 1B", baseName: "SSS 1", arm: "B" },
+  { id: "SSS 2A", name: "SSS 2A", baseName: "SSS 2", arm: "A" },
+  { id: "SSS 2B", name: "SSS 2B", baseName: "SSS 2", arm: "B" },
+  { id: "SSS 3A", name: "SSS 3A", baseName: "SSS 3", arm: "A" },
+  { id: "SSS 3B", name: "SSS 3B", baseName: "SSS 3", arm: "B" },
 ];
 
 // FIXED 20 SUBJECTS ONLY (No sub-text)
@@ -201,17 +206,24 @@ function MultiSearchableDropdown({
     }
   };
 
-  const handleRemoveChip = (e: React.MouseEvent, optId: string) => {
-    e.stopPropagation();
-    onChange(selected.filter((id) => id !== optId));
-  };
-
   const handleAddCustom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customInput.trim() || !onCustomAdd) return;
     onCustomAdd(customInput.trim());
     setCustomInput("");
   };
+
+  // Pure text summary when closed: 0 -> placeholder, 1 -> "JSS 1A", 2 -> "JSS 1A, JSS 1B", 3+ -> "JSS 1A, JSS 1B + 1 more"
+  const summaryText = useMemo(() => {
+    if (selected.length === 0) return placeholder;
+    const names = selected.map((optId) => {
+      const item = options.find((o) => o.id === optId);
+      return item ? item.name : optId;
+    });
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]}, ${names[1]}`;
+    return `${names[0]}, ${names[1]} + ${names.length - 2} more`;
+  }, [selected, options, placeholder]);
 
   return (
     <div id={id} className="space-y-1.5" ref={containerRef}>
@@ -223,42 +235,24 @@ function MultiSearchableDropdown({
         <span className="text-xs font-semibold text-slate-500">{counterText}</span>
       </div>
 
-      {/* Input box: When closed, shows placeholder OR chips inside the input with 'x' to remove */}
+      {/* Input box: When closed, shows clean text summary (NO pills, NO badges, NO chips inside or outside) */}
       <div
         tabIndex={0}
         role="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full min-h-[42px] px-3 py-1.5 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${error
+        className={`w-full min-h-[42px] px-3.5 py-2.5 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${error
           ? "border-rose-400 bg-rose-50/20"
           : isOpen
             ? "border-emerald-600 ring-2 ring-emerald-500/10"
             : "border-slate-300 hover:border-slate-400"
           }`}
       >
-        <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
-          {selected.length === 0 ? (
-            <span className="text-xs text-slate-500 font-normal">{placeholder}</span>
-          ) : (
-            selected.map((optId) => {
-              const item = options.find((o) => o.id === optId) || { id: optId, name: optId };
-              return (
-                <span
-                  key={optId}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200 shrink-0"
-                >
-                  <span>{item.name}</span>
-                  <span
-                    onClick={(e) => handleRemoveChip(e, optId)}
-                    className="hover:text-rose-600 transition cursor-pointer"
-                    title="Remove"
-                  >
-                    ×
-                  </span>
-                </span>
-              );
-            })
-          )}
-        </div>
+        <span
+          className={`truncate text-xs ${selected.length === 0 ? "text-slate-500 font-normal" : "text-slate-800 font-semibold"
+            }`}
+        >
+          {summaryText}
+        </span>
         <ChevronDown
           className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${isOpen ? "rotate-180 text-emerald-600" : ""
             }`}
@@ -630,7 +624,8 @@ export default function SecondaryStaffOnboardingModal({
   const [trcnExpiry, setTrcnExpiry] = useState("");
 
   // Section D: Secondary Assignments
-  const [classesList, setClassesList] = useState<Array<{ id: string; name: string }>>(FIXED_SECONDARY_12_CLASSES);
+  const [classesList] = useState<Array<{ id: string; name: string; baseName: string; arm: string }>>(FIXED_SECONDARY_12_CLASSES);
+  const [dbClassrooms, setDbClassrooms] = useState<Array<{ id: string; name: string }>>([]);
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>(
     SECONDARY_STANDARD_SUBJECTS.map((s) => ({ id: s, name: s }))
   );
@@ -686,45 +681,20 @@ export default function SecondaryStaffOnboardingModal({
     }
   }, [formData.firstName, formData.lastName, formData.accountName]);
 
-  // Fetch real school classes and enforce strictly 12 classes (Arms A and B ONLY)
+  // Fetch real school classes from tenant DB
   const loadSchoolClasses = async () => {
     setIsLoadingClasses(true);
     setClassLoadError(null);
     try {
       const res = await fetchSchoolClassesAction(schoolDomain);
       if (res.success && res.data && res.data.length > 0) {
-        const mapped12 = FIXED_SECONDARY_12_CLASSES.map((std) => {
-          const directMatch = res.data.find((c: any) => {
-            const n = (c.name || "").replace(/\s+/g, "").toUpperCase();
-            const target = std.name.replace(/\s+/g, "").toUpperCase();
-            return n === target || n.startsWith(target);
-          });
-          if (directMatch) {
-            return { id: directMatch.id, name: std.name };
-          }
-          const levelPrefix = std.name.slice(0, -1).trim();
-          const baseMatch = res.data.find((c: any) => {
-            const n = (c.name || "").trim().toUpperCase();
-            return n === levelPrefix.toUpperCase();
-          });
-          if (baseMatch) {
-            const isArmA = std.name.endsWith("A");
-            return {
-              id: isArmA ? baseMatch.id : `${baseMatch.id}-b`,
-              name: std.name,
-            };
-          }
-          return std;
-        });
-
-        setClassesList(mapped12);
-      } else {
-        setClassesList(FIXED_SECONDARY_12_CLASSES);
+        setDbClassrooms(res.data);
+      } else if (!res.success) {
+        setClassLoadError("Could not load classes. Check connection and retry.");
       }
     } catch (err: any) {
       console.error("Failed to load school classes:", err);
       setClassLoadError("Could not load classes. Check connection and retry.");
-      setClassesList(FIXED_SECONDARY_12_CLASSES);
     } finally {
       setIsLoadingClasses(false);
     }
@@ -901,32 +871,61 @@ export default function SecondaryStaffOnboardingModal({
               ? [formTutorClassId]
               : [];
 
+        // 1. Form Tutor Assignment (Option 1 Mapping: Resolves to base Classroom, arm in metadata)
         if (formTutorClassId) {
-          const selectedClass = classesList.find((c) => c.id === formTutorClassId);
+          const opt = FIXED_SECONDARY_12_CLASSES.find((c) => c.id === formTutorClassId);
+          const baseName = opt?.baseName || "JSS 1";
+          const arm = opt?.arm || "A";
+          const dbClass = dbClassrooms.find(
+            (c) => c.name.replace(/\s+/g, "").toUpperCase() === baseName.replace(/\s+/g, "").toUpperCase()
+          );
+
           assignmentsPayload.push({
             assignmentType: "FormTutor",
-            classroomId: formTutorClassId,
+            classroomId: dbClass?.id || null,
             metadata: {
-              className: selectedClass?.name || "Assigned Form Class",
+              className: baseName,
+              arm: arm,
               roleTitle: isFormTutor ? "Form Tutor" : "Assigned Class",
               subjects: selectedSubjects,
             },
           });
         }
+
+        // 2. Classes Taught (Option 1 Mapping: Deduplicate to 1 StaffAssignment per base class)
         if (effectiveTeachingClassIds.length > 0) {
-          effectiveTeachingClassIds.forEach((clsId) => {
-            if (
-              clsId === formTutorClassId &&
-              assignmentsPayload.some((a) => a.classroomId === clsId && a.assignmentType === "FormTutor")
-            ) {
-              return;
+          const baseClassGroups = new Map<string, { baseName: string; arms: string[]; dbId: string | null }>();
+
+          effectiveTeachingClassIds.forEach((classId) => {
+            const opt = FIXED_SECONDARY_12_CLASSES.find((c) => c.id === classId);
+            if (!opt) return;
+            const baseName = opt.baseName;
+            const arm = opt.arm;
+            const dbClass = dbClassrooms.find(
+              (c) => c.name.replace(/\s+/g, "").toUpperCase() === baseName.replace(/\s+/g, "").toUpperCase()
+            );
+
+            if (!baseClassGroups.has(baseName)) {
+              baseClassGroups.set(baseName, {
+                baseName,
+                arms: [arm],
+                dbId: dbClass?.id || null,
+              });
+            } else {
+              const group = baseClassGroups.get(baseName)!;
+              if (!group.arms.includes(arm)) {
+                group.arms.push(arm);
+              }
             }
-            const cls = classesList.find((c) => c.id === clsId);
+          });
+
+          baseClassGroups.forEach((group) => {
             assignmentsPayload.push({
               assignmentType: "SubjectTeacher",
-              classroomId: clsId,
+              classroomId: group.dbId,
               metadata: {
-                className: cls?.name,
+                className: group.baseName,
+                arms: group.arms.sort(),
                 subjects: selectedSubjects,
               },
             });
@@ -1722,7 +1721,7 @@ export default function SecondaryStaffOnboardingModal({
                     id="field-teachingClasses"
                     label="Classes / Arms Taught"
                     required={isSubjectTeacher}
-                    counterText={`${teachingClassIds.length} class(es) selected`}
+                    counterText={`${teachingClassIds.length} ${teachingClassIds.length === 1 ? "class" : "classes"} selected`}
                     placeholder="-- Select Classes Taught --"
                     searchPlaceholder="Search classes... e.g. JSS 1A"
                     options={classesList}
@@ -1746,7 +1745,7 @@ export default function SecondaryStaffOnboardingModal({
                     id="field-subjects"
                     label="Subjects Taught"
                     required={isSubjectTeacher}
-                    counterText={`${selectedSubjects.length} subject(s) selected`}
+                    counterText={`${selectedSubjects.length} ${selectedSubjects.length === 1 ? "subject" : "subjects"} selected`}
                     placeholder="-- Select Subjects Taught --"
                     searchPlaceholder="Search subjects... e.g. Biology"
                     options={subjectsList}
