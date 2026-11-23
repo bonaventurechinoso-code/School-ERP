@@ -37,13 +37,13 @@ export default function Navbar() {
         <div className="w-full max-w-full overflow-hidden px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           {/* Left: Brand Logo */}
           <Link href="/" className="flex items-center gap-3 group focus:outline-none shrink-0">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-slate-900 to-indigo-950 dark:from-slate-950 dark:to-indigo-950 border border-slate-700/50 dark:border-slate-800 shadow-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
               <Image
                 src="/img/business-logo.png"
                 alt="School ERP Logo"
-                width={36}
-                height={36}
-                className="w-full h-full object-contain p-1"
+                width={40}
+                height={40}
+                className="w-full h-full object-cover rounded-xl"
                 priority
               />
             </div>

@@ -828,13 +828,14 @@ function LoginPageContent() {
         <div className="relative z-10">
           <div className="flex items-center gap-3 w-fit">
             {/* Small square box/badge containing corporate logo with matching curved border radius */}
-            <div className="h-10 w-10 rounded-xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center p-1.5 overflow-hidden">
+            <div className="h-10 w-10 rounded-xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center overflow-hidden shrink-0">
               <Image
                 src="/img/business-logo.png"
                 alt="SchoolERP Logo"
-                width={32}
-                height={32}
-                className="w-full h-full object-contain rounded-lg"
+                width={40}
+                height={40}
+                className="w-full h-full object-cover rounded-xl"
+                priority
               />
             </div>
             <div className="flex items-center gap-2">

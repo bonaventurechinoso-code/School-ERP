@@ -119,13 +119,14 @@ export default function SuperAdminSidebar() {
           onClick={() => setIsOpen(false)}
           className="flex items-center gap-3 group min-w-0"
         >
-          <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 flex items-center justify-center p-1.5 shadow-xs group-hover:border-cyan-500/60 transition-colors shrink-0">
+          <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shadow-xs group-hover:border-cyan-500/60 transition-colors shrink-0">
             <Image
               src="/img/business-logo.png"
               alt="School ERP"
-              width={26}
-              height={26}
-              className="object-contain w-full h-full"
+              width={36}
+              height={36}
+              className="w-full h-full object-cover rounded-xl"
+              priority
             />
           </div>
           <div className="min-w-0">
@@ -520,13 +521,14 @@ export default function SuperAdminSidebar() {
             href="/super-admin"
             className="flex items-center gap-2 group min-w-0"
           >
-            <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-slate-900 dark:bg-zinc-950 border border-slate-700/80 flex items-center justify-center p-1 shrink-0">
+            <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 shadow-xs">
               <Image
                 src="/img/business-logo.png"
                 alt="School ERP"
-                width={22}
-                height={22}
-                className="object-contain"
+                width={32}
+                height={32}
+                className="w-full h-full object-cover rounded-lg"
+                priority
               />
             </div>
             <div className="flex items-center gap-1.5 truncate">
