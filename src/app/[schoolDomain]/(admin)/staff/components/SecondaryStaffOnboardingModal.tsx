@@ -294,31 +294,35 @@ export default function SecondaryStaffOnboardingModal({
     try {
       const res = await fetchSchoolClassesAction(schoolDomain);
       if (res.success && res.data && res.data.length > 0) {
-        // Filter out any Arm C, D, E, F strictly
-        const validClasses: SecondaryClassItem[] = [];
-        res.data.forEach((c: any) => {
-          const rawName = (c.name || "").trim();
-          // Exclude Arms C, D, E, F
-          if (/\b(arm\s*[c-z]|[c-z]\b|\([c-z]\))/i.test(rawName) || /(1c|2c|3c|1d|2d|3d|1e|2e|3e|1f|2f|3f)\b/i.test(rawName)) {
-            return;
+        // Map DB classes to the 12 standard classes (strictly Arms A & B only)
+        const mapped12: SecondaryClassItem[] = FIXED_SECONDARY_12_CLASSES.map((std) => {
+          // Look for direct match like "JSS 1A" or "JSS 1 (A)"
+          const directMatch = res.data.find((c: any) => {
+            const n = (c.name || "").replace(/\s+/g, "").toUpperCase();
+            const target = std.name.replace(/\s+/g, "").toUpperCase();
+            return n === target || n.startsWith(target);
+          });
+          if (directMatch) {
+            return { id: directMatch.id, name: std.name, stream: std.stream };
           }
-          // Extract short pill label and stream
-          let shortName = rawName;
-          let stream: string | undefined = undefined;
-          const match = rawName.match(/^([a-zA-Z0-9\s]+?)(?:\s*\((.*?)\))?$/);
-          if (match) {
-            shortName = match[1].trim();
-            if (match[2]) stream = match[2].trim();
+          // If no specific arm in DB, check if base level exists (e.g. "JSS 1")
+          const levelPrefix = std.name.slice(0, -1).trim(); // "JSS 1"
+          const baseMatch = res.data.find((c: any) => {
+            const n = (c.name || "").trim().toUpperCase();
+            return n === levelPrefix.toUpperCase();
+          });
+          if (baseMatch) {
+            const isArmA = std.name.endsWith("A");
+            return {
+              id: isArmA ? baseMatch.id : `${baseMatch.id}-b`,
+              name: std.name,
+              stream: std.stream,
+            };
           }
-          validClasses.push({ id: c.id, name: shortName, stream });
+          return std;
         });
 
-        if (validClasses.length > 0) {
-          // Limit to max 12 secondary classes
-          setClassesList(validClasses.slice(0, 12));
-        } else {
-          setClassesList(FIXED_SECONDARY_12_CLASSES);
-        }
+        setClassesList(mapped12);
       } else {
         setClassesList(FIXED_SECONDARY_12_CLASSES);
       }
