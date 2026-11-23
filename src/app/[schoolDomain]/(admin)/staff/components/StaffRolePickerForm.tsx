@@ -269,96 +269,96 @@ export default function StaffRolePickerForm({
             id: "Subject Teacher",
             title: "Subject Teacher",
             category: "teaching",
-            badgeText: "Curriculum Subject Lead",
-            description: "Delivers senior/junior WAEC, NECO & BECE syllabus for designated subjects.",
+            badgeText: "Academic Faculty",
+            description: "Delivers curriculum syllabus and enters Continuous Assessment and examination scores.",
             trcnStatus: "mandatory",
           },
           {
             id: "Form Tutor / Class Teacher",
-            title: "Form Tutor / Master",
+            title: "Form Tutor / Class Teacher",
             category: "teaching",
-            badgeText: "Class / Arm Custodian",
-            description: "Manages roll call, attendance registers, and pastoral welfare for a designated arm (e.g. JSS 1A).",
+            badgeText: "Class Custodian",
+            description: "Manages class attendance register, pastoral care, and terminal report card remarks.",
             trcnStatus: "mandatory",
           },
           {
             id: "Head of Department (HOD)",
             title: "Head of Department (HOD)",
             category: "leadership",
-            badgeText: "Departmental Leader",
-            description: "Supervises subject teachers, approves schemes of work, reviews lesson notes & countersigns CA scores.",
+            badgeText: "Department Lead",
+            description: "Supervises subject teachers, approves schemes of work, and coordinates exams.",
             trcnStatus: "mandatory",
           },
           {
             id: "Vice Principal (Academic)",
-            title: "Vice Principal (Academics / VP Acad)",
+            title: "Vice Principal (Academic)",
             category: "leadership",
             badgeText: "Senior Leadership",
-            description: "Coordinates master timetable, WAEC/NECO examination centres, broadsheets, and academic standards.",
+            description: "Coordinates master timetables, academic broadsheets, and external examination centres.",
             trcnStatus: "mandatory",
           },
           {
             id: "Vice Principal (Administration)",
-            title: "Vice Principal (Administration / VP Admin)",
+            title: "Vice Principal (Administration)",
             category: "leadership",
             badgeText: "Senior Leadership",
-            description: "Manages school discipline, co-curricular clubs, boarding houses, and staff turnout.",
+            description: "Manages student discipline, co-curricular activities, and staff attendance.",
             trcnStatus: "mandatory",
           },
           {
             id: "Principal",
-            title: "School Principal",
+            title: "Principal",
             category: "leadership",
-            badgeText: "Chief Executive Officer",
-            description: "Highest administrative & academic authority; signs terminal report cards, transcripts and certificates.",
+            badgeText: "Chief Executive",
+            description: "Executive institutional authority; signs terminal report cards, transcripts and certificates.",
             trcnStatus: "mandatory",
           },
           {
             id: "Bursar",
-            title: "School Bursar",
+            title: "Bursar",
             category: "support",
             badgeText: "Financial Controller",
-            description: "Controls tuition collection, billing schedules, vendor payments, and annual budget reports.",
+            description: "Administers tuition billing, fee collections, payment receipts, and monthly staff payroll.",
             trcnStatus: "none",
           },
           {
             id: "Guidance Counselor",
-            title: "Guidance & Career Counselor",
+            title: "Guidance Counselor",
             category: "support",
             badgeText: "Student Welfare",
-            description: "Coordinates career guidance, UTME subject combinations, psycho-social counseling and ethics.",
+            description: "Coordinates student counseling, psycho-social care, and UTME subject combinations.",
             trcnStatus: "optional",
           },
           {
             id: "Librarian",
-            title: "School Librarian / Media Specialist",
+            title: "Librarian",
             category: "support",
-            badgeText: "Library & E-Learning",
-            description: "Curates library catalogue, text distributions, past question papers, and study halls.",
+            badgeText: "Library Specialist",
+            description: "Manages library catalogues, textbook allocations, and quiet study halls.",
             trcnStatus: "none",
           },
           {
             id: "Lab Technologist",
-            title: "Science / ICT Lab Technologist",
+            title: "Lab Technologist",
             category: "support",
-            badgeText: "STEM Laboratories",
-            description: "Prepares chemistry/physics/biology practicals and maintains computer labs for CBT tests.",
+            badgeText: "STEM Labs",
+            description: "Prepares science practicals and maintains computer labs for CBT tests.",
             trcnStatus: "none",
           },
           {
             id: "Admin Officer",
-            title: "Administrative Officer",
+            title: "Admin Officer",
             category: "support",
-            badgeText: "Secretariat & Registry",
-            description: "Manages admissions files, Ministry of Education census, and official dispatch.",
+            badgeText: "Registry & Records",
+            description: "Coordinates student admissions records, ministry returns, and official correspondence.",
             trcnStatus: "none",
           },
           {
             id: "Support Staff",
-            title: "Support Services & Security",
+            title: "Support Staff",
             category: "support",
             badgeText: "General Support",
-            description: "Campus security guard, maintenance officer, driver, janitorial services.",
+            description: "Campus facilities maintenance, physical security, and general support services.",
             trcnStatus: "none",
           },
         ];
@@ -562,28 +562,39 @@ export default function StaffRolePickerForm({
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {selectedItem ? (
               <>
-                {selectedItem.category === "teaching" ? (
-                  <GraduationCap className="w-4 h-4 text-blue-600 shrink-0" />
-                ) : selectedItem.category === "leadership" ? (
-                  <Award className="w-4 h-4 text-purple-600 shrink-0" />
+                {tierCategory === "SECONDARY" ? (
+                  <>
+                    <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="font-bold text-slate-900 text-xs truncate">
+                      {selectedRole}
+                    </span>
+                  </>
                 ) : (
-                  <Briefcase className="w-4 h-4 text-slate-600 shrink-0" />
+                  <>
+                    {selectedItem.category === "teaching" ? (
+                      <GraduationCap className="w-4 h-4 text-blue-600 shrink-0" />
+                    ) : selectedItem.category === "leadership" ? (
+                      <Award className="w-4 h-4 text-purple-600 shrink-0" />
+                    ) : (
+                      <Briefcase className="w-4 h-4 text-slate-600 shrink-0" />
+                    )}
+                    <span className="font-bold text-slate-900 truncate">{selectedItem.title}</span>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                        selectedItem.category === "teaching"
+                          ? "bg-blue-100 text-blue-700"
+                          : selectedItem.category === "leadership"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {selectedItem.badgeText}
+                    </span>
+                  </>
                 )}
-                <span className="font-bold text-slate-900 truncate">{selectedItem.title}</span>
-                <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                    selectedItem.category === "teaching"
-                      ? "bg-blue-100 text-blue-700"
-                      : selectedItem.category === "leadership"
-                      ? "bg-purple-100 text-purple-700"
-                      : "bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {selectedItem.badgeText}
-                </span>
               </>
             ) : (
-              <span className="text-slate-400 font-normal truncate">{placeholderText}</span>
+              <span className="text-slate-500 font-normal truncate">{placeholderText}</span>
             )}
           </div>
 
@@ -610,13 +621,17 @@ export default function StaffRolePickerForm({
           </div>
         </div>
 
-        {/* FLOATING LIST OF ROLES PER INSTITUTIONAL TIER */}
+        {/* LIST OF ROLES PER INSTITUTIONAL TIER */}
         {isOpen && (
           <div 
             id="staff-role-picker-listbox"
             role="listbox" 
             aria-label={`Available roles for ${tierDisplay}`}
-            className="absolute z-50 mt-1.5 w-full bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className={
+              tierCategory === "SECONDARY"
+                ? "mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in duration-150"
+                : "absolute z-50 mt-1.5 w-full bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            }
           >
             {/* SEARCH FILTER */}
             <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 flex items-center gap-2">
@@ -686,28 +701,37 @@ export default function StaffRolePickerForm({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <GraduationCap
-                              className={`w-3.5 h-3.5 ${
-                                isSelected ? "text-blue-600" : "text-slate-400"
-                              }`}
-                            />
-                            <span className="text-xs font-bold">{role.title}</span>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100/70 text-blue-700">
-                              {role.badgeText}
-                            </span>
-                            {role.trcnStatus === "mandatory" && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
-                                <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
-                            {role.description}
-                          </p>
+                          {tierCategory === "SECONDARY" ? (
+                            <div>
+                              <div className="text-xs font-bold text-slate-900">{role.title}</div>
+                              <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">{role.description}</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <GraduationCap
+                                  className={`w-3.5 h-3.5 ${
+                                    isSelected ? "text-blue-600" : "text-slate-400"
+                                  }`}
+                                />
+                                <span className="text-xs font-bold">{role.title}</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100/70 text-blue-700">
+                                  {role.badgeText}
+                                </span>
+                                {role.trcnStatus === "mandatory" && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
+                                    <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                                {role.description}
+                              </p>
+                            </>
+                          )}
                         </div>
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                          <div className={`w-4 h-4 rounded-full ${tierCategory === "SECONDARY" ? "bg-emerald-600" : "bg-blue-600"} text-white flex items-center justify-center shrink-0 mt-0.5`}>
                             <Check className="w-3 h-3 stroke-[3]" />
                           </div>
                         )}
@@ -754,28 +778,37 @@ export default function StaffRolePickerForm({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Award
-                              className={`w-3.5 h-3.5 ${
-                                isSelected ? "text-purple-600" : "text-slate-400"
-                              }`}
-                            />
-                            <span className="text-xs font-bold">{role.title}</span>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-purple-100/70 text-purple-700">
-                              {role.badgeText}
-                            </span>
-                            {role.trcnStatus === "mandatory" && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
-                                <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
-                            {role.description}
-                          </p>
+                          {tierCategory === "SECONDARY" ? (
+                            <div>
+                              <div className="text-xs font-bold text-slate-900">{role.title}</div>
+                              <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">{role.description}</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <Award
+                                  className={`w-3.5 h-3.5 ${
+                                    isSelected ? "text-purple-600" : "text-slate-400"
+                                  }`}
+                                />
+                                <span className="text-xs font-bold">{role.title}</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-purple-100/70 text-purple-700">
+                                  {role.badgeText}
+                                </span>
+                                {role.trcnStatus === "mandatory" && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 flex items-center gap-0.5">
+                                    <ShieldCheck className="w-2.5 h-2.5 text-amber-600" /> TRCN
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                                {role.description}
+                              </p>
+                            </>
+                          )}
                         </div>
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                          <div className={`w-4 h-4 rounded-full ${tierCategory === "SECONDARY" ? "bg-emerald-600" : "bg-purple-600"} text-white flex items-center justify-center shrink-0 mt-0.5`}>
                             <Check className="w-3 h-3 stroke-[3]" />
                           </div>
                         )}
@@ -822,23 +855,32 @@ export default function StaffRolePickerForm({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Briefcase
-                              className={`w-3.5 h-3.5 ${
-                                isSelected ? "text-slate-700" : "text-slate-400"
-                              }`}
-                            />
-                            <span className="text-xs font-bold">{role.title}</span>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-700">
-                              {role.badgeText}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
-                            {role.description}
-                          </p>
+                          {tierCategory === "SECONDARY" ? (
+                            <div>
+                              <div className="text-xs font-bold text-slate-900">{role.title}</div>
+                              <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">{role.description}</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <Briefcase
+                                  className={`w-3.5 h-3.5 ${
+                                    isSelected ? "text-slate-700" : "text-slate-400"
+                                  }`}
+                                />
+                                <span className="text-xs font-bold">{role.title}</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-700">
+                                  {role.badgeText}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                                {role.description}
+                              </p>
+                            </>
+                          )}
                         </div>
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-slate-700 text-white flex items-center justify-center shrink-0 mt-0.5">
+                          <div className={`w-4 h-4 rounded-full ${tierCategory === "SECONDARY" ? "bg-emerald-600" : "bg-slate-700"} text-white flex items-center justify-center shrink-0 mt-0.5`}>
                             <Check className="w-3 h-3 stroke-[3]" />
                           </div>
                         )}
