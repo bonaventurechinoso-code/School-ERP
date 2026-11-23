@@ -666,7 +666,8 @@ function LoginPageContent() {
         // Check forced initial password reset for standard accounts (bypassed conditionally for demo tenant)
         const isLoginDemoTenant = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase() === "demo";
         if (!isLoginDemoTenant && sessionPayload?.mustChangePassword) {
-          destination = "/change-password";
+          const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
+          destination = resolvedSubdomain ? "/change-password" : (targetCode ? `/${targetCode}/change-password` : "/change-password");
         } else if (
           callbackUrl &&
           !callbackUrl.includes("/login") &&

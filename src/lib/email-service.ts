@@ -1605,7 +1605,7 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
             </div>
           </div>
           <div class="footer">
-            &copy; ${new Date().getFullYear()} ${schoolName} &bull; Powered by School ERP<br/>
+            &copy; ${new Date().getFullYear()} ${schoolName} &bull; Powered by BonaVee ICT School ERP<br/>
             Need assistance? Contact support or reply directly to this notification.
           </div>
         </div>
@@ -1850,7 +1850,7 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
             </div>
           </div>
           <div class="footer">
-            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by School ERP<br/>
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by BonaVee ICT School ERP<br/>
             Need assistance? Contact the school admissions office or reply directly to this notification.
           </div>
         </div>
@@ -2045,7 +2045,7 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
             </div>
           </div>
           <div class="footer">
-            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by School ERP<br/>
+            &copy; ${new Date().getFullYear()} ${tenantName} &bull; Powered by BonaVee ICT School ERP<br/>
             Need assistance? Contact the school administration or reply directly to this notification.
           </div>
         </div>
@@ -2866,7 +2866,7 @@ export async function sendPasswordRecommendationEmail(payload: PasswordRecommend
             </div>
           </div>
           <div class="footer">
-            School ERP &bull; Educational Management Platform
+            BonaVee ICT School ERP &bull; Educational Management Platform
           </div>
         </div>
       </body>

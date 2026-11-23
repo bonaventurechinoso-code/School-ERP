@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { basePrisma } from "@/lib/tenant-prisma";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { uploadToUploadthing } from "@/lib/uploadthing";
+import { clearL1TenantCache } from "@/lib/cache";
+import { safeRedisDel, safeRedisScanDel } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -187,20 +190,14 @@ export async function POST(
     const cleanPrefix = isLogo ? "logo" : isVideo ? "hero_vid" : "hero_img";
     const uniqueFileName = `${cleanPrefix}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${safeExt}`;
 
+    let finalUrl = "";
+
     // 5. Try UploadThing Cloud Storage first if configured
     if (process.env.UPLOADTHING_TOKEN) {
       try {
         const utResult = await uploadToUploadthing(file, uniqueFileName);
         if (utResult && utResult.url) {
-          return NextResponse.json({
-            success: true,
-            url: utResult.url,
-            mediaKind,
-            mediaType: isVideo ? "video" : "image",
-            mimeType,
-            size: file.size,
-            name: file.name,
-          });
+          finalUrl = utResult.url;
         }
       } catch (utErr) {
         console.warn("[BRANDING_UPLOAD] UploadThing failed, falling back to local disk:", utErr);
@@ -208,22 +205,67 @@ export async function POST(
     }
 
     // 6. Local Disk Storage: public/uploads/branding/[schoolId]/
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    if (!finalUrl) {
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads", "branding", school.id);
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+      const uploadsDir = path.join(process.cwd(), "public", "uploads", "branding", school.id);
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const filePath = path.join(uploadsDir, uniqueFileName);
+      fs.writeFileSync(filePath, buffer);
+
+      finalUrl = `/uploads/branding/${school.id}/${uniqueFileName}`;
     }
 
-    const filePath = path.join(uploadsDir, uniqueFileName);
-    fs.writeFileSync(filePath, buffer);
+    // 7. Immediately persist uploaded branding media to database so changes reflect on public portal immediately
+    try {
+      if (isLogo) {
+        await basePrisma.school.update({
+          where: { id: school.id },
+          data: { logo: finalUrl },
+        });
+      } else {
+        const current = await basePrisma.school.findUnique({
+          where: { id: school.id },
+          select: { tierDatabasesConfig: true },
+        });
+        const currentCfg = (current?.tierDatabasesConfig as any) || {};
+        const updatedCfg = {
+          ...currentCfg,
+          customHeroType: isVideo ? "video" : "image",
+          ...(isVideo ? { customHeroVideo: finalUrl } : { customHeroImage: finalUrl }),
+        };
+        await basePrisma.school.update({
+          where: { id: school.id },
+          data: { tierDatabasesConfig: updatedCfg },
+        });
+      }
 
-    const publicUrl = `/uploads/branding/${school.id}/${uniqueFileName}`;
+      // 8. Invalidate caches and trigger Next.js path revalidation
+      const sub = school.subdomain ? school.subdomain.toLowerCase().trim() : null;
+      if (sub) {
+        clearL1TenantCache(sub);
+        clearL1TenantCache(school.id);
+        await safeRedisDel(`cache:tenant:meta:${sub}`);
+        await safeRedisScanDel(`cache:tenant:${school.id}:*`);
+        try {
+          revalidatePath(`/${sub}`, "page");
+          revalidatePath(`/${sub}`, "layout");
+          revalidatePath(`/${sub}/portal-settings`, "page");
+          revalidatePath("/[schoolDomain]", "page");
+          revalidatePath("/[schoolDomain]", "layout");
+        } catch {}
+      }
+    } catch (persistErr) {
+      console.warn("[BRANDING_UPLOAD] Auto-persist warning:", persistErr);
+    }
 
     return NextResponse.json({
       success: true,
-      url: publicUrl,
+      url: finalUrl,
       mediaKind,
       mediaType: isVideo ? "video" : "image",
       mimeType,

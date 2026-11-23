@@ -97,6 +97,7 @@ export default async function TenantLayout({
         secondSegment === "apply" ||
         secondSegment === "forgot-password" ||
         secondSegment === "reset-password" ||
+        secondSegment === "change-password" ||
         (secondSegment === "admissions" && pathSegments.length >= 3 && pathSegments[2] === "upload") ||
         pathSegments.length <= 1;
 
@@ -125,7 +126,8 @@ export default async function TenantLayout({
       const isPublicTenantAction =
         secondSegment === "login" ||
         secondSegment === "forgot-password" ||
-        secondSegment === "reset-password";
+        secondSegment === "reset-password" ||
+        secondSegment === "change-password";
 
       if (!isPublicTenantAction) {
         redirect("/trial-expired");

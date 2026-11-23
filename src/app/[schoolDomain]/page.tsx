@@ -270,7 +270,7 @@ export default async function PublicGuestPortalPage({
                   fill
                   sizes="48px"
                   className="object-contain"
-                  unoptimized={school.logo.startsWith("data:") || school.logo.endsWith(".svg")}
+                  unoptimized={true}
                 />
               </div>
             ) : (
@@ -337,7 +337,7 @@ export default async function PublicGuestPortalPage({
                 priority
                 className="object-cover" 
                 alt={`${school.name} Campus Premises`} 
-                unoptimized={heroImageUrl.startsWith("data:")}
+                unoptimized={true}
               />
             )}
             <div className="absolute inset-0 bg-black/50 z-0 pointer-events-none" />
@@ -633,7 +633,7 @@ export default async function PublicGuestPortalPage({
                     fill
                     sizes="40px"
                     className="object-contain"
-                    unoptimized={school.logo.startsWith("data:") || school.logo.endsWith(".svg")}
+                    unoptimized={true}
                   />
                 </div>
               ) : (

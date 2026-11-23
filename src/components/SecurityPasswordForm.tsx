@@ -134,18 +134,21 @@ export default function SecurityPasswordForm({
       if (isForcedReset) {
         setTimeout(() => {
           const canonical = (data.role || userRole || "").toUpperCase();
+          let target = `/${schoolDomain}/dashboard`;
           if (canonical === "SUPER_ADMIN" || schoolDomain === "admin") {
-            router.push("/admin");
+            target = "/super-admin";
           } else if (canonical === "STUDENT") {
-            router.push(`/${schoolDomain}/portal/student`);
-          } else if (canonical === "STAFF" || canonical === "TEACHER" || canonical.includes("TEACHER")) {
-            router.push(`/${schoolDomain}/portal/staff`);
+            target = `/${schoolDomain}/portal/student`;
+          } else if (canonical === "PARENT") {
+            target = `/${schoolDomain}/portal/parent`;
+          } else if (canonical === "STAFF" || canonical === "TEACHER" || canonical.includes("TEACHER") || canonical.includes("STAFF")) {
+            target = `/${schoolDomain}/portal/staff`;
           } else if (canonical === "BURSAR" || canonical.includes("BURSAR")) {
-            router.push(`/bursar`);
-          } else {
-            router.push(`/${schoolDomain}/dashboard`);
+            target = `/${schoolDomain}/portal/bursar`;
+          } else if (canonical === "PRINCIPAL" || canonical === "HEADMASTER" || canonical === "VICE_PRINCIPAL") {
+            target = `/${schoolDomain}/portal/principal`;
           }
-          router.refresh();
+          window.location.replace(target);
         }, 1500);
       }
     } catch (err: any) {

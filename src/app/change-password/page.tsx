@@ -4,6 +4,7 @@ export const fetchCache = "force-no-store";
 
 import React from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import { getSession } from "@/lib/auth";
 import Image from "next/image";
@@ -11,35 +12,43 @@ import Link from "next/link";
 import { basePrisma } from "@/lib/tenant-prisma";
 
 export default async function UniversalChangePasswordPage() {
+  const cookieStore = await cookies();
+  const cookieDomain = cookieStore.get("schoolDomain")?.value || cookieStore.get("activeSchoolDomain")?.value || "";
+
   let session = null;
   try {
-    session = await getSession();
+    session = await getSession(undefined, cookieDomain || undefined);
   } catch (e) {
     console.warn("[build] getSession fallback in change-password:", e);
   }
 
-  const schoolDomain = session?.schoolDomain || "york";
+  const schoolDomain = session?.schoolDomain || cookieDomain || "demo";
   if (schoolDomain.toLowerCase() === "demo") {
     redirect("/demo/dashboard");
   }
   const effectiveRole = session?.role || session?.staffRole || "STAFF";
 
-  // Look up school brand color if possible
+  // Look up school details
   let brandColor = "#4f46e5";
+  let schoolName = "School Portal";
+  let schoolLogo = "/img/business-logo.png";
+
   if (schoolDomain) {
-    let school = null;
     try {
-      school = await basePrisma.school.findFirst({
+      const school = await basePrisma.school.findFirst({
         where: {
           OR: [
             { subdomain: schoolDomain.toLowerCase().trim() },
             { slug: schoolDomain.toLowerCase().trim() },
           ],
         },
+        select: {
+          name: true,
+          logo: true,
+        },
       });
-      if ((school as any)?.branding?.primaryColor) {
-        brandColor = (school as any).branding.primaryColor;
-      }
+      if (school?.name) schoolName = school.name;
+      if (school?.logo) schoolLogo = school.logo;
     } catch (e) {
       console.warn("[build] School drift fallback", e);
     }
@@ -51,14 +60,15 @@ export default async function UniversalChangePasswordPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
             <Image
-              src="/img/business-logo.png"
-              alt="School ERP"
+              src={schoolLogo}
+              alt={schoolName}
               width={28}
               height={28}
-              className="w-7 h-7 rounded-lg object-contain shadow-xs"
+              className="w-7 h-7 rounded-lg object-contain shadow-xs bg-white/10 p-0.5"
+              unoptimized={true}
             />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Account Security &bull; Mandatory Password Change
+              {schoolName} &bull; Mandatory Password Change
             </span>
           </div>
         </div>

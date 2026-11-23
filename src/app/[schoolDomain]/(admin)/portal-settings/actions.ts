@@ -194,6 +194,10 @@ export async function updatePortalSettings(
       const normDomain = targetSubdomain.toLowerCase().trim();
       clearL1TenantCache(normDomain);
       clearL1TenantCache(schoolId);
+      if (updatedSchool.slug) {
+        clearL1TenantCache(updatedSchool.slug.toLowerCase().trim());
+        await safeRedisDel(`cache:tenant:meta:${updatedSchool.slug.toLowerCase().trim()}`);
+      }
       await safeRedisDel(`cache:tenant:meta:${normDomain}`);
       await safeRedisScanDel(`cache:tenant:${schoolId}:*`);
     }
@@ -208,8 +212,11 @@ export async function updatePortalSettings(
       safeRevalidatePath(`/${targetSubdomain}/finance`, "page");
       safeRevalidatePath(`/${targetSubdomain}/portal/student`, "page");
       safeRevalidatePath(`/${targetSubdomain}/portal/principal`, "page");
+      safeRevalidatePath(`/[schoolDomain]`, "page");
+      safeRevalidatePath(`/[schoolDomain]`, "layout");
     } else {
       safeRevalidatePath(`/portal-settings`, "page");
+      safeRevalidatePath(`/[schoolDomain]`, "page");
     }
 
     return { success: true, school: updatedSchool };
