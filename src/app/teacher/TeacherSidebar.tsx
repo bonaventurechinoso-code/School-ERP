@@ -114,7 +114,7 @@ export function TeacherSidebar({
 
         {/* Core Navigation Matrix (10 Modules in exact order) */}
         <nav className="space-y-1.5 pt-1">
-          <p className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 px-3 pb-1">
+          <p className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-zinc-300 px-3 pb-1">
             Modules
           </p>
 
@@ -132,8 +132,8 @@ export function TeacherSidebar({
                 onClick={() => setIsOpen(false)}
                 className={`w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-bold transition-all group ${
                   isActive
-                    ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 font-black border-r-4 border-emerald-500 shadow-xs"
-                    : "text-slate-800 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-950 dark:hover:text-white"
+                    ? "bg-emerald-500/20 text-emerald-900 dark:text-emerald-100 font-black border-l-4 border-emerald-500 shadow-xs"
+                    : "text-slate-800 dark:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-950 dark:hover:text-white font-bold"
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -141,7 +141,7 @@ export function TeacherSidebar({
                     className={`w-4.5 h-4.5 shrink-0 stroke-[2.5] transition-transform group-hover:scale-110 ${
                       isActive
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-slate-600 dark:text-zinc-400 group-hover:text-slate-950 dark:group-hover:text-white"
+                        : "text-slate-700 dark:text-zinc-300 group-hover:text-slate-950 dark:group-hover:text-white"
                     }`}
                   />
                   <span className="truncate font-bold">{item.label}</span>

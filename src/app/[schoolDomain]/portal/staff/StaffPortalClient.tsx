@@ -1009,16 +1009,16 @@ export default function StaffPortalClient({
                   onClick={() => toggleSection(group.title)}
                   title={group.title}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 cursor-pointer ${anyChildActive
-                      ? "bg-emerald-600/25 text-white font-black border-l-4 border-emerald-400 shadow-xs"
-                      : "text-slate-100 hover:bg-slate-800 hover:text-white"
+                      ? "bg-white/15 text-white font-black border-l-4 border-emerald-400 shadow-xs"
+                      : "text-slate-200 hover:bg-white/10 hover:text-white font-bold"
                     }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <FolderIcon
-                      className={`w-4.5 h-4.5 shrink-0 stroke-[2.5] transition-colors ${anyChildActive ? "text-emerald-400" : "text-slate-300"
+                      className={`w-4.5 h-4.5 shrink-0 stroke-[2.5] transition-colors ${anyChildActive ? "text-emerald-400" : "text-slate-200"
                         }`}
                     />
-                    <span className="flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left truncate font-bold">
+                    <span className="flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left truncate font-bold text-slate-100">
                       {group.title}
                     </span>
                   </div>
@@ -1027,9 +1027,9 @@ export default function StaffPortalClient({
                       <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs ring-2 ring-emerald-400/30" />
                     )}
                     {isExpanded ? (
-                      <ChevronDown className="w-4 h-4 text-slate-300 stroke-[2.5] transition-transform duration-150" />
+                      <ChevronDown className="w-4 h-4 text-slate-200 stroke-[2.5] transition-transform duration-150" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-slate-300 stroke-[2.5] transition-transform duration-150" />
+                      <ChevronRight className="w-4 h-4 text-slate-200 stroke-[2.5] transition-transform duration-150" />
                     )}
                   </div>
                 </button>
@@ -1051,18 +1051,18 @@ export default function StaffPortalClient({
                           }}
                           title={child.label}
                           className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${isChildActive
-                              ? "bg-emerald-600/30 text-white font-black border-l-4 border-emerald-400 shadow-xs"
-                              : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                              ? "bg-white/15 text-white font-black border-l-4 border-emerald-400 shadow-xs"
+                              : "text-slate-200 hover:bg-white/10 hover:text-white font-bold"
                             }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             {ChildIcon && (
                               <ChildIcon
-                                className={`w-4 h-4 shrink-0 stroke-[2.5] ${isChildActive ? "text-emerald-400" : "text-slate-400"
+                                className={`w-4 h-4 shrink-0 stroke-[2.5] ${isChildActive ? "text-emerald-400" : "text-slate-300"
                                   }`}
                               />
                             )}
-                            <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left truncate font-bold">
+                            <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left truncate font-bold text-slate-100">
                               {child.label}
                             </span>
                           </div>

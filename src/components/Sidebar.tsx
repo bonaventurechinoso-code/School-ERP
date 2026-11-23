@@ -319,7 +319,7 @@ export default function Sidebar({
           return (
             <div key={group.id} className="space-y-1">
               {group.title && (
-                <div className={`px-3 pt-2.5 pb-1 text-[11px] font-black text-slate-300 dark:text-zinc-400 tracking-wider uppercase ${isCollapsed ? "md:hidden" : ""}`}>
+                <div className={`px-3 pt-2.5 pb-1 text-[11px] font-black text-slate-200 dark:text-zinc-300 tracking-wider uppercase ${isCollapsed ? "md:hidden" : ""}`}>
                   {group.title}
                 </div>
               )}
@@ -343,13 +343,13 @@ export default function Sidebar({
                         onClick={() => toggleGroup(item.id)}
                         title={item.label}
                         className={`w-full flex items-start justify-between px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 cursor-pointer ${anyChildActive
-                            ? "bg-indigo-600/25 text-white font-black border-l-4 border-indigo-400 shadow-xs"
-                            : "text-slate-100 hover:bg-slate-800 hover:text-white"
+                            ? "bg-white/15 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                            : "text-slate-200 hover:bg-white/10 hover:text-white font-bold"
                           }`}
                       >
                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                          <Icon className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] ${anyChildActive ? "text-indigo-400" : "text-slate-300 group-hover:text-white"}`} />
-                          <span className={`flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left font-bold ${isCollapsed ? "md:hidden" : ""}`}>
+                          <Icon className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] ${anyChildActive ? "text-indigo-400" : "text-slate-200 group-hover:text-white"}`} />
+                          <span className={`flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left font-bold text-slate-100 group-hover:text-white ${isCollapsed ? "md:hidden" : ""}`}>
                             {item.label}
                           </span>
                         </div>
@@ -359,9 +359,9 @@ export default function Sidebar({
                             <span className="w-2 h-2 rounded-full bg-indigo-400 shadow-xs ring-2 ring-indigo-400/30" />
                           )}
                           {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-slate-300 stroke-[2.5]" />
+                            <ChevronDown className="w-4 h-4 text-slate-200 stroke-[2.5]" />
                           ) : (
-                            <ChevronRight className="w-4 h-4 text-slate-300 stroke-[2.5]" />
+                            <ChevronRight className="w-4 h-4 text-slate-200 stroke-[2.5]" />
                           )}
                         </div>
                       </button>
@@ -380,18 +380,18 @@ export default function Sidebar({
                                 href={childHref}
                                 onClick={() => setIsSidebarOpen(false)}
                                 title={child.label}
-                                className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150 ${isChildActive
-                                    ? "bg-indigo-600/30 text-white font-black border-l-4 border-indigo-400 shadow-xs"
-                                    : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                                className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs sm:text-[12px] font-bold transition-all duration-150 ${isChildActive
+                                    ? "bg-white/15 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                                    : "text-slate-200 hover:bg-white/10 hover:text-white font-bold"
                                   }`}
                               >
                                 {ChildIcon && (
                                   <ChildIcon
-                                    className={`w-4 h-4 shrink-0 mt-0.5 stroke-[2.5] ${isChildActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
+                                    className={`w-4 h-4 shrink-0 mt-0.5 stroke-[2.5] ${isChildActive ? "text-indigo-400" : "text-slate-300 group-hover:text-white"
                                       }`}
                                   />
                                 )}
-                                <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left font-bold">
+                                <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left font-bold text-slate-100 group-hover:text-white">
                                   {child.label}
                                 </span>
                                 {child.badge && (
@@ -419,16 +419,16 @@ export default function Sidebar({
                     onClick={() => setIsSidebarOpen(false)}
                     title={item.label}
                     className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 group active:scale-98 ${isActive
-                        ? "bg-indigo-600/25 text-white font-black border-l-4 border-indigo-400 shadow-xs"
-                        : "text-slate-100 hover:bg-slate-800 hover:text-white"
+                        ? "bg-white/15 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                        : "text-slate-200 hover:bg-white/10 hover:text-white font-bold"
                       }`}
                   >
                     <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <Icon
-                        className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] transition-colors ${isActive ? "text-indigo-400" : "text-slate-300 group-hover:text-white"
+                        className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] transition-colors ${isActive ? "text-indigo-400" : "text-slate-200 group-hover:text-white"
                           }`}
                       />
-                      <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left font-bold">
+                      <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left font-bold text-slate-100 group-hover:text-white">
                         {item.label}
                       </span>
                     </div>

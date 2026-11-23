@@ -119,7 +119,7 @@ export function BursarSidebar({
 
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
-          <div className="px-3 pb-1.5 text-[11px] font-black uppercase tracking-wider text-slate-300 dark:text-zinc-400">
+          <div className="px-3 pb-1.5 text-[11px] font-black uppercase tracking-wider text-slate-200 dark:text-zinc-300">
             Financial Management
           </div>
 
@@ -138,13 +138,13 @@ export function BursarSidebar({
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all ${
                   isActive
-                    ? "bg-indigo-600/30 text-white font-black border-l-4 border-indigo-400 shadow-xs"
-                    : "text-slate-100 hover:text-white hover:bg-slate-800"
+                    ? "bg-white/15 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4.5 h-4.5 stroke-[2.5] ${isActive ? "text-indigo-400" : "text-slate-300"}`} />
-                  <span className="font-bold">{item.label}</span>
+                  <Icon className={`w-4.5 h-4.5 stroke-[2.5] ${isActive ? "text-indigo-400" : "text-slate-200"}`} />
+                  <span className="font-bold text-slate-100">{item.label}</span>
                 </div>
 
                 {'hasBadge' in item && item.hasBadge && pendingVerificationsCount > 0 && (
