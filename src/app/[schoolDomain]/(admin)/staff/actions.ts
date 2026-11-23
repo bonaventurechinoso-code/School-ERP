@@ -124,6 +124,7 @@ export async function fetchStaffPaginated(
     cursor?: string | null;
     limit?: number;
     search?: string;
+    bypassCache?: boolean;
   }
 ): Promise<CursorPaginationResult<any>> {
   try {
@@ -163,6 +164,7 @@ export async function fetchStaffPaginated(
     return await cacheAside<CursorPaginationResult<any>>({
       key: cacheKey,
       ttlSeconds: 900, // 15 minutes safe sliding TTL
+      bypassCache: options?.bypassCache,
       fetchFn: async () => {
         try {
           const tenantDb = getTenantClient(schoolId);
@@ -1685,6 +1687,7 @@ export async function createEnterpriseStaffAction(
 
     // Invalidate caches & revalidate paths across all portal pages
     await invalidateStaffNamespace(schoolId);
+    clearL1TenantCache(schoolId);
     if (subdomain) {
       clearL1TenantCache(subdomain);
       safeRevalidate(`/${subdomain}/staff`, "page");
@@ -1730,11 +1733,22 @@ export async function createEnterpriseStaffAction(
         firstName: result.staff.firstName,
         lastName: result.staff.lastName,
         email: result.staff.email,
-        role: payload.role,
-        status: result.staff.status,
+        role: payload.role || canonicalRole,
+        status: result.staff.status || "ACTIVE",
         tempPassword,
         emailDispatched,
         emailDeliveryStatus,
+        department: payload.departmentName ? { name: payload.departmentName } : null,
+        departmentId: payload.departmentId || null,
+        metadata: {
+          qualification: payload.highestQualification || "B.Ed",
+          trcn_number: payload.trcnNumber || null,
+          trcnCategory: "Category C",
+          nin: payload.nin || null,
+        },
+        baseSalary: payload.baseSalary || 220000,
+        bankName: payload.bankName || "Zenith Bank",
+        todayAttendance: null,
       },
     };
   } catch (error: any) {

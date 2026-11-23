@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Staff } from "@prisma/client";
 import {
   createStaff,
@@ -51,6 +51,10 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Mail,
+  Key,
+  X,
+  Sparkles,
 } from "lucide-react";
 
 export interface StaffTableProps {
@@ -191,12 +195,32 @@ export default function StaffTable({
   classrooms: propClassrooms = [],
 }: StaffTableProps) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const tenant = useTenant();
   const searchParams = useSearchParams();
   const paramTier = searchParams.get("tier");
 
   const schoolDomain = propDomain || tenant.subdomain || "greenwood";
   const schoolName = propSchoolName || tenant.name || "Greenwood Academy";
+
+  // Onboarding Success Notification Banner State
+  const [onboardSuccessMessage, setOnboardSuccessMessage] = useState<{
+    name: string;
+    role: string;
+    email: string;
+    tempPassword?: string;
+    emailDispatched?: boolean;
+    emailDeliveryStatus?: string;
+  } | null>(null);
+
+  // Auto-dismiss confirmation banner after 15 seconds
+  useEffect(() => {
+    if (!onboardSuccessMessage) return;
+    const timer = setTimeout(() => {
+      setOnboardSuccessMessage(null);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [onboardSuccessMessage]);
 
   // Tier category resolution
   const effectiveTier = paramTier || activeTier || (tenant as any)?.activeTier || tenant?.preciseTier || "PRIMARY";
@@ -281,10 +305,8 @@ export default function StaffTable({
       .catch(() => {});
   }, [schoolDomain]);
 
-
-
-  // Refresh roster
-  const refreshRoster = (query?: string, role?: string, dept?: string) => {
+  // Refresh roster with optional bypassCache support
+  const refreshRoster = (query?: string, role?: string, dept?: string, bypassCache?: boolean) => {
     const q = query !== undefined ? query : searchQuery;
     const r = role !== undefined ? role : filterRole;
     const d = dept !== undefined ? dept : filterDepartment;
@@ -295,6 +317,7 @@ export default function StaffTable({
         role: r !== "ALL" ? r : undefined,
         departmentId: d !== "ALL" ? d : undefined,
         limit: 25,
+        bypassCache,
       });
       if (res?.items) {
         setCurrentStaff(res.items);
@@ -302,6 +325,75 @@ export default function StaffTable({
         setHasMore(res.hasMore);
       }
     });
+  };
+
+  // Immediate optimistic update and UI confirmation handler for all onboarding modals
+  const handleStaffOnboardingSuccess = (newStaff: any) => {
+    setIsOnboardModalOpen(false);
+
+    if (newStaff) {
+      const optimisticStaff = {
+        id: newStaff.id || `temp-${Date.now()}`,
+        staffId: newStaff.staffId || null,
+        firstName: newStaff.firstName || "New",
+        lastName: newStaff.lastName || "Staff",
+        email: newStaff.email || "",
+        role: newStaff.role || defaultRole,
+        department: newStaff.department || null,
+        metadata: newStaff.metadata || {
+          qualification: "B.Ed",
+          trcn_number: null,
+          trcnCategory: "Category C",
+        },
+        baseSalary: newStaff.baseSalary || 220000,
+        bankName: newStaff.bankName || "Zenith Bank",
+        status: newStaff.status || "ACTIVE",
+        todayAttendance: null,
+      };
+
+      // Reset search filter if one was active so the newly created staff member is immediately visible
+      if (searchQuery) {
+        setSearchQuery("");
+      }
+
+      // If active filter would hide this role, adjust filter
+      if (newStaff.role) {
+        const isTeacher = newStaff.role.toUpperCase().includes("TEACH");
+        if (filterRole === "TEACHER" && !isTeacher) {
+          setFilterRole("ALL");
+        } else if (filterRole === "NON_TEACHING" && isTeacher) {
+          setFilterRole("ALL");
+        }
+      }
+
+      // Optimistic instant prepend to table
+      setCurrentStaff((prev) => {
+        const exists = prev.some(
+          (s) =>
+            s.id === optimisticStaff.id ||
+            (s.email && optimisticStaff.email && s.email.toLowerCase() === optimisticStaff.email.toLowerCase())
+        );
+        if (exists) return prev;
+        return [optimisticStaff, ...prev];
+      });
+
+      // Show confirmation banner
+      setOnboardSuccessMessage({
+        name: `${newStaff.firstName} ${newStaff.lastName}`.trim(),
+        role: newStaff.role || "Staff Member",
+        email: newStaff.email || "",
+        tempPassword: newStaff.tempPassword,
+        emailDispatched: newStaff.emailDispatched,
+        emailDeliveryStatus: newStaff.emailDeliveryStatus,
+      });
+
+      // Trigger background sync with bypassCache=true & server component router refresh
+      refreshRoster("", undefined, undefined, true);
+      router.refresh();
+    } else {
+      refreshRoster(undefined, undefined, undefined, true);
+      router.refresh();
+    }
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -660,6 +752,61 @@ export default function StaffTable({
 
   return (
     <div className="space-y-6">
+      {/* ONBOARDING SUCCESS CONFIRMATION BANNER */}
+      {onboardSuccessMessage && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white p-5 shadow-xl border border-emerald-500/30 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5 shadow-inner">
+                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-black text-sm text-white tracking-wide flex items-center gap-1.5">
+                    <span>Staff Member Successfully Onboarded!</span>
+                    <Sparkles className="w-4 h-4 text-emerald-300" />
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Added to Directory Instantly
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100/90 leading-relaxed">
+                  <strong className="text-white font-bold">{onboardSuccessMessage.name}</strong> has been onboarded as{" "}
+                  <span className="text-emerald-300 font-semibold">{onboardSuccessMessage.role}</span> and added directly to the staff directory below.
+                </p>
+                <div className="flex items-center gap-3 pt-1.5 flex-wrap text-xs">
+                  {onboardSuccessMessage.email && (
+                    <div className="flex items-center gap-1.5 text-emerald-200/90 bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                      <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{onboardSuccessMessage.email}</span>
+                      {onboardSuccessMessage.emailDispatched ? (
+                        <span className="text-[10px] text-emerald-300 font-semibold">• Credentials Dispatched</span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-300/80 font-semibold">• Credentials Dispatched</span>
+                      )}
+                    </div>
+                  )}
+                  {onboardSuccessMessage.tempPassword && (
+                    <div className="flex items-center gap-1.5 text-indigo-200 bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-500/30 font-mono text-[11px]">
+                      <Key className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Temp Password: <strong className="text-white">{onboardSuccessMessage.tempPassword}</strong></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOnboardSuccessMessage(null)}
+              className="text-emerald-300/70 hover:text-white hover:bg-emerald-800/40 p-1.5 rounded-lg transition shrink-0"
+              title="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* TOOLBAR & SEARCH BAR */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-5">
         {/* ROW 1: HEADER & FILTER CHIPS */}
@@ -996,10 +1143,7 @@ export default function StaffTable({
         <CrecheStaffOnboardingModal
           isOpen={isOnboardModalOpen}
           onClose={() => setIsOnboardModalOpen(false)}
-          onSuccess={() => {
-            refreshRoster();
-            setIsOnboardModalOpen(false);
-          }}
+          onSuccess={(created) => handleStaffOnboardingSuccess(created)}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
@@ -1011,10 +1155,7 @@ export default function StaffTable({
         <NurseryStaffOnboardingModal
           isOpen={isOnboardModalOpen}
           onClose={() => setIsOnboardModalOpen(false)}
-          onSuccess={() => {
-            refreshRoster();
-            setIsOnboardModalOpen(false);
-          }}
+          onSuccess={(created) => handleStaffOnboardingSuccess(created)}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
@@ -1026,10 +1167,7 @@ export default function StaffTable({
         <PrimaryStaffOnboardingModal
           isOpen={isOnboardModalOpen}
           onClose={() => setIsOnboardModalOpen(false)}
-          onSuccess={() => {
-            refreshRoster();
-            setIsOnboardModalOpen(false);
-          }}
+          onSuccess={(created) => handleStaffOnboardingSuccess(created)}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
@@ -1041,10 +1179,7 @@ export default function StaffTable({
         <SecondaryStaffOnboardingModal
           isOpen={isOnboardModalOpen}
           onClose={() => setIsOnboardModalOpen(false)}
-          onSuccess={() => {
-            refreshRoster();
-            setIsOnboardModalOpen(false);
-          }}
+          onSuccess={(created) => handleStaffOnboardingSuccess(created)}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}
@@ -1056,10 +1191,7 @@ export default function StaffTable({
         <TertiaryStaffOnboardingModal
           isOpen={isOnboardModalOpen}
           onClose={() => setIsOnboardModalOpen(false)}
-          onSuccess={() => {
-            refreshRoster();
-            setIsOnboardModalOpen(false);
-          }}
+          onSuccess={(created) => handleStaffOnboardingSuccess(created)}
           schoolId={schoolId}
           schoolDomain={schoolDomain}
           schoolName={schoolName}

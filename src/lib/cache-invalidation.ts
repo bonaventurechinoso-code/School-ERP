@@ -45,10 +45,13 @@ export async function invalidateStudentNamespace(schoolId: string, tierName?: st
  * Invalidate staff directory and scheduling queries for a tenant.
  */
 export async function invalidateStaffNamespace(schoolId: string): Promise<void> {
+  clearL1TenantCache(schoolId);
   await Promise.all([
+    invalidateNamespace(`cache:tenant:${schoolId}:*staff*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:staff:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:dashboard:*`),
     invalidateNamespace(`cache:tenant:${schoolId}:tier:*:table:scheduling:*`),
+    invalidateNamespace(`cache:tenant:${schoolId}:*dashboard*`),
   ]);
 }
 
