@@ -107,7 +107,7 @@ export async function ensureStaffMetadataTable() {
       ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS designation TEXT;
       ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS assigned_class TEXT;
       ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS assigned_subjects TEXT;
-    `).catch(() => {});
+    `).catch(() => { });
   } catch (err) {
     console.error("[ensureStaffMetadataTable] Table check/create error:", err);
   }
@@ -152,7 +152,7 @@ export async function fetchStaffPaginated(
     const limit = options?.limit || 25;
     const search = options?.search;
 
-    await ensureStaffMetadataTable().catch(() => {});
+    await ensureStaffMetadataTable().catch(() => { });
 
     const cacheKey = buildCacheKey({
       tenantId: schoolId,
@@ -177,8 +177,8 @@ export async function fetchStaffPaginated(
               ? role.toUpperCase().includes("NON")
                 ? { user: { role: { not: "TEACHER" } } }
                 : role.toUpperCase().includes("TEACH")
-                ? { user: { role: "TEACHER" } }
-                : { user: { role: toCanonicalRole(role) } }
+                  ? { user: { role: "TEACHER" } }
+                  : { user: { role: toCanonicalRole(role) } }
               : {}),
             ...(departmentId && departmentId !== "ALL" ? { departmentId } : {}),
           };
@@ -203,7 +203,7 @@ export async function fetchStaffPaginated(
               ...args,
               where: whereClause,
               orderBy: { createdAt: "desc" },
-              include: { 
+              include: {
                 department: true,
                 user: {
                   select: {
@@ -370,11 +370,11 @@ export async function fetchStaffFullProfile(schoolIdentifier: string, staffId: s
  */
 export async function createStaff(
   schoolIdentifier: string,
-  data: { 
-    firstName: string; 
-    lastName: string; 
-    email: string; 
-    role: string; 
+  data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
     status?: string;
     departmentId?: string | null;
     baseSalary?: number | null;
@@ -505,7 +505,7 @@ export async function createStaff(
           emergency_name = EXCLUDED.emergency_name,
           emergency_phone = EXCLUDED.emergency_phone,
           updated_at = NOW();
-      `, 
+      `,
         staff.id,
         data.phone || null,
         data.whatsapp || null,
@@ -633,7 +633,7 @@ export async function updateStaffProfile(
           email: data.email.trim().toLowerCase(),
           role: canonicalRole,
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     const updateData: any = {
@@ -934,7 +934,7 @@ export async function updateStaffStatus(
     const { schoolId, subdomain, schoolName } = await resolveSchoolInfo(schoolIdentifier);
     const tenantDb = getTenantClient(schoolId);
     const data: any = { status: newStatus };
-    
+
     switch (newStatus) {
       case "ONBOARDING":
         data.onboardingAt = new Date();
@@ -1311,10 +1311,10 @@ export async function generateEnterpriseStaffId(
     tierCategory === "TERTIARY" &&
     !isNonTeachingRole(role) &&
     (role.toLowerCase().includes("lecturer") ||
-     role.toLowerCase().includes("professor") ||
-     role.toLowerCase().includes("reader") ||
-     role.toLowerCase().includes("assistant") ||
-     role.toLowerCase().includes("graduate"));
+      role.toLowerCase().includes("professor") ||
+      role.toLowerCase().includes("reader") ||
+      role.toLowerCase().includes("assistant") ||
+      role.toLowerCase().includes("graduate"));
 
   const rolePrefix = isTertiaryAcademic ? "LEC" : "STF";
   const prefix = `${schoolCode}/${rolePrefix}/`;
@@ -1369,7 +1369,7 @@ export async function fetchSchoolStaffMembersAction(schoolIdentifier: string) {
 
 export interface EnterpriseStaffPayload {
   tierCategory: StaffTierCategory;
-  
+
   // Section A: Personal & Identity
   firstName: string;
   lastName: string;
@@ -1743,7 +1743,7 @@ export async function createEnterpriseStaffAction(
     // Ensure security policies are synchronized
     try {
       await setUserMustChangePassword(result.user.id, schoolId, true);
-    } catch {}
+    } catch { }
 
     // Invalidate caches & revalidate paths across all portal pages
     await invalidateStaffNamespace(schoolId);
