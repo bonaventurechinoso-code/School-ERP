@@ -228,13 +228,12 @@ function MultiSearchableDropdown({
         tabIndex={0}
         role="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full min-h-[42px] px-3 py-1.5 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${
-          error
-            ? "border-rose-400 bg-rose-50/20"
-            : isOpen
+        className={`w-full min-h-[42px] px-3 py-1.5 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${error
+          ? "border-rose-400 bg-rose-50/20"
+          : isOpen
             ? "border-emerald-600 ring-2 ring-emerald-500/10"
             : "border-slate-300 hover:border-slate-400"
-        }`}
+          }`}
       >
         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
           {selected.length === 0 ? (
@@ -261,9 +260,8 @@ function MultiSearchableDropdown({
           )}
         </div>
         <ChevronDown
-          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${
-            isOpen ? "rotate-180 text-emerald-600" : ""
-          }`}
+          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${isOpen ? "rotate-180 text-emerald-600" : ""
+            }`}
         />
       </div>
 
@@ -437,13 +435,12 @@ function SingleSearchableDropdown({
         tabIndex={0}
         role="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full min-h-[42px] px-3 py-2 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${
-          error
-            ? "border-rose-400 bg-rose-50/20"
-            : isOpen
+        className={`w-full min-h-[42px] px-3 py-2 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${error
+          ? "border-rose-400 bg-rose-50/20"
+          : isOpen
             ? "border-emerald-600 ring-2 ring-emerald-500/10"
             : "border-slate-300 hover:border-slate-400"
-        }`}
+          }`}
       >
         <span className={selectedItem ? "font-semibold text-slate-800" : "text-slate-500 font-normal"}>
           {selectedItem ? selectedItem.name : placeholder}
@@ -462,9 +459,8 @@ function SingleSearchableDropdown({
             </span>
           )}
           <ChevronDown
-            className={`w-4 h-4 text-slate-400 transition-transform ${
-              isOpen ? "rotate-180 text-emerald-600" : ""
-            }`}
+            className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "rotate-180 text-emerald-600" : ""
+              }`}
           />
         </div>
       </div>
@@ -494,9 +490,8 @@ function SingleSearchableDropdown({
                 onChange("");
                 setIsOpen(false);
               }}
-              className={`px-3 py-2 text-xs rounded-lg cursor-pointer transition ${
-                !value ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-600 hover:bg-slate-50"
-              }`}
+              className={`px-3 py-2 text-xs rounded-lg cursor-pointer transition ${!value ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-600 hover:bg-slate-50"
+                }`}
             >
               {placeholder}
             </div>
@@ -509,11 +504,10 @@ function SingleSearchableDropdown({
                     onChange(opt.id);
                     setIsOpen(false);
                   }}
-                  className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition ${
-                    isSelected
-                      ? "bg-emerald-50 text-emerald-900 font-bold"
-                      : "text-slate-700 hover:bg-slate-50 font-medium"
-                  }`}
+                  className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition ${isSelected
+                    ? "bg-emerald-50 text-emerald-900 font-bold"
+                    : "text-slate-700 hover:bg-slate-50 font-medium"
+                    }`}
                 >
                   <span>{opt.name}</span>
                   {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
