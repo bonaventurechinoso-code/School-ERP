@@ -366,37 +366,37 @@ export default function PrincipalPortalClient({
                   type="button"
                   onClick={() => toggleSection(group.title)}
                   title={group.title}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 cursor-pointer ${
                     anyChildActive
-                      ? "bg-amber-500/15 text-white font-bold"
-                      : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                      ? "bg-amber-500/25 text-white font-black border-l-4 border-amber-400 shadow-xs"
+                      : "text-slate-100 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <FolderIcon
-                      className={`w-4 h-4 shrink-0 transition-colors ${
-                        anyChildActive ? "text-amber-400" : "text-slate-400"
+                      className={`w-4.5 h-4.5 shrink-0 stroke-[2.5] transition-colors ${
+                        anyChildActive ? "text-amber-400" : "text-slate-300"
                       }`}
                     />
-                    <span className="flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left truncate">
+                    <span className="flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left truncate font-bold">
                       {group.title}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
                     {anyChildActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shadow-xs ring-2 ring-amber-400/30" />
                     )}
                     {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                      <ChevronDown className="w-4 h-4 text-slate-300 stroke-[2.5] transition-transform duration-150" />
                     ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 transition-transform duration-150" />
+                      <ChevronRight className="w-4 h-4 text-slate-300 stroke-[2.5] transition-transform duration-150" />
                     )}
                   </div>
                 </button>
 
                 {/* Indented Child Links */}
                 {isExpanded && (
-                  <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-700/80 animate-in fade-in slide-in-from-top-1 duration-150">
                     {group.items.map((child) => {
                       const isChildActive = activeTab === child.id;
                       const ChildIcon = child.icon;
@@ -410,21 +410,21 @@ export default function PrincipalPortalClient({
                             setIsSidebarOpen(false);
                           }}
                           title={child.label}
-                          className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
+                          className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${
                             isChildActive
-                              ? "bg-amber-500/20 text-white font-bold border-l-2 border-amber-500 shadow-2xs"
-                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border-l-2 border-transparent"
+                              ? "bg-amber-500/30 text-white font-black border-l-4 border-amber-400 shadow-xs"
+                              : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             {ChildIcon && (
                               <ChildIcon
-                                className={`w-3.5 h-3.5 shrink-0 ${
-                                  isChildActive ? "text-amber-400" : "text-slate-500"
+                                className={`w-4 h-4 shrink-0 stroke-[2.5] ${
+                                  isChildActive ? "text-amber-400" : "text-slate-400"
                                 }`}
                               />
                             )}
-                            <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left truncate">
+                            <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left truncate font-bold">
                               {child.label}
                             </span>
                           </div>

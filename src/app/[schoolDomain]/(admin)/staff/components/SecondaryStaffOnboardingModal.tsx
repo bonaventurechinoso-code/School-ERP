@@ -819,6 +819,7 @@ export default function SecondaryStaffOnboardingModal({
     if (!formData.gender) localErrors.gender = "Gender is required.";
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.lga || !formData.lga.trim()) localErrors.lga = "LGA of Origin is required.";
 
     // Section B
     if (!formData.dateOfEmployment) localErrors.dateOfEmployment = "Date of Employment is required.";
@@ -903,8 +904,8 @@ export default function SecondaryStaffOnboardingModal({
           teachingClassIds.length > 0
             ? teachingClassIds
             : formTutorClassId
-            ? [formTutorClassId]
-            : [];
+              ? [formTutorClassId]
+              : [];
 
         if (formTutorClassId) {
           const selectedClass = classesList.find((c) => c.id === formTutorClassId);
@@ -1117,9 +1118,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.firstName}
                     onChange={(e) => handleFieldChange("firstName", e.target.value)}
                     placeholder="e.g. Chioma"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.firstName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.firstName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.firstName && <p className="text-[11px] text-rose-500 mt-1">{errors.firstName}</p>}
                 </div>
@@ -1134,9 +1134,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.lastName}
                     onChange={(e) => handleFieldChange("lastName", e.target.value)}
                     placeholder="e.g. Okeke"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.lastName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.lastName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.lastName && <p className="text-[11px] text-rose-500 mt-1">{errors.lastName}</p>}
                 </div>
@@ -1164,9 +1163,8 @@ export default function SecondaryStaffOnboardingModal({
                       Date of Birth <span className="text-rose-500">*</span>
                     </label>
                     {age !== null && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                        age >= 18 && age <= 70 ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"
-                      }`}>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${age >= 18 && age <= 70 ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"
+                        }`}>
                         Age: {age} yrs
                       </span>
                     )}
@@ -1175,9 +1173,8 @@ export default function SecondaryStaffOnboardingModal({
                     type="date"
                     value={formData.dateOfBirth}
                     onChange={(e) => handleFieldChange("dateOfBirth", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.dateOfBirth ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.dateOfBirth ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.dateOfBirth && <p className="text-[11px] text-rose-500 mt-1">{errors.dateOfBirth}</p>}
                 </div>
@@ -1190,9 +1187,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.gender}
                     onChange={(e) => handleFieldChange("gender", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.gender ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.gender ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select Gender --</option>
                     <option value="Female">Female</option>
@@ -1228,9 +1224,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.nin}
                     onChange={(e) => handleFieldChange("nin", e.target.value.replace(/\D/g, ""))}
                     placeholder="e.g. 12345678901"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono placeholder:text-slate-500 ${
-                      errors.nin ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono placeholder:text-slate-500 ${errors.nin ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.nin && <p className="text-[11px] text-rose-500 mt-1">{errors.nin}</p>}
                 </div>
@@ -1247,9 +1242,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.phone}
                     onChange={(e) => handleFieldChange("phone", e.target.value)}
                     placeholder="e.g. 08031234567 or +234 803 123 4567"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.phone ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.phone ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.phone && <p className="text-[11px] text-rose-500 mt-1">{errors.phone}</p>}
                 </div>
@@ -1264,9 +1258,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.email}
                     onChange={(e) => handleFieldChange("email", e.target.value.toLowerCase())}
                     placeholder="e.g. staff.member@greenwood.edu.ng"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.email ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.email ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.email && <p className="text-[11px] text-rose-500 mt-1">{errors.email}</p>}
                 </div>
@@ -1274,7 +1267,7 @@ export default function SecondaryStaffOnboardingModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Residential Address */}
-                <div id="field-residentialAddress" className="sm:col-span-2">
+                <div id="field-residentialAddress">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Residential Address <span className="text-rose-500">*</span>
                   </label>
@@ -1283,9 +1276,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.residentialAddress}
                     onChange={(e) => handleFieldChange("residentialAddress", e.target.value)}
                     placeholder="e.g. 14 Mission Road, Enugu"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.residentialAddress ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.residentialAddress ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.residentialAddress && (
                     <p className="text-[11px] text-rose-500 mt-1">{errors.residentialAddress}</p>
@@ -1300,9 +1292,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.state}
                     onChange={(e) => handleFieldChange("state", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.state ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.state ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select State --</option>
                     {NIGERIAN_STATES.map((st) => (
@@ -1312,6 +1303,22 @@ export default function SecondaryStaffOnboardingModal({
                     ))}
                   </select>
                   {errors.state && <p className="text-[11px] text-rose-500 mt-1">{errors.state}</p>}
+                </div>
+
+                {/* L.G.A */}
+                <div id="field-lga">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    L.G.A of Origin <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.lga}
+                    onChange={(e) => handleFieldChange("lga", e.target.value)}
+                    placeholder="e.g. Udi, Nsukka, Ikeja"
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.lga ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
+                  />
+                  {errors.lga && <p className="text-[11px] text-rose-500 mt-1">{errors.lga}</p>}
                 </div>
               </div>
             </div>
@@ -1355,9 +1362,8 @@ export default function SecondaryStaffOnboardingModal({
                     type="date"
                     value={formData.dateOfEmployment}
                     onChange={(e) => handleFieldChange("dateOfEmployment", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.dateOfEmployment ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.dateOfEmployment ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.dateOfEmployment && (
                     <p className="text-[11px] text-rose-500 mt-1">{errors.dateOfEmployment}</p>
@@ -1372,9 +1378,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.employmentType}
                     onChange={(e) => handleFieldChange("employmentType", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.employmentType ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.employmentType ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select Type --</option>
                     <option value="Full-time">Full-time</option>
@@ -1398,9 +1403,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.departmentName}
                     onChange={(e) => handleFieldChange("departmentName", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.departmentName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.departmentName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select Department / Unit --</option>
                     <option value="Sciences">Sciences (Maths, Physics, Chem, Bio)</option>
@@ -1470,9 +1474,8 @@ export default function SecondaryStaffOnboardingModal({
                         });
                       }
                     }}
-                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 ${
-                      errors.qualification ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 ${errors.qualification ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select Highest Qualification --</option>
                     {NURSERY_PRIMARY_SECONDARY_QUALIFICATIONS.map((q) => (
@@ -1505,9 +1508,8 @@ export default function SecondaryStaffOnboardingModal({
                       }
                     }}
                     placeholder="e.g. Physics Education, English Literature, Mathematics"
-                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-500 ${
-                      errors.fieldOfStudy ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-500 ${errors.fieldOfStudy ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.fieldOfStudy && (
                     <p className="text-[11px] text-rose-500 font-medium mt-1">{errors.fieldOfStudy}</p>
@@ -1555,11 +1557,10 @@ export default function SecondaryStaffOnboardingModal({
                   </label>
                   {trcnNumber && (
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isTrcnExpired
-                          ? "bg-rose-100 text-rose-700 border border-rose-200"
-                          : "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                      }`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isTrcnExpired
+                        ? "bg-rose-100 text-rose-700 border border-rose-200"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        }`}
                     >
                       {isTrcnExpired ? "Expired License" : "Active License"}
                     </span>
@@ -1582,9 +1583,8 @@ export default function SecondaryStaffOnboardingModal({
                         }
                       }}
                       placeholder="e.g. TRCN/LA/2019/33102"
-                      className={`w-full text-xs font-mono uppercase border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-500 ${
-                        errors.trcnNumber ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                      }`}
+                      className={`w-full text-xs font-mono uppercase border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-500 ${errors.trcnNumber ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                        }`}
                     />
                     {errors.trcnNumber && (
                       <p className="text-[11px] text-rose-500 font-medium mt-1">{errors.trcnNumber}</p>
@@ -1605,9 +1605,8 @@ export default function SecondaryStaffOnboardingModal({
                           });
                         }
                       }}
-                      className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 ${
-                        errors.trcnExpiry ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                      }`}
+                      className={`w-full text-xs font-medium border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500 ${errors.trcnExpiry ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                        }`}
                     />
                     {errors.trcnExpiry && (
                       <p className="text-[11px] text-rose-500 font-medium mt-1">{errors.trcnExpiry}</p>
@@ -1637,12 +1636,12 @@ export default function SecondaryStaffOnboardingModal({
                     {isFormTutor
                       ? "Form Tutor Allocation"
                       : isSubjectTeacher
-                      ? "Class & Subject Assignment"
-                      : isHod
-                      ? "HOD Supervision"
-                      : isNonTeaching
-                      ? "Support Staff"
-                      : "Secondary Leadership"}
+                        ? "Class & Subject Assignment"
+                        : isHod
+                          ? "HOD Supervision"
+                          : isNonTeaching
+                            ? "Support Staff"
+                            : "Secondary Leadership"}
                   </span>
                 }
               />
@@ -1670,11 +1669,10 @@ export default function SecondaryStaffOnboardingModal({
                               key={dept}
                               type="button"
                               onClick={() => toggleHodDepartment(dept)}
-                              className={`px-3 py-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition cursor-pointer ${
-                                isSelected
-                                  ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
-                                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-                              }`}
+                              className={`px-3 py-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition cursor-pointer ${isSelected
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                                : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                                }`}
                             >
                               <span>{dept}</span>
                               {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
@@ -1823,9 +1821,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.nextOfKinName}
                     onChange={(e) => handleFieldChange("nextOfKinName", e.target.value)}
                     placeholder="e.g. Emeka Okeke"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.nextOfKinName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.nextOfKinName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.nextOfKinName && (
                     <p className="text-[11px] text-rose-500 mt-1">{errors.nextOfKinName}</p>
@@ -1840,9 +1837,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.nextOfKinRelationship}
                     onChange={(e) => handleFieldChange("nextOfKinRelationship", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.nextOfKinRelationship ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.nextOfKinRelationship ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Select Relationship --</option>
                     <option value="Spouse">Spouse</option>
@@ -1867,9 +1863,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.nextOfKinPhone}
                     onChange={(e) => handleFieldChange("nextOfKinPhone", e.target.value)}
                     placeholder="e.g. 08029876543"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${
-                      errors.nextOfKinPhone ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white placeholder:text-slate-500 ${errors.nextOfKinPhone ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.nextOfKinPhone && (
                     <p className="text-[11px] text-rose-500 mt-1">{errors.nextOfKinPhone}</p>
@@ -1969,9 +1964,8 @@ export default function SecondaryStaffOnboardingModal({
                       value={formData.baseSalary}
                       onChange={(e) => handleFieldChange("baseSalary", e.target.value)}
                       placeholder="e.g. 150000"
-                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono font-semibold placeholder:text-slate-500 ${
-                        errors.baseSalary ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                      }`}
+                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono font-semibold placeholder:text-slate-500 ${errors.baseSalary ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                        }`}
                     />
                   </div>
                   {errors.baseSalary && <p className="text-[11px] text-rose-500 mt-1">{errors.baseSalary}</p>}
@@ -2020,9 +2014,8 @@ export default function SecondaryStaffOnboardingModal({
                   <select
                     value={formData.bankName}
                     onChange={(e) => handleFieldChange("bankName", e.target.value)}
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${
-                      errors.bankName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white ${errors.bankName ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   >
                     <option value="">-- Choose Commercial Bank --</option>
                     {NIGERIAN_BANKS.map((b) => (
@@ -2045,9 +2038,8 @@ export default function SecondaryStaffOnboardingModal({
                     value={formData.bankAccountNumber}
                     onChange={(e) => handleFieldChange("bankAccountNumber", e.target.value.replace(/\D/g, ""))}
                     placeholder="e.g. 0123456789"
-                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono font-semibold placeholder:text-slate-500 ${
-                      errors.bankAccountNumber ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                    }`}
+                    className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono font-semibold placeholder:text-slate-500 ${errors.bankAccountNumber ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
+                      }`}
                   />
                   {errors.bankAccountNumber && (
                     <p className="text-[11px] text-rose-500 mt-1">{errors.bankAccountNumber}</p>

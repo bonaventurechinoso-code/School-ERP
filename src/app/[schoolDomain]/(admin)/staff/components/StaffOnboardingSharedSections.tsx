@@ -384,7 +384,7 @@ export default function StaffOnboardingSharedSections({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Residential Address */}
-          <div className="sm:col-span-2">
+          <div id="field-residentialAddress">
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Residential Address <span className="text-rose-500">*</span>
             </label>
@@ -393,7 +393,7 @@ export default function StaffOnboardingSharedSections({
               value={formData.residentialAddress}
               onChange={(e) => handleChange("residentialAddress", e.target.value)}
               placeholder="e.g. 14 Mission Road, Egede, Enugu State"
-              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white ${
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white placeholder:text-slate-500 ${
                 errors.residentialAddress ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
               }`}
             />
@@ -402,8 +402,8 @@ export default function StaffOnboardingSharedSections({
             )}
           </div>
 
-          {/* State & LGA */}
-          <div>
+          {/* State */}
+          <div id="field-state">
             <label className="block text-xs font-bold text-slate-700 mb-1">
               State of Origin / Residence <span className="text-rose-500">*</span>
             </label>
@@ -420,6 +420,23 @@ export default function StaffOnboardingSharedSections({
               ))}
             </select>
             {errors.state && <p className="text-[11px] text-rose-500 mt-1">{errors.state}</p>}
+          </div>
+
+          {/* L.G.A of Origin */}
+          <div id="field-lga">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              L.G.A of Origin <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.lga}
+              onChange={(e) => handleChange("lga", e.target.value)}
+              placeholder="e.g. Udi, Nsukka, Ikeja"
+              className={`w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white placeholder:text-slate-500 ${
+                errors.lga ? "border-rose-400 bg-rose-50/30" : "border-slate-200"
+              }`}
+            />
+            {errors.lga && <p className="text-[11px] text-rose-500 mt-1">{errors.lga}</p>}
           </div>
         </div>
       </div>

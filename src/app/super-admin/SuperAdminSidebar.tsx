@@ -166,13 +166,13 @@ export default function SuperAdminSidebar() {
             onClick={() => setIsOpen(false)}
             className={`flex items-center justify-between px-3 py-2.5 text-sm rounded-xl transition-all duration-150 min-h-[40px] touch-manipulation ${
               isActive("/super-admin", true)
-                ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400 shadow-xs"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
+                ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
             }`}
           >
             <div className="flex items-center gap-2.5 truncate">
-              <LayoutDashboard className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span className="truncate">Platform Dashboard</span>
+              <LayoutDashboard className="w-4.5 h-4.5 stroke-[2.5] text-cyan-400 shrink-0" />
+              <span className="truncate font-bold">Platform Dashboard</span>
             </div>
           </Link>
         </div>
@@ -189,14 +189,14 @@ export default function SuperAdminSidebar() {
                 toggleGroup("operations");
               }
             }}
-            className="text-[11px] uppercase tracking-widest text-slate-400 font-bold py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
+            className="text-[11px] uppercase tracking-wider text-slate-300 font-black py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
           >
             <div className="flex items-center gap-2 truncate">
-              <LayoutDashboard className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="truncate">Platform Operations</span>
+              <LayoutDashboard className="w-4 h-4 stroke-[2.5] text-cyan-400 shrink-0" />
+              <span className="truncate font-bold">Platform Operations</span>
             </div>
             <ChevronDown
-              className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+              className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 transition-transform duration-200 ${
                 openGroups.operations ? "rotate-180" : ""
               }`}
             />
@@ -207,20 +207,20 @@ export default function SuperAdminSidebar() {
               openGroups.operations ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-3 border-l border-white/10 pl-2.5 py-1 space-y-1">
+            <div className="ml-3 border-l-2 border-white/20 pl-2.5 py-1 space-y-1">
               {/* Tenants / Schools */}
               <Link
                 href="/super-admin/tenants"
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/tenants")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <Building2 className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Tenants / Schools</span>
+                  <Building2 className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">Tenants / Schools</span>
                 </div>
               </Link>
 
@@ -230,13 +230,13 @@ export default function SuperAdminSidebar() {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/settings/payments")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <CreditCard className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Subscriptions &amp; Plans</span>
+                  <CreditCard className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">Subscriptions &amp; Plans</span>
                 </div>
               </Link>
 
@@ -252,14 +252,14 @@ export default function SuperAdminSidebar() {
                       toggleGroup("finance");
                     }
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer select-none min-h-[38px] focus:outline-none"
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-200 font-bold hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer select-none min-h-[38px] focus:outline-none"
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <Landmark className="w-4 h-4 shrink-0" />
+                    <Landmark className="w-4 h-4 stroke-[2.5] shrink-0 text-cyan-400" />
                     <span className="truncate">Platform Billing</span>
                   </div>
                   <ChevronDown
-                    className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+                    className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 transition-transform duration-200 ${
                       openGroups.finance ? "rotate-180" : ""
                     }`}
                   />
@@ -270,18 +270,18 @@ export default function SuperAdminSidebar() {
                     openGroups.finance ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <div className="ml-3 border-l border-white/10 pl-2.5 py-1 space-y-1">
+                  <div className="ml-3 border-l-2 border-white/20 pl-2.5 py-1 space-y-1">
                     <Link
                       href="/super-admin/finance/bank-accounts"
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 min-h-[36px] touch-manipulation ${
                         isActive("/super-admin/finance/bank-account") || isActive("/super-admin/finance/bank-accounts")
-                          ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                          : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <Landmark className="w-3.5 h-3.5 shrink-0" />
+                        <Landmark className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                         <span className="truncate">Bank Account Configs</span>
                       </div>
                     </Link>
@@ -291,12 +291,12 @@ export default function SuperAdminSidebar() {
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 min-h-[36px] touch-manipulation ${
                         isActive("/super-admin/billings")
-                          ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                          : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                        <CreditCard className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                         <span className="truncate">Platform Ledger</span>
                       </div>
                     </Link>
@@ -306,12 +306,12 @@ export default function SuperAdminSidebar() {
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150 min-h-[36px] touch-manipulation ${
                         isActive("/super-admin/finance/receipts")
-                          ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                          ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                          : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <FileCheck className="w-3.5 h-3.5 shrink-0" />
+                        <FileCheck className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                         <span className="truncate">Payment &amp; Verification</span>
                       </div>
                     </Link>
@@ -325,13 +325,13 @@ export default function SuperAdminSidebar() {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/users")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Platform Users &amp; Roles</span>
+                  <ShieldCheck className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">Platform Users &amp; Roles</span>
                 </div>
               </Link>
 
@@ -341,13 +341,13 @@ export default function SuperAdminSidebar() {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/audit-logs")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <FileText className="w-4 h-4 shrink-0" />
-                  <span className="truncate">System Audit Logs</span>
+                  <FileText className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">System Audit Logs</span>
                 </div>
               </Link>
 
@@ -357,13 +357,13 @@ export default function SuperAdminSidebar() {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/support")
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <LifeBuoy className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Support &amp; Inquiries</span>
+                  <LifeBuoy className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">Support &amp; Inquiries</span>
                 </div>
               </Link>
             </div>
@@ -382,14 +382,14 @@ export default function SuperAdminSidebar() {
                 toggleGroup("settings");
               }
             }}
-            className="text-[11px] uppercase tracking-widest text-slate-400 font-bold py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
+            className="text-[11px] uppercase tracking-wider text-slate-300 font-black py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
           >
             <div className="flex items-center gap-2 truncate">
-              <Settings className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="truncate">Platform Settings</span>
+              <Settings className="w-4 h-4 stroke-[2.5] text-cyan-400 shrink-0" />
+              <span className="truncate font-bold">Platform Settings</span>
             </div>
             <ChevronDown
-              className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+              className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 transition-transform duration-200 ${
                 openGroups.settings ? "rotate-180" : ""
               }`}
             />
@@ -400,19 +400,19 @@ export default function SuperAdminSidebar() {
               openGroups.settings ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-3 border-l border-white/10 pl-2.5 py-1 space-y-1">
+            <div className="ml-3 border-l-2 border-white/20 pl-2.5 py-1 space-y-1">
               <Link
                 href="/super-admin/settings"
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/settings", true)
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <Settings className="w-4 h-4 shrink-0" />
-                  <span className="truncate">General Settings</span>
+                  <Settings className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">General Settings</span>
                 </div>
               </Link>
             </div>
@@ -431,14 +431,14 @@ export default function SuperAdminSidebar() {
                 toggleGroup("system");
               }
             }}
-            className="text-[11px] uppercase tracking-widest text-slate-400 font-bold py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
+            className="text-[11px] uppercase tracking-wider text-slate-300 font-black py-2 px-3 flex justify-between items-center cursor-pointer hover:text-white transition-colors select-none min-h-[38px] rounded-lg focus:outline-none focus:bg-white/5"
           >
             <div className="flex items-center gap-2 truncate">
-              <Shield className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="truncate">System</span>
+              <Shield className="w-4 h-4 stroke-[2.5] text-cyan-400 shrink-0" />
+              <span className="truncate font-bold">System</span>
             </div>
             <ChevronDown
-              className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+              className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 transition-transform duration-200 ${
                 openGroups.system ? "rotate-180" : ""
               }`}
             />
@@ -449,19 +449,19 @@ export default function SuperAdminSidebar() {
               openGroups.system ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-3 border-l border-white/10 pl-2.5 py-1 space-y-1">
+            <div className="ml-3 border-l-2 border-white/20 pl-2.5 py-1 space-y-1">
               <Link
                 href="/super-admin/profile"
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-150 min-h-[38px] touch-manipulation ${
                   isActive("/super-admin/profile", false, ["/super-admin/account"])
-                    ? "bg-white/10 text-white font-semibold border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white font-black border-l-4 border-cyan-400 shadow-xs"
+                    : "text-slate-200 hover:text-white hover:bg-white/10 font-bold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <UserCircle className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Super-Admin Profile &amp; Security</span>
+                  <UserCircle className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate font-bold">Super-Admin Profile &amp; Security</span>
                 </div>
               </Link>
             </div>

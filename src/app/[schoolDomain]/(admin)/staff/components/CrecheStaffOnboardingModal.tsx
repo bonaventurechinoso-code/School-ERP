@@ -121,6 +121,7 @@ export default function CrecheStaffOnboardingModal({
     if (!formData.residentialAddress.trim()) localErrors.residentialAddress = "Residential Address is required.";
     if (!formData.dateOfBirth) localErrors.dateOfBirth = "Date of Birth is required.";
     if (!formData.state) localErrors.state = "State of Origin / Residence is required.";
+    if (!formData.lga || !formData.lga.trim()) localErrors.lga = "LGA of Origin is required.";
     if (!formData.employmentType) localErrors.employmentType = "Employment Type is required.";
     if (!formData.departmentName) localErrors.departmentName = "Department / Unit is required.";
     if (!qualification.trim()) localErrors.qualification = "Please select highest qualification.";

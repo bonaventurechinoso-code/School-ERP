@@ -319,7 +319,7 @@ export default function Sidebar({
           return (
             <div key={group.id} className="space-y-1">
               {group.title && (
-                <div className={`px-3 pt-2 pb-1 text-[10px] font-black text-slate-400 dark:text-zinc-500 tracking-widest uppercase ${isCollapsed ? "md:hidden" : ""}`}>
+                <div className={`px-3 pt-2.5 pb-1 text-[11px] font-black text-slate-300 dark:text-zinc-400 tracking-wider uppercase ${isCollapsed ? "md:hidden" : ""}`}>
                   {group.title}
                 </div>
               )}
@@ -342,33 +342,33 @@ export default function Sidebar({
                         type="button"
                         onClick={() => toggleGroup(item.id)}
                         title={item.label}
-                        className={`w-full flex items-start justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${anyChildActive
-                            ? "bg-indigo-600/15 text-white font-bold"
-                            : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                        className={`w-full flex items-start justify-between px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 cursor-pointer ${anyChildActive
+                            ? "bg-indigo-600/25 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                            : "text-slate-100 hover:bg-slate-800 hover:text-white"
                           }`}
                       >
                         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                          <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${anyChildActive ? "text-indigo-400" : "text-slate-400"}`} />
-                          <span className={`flex-1 min-w-0 text-xs sm:text-[12.5px] leading-snug break-words whitespace-normal text-left ${isCollapsed ? "md:hidden" : ""}`}>
+                          <Icon className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] ${anyChildActive ? "text-indigo-400" : "text-slate-300 group-hover:text-white"}`} />
+                          <span className={`flex-1 min-w-0 text-xs sm:text-[13px] leading-snug break-words whitespace-normal text-left font-bold ${isCollapsed ? "md:hidden" : ""}`}>
                             {item.label}
                           </span>
                         </div>
                         <div className={`flex items-center gap-1.5 shrink-0 ml-1.5 mt-0.5 ${isCollapsed ? "md:hidden" : ""}`}>
 
                           {anyChildActive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                            <span className="w-2 h-2 rounded-full bg-indigo-400 shadow-xs ring-2 ring-indigo-400/30" />
                           )}
                           {isExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            <ChevronDown className="w-4 h-4 text-slate-300 stroke-[2.5]" />
                           ) : (
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            <ChevronRight className="w-4 h-4 text-slate-300 stroke-[2.5]" />
                           )}
                         </div>
                       </button>
 
                       {/* Accordion Children with clean vector icons & relative indent margins */}
                       {isExpanded && (
-                        <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l border-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="ml-3 pl-2.5 py-0.5 space-y-0.5 border-l-2 border-slate-700/80 animate-in fade-in slide-in-from-top-1 duration-150">
                           {item.children!.map((child) => {
                             const childHref = child.href(schoolDomain);
                             const isChildActive = isItemActive(childHref, child.exact, child.matchPaths);
@@ -380,22 +380,22 @@ export default function Sidebar({
                                 href={childHref}
                                 onClick={() => setIsSidebarOpen(false)}
                                 title={child.label}
-                                className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-150 ${isChildActive
-                                    ? "bg-indigo-600/20 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
-                                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                                className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150 ${isChildActive
+                                    ? "bg-indigo-600/30 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                                    : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                                   }`}
                               >
                                 {ChildIcon && (
                                   <ChildIcon
-                                    className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isChildActive ? "text-indigo-400" : "text-slate-500"
+                                    className={`w-4 h-4 shrink-0 mt-0.5 stroke-[2.5] ${isChildActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
                                       }`}
                                   />
                                 )}
-                                <span className="flex-1 min-w-0 text-xs sm:text-[11.5px] lg:text-xs leading-snug break-words whitespace-normal text-left">
+                                <span className="flex-1 min-w-0 text-xs sm:text-[12px] leading-snug break-words whitespace-normal text-left font-bold">
                                   {child.label}
                                 </span>
                                 {child.badge && (
-                                  <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-500/40">
                                     {child.badge}
                                   </span>
                                 )}
@@ -418,22 +418,22 @@ export default function Sidebar({
                     href={itemHref}
                     onClick={() => setIsSidebarOpen(false)}
                     title={item.label}
-                    className={`flex items-start justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 group active:scale-98 ${isActive
-                        ? "bg-indigo-600/15 text-white font-bold border-l-2 border-indigo-500 shadow-2xs"
-                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                    className={`flex items-start justify-between gap-2 px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition-all duration-150 group active:scale-98 ${isActive
+                        ? "bg-indigo-600/25 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                        : "text-slate-100 hover:bg-slate-800 hover:text-white"
                       }`}
                   >
                     <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <Icon
-                        className={`w-4 h-4 shrink-0 mt-0.5 transition-colors ${isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200"
+                        className={`w-4.5 h-4.5 shrink-0 mt-0.5 stroke-[2.5] transition-colors ${isActive ? "text-indigo-400" : "text-slate-300 group-hover:text-white"
                           }`}
                       />
-                      <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left">
+                      <span className="flex-1 min-w-0 leading-snug break-words whitespace-normal text-left font-bold">
                         {item.label}
                       </span>
                     </div>
                     {item.badge && (
-                      <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 mt-0.5">
+                      <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-500/25 text-indigo-300 mt-0.5">
                         {item.badge}
                       </span>
                     )}

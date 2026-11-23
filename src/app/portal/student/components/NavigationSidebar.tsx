@@ -102,7 +102,7 @@ export function NavigationSidebar({
 
         {/* Navigation Items */}
         <nav className="space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 pb-1">
+          <p className="text-[11px] font-black uppercase tracking-wider text-slate-300 px-2 pb-1">
             Workspace Modules
           </p>
           {navItems.map((item) => {
@@ -116,14 +116,14 @@ export function NavigationSidebar({
                   setActiveTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs sm:text-[13px] font-bold transition ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-bold"
-                    : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                    ? "bg-indigo-600/30 text-white font-black border-l-4 border-indigo-400 shadow-xs"
+                    : "text-slate-100 hover:bg-slate-800 hover:text-white"
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <Icon className="w-4.5 h-4.5 shrink-0 stroke-[2.5]" />
+                <span className="truncate font-bold">{item.label}</span>
               </button>
             );
           })}
