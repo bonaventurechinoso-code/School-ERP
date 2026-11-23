@@ -72,7 +72,139 @@ export interface TimetablePeriodItem {
 }
 
 /**
- * 1. Fetch all classrooms, tiers, courses, active students, and current faculty profile for a tenant
+ * 0. Resolves all classrooms and subjects strictly assigned to a staff member across all tiers.
+ */
+export async function getStaffAssignedClassesAndSubjects(
+  schoolId: string,
+  staffId: string
+): Promise<{ assignedClasses: string[]; assignedSubjects: string[] }> {
+  const assignedClassesSet = new Set<string>();
+  const assignedSubjectsSet = new Set<string>();
+
+  try {
+    // 1. StaffAssignment records (Primary ClassTeacher / SubjectTeacher, Secondary FormTutor / SubjectTeacher, Creche Caregiver, Tertiary Lecturer, etc.)
+    const assignments = await basePrisma.staffAssignment.findMany({
+      where: { schoolId, staffId },
+      include: { classroom: true, course: true },
+    });
+
+    for (const a of assignments) {
+      if (a.classroom?.name) {
+        assignedClassesSet.add(a.classroom.name.trim());
+      } else if (a.classroomId) {
+        const cls = await basePrisma.classroom.findUnique({
+          where: { id: a.classroomId },
+          select: { name: true },
+        });
+        if (cls?.name) assignedClassesSet.add(cls.name.trim());
+      }
+
+      if (a.course?.name) {
+        assignedSubjectsSet.add(a.course.name.trim());
+      }
+
+      if (a.metadata) {
+        try {
+          const meta = typeof a.metadata === "string" ? JSON.parse(a.metadata) : a.metadata;
+          if (meta.className) assignedClassesSet.add(String(meta.className).trim());
+          if (meta.playgroupName) assignedClassesSet.add(String(meta.playgroupName).trim());
+          if (meta.assignedClass) assignedClassesSet.add(String(meta.assignedClass).trim());
+          if (meta.displayLabel) assignedClassesSet.add(String(meta.displayLabel).trim());
+          if (Array.isArray(meta.classes)) {
+            meta.classes.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+          }
+          if (Array.isArray(meta.classesTaught)) {
+            meta.classesTaught.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+          }
+          if (Array.isArray(meta.assignedClasses)) {
+            meta.assignedClasses.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+          }
+          if (Array.isArray(meta.subjects)) {
+            meta.subjects.forEach((s: any) => s && assignedSubjectsSet.add(String(s).trim()));
+          }
+        } catch { }
+      }
+    }
+
+    // 2. Timetable records
+    const timetable = await basePrisma.timetable.findMany({
+      where: { schoolId, staffId },
+      include: { classroom: true, course: true },
+    });
+
+    for (const t of timetable) {
+      if (t.classroom?.name) assignedClassesSet.add(t.classroom.name.trim());
+      if (t.course?.name) assignedSubjectsSet.add(t.course.name.trim());
+    }
+
+    // 3. bonavee_staff_metadata check
+    try {
+      const metaRows = await basePrisma.$queryRawUnsafe<any[]>(
+        `SELECT assigned_class, assigned_subjects, designation FROM bonavee_staff_metadata WHERE staff_id = $1 LIMIT 1`,
+        staffId
+      );
+      if (metaRows && metaRows.length > 0) {
+        const row = metaRows[0];
+        if (row.assigned_class && typeof row.assigned_class === "string" && row.assigned_class.trim()) {
+          assignedClassesSet.add(row.assigned_class.trim());
+        }
+        if (row.assigned_subjects && typeof row.assigned_subjects === "string" && row.assigned_subjects.trim()) {
+          const parts = row.assigned_subjects.split(/[,;\n]/).map((s: string) => s.trim()).filter(Boolean);
+          parts.forEach((p: string) => assignedSubjectsSet.add(p));
+        }
+      }
+    } catch { }
+  } catch (err) {
+    console.warn("[getStaffAssignedClassesAndSubjects] Warning:", err);
+  }
+
+  return {
+    assignedClasses: Array.from(assignedClassesSet).filter(Boolean),
+    assignedSubjects: Array.from(assignedSubjectsSet).filter(Boolean),
+  };
+}
+
+/**
+ * Verifies whether a teacher is authorized to access, record attendance, or submit grades for a class.
+ */
+export async function verifyTeacherClassAccess(
+  schoolId: string,
+  staffEmail: string | undefined,
+  targetClass: string
+): Promise<boolean> {
+  if (!targetClass || !targetClass.trim()) return false;
+  if (!staffEmail) return false;
+  try {
+    const staff = await basePrisma.staff.findFirst({
+      where: { schoolId, email: staffEmail },
+      select: { id: true, user: { select: { role: true } } },
+    });
+    if (!staff) return false;
+
+    const userRole = (staff.user?.role || "").toUpperCase();
+    if (["PRINCIPAL", "HEADMASTER"].includes(userRole)) {
+      return true;
+    }
+
+    const { assignedClasses } = await getStaffAssignedClassesAndSubjects(schoolId, staff.id);
+    const targetNorm = targetClass.trim().toLowerCase();
+
+    return assignedClasses.some((cls) => {
+      const clsNorm = cls.trim().toLowerCase();
+      return (
+        clsNorm === targetNorm ||
+        targetNorm.startsWith(clsNorm + " ") ||
+        clsNorm.startsWith(targetNorm + " ")
+      );
+    });
+  } catch (err) {
+    console.error("[verifyTeacherClassAccess] Error:", err);
+    return false;
+  }
+}
+
+/**
+ * 1. Fetch classrooms, tiers, courses, active students, and current faculty profile strictly scoped to assigned classes
  */
 export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?: string) {
   try {
@@ -83,6 +215,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
         where: { schoolId, email: staffEmail },
         include: {
           department: true,
+          user: { select: { role: true } },
           PayrollRecord: {
             orderBy: { payDate: "desc" },
           },
@@ -92,6 +225,12 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
               classroom: true,
             },
             orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+          },
+          assignments: {
+            include: {
+              classroom: true,
+              course: true,
+            },
           },
         },
       });
@@ -106,6 +245,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
           where: { schoolId, userId: userRecord.id },
           include: {
             department: true,
+            user: { select: { role: true } },
             PayrollRecord: {
               orderBy: { payDate: "desc" },
             },
@@ -115,6 +255,12 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
                 classroom: true,
               },
               orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+            },
+            assignments: {
+              include: {
+                classroom: true,
+                course: true,
+              },
             },
           },
         });
@@ -132,6 +278,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
           where: { schoolId },
           include: {
             department: true,
+            user: { select: { role: true } },
             PayrollRecord: {
               orderBy: { payDate: "desc" },
             },
@@ -142,12 +289,28 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
               },
               orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
             },
+            assignments: {
+              include: {
+                classroom: true,
+                course: true,
+              },
+            },
           },
         });
       }
     }
 
-    const [school, classrooms, courses, students, lessonNotes, leaveRequests] = await Promise.all([
+    // Resolve teacher's strictly assigned classes and subjects
+    const { assignedClasses, assignedSubjects } = currentStaff
+      ? await getStaffAssignedClassesAndSubjects(schoolId, currentStaff.id)
+      : { assignedClasses: [], assignedSubjects: [] };
+
+    const effectiveRole = (currentStaff?.user?.role || currentStaff?.role || "TEACHER").toUpperCase();
+    const isTeacherRole = ["TEACHER", "STAFF", "INSTRUCTOR", "LECTURER", "PROFESSOR", "CLASS_TEACHER"].some((r) =>
+      effectiveRole.includes(r)
+    );
+
+    const [school, lessonNotes, leaveRequests] = await Promise.all([
       basePrisma.school.findUnique({
         where: { id: schoolId },
         include: {
@@ -156,35 +319,137 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
           },
         },
       }),
-      basePrisma.classroom.findMany({
-        where: { schoolId },
-        orderBy: { name: "asc" },
-      }),
-      basePrisma.course.findMany({
-        where: { schoolId },
-        orderBy: { name: "asc" },
-      }),
-      basePrisma.student.findMany({
-        where: {
-          schoolId,
-          status: { in: ["ENROLLED", "ACTIVE"] },
-        },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          admissionNumber: true,
-          currentClass: true,
-          tierId: true,
-          status: true,
-          parentPhone: true,
-          dynamicFields: true,
-        },
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      }),
       currentStaff ? fetchStaffLessonNotesAction(schoolId, currentStaff.id) : Promise.resolve([]),
       currentStaff ? fetchStaffLeaveRequestsAction(schoolId, currentStaff.id) : Promise.resolve([]),
     ]);
+
+    let classrooms: any[] = [];
+    let courses: any[] = [];
+    let students: any[] = [];
+
+    if (isTeacherRole) {
+      // STRICT TEACHER CLASS RESTRICTION:
+      // If the teacher has assigned classes, they ONLY see their assigned classes and students in those classes.
+      // If the teacher has NO assigned classes, they get 0 classes and 0 students.
+      if (assignedClasses.length > 0) {
+        const matchedClassrooms = await basePrisma.classroom.findMany({
+          where: {
+            schoolId,
+            OR: assignedClasses.map((cls) => ({
+              name: { equals: cls, mode: "insensitive" },
+            })),
+          },
+          orderBy: { name: "asc" },
+        });
+
+        const classroomMap = new Map<string, any>();
+        matchedClassrooms.forEach((c) => classroomMap.set(c.name.toLowerCase(), c));
+        assignedClasses.forEach((clsName) => {
+          if (!classroomMap.has(clsName.toLowerCase())) {
+            classroomMap.set(clsName.toLowerCase(), {
+              id: clsName,
+              schoolId,
+              name: clsName,
+              capacity: 35,
+              tierId: school?.academicTiers?.[0]?.id || null,
+            });
+          }
+        });
+        classrooms = Array.from(classroomMap.values());
+
+        // Strictly query ONLY students enrolled in the teacher's assigned classes
+        students = await basePrisma.student.findMany({
+          where: {
+            schoolId,
+            status: { in: ["ENROLLED", "ACTIVE"] },
+            OR: assignedClasses.flatMap((cls) => [
+              { currentClass: { equals: cls, mode: "insensitive" } },
+              { currentClass: { startsWith: cls + " ", mode: "insensitive" } },
+            ]),
+          },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            admissionNumber: true,
+            currentClass: true,
+            tierId: true,
+            status: true,
+            parentPhone: true,
+            dynamicFields: true,
+          },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        });
+
+        // Courses: filter to courses assigned to teacher or school courses matching teacher subjects
+        if (assignedSubjects.length > 0) {
+          courses = await basePrisma.course.findMany({
+            where: {
+              schoolId,
+              OR: assignedSubjects.map((sub) => ({
+                name: { equals: sub, mode: "insensitive" },
+              })),
+            },
+            orderBy: { name: "asc" },
+          });
+          const existingCourseNames = new Set(courses.map((c) => c.name.toLowerCase()));
+          assignedSubjects.forEach((subName) => {
+            if (!existingCourseNames.has(subName.toLowerCase())) {
+              courses.push({
+                id: subName,
+                schoolId,
+                name: subName,
+                code: subName.substring(0, 4).toUpperCase(),
+              });
+            }
+          });
+        } else {
+          courses = await basePrisma.course.findMany({
+            where: { schoolId },
+            orderBy: { name: "asc" },
+            take: 10,
+          });
+        }
+      } else {
+        // Teacher has no assigned classes yet: STRICT RESTRICTION - ZERO classrooms and ZERO students
+        classrooms = [];
+        students = [];
+        courses = [];
+      }
+    } else {
+      // Non-teaching or administrative oversight roles (Principal, Headmaster, etc.)
+      const [allCls, allCourses, allStudents] = await Promise.all([
+        basePrisma.classroom.findMany({
+          where: { schoolId },
+          orderBy: { name: "asc" },
+        }),
+        basePrisma.course.findMany({
+          where: { schoolId },
+          orderBy: { name: "asc" },
+        }),
+        basePrisma.student.findMany({
+          where: {
+            schoolId,
+            status: { in: ["ENROLLED", "ACTIVE"] },
+          },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            admissionNumber: true,
+            currentClass: true,
+            tierId: true,
+            status: true,
+            parentPhone: true,
+            dynamicFields: true,
+          },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        }),
+      ]);
+      classrooms = allCls;
+      courses = allCourses;
+      students = allStudents;
+    }
 
     return {
       success: true,
@@ -194,6 +459,8 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       students,
       lessonNotes,
       leaveRequests,
+      assignedClasses,
+      assignedSubjects,
       staffProfile: currentStaff
         ? {
           id: currentStaff.id,
@@ -223,6 +490,8 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       students: [],
       lessonNotes: [],
       leaveRequests: [],
+      assignedClasses: [],
+      assignedSubjects: [],
       staffProfile: null,
       payrollRecords: [],
       timetable: [],
@@ -281,9 +550,21 @@ export async function fetchClassroomAttendance(
 export async function saveClassroomAttendance(
   schoolId: string,
   dateString: string,
-  records: AttendanceRecordPayload[]
+  records: AttendanceRecordPayload[],
+  className?: string
 ) {
   try {
+    const session = await getSession();
+    if (session && session.email && className) {
+      const allowed = await verifyTeacherClassAccess(schoolId, session.email, className);
+      if (!allowed) {
+        return {
+          success: false,
+          error: `Access Denied: You are not assigned to class "${className}". Teachers are strictly restricted to their assigned classes.`,
+        };
+      }
+    }
+
     const targetDate = new Date(dateString);
     const normalizedDate = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate()));
 
@@ -352,6 +633,18 @@ export async function fetchClassroomGrades(
   term: string
 ) {
   try {
+    const session = await getSession();
+    if (session && session.email) {
+      const allowed = await verifyTeacherClassAccess(schoolId, session.email, className);
+      if (!allowed) {
+        return {
+          success: false,
+          error: `Access Denied: You are not assigned to class "${className}". Teachers are strictly restricted to their assigned classes.`,
+          grades: [],
+        };
+      }
+    }
+
     const termVariants = getTermVariants(term);
 
     // Fetch from GradeRecord and AcademicRecord in parallel
@@ -443,6 +736,15 @@ export async function saveClassroomGrades(
           success: false,
           error: "Permission Denied: School Administrators do not have access to record or edit marks in teacher gradebooks.",
         };
+      }
+      if (session.email) {
+        const allowed = await verifyTeacherClassAccess(schoolId, session.email, className);
+        if (!allowed) {
+          return {
+            success: false,
+            error: `Access Denied: You are not assigned to class "${className}". Teachers are strictly restricted to their assigned classes.`,
+          };
+        }
       }
     }
 
@@ -828,6 +1130,17 @@ export async function compileClassReportCardsFromStaffPortal(
   tierName?: string
 ) {
   try {
+    const session = await getSession();
+    if (session && session.email) {
+      const allowed = await verifyTeacherClassAccess(schoolId, session.email, className);
+      if (!allowed) {
+        return {
+          success: false,
+          error: `Access Denied: You are not assigned to class "${className}". Teachers are strictly restricted to their assigned classes.`,
+        };
+      }
+    }
+
     const result = await compileClassReportCards({
       schoolId,
       className,
@@ -918,6 +1231,17 @@ export async function submitLessonNoteAction(
   note: LessonNoteData
 ) {
   try {
+    const session = await getSession();
+    if (session && session.email && note.className) {
+      const allowed = await verifyTeacherClassAccess(schoolId, session.email, note.className);
+      if (!allowed) {
+        return {
+          success: false,
+          error: `Access Denied: You are not assigned to class "${note.className}". Teachers are strictly restricted to their assigned classes.`,
+        };
+      }
+    }
+
     const title = `Week ${note.weekNumber}: ${note.topic} (${note.subject} - ${note.className})`;
     const content = JSON.stringify(note);
     const priority = note.status || "SUBMITTED";

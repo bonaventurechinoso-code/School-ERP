@@ -121,6 +121,8 @@ interface StaffPortalClientProps {
   initialClassrooms: ClassroomItem[];
   initialCourses: CourseItem[];
   initialStudents: StudentItem[];
+  initialAssignedClasses?: string[];
+  initialAssignedSubjects?: string[];
   initialLessonNotes?: LessonNoteData[];
   initialLeaveRequests?: LeaveRequestData[];
   defaultTab?: "overview" | "rosters" | "attendance" | "gradebook" | "schedule" | "lessons" | "leaves" | "payslips" | "security" | "profile" | "circulars" | "research";
@@ -144,6 +146,8 @@ export default function StaffPortalClient({
   initialClassrooms,
   initialCourses,
   initialStudents,
+  initialAssignedClasses = [],
+  initialAssignedSubjects = [],
   initialLessonNotes = [],
   initialLeaveRequests = [],
   defaultTab = "overview",
@@ -187,25 +191,11 @@ export default function StaffPortalClient({
   const isPrimary = terminology.isPrimary;
   const isSecondary = terminology.isSecondary;
 
-  // Tier & Class Filtering
-  const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
-  const [selectedClass, setSelectedClass] = useState<string>(
-    initialClassrooms[0]?.name || initialStudents[0]?.currentClass || initialStudents[0]?.class || "Primary 1"
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSession, setSelectedSession] = useState<string>("2026/2027");
-  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
-
-  // Gradebook State & Loading
-  const [selectedSubject, setSelectedSubject] = useState<string>(initialCourses[0]?.name || "General Mathematics");
-  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
-  const [academicYear, setAcademicYear] = useState<string>("2026/2027");
-  const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
-  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
-  const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
-
-  // Derived Assigned Subjects & Classes for the teacher (Strict Timetable / Allocation binding)
+  // Derived Assigned Subjects & Classes for the teacher (Strict Institutional Assignment binding)
   const teacherAssignedSubjects = useMemo(() => {
+    if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
+      return initialAssignedSubjects;
+    }
     if (initialTimetable && initialTimetable.length > 0) {
       const subjectSet = new Set<string>();
       initialTimetable.forEach((t) => {
@@ -214,9 +204,28 @@ export default function StaffPortalClient({
       if (subjectSet.size > 0) return Array.from(subjectSet);
     }
     return initialCourses.map((c) => c.name);
-  }, [initialTimetable, initialCourses]);
+  }, [initialAssignedSubjects, initialTimetable, initialCourses]);
+
+  // Gradebook State & Loading
+  const [selectedSubject, setSelectedSubject] = useState<string>(
+    teacherAssignedSubjects[0] || initialCourses[0]?.name || "General Mathematics"
+  );
+  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
+  const [academicYear, setAcademicYear] = useState<string>("2026/2027");
+  const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
+  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
+  const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
 
   const teacherAssignedClasses = useMemo(() => {
+    // 1. Prioritize authoritative assignedClasses from server StaffAssignment
+    if (initialAssignedClasses && initialAssignedClasses.length > 0) {
+      return initialAssignedClasses;
+    }
+    // 2. Or from initialClassrooms (which server strictly restricts to the teacher's assigned classrooms)
+    if (initialClassrooms && initialClassrooms.length > 0) {
+      return initialClassrooms.map((c) => c.name);
+    }
+    // 3. Or from timetable
     if (initialTimetable && initialTimetable.length > 0) {
       const classSet = new Set<string>();
       initialTimetable.forEach((t) => {
@@ -226,28 +235,18 @@ export default function StaffPortalClient({
       });
       if (classSet.size > 0) return Array.from(classSet);
     }
-    if (initialClassrooms && initialClassrooms.length > 0) {
-      return initialClassrooms.map((c) => c.name);
-    }
-    // Collect from students enrolled in this school
-    const studentClasses = new Set<string>();
-    if (Array.isArray(initialStudents)) {
-      initialStudents.forEach((s) => {
-        if (s.currentClass && s.currentClass.trim()) {
-          studentClasses.add(s.currentClass.trim());
-        }
-      });
-    }
-    if (studentClasses.size > 0) return Array.from(studentClasses);
+    // STRICT INSTITUTIONAL RESTRICTION: NEVER fall back to all students or all tier classes
+    return [];
+  }, [initialAssignedClasses, initialClassrooms, initialTimetable, selectedSubject]);
 
-    // Fallback to school registered tier classes
-    const schoolTierClasses = getClassesForSchool({
-      subdomain: schoolDomain,
-      name: schoolName,
-      academicTiers: initialTiers,
-    });
-    return schoolTierClasses.allClasses;
-  }, [initialTimetable, initialClassrooms, initialStudents, initialTiers, selectedSubject, schoolDomain, schoolName]);
+  // Tier & Class Filtering
+  const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
+  const [selectedClass, setSelectedClass] = useState<string>(
+    initialAssignedClasses[0] || initialClassrooms[0]?.name || ""
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSession, setSelectedSession] = useState<string>("2026/2027");
+  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
 
   // Ensure selectedSubject is valid in teacherAssignedSubjects
   useEffect(() => {
@@ -258,8 +257,12 @@ export default function StaffPortalClient({
 
   // Ensure selectedClass is valid in teacherAssignedClasses for the chosen subject
   useEffect(() => {
-    if (teacherAssignedClasses.length > 0 && !teacherAssignedClasses.includes(selectedClass)) {
-      setSelectedClass(teacherAssignedClasses[0]);
+    if (teacherAssignedClasses.length > 0) {
+      if (!selectedClass || !teacherAssignedClasses.includes(selectedClass)) {
+        setSelectedClass(teacherAssignedClasses[0]);
+      }
+    } else {
+      setSelectedClass("");
     }
   }, [teacherAssignedClasses, selectedClass]);
 
@@ -1347,14 +1350,15 @@ export default function StaffPortalClient({
                         value={selectedClass}
                         onChange={(e) => setSelectedClass(e.target.value)}
                         className="text-xs font-bold text-slate-900 dark:text-white bg-transparent outline-none cursor-pointer"
+                        disabled={teacherAssignedClasses.length === 0}
                       >
-                        {initialClassrooms.map((c) => (
-                          <option key={c.id} value={c.name} className="dark:bg-zinc-900 text-slate-900 dark:text-white">
-                            {c.name}
+                        {teacherAssignedClasses.map((cls) => (
+                          <option key={cls} value={cls} className="dark:bg-zinc-900 text-slate-900 dark:text-white">
+                            {cls}
                           </option>
                         ))}
-                        {initialClassrooms.length === 0 && (
-                          <option value="JSS 1">JSS 1</option>
+                        {teacherAssignedClasses.length === 0 && (
+                          <option value="">No Class Assigned</option>
                         )}
                       </select>
                     </div>
@@ -1383,7 +1387,7 @@ export default function StaffPortalClient({
 
                   <div className="my-2 relative z-10">
                     <p className="text-3xl sm:text-4xl lg:text-[40px] font-black tracking-tight text-slate-900 dark:text-white leading-none truncate">
-                      {initialClassrooms.length || 4}
+                      {teacherAssignedClasses.length}
                     </p>
                   </div>
 
@@ -2519,8 +2523,8 @@ export default function StaffPortalClient({
                     setSelectedLessonNote(null);
                     setLessonFormData({
                       weekNumber: 1,
-                      subject: initialCourses[0]?.name || "General Mathematics",
-                      className: initialClassrooms[0]?.name || "JSS 1",
+                      subject: teacherAssignedSubjects[0] || initialCourses[0]?.name || "General Mathematics",
+                      className: teacherAssignedClasses[0] || "",
                       topic: "",
                       subTopic: "",
                       objectives: "",
@@ -2955,7 +2959,7 @@ export default function StaffPortalClient({
                     </h3>
                   </div>
                   <span className="text-[10px] text-slate-400 font-semibold">
-                    {initialClassrooms.length} Classroom Streams Assigned
+                    {teacherAssignedClasses.length} Classroom Streams Assigned
                   </span>
                 </div>
 
@@ -2965,17 +2969,22 @@ export default function StaffPortalClient({
                       Assigned Stream Cohorts
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {initialClassrooms.map((c) => (
+                      {teacherAssignedClasses.map((clsName) => (
                         <span
-                          key={c.id}
-                          className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${c.name === selectedClass
+                          key={clsName}
+                          className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${clsName === selectedClass
                               ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
                               : "bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
                             }`}
                         >
-                          {c.name}
+                          {clsName}
                         </span>
                       ))}
+                      {teacherAssignedClasses.length === 0 && (
+                        <span className="text-xs text-amber-600 dark:text-amber-400 italic font-medium">
+                          No classroom streams assigned.
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -3429,12 +3438,16 @@ export default function StaffPortalClient({
                           setLessonFormData((prev) => ({ ...prev, className: e.target.value }))
                         }
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl font-bold"
+                        disabled={teacherAssignedClasses.length === 0}
                       >
-                        {initialClassrooms.map((c) => (
-                          <option key={c.id} value={c.name}>
-                            {c.name}
+                        {teacherAssignedClasses.map((cls) => (
+                          <option key={cls} value={cls}>
+                            {cls}
                           </option>
                         ))}
+                        {teacherAssignedClasses.length === 0 && (
+                          <option value="">No Class Assigned</option>
+                        )}
                       </select>
                     </div>
 

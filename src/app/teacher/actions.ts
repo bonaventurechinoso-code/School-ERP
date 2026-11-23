@@ -38,6 +38,14 @@ const staffContextSelect = {
       classroom: { select: { name: true } },
     },
   },
+  assignments: {
+    select: {
+      assignmentType: true,
+      classroom: { select: { name: true } },
+      course: { select: { name: true } },
+      metadata: true,
+    },
+  },
 } as const;
 
 /**
@@ -92,44 +100,32 @@ const resolveTeacherContextMemo = cache(async (): Promise<TeacherContext | null>
 
   if (!staff) return null;
 
-  // Extract assigned classes & subjects from timetable
+  // Extract assigned classes & subjects strictly from StaffAssignment and Timetable
   const assignedClassesSet = new Set<string>();
   const assignedSubjectsSet = new Set<string>();
 
-  staff.Timetable?.forEach((t: any) => {
-    if (t.classroom?.name) assignedClassesSet.add(t.classroom.name);
-    if (t.course?.name) assignedSubjectsSet.add(t.course.name);
+  staff.assignments?.forEach((a: any) => {
+    if (a.classroom?.name) assignedClassesSet.add(a.classroom.name.trim());
+    if (a.course?.name) assignedSubjectsSet.add(a.course.name.trim());
+    if (a.metadata) {
+      try {
+        const meta = typeof a.metadata === "string" ? JSON.parse(a.metadata) : a.metadata;
+        if (meta.className) assignedClassesSet.add(String(meta.className).trim());
+        if (meta.playgroupName) assignedClassesSet.add(String(meta.playgroupName).trim());
+        if (meta.assignedClass) assignedClassesSet.add(String(meta.assignedClass).trim());
+        if (meta.displayLabel) assignedClassesSet.add(String(meta.displayLabel).trim());
+        if (Array.isArray(meta.classes)) meta.classes.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+        if (Array.isArray(meta.classesTaught)) meta.classesTaught.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+        if (Array.isArray(meta.assignedClasses)) meta.assignedClasses.forEach((c: any) => c && assignedClassesSet.add(String(c).trim()));
+        if (Array.isArray(meta.subjects)) meta.subjects.forEach((s: any) => s && assignedSubjectsSet.add(String(s).trim()));
+      } catch { }
+    }
   });
 
-  // Fallback defaults if no timetable rows are configured yet (strictly scoped to this school's registered tiers & students)
-  if (assignedClassesSet.size === 0) {
-    const enrolledStudents = await basePrisma.student.findMany({
-      where: { schoolId: school.id, status: { in: ["ENROLLED", "ACTIVE"] } },
-      select: { currentClass: true },
-      distinct: ["currentClass"],
-    });
-
-    enrolledStudents.forEach((s) => {
-      if (s.currentClass && s.currentClass.trim()) {
-        assignedClassesSet.add(s.currentClass.trim());
-      }
-    });
-
-    if (assignedClassesSet.size === 0) {
-      const schoolDetails = await basePrisma.school.findUnique({
-        where: { id: school.id },
-        select: { tier: true, academicTiers: { select: { name: true, level: true } } },
-      });
-      const tierClasses = getClassesForSchool({
-        schoolId: school.id,
-        name: school.name,
-        subdomain: school.subdomain,
-        tier: schoolDetails?.tier,
-        academicTiers: schoolDetails?.academicTiers,
-      });
-      tierClasses.allClasses.slice(0, 3).forEach((cls) => assignedClassesSet.add(cls));
-    }
-  }
+  staff.Timetable?.forEach((t: any) => {
+    if (t.classroom?.name) assignedClassesSet.add(t.classroom.name.trim());
+    if (t.course?.name) assignedSubjectsSet.add(t.course.name.trim());
+  });
 
   if (assignedSubjectsSet.size === 0) {
     const schoolCourses = await basePrisma.course.findMany({

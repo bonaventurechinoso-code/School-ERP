@@ -105,6 +105,8 @@ export async function ensureStaffMetadataTable() {
     `);
     await basePrisma.$executeRawUnsafe(`
       ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS designation TEXT;
+      ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS assigned_class TEXT;
+      ALTER TABLE bonavee_staff_metadata ADD COLUMN IF NOT EXISTS assigned_subjects TEXT;
     `).catch(() => {});
   } catch (err) {
     console.error("[ensureStaffMetadataTable] Table check/create error:", err);
@@ -735,6 +737,64 @@ export async function updateStaffProfile(
       data.emergencyPhone || null,
       data.role || null
     );
+
+    if (data.assignedClass && data.assignedClass.trim()) {
+      const clsName = data.assignedClass.trim();
+      await basePrisma.$executeRawUnsafe(`
+        UPDATE bonavee_staff_metadata 
+        SET assigned_class = $2, assigned_subjects = $3, updated_at = NOW() 
+        WHERE staff_id = $1
+      `, staffId, clsName, data.assignedSubjects || null).catch(() => {});
+
+      let matchedCls = await basePrisma.classroom.findFirst({
+        where: {
+          schoolId,
+          name: { equals: clsName, mode: "insensitive" },
+        },
+      });
+      if (!matchedCls) {
+        matchedCls = await basePrisma.classroom.create({
+          data: {
+            schoolId,
+            name: clsName,
+            capacity: 35,
+          },
+        });
+      }
+
+      const existingAssign = await basePrisma.staffAssignment.findFirst({
+        where: { schoolId, staffId, assignmentType: "ClassTeacher" },
+      });
+      if (existingAssign) {
+        await basePrisma.staffAssignment.update({
+          where: { id: existingAssign.id },
+          data: {
+            classroomId: matchedCls.id,
+            metadata: JSON.stringify({
+              className: clsName,
+              assignedClass: clsName,
+              subjects: data.assignedSubjects ? [data.assignedSubjects] : undefined,
+            }),
+          },
+        });
+      } else {
+        await basePrisma.staffAssignment.create({
+          data: {
+            schoolId,
+            staffId,
+            classroomId: matchedCls.id,
+            assignmentType: "ClassTeacher",
+            assignedRole: data.role || "Teacher",
+            session: "2026/2027",
+            metadata: JSON.stringify({
+              className: clsName,
+              assignedClass: clsName,
+              subjects: data.assignedSubjects ? [data.assignedSubjects] : undefined,
+            }),
+          },
+        });
+      }
+    }
 
     await invalidateStaffNamespace(schoolId);
     if (subdomain) {

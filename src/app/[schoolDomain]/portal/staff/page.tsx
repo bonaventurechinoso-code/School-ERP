@@ -123,6 +123,8 @@ export default async function TenantStaffPortalPage({
       initialClassrooms={initialData.classrooms}
       initialCourses={initialData.courses}
       initialStudents={initialData.students}
+      initialAssignedClasses={initialData.assignedClasses}
+      initialAssignedSubjects={initialData.assignedSubjects}
       initialLessonNotes={initialData.lessonNotes}
       initialLeaveRequests={initialData.leaveRequests}
       defaultTab={requestedTab}
