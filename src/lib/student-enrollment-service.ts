@@ -207,7 +207,7 @@ export async function createStudentWithCredentials(
   const resolvedTierName =
     activeTierName ||
     (school.academicTiers.length > 0 ? school.academicTiers[0].name : "Primary School");
-  
+
   const isTertiary = isHigherEdTier(resolvedTierName) || school.tier === "TERTIARY";
   const tierObj = school.academicTiers.find((t) =>
     (input.tierId && t.id === input.tierId) ||
@@ -611,12 +611,12 @@ export async function createStudentWithCredentials(
         revalidatePath(`/${school.subdomain}/students`, "layout");
         revalidatePath(`/${school.subdomain}/portal/staff`);
         revalidatePath(`/teacher/students`);
-      } catch {}
+      } catch { }
     }
     try {
       revalidatePath(`/[schoolDomain]/students`, "page");
       revalidatePath(`/[schoolDomain]/students`, "layout");
-    } catch {}
+    } catch { }
   } catch (cacheErr) {
     console.warn("[STUDENT_ENROLLMENT_CACHE_WARN]:", cacheErr);
   }
@@ -902,7 +902,7 @@ export async function executeBatchEnrollmentWithCredentials(
 ) {
   const safeTierName = typeof tierName === "string" ? tierName : undefined;
   const validation = await validateEnrollmentBatch(schoolId, session, rows, safeTierName);
-  
+
   // Filter out invalid rows, and handle duplicate actions (default SKIP)
   const rowsToEnroll = validation.rows.filter((r, idx) => {
     if (!r.isValid) return false;
@@ -949,7 +949,7 @@ export async function executeBatchEnrollmentWithCredentials(
       revalidatePath(`/${school.subdomain}/portal/staff`);
       revalidatePath(`/teacher/students`);
     }
-  } catch {}
+  } catch { }
 
   return {
     success: results.length > 0,
