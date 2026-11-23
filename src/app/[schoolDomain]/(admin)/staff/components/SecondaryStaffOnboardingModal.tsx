@@ -14,18 +14,13 @@ import {
   Briefcase,
   ShieldCheck,
   Lock,
-  Calendar,
-  MapPin,
-  Phone,
-  Mail,
-  User,
-  CreditCard,
-  Building2,
+  ChevronDown,
+  Search,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import StaffRolePickerForm from "./StaffRolePickerForm";
 import {
-  SECONDARY_STAFF_ROLES,
   SECONDARY_HOD_DEPARTMENTS,
   NURSERY_PRIMARY_SECONDARY_QUALIFICATIONS,
   isNonTeachingRole,
@@ -45,28 +40,23 @@ export const NIGERIAN_STATES = [
   "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT Abuja"
 ];
 
-export interface SecondaryClassItem {
-  id: string;
-  name: string;
-  stream?: string;
-}
-
-// STRICTLY 12 CLASSES ONLY: JSS 1A to SSS 3B (Arms A and B only, NO Arms C-F)
-export const FIXED_SECONDARY_12_CLASSES: SecondaryClassItem[] = [
+// STRICTLY 12 CLASSES ONLY: JSS 1A to SSS 3B (Arms A & B ONLY, NO sub-text, NO Arms C-F)
+export const FIXED_SECONDARY_12_CLASSES: Array<{ id: string; name: string }> = [
   { id: "sec-jss1-a", name: "JSS 1A" },
   { id: "sec-jss1-b", name: "JSS 1B" },
   { id: "sec-jss2-a", name: "JSS 2A" },
   { id: "sec-jss2-b", name: "JSS 2B" },
   { id: "sec-jss3-a", name: "JSS 3A" },
   { id: "sec-jss3-b", name: "JSS 3B" },
-  { id: "sec-sss1-a", name: "SSS 1A", stream: "Sciences" },
-  { id: "sec-sss1-b", name: "SSS 1B", stream: "Arts & Humanities" },
-  { id: "sec-sss2-a", name: "SSS 2A", stream: "Sciences" },
-  { id: "sec-sss2-b", name: "SSS 2B", stream: "Arts & Humanities" },
-  { id: "sec-sss3-a", name: "SSS 3A", stream: "Sciences" },
-  { id: "sec-sss3-b", name: "SSS 3B", stream: "Arts & Commercial" },
+  { id: "sec-sss1-a", name: "SSS 1A" },
+  { id: "sec-sss1-b", name: "SSS 1B" },
+  { id: "sec-sss2-a", name: "SSS 2A" },
+  { id: "sec-sss2-b", name: "SSS 2B" },
+  { id: "sec-sss3-a", name: "SSS 3A" },
+  { id: "sec-sss3-b", name: "SSS 3B" },
 ];
 
+// FIXED 20 SUBJECTS ONLY (No sub-text)
 export const SECONDARY_STANDARD_SUBJECTS = [
   "English Language",
   "Mathematics",
@@ -88,7 +78,7 @@ export const SECONDARY_STANDARD_SUBJECTS = [
   "French",
   "Technical Drawing",
   "Food & Nutrition",
-] as const;
+];
 
 interface Props {
   isOpen: boolean;
@@ -101,7 +91,25 @@ interface Props {
   lineManagers?: Array<{ id: string; firstName: string; lastName: string; staffId?: string }>;
 }
 
-// Unified badge color system for all headers
+// Generate dynamic staff prefix from school name / domain (e.g. Greenwood Academy -> GW)
+function getSchoolStaffPrefix(schoolName: string, schoolDomain: string): string {
+  if (schoolName) {
+    const clean = schoolName.replace(/[^a-zA-Z\s]/g, "").trim();
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    } else if (words.length === 1 && words[0].length >= 3) {
+      return words[0].slice(0, 3).toUpperCase();
+    }
+  }
+  if (schoolDomain) {
+    const clean = schoolDomain.replace(/[^a-zA-Z]/g, "").toUpperCase();
+    return clean.slice(0, 3) || "STF";
+  }
+  return "GW";
+}
+
+// Section Header with calm badge color system (Title 16px bold, subtitle 13px grey)
 function SectionHeader({
   letter,
   title,
@@ -114,17 +122,407 @@ function SectionHeader({
   badgeRight?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-7 h-7 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-3 border-b border-slate-100">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 flex items-center justify-center font-bold text-xs shrink-0">
           {letter}
         </div>
         <div className="min-w-0">
-          <h4 className="font-bold text-slate-800 text-sm truncate">{title}</h4>
-          <p className="text-xs text-slate-600 truncate">{subtitle}</p>
+          <h4 className="text-base font-bold text-slate-800 tracking-tight truncate">{title}</h4>
+          <p className="text-[13px] text-slate-500 truncate">{subtitle}</p>
         </div>
       </div>
       {badgeRight && <div className="shrink-0">{badgeRight}</div>}
+    </div>
+  );
+}
+
+// Section D Multi-Select Searchable Dropdown (Dropdowns only, zero pills visible when closed)
+function MultiSearchableDropdown({
+  id,
+  label,
+  required,
+  counterText,
+  placeholder,
+  searchPlaceholder,
+  options,
+  selected,
+  onChange,
+  error,
+  allowCustomAdd,
+  onCustomAdd,
+  helperText,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  counterText: string;
+  placeholder: string;
+  searchPlaceholder: string;
+  options: Array<{ id: string; name: string }>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+  error?: string;
+  allowCustomAdd?: boolean;
+  onCustomAdd?: (name: string) => void;
+  helperText?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customInput, setCustomInput] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.name.toLowerCase().includes(q));
+  }, [options, searchQuery]);
+
+  const handleToggle = (optId: string) => {
+    if (selected.includes(optId)) {
+      onChange(selected.filter((id) => id !== optId));
+    } else {
+      onChange([...selected, optId]);
+    }
+  };
+
+  const handleRemoveChip = (e: React.MouseEvent, optId: string) => {
+    e.stopPropagation();
+    onChange(selected.filter((id) => id !== optId));
+  };
+
+  const handleAddCustom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customInput.trim() || !onCustomAdd) return;
+    onCustomAdd(customInput.trim());
+    setCustomInput("");
+  };
+
+  return (
+    <div id={id} className="space-y-1.5" ref={containerRef}>
+      {/* Label and live counter row */}
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-slate-700">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+        <span className="text-xs font-semibold text-slate-500">{counterText}</span>
+      </div>
+
+      {/* Input box: When closed, shows placeholder OR chips inside the input with 'x' to remove */}
+      <div
+        tabIndex={0}
+        role="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full min-h-[42px] px-3 py-1.5 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${
+          error
+            ? "border-rose-400 bg-rose-50/20"
+            : isOpen
+            ? "border-emerald-600 ring-2 ring-emerald-500/10"
+            : "border-slate-300 hover:border-slate-400"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
+          {selected.length === 0 ? (
+            <span className="text-xs text-slate-500 font-normal">{placeholder}</span>
+          ) : (
+            selected.map((optId) => {
+              const item = options.find((o) => o.id === optId) || { id: optId, name: optId };
+              return (
+                <span
+                  key={optId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200 shrink-0"
+                >
+                  <span>{item.name}</span>
+                  <span
+                    onClick={(e) => handleRemoveChip(e, optId)}
+                    className="hover:text-rose-600 transition cursor-pointer"
+                    title="Remove"
+                  >
+                    ×
+                  </span>
+                </span>
+              );
+            })
+          )}
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${
+            isOpen ? "rotate-180 text-emerald-600" : ""
+          }`}
+        />
+      </div>
+
+      {error && <p className="text-[11px] text-rose-500 font-medium">{error}</p>}
+      {helperText && <p className="text-xs text-slate-600 truncate">{helperText}</p>}
+
+      {/* DROPDOWN CONTAINER (Opens below, pushes content down smoothly) */}
+      {isOpen && (
+        <div className="mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-2.5 animate-in fade-in duration-150">
+          {/* Search Input at Top */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-transparent text-xs text-slate-800 placeholder:text-slate-400 outline-none"
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-slate-400 hover:text-slate-600 text-xs"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Checkbox List ONLY */}
+          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 pr-1">
+            {filteredOptions.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-400">
+                No matches found for &quot;{searchQuery}&quot;
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt.id);
+                return (
+                  <label
+                    key={opt.id}
+                    className="flex items-center justify-between px-2.5 py-2 hover:bg-slate-50 rounded-lg cursor-pointer transition select-none"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggle(opt.id)}
+                        className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                      />
+                      <span className={`text-xs ${isChecked ? "font-bold text-emerald-900" : "font-medium text-slate-700"}`}>
+                        {opt.name}
+                      </span>
+                    </div>
+                    {isChecked && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          {/* Custom Add (if enabled) */}
+          {allowCustomAdd && onCustomAdd && (
+            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <input
+                type="text"
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddCustom(e);
+                  }
+                }}
+                placeholder="Add another subject (e.g. Visual Arts)..."
+                className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-slate-50 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddCustom}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+              >
+                + Add
+              </button>
+            </div>
+          )}
+
+          {/* Dropdown Footer: [Clear All] [Done] */}
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-xs text-slate-500 hover:text-rose-600 font-semibold px-2 py-1 transition"
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Section D Single-Select Searchable Dropdown (Assigned Form Class)
+function SingleSearchableDropdown({
+  id,
+  label,
+  required,
+  placeholder,
+  searchPlaceholder,
+  options,
+  value,
+  onChange,
+  error,
+  helperText,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  placeholder: string;
+  searchPlaceholder: string;
+  options: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (val: string) => void;
+  error?: string;
+  helperText?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.name.toLowerCase().includes(q));
+  }, [options, searchQuery]);
+
+  const selectedItem = options.find((o) => o.id === value);
+
+  return (
+    <div id={id} className="space-y-1.5" ref={containerRef}>
+      <label className="block text-xs font-bold text-slate-700">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+
+      {/* Input box */}
+      <div
+        tabIndex={0}
+        role="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full min-h-[42px] px-3 py-2 text-xs border rounded-xl bg-white flex items-center justify-between gap-2 transition cursor-pointer select-none ${
+          error
+            ? "border-rose-400 bg-rose-50/20"
+            : isOpen
+            ? "border-emerald-600 ring-2 ring-emerald-500/10"
+            : "border-slate-300 hover:border-slate-400"
+        }`}
+      >
+        <span className={selectedItem ? "font-semibold text-slate-800" : "text-slate-500 font-normal"}>
+          {selectedItem ? selectedItem.name : placeholder}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {value && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+              }}
+              className="text-slate-400 hover:text-rose-600 transition p-1"
+              title="Clear selection"
+            >
+              ×
+            </span>
+          )}
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform ${
+              isOpen ? "rotate-180 text-emerald-600" : ""
+            }`}
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-[11px] text-rose-500 font-medium">{error}</p>}
+      {helperText && <p className="text-xs text-slate-600 truncate">{helperText}</p>}
+
+      {/* Dropdown list */}
+      {isOpen && (
+        <div className="mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-2 animate-in fade-in duration-150">
+          {/* Search box */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-transparent text-xs text-slate-800 placeholder:text-slate-400 outline-none"
+              autoFocus
+            />
+          </div>
+
+          <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 pr-1">
+            <div
+              onClick={() => {
+                onChange("");
+                setIsOpen(false);
+              }}
+              className={`px-3 py-2 text-xs rounded-lg cursor-pointer transition ${
+                !value ? "bg-emerald-50 text-emerald-800 font-bold" : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {placeholder}
+            </div>
+            {filteredOptions.map((opt) => {
+              const isSelected = value === opt.id;
+              return (
+                <div
+                  key={opt.id}
+                  onClick={() => {
+                    onChange(opt.id);
+                    setIsOpen(false);
+                  }}
+                  className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition ${
+                    isSelected
+                      ? "bg-emerald-50 text-emerald-900 font-bold"
+                      : "text-slate-700 hover:bg-slate-50 font-medium"
+                  }`}
+                >
+                  <span>{opt.name}</span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -194,14 +592,14 @@ function RolePermissionsCard({ role }: { role: string }) {
   }
 
   return (
-    <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-2">
+    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
       <div className="flex items-center gap-2">
         <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-        <span className="font-bold text-emerald-950 text-xs">
+        <span className="font-bold text-slate-800 text-xs">
           Active Permissions Boundary — {roleTitle}
         </span>
       </div>
-      <ul className="space-y-1.5 pl-6 list-disc text-emerald-900 font-medium">
+      <ul className="space-y-1.5 pl-6 list-disc text-slate-700 font-medium">
         {bullets.map((b, idx) => (
           <li key={idx} className="leading-relaxed">
             {b}
@@ -238,13 +636,15 @@ export default function SecondaryStaffOnboardingModal({
   const [trcnExpiry, setTrcnExpiry] = useState("");
 
   // Section D: Secondary Assignments
-  const [classesList, setClassesList] = useState<SecondaryClassItem[]>(FIXED_SECONDARY_12_CLASSES);
+  const [classesList, setClassesList] = useState<Array<{ id: string; name: string }>>(FIXED_SECONDARY_12_CLASSES);
+  const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>(
+    SECONDARY_STANDARD_SUBJECTS.map((s) => ({ id: s, name: s }))
+  );
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
   const [classLoadError, setClassLoadError] = useState<string | null>(null);
   const [formTutorClassId, setFormTutorClassId] = useState<string>("");
   const [teachingClassIds, setTeachingClassIds] = useState<string[]>([]);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [customSubjectInput, setCustomSubjectInput] = useState("");
   const [selectedHodDepartments, setSelectedHodDepartments] = useState<string[]>([]);
 
   // Validation & Submission
@@ -253,6 +653,11 @@ export default function SecondaryStaffOnboardingModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Dynamic Staff ID Prefix (e.g. Greenwood Academy -> GW/STF/001 - auto)
+  const staffPrefix = useMemo(() => {
+    return getSchoolStaffPrefix(schoolName, schoolDomain);
+  }, [schoolName, schoolDomain]);
 
   // Auto-calculate age from DOB
   const age = useMemo(() => {
@@ -287,26 +692,23 @@ export default function SecondaryStaffOnboardingModal({
     }
   }, [formData.firstName, formData.lastName, formData.accountName]);
 
-  // Fetch real school classes and enforce strictly 2 arms (Arms A and B ONLY)
+  // Fetch real school classes and enforce strictly 12 classes (Arms A and B ONLY)
   const loadSchoolClasses = async () => {
     setIsLoadingClasses(true);
     setClassLoadError(null);
     try {
       const res = await fetchSchoolClassesAction(schoolDomain);
       if (res.success && res.data && res.data.length > 0) {
-        // Map DB classes to the 12 standard classes (strictly Arms A & B only)
-        const mapped12: SecondaryClassItem[] = FIXED_SECONDARY_12_CLASSES.map((std) => {
-          // Look for direct match like "JSS 1A" or "JSS 1 (A)"
+        const mapped12 = FIXED_SECONDARY_12_CLASSES.map((std) => {
           const directMatch = res.data.find((c: any) => {
             const n = (c.name || "").replace(/\s+/g, "").toUpperCase();
             const target = std.name.replace(/\s+/g, "").toUpperCase();
             return n === target || n.startsWith(target);
           });
           if (directMatch) {
-            return { id: directMatch.id, name: std.name, stream: std.stream };
+            return { id: directMatch.id, name: std.name };
           }
-          // If no specific arm in DB, check if base level exists (e.g. "JSS 1")
-          const levelPrefix = std.name.slice(0, -1).trim(); // "JSS 1"
+          const levelPrefix = std.name.slice(0, -1).trim();
           const baseMatch = res.data.find((c: any) => {
             const n = (c.name || "").trim().toUpperCase();
             return n === levelPrefix.toUpperCase();
@@ -316,7 +718,6 @@ export default function SecondaryStaffOnboardingModal({
             return {
               id: isArmA ? baseMatch.id : `${baseMatch.id}-b`,
               name: std.name,
-              stream: std.stream,
             };
           }
           return std;
@@ -365,29 +766,21 @@ export default function SecondaryStaffOnboardingModal({
     }
   };
 
-  const toggleTeachingClass = (clsId: string) => {
-    setTeachingClassIds((prev) =>
-      prev.includes(clsId) ? prev.filter((id) => id !== clsId) : [...prev, clsId]
-    );
-    if (errors.teachingClasses) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.teachingClasses;
-        return next;
-      });
+  const handleAddCustomSubject = (customName: string) => {
+    const trimmed = customName.trim();
+    if (!trimmed) return;
+    if (!subjectsList.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) {
+      setSubjectsList((prev) => [...prev, { id: trimmed, name: trimmed }]);
     }
-  };
-
-  const toggleSubject = (subj: string) => {
-    setSelectedSubjects((prev) =>
-      prev.includes(subj) ? prev.filter((s) => s !== subj) : [...prev, subj]
-    );
-    if (errors.subjects) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.subjects;
-        return next;
-      });
+    if (!selectedSubjects.includes(trimmed)) {
+      setSelectedSubjects((prev) => [...prev, trimmed]);
+      if (errors.subjects) {
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.subjects;
+          return next;
+        });
+      }
     }
   };
 
@@ -402,22 +795,6 @@ export default function SecondaryStaffOnboardingModal({
         return next;
       });
     }
-  };
-
-  const handleAddCustomSubject = () => {
-    const val = customSubjectInput.trim();
-    if (!val) return;
-    if (!selectedSubjects.includes(val)) {
-      setSelectedSubjects((prev) => [...prev, val]);
-      if (errors.subjects) {
-        setErrors((prev) => {
-          const next = { ...prev };
-          delete next.subjects;
-          return next;
-        });
-      }
-    }
-    setCustomSubjectInput("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -653,23 +1030,23 @@ export default function SecondaryStaffOnboardingModal({
   const secondaryPayGrades = getPayGradesForTier("SECONDARY");
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex justify-center p-3 sm:p-5 md:p-6 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto max-h-[92vh]">
         {/* MODAL HEADER (STICKY SHRINK-0) */}
-        <div className="px-5 sm:px-6 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white flex items-center justify-between shrink-0 shadow-sm">
+        <div className="px-6 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
               <School className="w-5 h-5 text-emerald-200" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-black tracking-tight truncate">Secondary School Staff Onboarding</h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-100 text-[10px] font-black uppercase tracking-wider border border-emerald-400/30 shrink-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold tracking-tight truncate">Secondary School Staff Onboarding</h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-100 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30 shrink-0">
                   Secondary Tier
                 </span>
               </div>
-              <p className="text-xs text-emerald-100/90 font-medium mt-0.5 truncate">
-                {schoolName} • WAEC / NECO Standards • JSS 1 - SSS 3 Arms A &amp; B
+              <p className="text-xs text-emerald-100/90 font-normal mt-0.5 truncate">
+                {schoolName} • WAEC / NECO Standards • JSS 1A - SSS 3B
               </p>
             </div>
           </div>
@@ -692,10 +1069,10 @@ export default function SecondaryStaffOnboardingModal({
 
         {/* FORM CONTAINER WITH SCROLLABLE BODY AND STICKY FOOTER */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-          {/* SCROLLABLE BODY (EXACT ORDER: A -> B -> C -> D -> E -> F -> G) */}
+          {/* SCROLLABLE BODY (EXACT ORDER: A -> B -> C -> D -> E -> F -> G; 24px between sections, 16px between fields) */}
           <div
             ref={scrollContainerRef}
-            className="overflow-y-auto p-4 sm:p-6 pb-8 space-y-6 flex-1 overflow-x-hidden"
+            className="overflow-y-auto p-5 sm:p-6 pb-8 space-y-6 flex-1 overflow-x-hidden"
           >
             {/* DYNAMIC ROLE PICKER FORM (PUSHES CONTENT DOWN, NO OVERLAP) */}
             <div id="field-role">
@@ -726,10 +1103,10 @@ export default function SecondaryStaffOnboardingModal({
               <SectionHeader
                 letter="A"
                 title="Personal & Identity"
-                subtitle="Official government names, birth record, state of origin, and identity credentials"
+                subtitle="Official names, date of birth, state of origin, and identity credentials"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* First Name */}
                 <div id="field-firstName">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -767,7 +1144,7 @@ export default function SecondaryStaffOnboardingModal({
                 {/* Middle Name */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Middle Name <span className="text-slate-500 font-normal">(Optional)</span>
+                    Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="text"
@@ -779,7 +1156,7 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {/* DOB */}
                 <div id="field-dateOfBirth">
                   <div className="flex items-center justify-between mb-1">
@@ -843,7 +1220,7 @@ export default function SecondaryStaffOnboardingModal({
                 {/* NIN (Fully visible, no cutoff) */}
                 <div id="field-nin">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    NIN <span className="text-slate-500 font-normal">(11 Digits)</span>
+                    NIN <span className="text-slate-400 font-normal">(11 Digits)</span>
                   </label>
                   <input
                     type="text"
@@ -859,7 +1236,7 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Phone */}
                 <div id="field-phone">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -895,7 +1272,7 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Residential Address */}
                 <div id="field-residentialAddress" className="sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -949,12 +1326,12 @@ export default function SecondaryStaffOnboardingModal({
                 subtitle="Auto-generated Staff ID, resumption date, employment type, and department"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                {/* Staff ID: Disabled, grey, placeholder "EGD/STF/001 - auto" */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Staff ID: Disabled, grey, dynamic prefix (e.g. GW/STF/001 - auto), not hardcoded EGD */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-slate-700">Staff ID</label>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 font-bold px-1.5 py-0.2 rounded border border-emerald-200">
+                    <span className="text-[10px] text-emerald-800 bg-emerald-50 font-bold px-1.5 py-0.2 rounded border border-emerald-200">
                       Auto-generated on Save
                     </span>
                   </div>
@@ -963,10 +1340,10 @@ export default function SecondaryStaffOnboardingModal({
                     readOnly
                     disabled
                     value={formData.staffId || ""}
-                    placeholder="EGD/STF/001 - auto"
+                    placeholder={`${staffPrefix}/STF/001 - auto`}
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-100 text-slate-600 font-mono font-semibold cursor-not-allowed placeholder:text-slate-500"
                   />
-                  <p className="text-[11px] text-slate-600 mt-1">Unique staff identifier created automatically upon save.</p>
+                  <p className="text-xs text-slate-600 truncate mt-1">Unique staff ID created automatically upon save.</p>
                 </div>
 
                 {/* Date of Employment */}
@@ -1012,7 +1389,7 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Department Name */}
                 <div id="field-departmentName">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1040,7 +1417,7 @@ export default function SecondaryStaffOnboardingModal({
                 {/* Reporting To */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Reporting To / Line Manager <span className="text-slate-500 font-normal">(Optional)</span>
+                    Reporting To / Line Manager <span className="text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <select
                     value={formData.reportingToId}
@@ -1075,7 +1452,7 @@ export default function SecondaryStaffOnboardingModal({
                 }
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Highest Qualification */}
                 <div id="field-qualification">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1173,7 +1550,7 @@ export default function SecondaryStaffOnboardingModal({
                     {!isNonTeaching ? (
                       <span className="text-rose-500 font-bold">*</span>
                     ) : (
-                      <span className="text-slate-500 font-normal">(Optional for non-teaching)</span>
+                      <span className="text-slate-400 font-normal">(Optional for non-teaching)</span>
                     )}
                   </label>
                   {trcnNumber && (
@@ -1189,7 +1566,7 @@ export default function SecondaryStaffOnboardingModal({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div id="field-trcnNumber">
                     <input
                       type="text"
@@ -1248,14 +1625,15 @@ export default function SecondaryStaffOnboardingModal({
 
             {/* =================================================================== */}
             {/* SECTION D: CLASSROOM & SUBJECT ASSIGNMENTS                         */}
+            {/* (DROPDOWNS ONLY: NO PILLS, NO GRIDS, NO CHECKBOXES VISIBLE WHEN CLOSED) */}
             {/* =================================================================== */}
             <div id="section-d-container" className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
               <SectionHeader
                 letter="D"
                 title={`Classroom & Subject Assignments ${formData.role ? `(${formData.role})` : ""}`}
-                subtitle="Assign Form Class, toggle teaching classes (max Arms A & B), and select subjects"
+                subtitle="Assign Form Class, select classes taught (max Arms A & B), and choose curriculum subjects"
                 badgeRight={
-                  <span className="text-[10px] font-bold text-slate-600">
+                  <span className="text-[10px] font-bold text-slate-500">
                     {isFormTutor
                       ? "Form Tutor Allocation"
                       : isSubjectTeacher
@@ -1271,7 +1649,7 @@ export default function SecondaryStaffOnboardingModal({
 
               {!isNonTeaching ? (
                 <div className="space-y-4">
-                  {/* HOD Department Selection (multi-department support) */}
+                  {/* HOD Department Selection (if role is HOD) */}
                   {isHod && (
                     <div id="field-hodDepartments" className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-3">
                       <div className="flex items-center justify-between">
@@ -1310,200 +1688,92 @@ export default function SecondaryStaffOnboardingModal({
                     </div>
                   )}
 
-                  {/* 1. ASSIGNED FORM CLASS (ONE DROPDOWN ONLY) */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label htmlFor="field-formTutorClass" className="block text-xs font-bold text-slate-700">
-                        Assigned Form Class / Arm (Form Tutor)
-                        {isFormTutor && <span className="text-rose-500"> *</span>}
-                      </label>
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {isFormTutor ? "Mandatory for Form Tutor" : "Optional Form Class"}
-                      </span>
-                    </div>
-                    <select
-                      id="field-formTutorClass"
-                      value={formTutorClassId}
-                      onChange={(e) => {
-                        setFormTutorClassId(e.target.value);
-                        if (errors.formTutorClass) {
-                          setErrors((prev) => {
-                            const n = { ...prev };
-                            delete n.formTutorClass;
-                            return n;
-                          });
-                        }
-                      }}
-                      className={`w-full text-xs font-semibold border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-emerald-500 ${
-                        errors.formTutorClass ? "border-rose-400 bg-rose-50/30" : "border-slate-300"
-                      }`}
-                    >
-                      <option value="">-- None / No Form Class Assigned --</option>
-                      {classesList.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.name} {cls.stream ? `(${cls.stream})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.formTutorClass && (
-                      <p className="text-[11px] text-rose-500 font-medium">{errors.formTutorClass}</p>
-                    )}
-                    <p className="text-[11px] text-slate-600">
-                      Assigns this teacher as Form Tutor responsible for student attendance and terminal reports.
-                    </p>
-                  </div>
-
-                  {/* 2. CLASSES / ARMS TAUGHT (ONE PICKER ONLY - QUICK TOGGLES, NO EXTRA DROPDOWNS) */}
-                  <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                          Classes / Arms Taught {isSubjectTeacher && <span className="text-rose-500">*</span>}
-                        </label>
-                        <p className="text-[11px] text-slate-600">
-                          Click any class pill to toggle assignment (Strictly Arms A &amp; B only).
-                        </p>
-                      </div>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                        teachingClassIds.length > 0 ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-slate-100 text-slate-600"
-                      }`}>
-                        {teachingClassIds.length} {teachingClassIds.length === 1 ? "class" : "classes"} selected
-                      </span>
-                    </div>
-
-                    {classLoadError && (
-                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
-                        <span>{classLoadError}</span>
-                        <button
-                          type="button"
-                          onClick={loadSchoolClasses}
-                          className="px-2.5 py-1 bg-white border border-rose-300 rounded-lg font-bold hover:bg-rose-100 transition flex items-center gap-1"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          <span>Retry</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* 12 CLASS PILLS GRID (STRICTLY ARMS A & B ONLY) */}
-                    <div
-                      id="field-teachingClasses"
-                      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-3 bg-slate-50/70 rounded-2xl border border-slate-200"
-                    >
-                      {classesList.map((cls) => {
-                        const isChecked = teachingClassIds.includes(cls.id);
-                        return (
-                          <button
-                            key={cls.id}
-                            type="button"
-                            onClick={() => toggleTeachingClass(cls.id)}
-                            className={`group px-3 py-2 rounded-xl text-left border flex flex-col justify-center transition cursor-pointer ${
-                              isChecked
-                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs font-bold"
-                                : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <span className={`text-xs font-bold tracking-tight ${isChecked ? "text-white" : "text-slate-800"}`}>
-                                {cls.name}
-                              </span>
-                              {isChecked ? (
-                                <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                                  <Check className="w-3 h-3 text-white stroke-[3]" />
-                                </span>
-                              ) : (
-                                <span className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />
-                              )}
-                            </div>
-                            {cls.stream && (
-                              <span
-                                className={`text-[10px] font-medium leading-none mt-1 truncate ${
-                                  isChecked ? "text-emerald-100" : "text-slate-500 group-hover:text-slate-600"
-                                }`}
-                              >
-                                {cls.stream}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.teachingClasses && (
-                      <p className="text-[11px] text-rose-500 font-medium mt-1">{errors.teachingClasses}</p>
-                    )}
-                  </div>
-
-                  {/* 3. SUBJECTS TAUGHT (MULTI-SELECT PILLS WITH LIVE COUNTER) */}
-                  <div className="space-y-2 pt-2 border-t border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                          Subjects Taught {isSubjectTeacher && <span className="text-rose-500">*</span>}
-                        </label>
-                        <p className="text-[11px] text-slate-600">Select subjects taught across the assigned secondary classes.</p>
-                      </div>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                        selectedSubjects.length > 0 ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-slate-100 text-slate-600"
-                      }`}>
-                        {selectedSubjects.length} {selectedSubjects.length === 1 ? "subject" : "subjects"} selected
-                      </span>
-                    </div>
-
-                    <div
-                      id="field-subjects"
-                      className="flex flex-wrap gap-1.5 p-3 bg-slate-50/70 rounded-2xl border border-slate-200 max-h-48 overflow-y-auto"
-                    >
-                      {SECONDARY_STANDARD_SUBJECTS.map((subj) => {
-                        const isSelected = selectedSubjects.includes(subj);
-                        return (
-                          <button
-                            key={subj}
-                            type="button"
-                            onClick={() => toggleSubject(subj)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
-                              isSelected
-                                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs font-bold"
-                                : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                          >
-                            <span>{subj}</span>
-                            {isSelected ? (
-                              <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                            ) : (
-                              <span className="text-slate-400 font-normal">+</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.subjects && (
-                      <p className="text-[11px] text-rose-500 font-medium mt-1">{errors.subjects}</p>
-                    )}
-
-                    {/* Custom Subject Addition */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="text"
-                        value={customSubjectInput}
-                        onChange={(e) => setCustomSubjectInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddCustomSubject();
-                          }
-                        }}
-                        placeholder="Add another secondary subject (e.g. Visual Arts, Music)..."
-                        className="text-xs border border-slate-300 rounded-xl px-3 py-2 flex-1 bg-white focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-500"
-                      />
+                  {classLoadError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-700">
+                      <span>{classLoadError}</span>
                       <button
                         type="button"
-                        onClick={handleAddCustomSubject}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                        onClick={loadSchoolClasses}
+                        className="px-2.5 py-1 bg-white border border-rose-300 rounded-lg font-bold hover:bg-rose-100 transition flex items-center gap-1"
                       >
-                        + Add Subject
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Retry</span>
                       </button>
                     </div>
-                  </div>
+                  )}
+
+                  {/* 1. ASSIGNED FORM CLASS / ARM (SINGLE SEARCHABLE DROPDOWN) */}
+                  <SingleSearchableDropdown
+                    id="field-formTutorClass"
+                    label="Assigned Form Class / Arm (Form Tutor)"
+                    required={isFormTutor}
+                    placeholder="-- None / No Form Class Assigned --"
+                    searchPlaceholder="Search class... e.g. JSS 1A"
+                    options={classesList}
+                    value={formTutorClassId}
+                    onChange={(val) => {
+                      setFormTutorClassId(val);
+                      if (errors.formTutorClass) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.formTutorClass;
+                          return n;
+                        });
+                      }
+                    }}
+                    error={errors.formTutorClass}
+                    helperText="Assigns this teacher as Form Tutor responsible for student attendance and terminal reports."
+                  />
+
+                  {/* 2. CLASSES / ARMS TAUGHT (MULTI SEARCHABLE DROPDOWN - NO PILLS ON FORM) */}
+                  <MultiSearchableDropdown
+                    id="field-teachingClasses"
+                    label="Classes / Arms Taught"
+                    required={isSubjectTeacher}
+                    counterText={`${teachingClassIds.length} class(es) selected`}
+                    placeholder="-- Select Classes Taught --"
+                    searchPlaceholder="Search classes... e.g. JSS 1A"
+                    options={classesList}
+                    selected={teachingClassIds}
+                    onChange={(next) => {
+                      setTeachingClassIds(next);
+                      if (errors.teachingClasses) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.teachingClasses;
+                          return n;
+                        });
+                      }
+                    }}
+                    error={errors.teachingClasses}
+                    helperText="Select each class or arm taught by this teacher (Max Arms A & B only)."
+                  />
+
+                  {/* 3. SUBJECTS TAUGHT (MULTI SEARCHABLE DROPDOWN - NO PILLS ON FORM) */}
+                  <MultiSearchableDropdown
+                    id="field-subjects"
+                    label="Subjects Taught"
+                    required={isSubjectTeacher}
+                    counterText={`${selectedSubjects.length} subject(s) selected`}
+                    placeholder="-- Select Subjects Taught --"
+                    searchPlaceholder="Search subjects... e.g. Biology"
+                    options={subjectsList}
+                    selected={selectedSubjects}
+                    onChange={(next) => {
+                      setSelectedSubjects(next);
+                      if (errors.subjects) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.subjects;
+                          return n;
+                        });
+                      }
+                    }}
+                    error={errors.subjects}
+                    allowCustomAdd={true}
+                    onCustomAdd={handleAddCustomSubject}
+                    helperText="Choose standard secondary subjects taught across assigned classes."
+                  />
 
                   {/* Executive Leadership Note */}
                   {isLeadership && (
@@ -1513,9 +1783,9 @@ export default function SecondaryStaffOnboardingModal({
                         <h5 className="text-xs font-bold text-emerald-900">
                           Secondary School Executive Leadership
                         </h5>
-                        <p className="text-[11px] text-emerald-800 mt-0.5">
+                        <p className="text-xs text-emerald-800 mt-0.5">
                           Scope: Academic administration, termly broadsheets approval, WAEC/NECO registrations,
-                          and staff supervision across JSS 1 - SSS 3.
+                          and staff supervision across JSS 1A - SSS 3B.
                         </p>
                       </div>
                     </div>
@@ -1542,7 +1812,7 @@ export default function SecondaryStaffOnboardingModal({
                 subtitle="Primary next of kin, emergency contacts, and institutional guarantor (all together)"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* NOK Name */}
                 <div id="field-nextOfKinName">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1622,7 +1892,7 @@ export default function SecondaryStaffOnboardingModal({
 
               {/* Emergency Fields (HIDDEN IF CHECKED, SHOWN IF UNCHECKED) */}
               {!formData.sameAsNextOfKin && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 animate-in fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 animate-in fade-in">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Emergency Contact Full Name</label>
                     <input
@@ -1647,10 +1917,10 @@ export default function SecondaryStaffOnboardingModal({
               )}
 
               {/* Institutional Guarantor */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Guarantor Full Name <span className="text-slate-500 font-normal">(Institutional surety)</span>
+                    Guarantor Full Name <span className="text-slate-400 font-normal">(Institutional surety)</span>
                   </label>
                   <input
                     type="text"
@@ -1683,11 +1953,11 @@ export default function SecondaryStaffOnboardingModal({
                 subtitle="Salary structure, 10-digit NUBAN bank account, and statutory pension/TIN"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Base Salary (FIXED ₦ ICON OVERLAP) */}
                 <div id="field-baseSalary">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Base Monthly Salary (NGN) <span className="text-slate-500 font-normal">(Optional)</span>
+                    Base Monthly Salary (NGN) <span className="text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-600 pointer-events-none">
@@ -1710,7 +1980,7 @@ export default function SecondaryStaffOnboardingModal({
                 {/* Pay Grade */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Pay Grade / Scale <span className="text-slate-500 font-normal">(Secondary)</span>
+                    Pay Grade / Scale <span className="text-slate-400 font-normal">(Secondary)</span>
                   </label>
                   <select
                     value={formData.payGrade}
@@ -1741,7 +2011,7 @@ export default function SecondaryStaffOnboardingModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Bank Name */}
                 <div id="field-bankName">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1767,7 +2037,7 @@ export default function SecondaryStaffOnboardingModal({
                 {/* Account Number */}
                 <div id="field-bankAccountNumber">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Account No <span className="text-[10px] text-slate-500 font-normal">(10-Digit NUBAN)</span>
+                    Account No <span className="text-[10px] text-slate-400 font-normal">(10-Digit NUBAN)</span>
                   </label>
                   <input
                     type="text"
@@ -1798,7 +2068,7 @@ export default function SecondaryStaffOnboardingModal({
               </div>
 
               {/* Statutory Pension & TIN */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Pension RSA PIN</label>
                   <input
@@ -1842,7 +2112,7 @@ export default function SecondaryStaffOnboardingModal({
                 subtitle="Portal username, mandatory first-login password reset, and role permissions boundary"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Portal Username: Auto-fills from Section A email or shows fallback */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1856,7 +2126,7 @@ export default function SecondaryStaffOnboardingModal({
                     placeholder={formData.email ? formData.email : "Will use email from Section A"}
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-100 text-slate-600 font-mono font-semibold cursor-not-allowed placeholder:text-slate-500"
                   />
-                  <p className="text-[11px] text-slate-600 mt-1">
+                  <p className="text-xs text-slate-600 truncate mt-1">
                     {formData.email
                       ? "Auto-filled from Section A official email address."
                       : "Will use email from Section A once entered."}
@@ -1867,10 +2137,10 @@ export default function SecondaryStaffOnboardingModal({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Security Enforcement</label>
                   <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-xs text-slate-700 font-semibold">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>Force Password Reset on First Login: <strong>ON (Mandatory)</strong></span>
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-1">Temporary password dispatched automatically on save.</p>
+                  <p className="text-xs text-slate-600 truncate mt-1">Temporary password dispatched automatically on save.</p>
                 </div>
               </div>
 
@@ -1878,9 +2148,9 @@ export default function SecondaryStaffOnboardingModal({
               <RolePermissionsCard role={formData.role} />
 
               {/* DISPATCH NOTIFICATION */}
-              <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-600 flex items-start gap-2">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
                 <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                <p>
+                <p className="leading-relaxed">
                   Initial temporary login credentials are cryptographically generated server-side and dispatched
                   directly to the staff member&apos;s verified work email. Passwords are never exposed in administrative views.
                 </p>

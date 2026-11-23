@@ -49,8 +49,8 @@ async function main() {
     page.on("console", (m) => console.log("[Browser Console]", m.text()));
 
     console.log(`Navigating to ${url}...`);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-    await new Promise((r) => setTimeout(r, 2000));
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+    await new Promise((r) => setTimeout(r, 4000));
 
     console.log("Looking for 'Onboard New Staff' button...");
     const clicked = await page.evaluate(() => {
@@ -86,39 +86,7 @@ async function main() {
     });
     await new Promise((r) => setTimeout(r, 1000));
 
-    // 2. Click class pills: JSS 1A, SSS 1A
-    console.log("Clicking class pills in Section D...");
-    await page.evaluate(() => {
-      const container = document.getElementById("field-teachingClasses");
-      if (container) {
-        const buttons = Array.from(container.querySelectorAll("button"));
-        buttons.forEach((b) => {
-          const txt = (b as HTMLElement).innerText;
-          if (txt.includes("JSS 1A") || txt.includes("SSS 1A")) {
-            (b as HTMLElement).click();
-          }
-        });
-      }
-    });
-    await new Promise((r) => setTimeout(r, 800));
-
-    // 3. Click subject pills: English Language, Mathematics
-    console.log("Clicking subject pills...");
-    await page.evaluate(() => {
-      const container = document.getElementById("field-subjects");
-      if (container) {
-        const buttons = Array.from(container.querySelectorAll("button"));
-        buttons.forEach((b) => {
-          const txt = (b as HTMLElement).innerText;
-          if (txt.includes("English Language") || txt.includes("Mathematics")) {
-            (b as HTMLElement).click();
-          }
-        });
-      }
-    });
-    await new Promise((r) => setTimeout(r, 800));
-
-    // 4. Scroll to Section D and capture screenshot
+    // Scroll to Section D
     console.log("Scrolling to Section D...");
     await page.evaluate(() => {
       const secD = document.getElementById("section-d-container");
@@ -126,18 +94,111 @@ async function main() {
     });
     await new Promise((r) => setTimeout(r, 1000));
 
-    const shot1Artifact = path.join(ARTIFACT_DIR, "secondary-staff-section-d.png");
-    const shot1Public = path.join(PUBLIC_SCREENSHOTS_DIR, "secondary-staff-section-d.png");
-    await page.screenshot({ path: shot1Artifact, fullPage: false });
-    await page.screenshot({ path: shot1Public, fullPage: false });
-    console.log(`✅ Captured Section D screenshot: ${shot1Artifact}`);
+    // 2. Open Classes dropdown in Section D
+    console.log("Opening Classes dropdown...");
+    await page.evaluate(() => {
+      const container = document.getElementById("field-teachingClasses");
+      if (container) {
+        const trigger = container.querySelector("[role='button']") as HTMLElement;
+        if (trigger) trigger.click();
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    // 3. Select JSS 1A and SSS 1A checkboxes inside dropdown
+    console.log("Selecting JSS 1A and SSS 1A checkboxes...");
+    await page.evaluate(() => {
+      const container = document.getElementById("field-teachingClasses");
+      if (container) {
+        const labels = Array.from(container.querySelectorAll("label"));
+        labels.forEach((lbl) => {
+          const txt = (lbl as HTMLElement).innerText;
+          if (txt.includes("JSS 1A") || txt.includes("SSS 1A")) {
+            const input = lbl.querySelector("input[type='checkbox']") as HTMLInputElement;
+            if (input && !input.checked) {
+              input.click();
+            }
+          }
+        });
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    // CAPTURE SCREENSHOT: Section D OPEN
+    console.log("Capturing Section D OPEN screenshot...");
+    const openArtifact = path.join(ARTIFACT_DIR, "secondary-staff-section-d-open.png");
+    const openPublic = path.join(PUBLIC_SCREENSHOTS_DIR, "secondary-staff-section-d-open.png");
+    await page.screenshot({ path: openArtifact, fullPage: false });
+    await page.screenshot({ path: openPublic, fullPage: false });
+    console.log(`✅ Captured Section D OPEN: ${openArtifact}`);
+
+    // Click "Done" to close Classes dropdown
+    console.log("Clicking Done to close Classes dropdown...");
+    await page.evaluate(() => {
+      const container = document.getElementById("field-teachingClasses");
+      if (container) {
+        const buttons = Array.from(container.querySelectorAll("button"));
+        const doneBtn = buttons.find((b) => b.innerText.includes("Done"));
+        if (doneBtn) doneBtn.click();
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    // 4. Open Subjects dropdown, select English Language and Mathematics, then click Done
+    console.log("Opening Subjects dropdown...");
+    await page.evaluate(() => {
+      const container = document.getElementById("field-subjects");
+      if (container) {
+        const trigger = container.querySelector("[role='button']") as HTMLElement;
+        if (trigger) trigger.click();
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    await page.evaluate(() => {
+      const container = document.getElementById("field-subjects");
+      if (container) {
+        const labels = Array.from(container.querySelectorAll("label"));
+        labels.forEach((lbl) => {
+          const txt = (lbl as HTMLElement).innerText;
+          if (txt.includes("English Language") || txt.includes("Mathematics")) {
+            const input = lbl.querySelector("input[type='checkbox']") as HTMLInputElement;
+            if (input && !input.checked) {
+              input.click();
+            }
+          }
+        });
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    console.log("Clicking Done to close Subjects dropdown...");
+    await page.evaluate(() => {
+      const container = document.getElementById("field-subjects");
+      if (container) {
+        const buttons = Array.from(container.querySelectorAll("button"));
+        const doneBtn = buttons.find((b) => b.innerText.includes("Done"));
+        if (doneBtn) doneBtn.click();
+      }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+
+    // CAPTURE SCREENSHOT: Section D CLOSED (Only 3 inputs, chips inside, no external pills)
+    console.log("Capturing Section D CLOSED screenshot...");
+    const closedArtifact = path.join(ARTIFACT_DIR, "secondary-staff-section-d-closed.png");
+    const closedPublic = path.join(PUBLIC_SCREENSHOTS_DIR, "secondary-staff-section-d-closed.png");
+    const oldSectionDArtifact = path.join(ARTIFACT_DIR, "secondary-staff-section-d.png");
+    await page.screenshot({ path: closedArtifact, fullPage: false });
+    await page.screenshot({ path: closedPublic, fullPage: false });
+    await page.screenshot({ path: oldSectionDArtifact, fullPage: false });
+    console.log(`✅ Captured Section D CLOSED: ${closedArtifact}`);
 
     // 5. Scroll down to Section G & Sticky Footer
     console.log("Scrolling down to Sticky Footer and Section G...");
     await page.evaluate(() => {
-      const scrollable = document.querySelector(".overflow-y-auto.p-4");
-      if (scrollable) {
-        scrollable.scrollTop = scrollable.scrollHeight;
+      const modalScroll = document.querySelector(".fixed.inset-0 form .overflow-y-auto") || document.querySelector(".fixed.inset-0 .overflow-y-auto");
+      if (modalScroll) {
+        modalScroll.scrollTop = modalScroll.scrollHeight;
       }
     });
     await new Promise((r) => setTimeout(r, 1000));
