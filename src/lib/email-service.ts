@@ -1724,7 +1724,23 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
     // Determine login role and owner
     const isGuardianLogin = loginOwner === "GUARDIAN" || (!loginOwner && !studentEmail && !!parentEmail);
     const resolvedOwnerName = isGuardianLogin ? (parentName || "Parent / Guardian") : studentName;
-    const resolvedUsername = username || (isGuardianLogin ? (parentEmail || parentPhone || admissionNumber) : (studentEmail || admissionNumber));
+
+    // Resolve portal login username: ALWAYS prioritize email / gmail address over phone number
+    const availableEmail = (isGuardianLogin ? (parentEmail || studentEmail) : (studentEmail || parentEmail))?.trim().toLowerCase();
+
+    let resolvedUsername = "";
+    if (username && username.includes("@")) {
+      resolvedUsername = username.trim().toLowerCase();
+    } else if (availableEmail && availableEmail.includes("@")) {
+      resolvedUsername = availableEmail;
+    } else if (username && !/^[0-9+\-\s()]+$/.test(username.trim())) {
+      // Non-phone identifier such as admission number / matriculation number
+      resolvedUsername = username.trim();
+    } else if (admissionNumber) {
+      resolvedUsername = admissionNumber.trim();
+    } else {
+      resolvedUsername = username || parentPhone || "Assigned on login";
+    }
 
     // Collect valid recipients (student email and/or parent email)
     const rawRecipients = [parentEmail, studentEmail].filter(

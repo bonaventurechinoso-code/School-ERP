@@ -313,22 +313,24 @@ export async function createStudentWithCredentials(
     // =========================================================================
     // K-12 WORKFLOW: LOGIN GOES TO GUARDIAN/PARENT, NOT THE CHILD
     // =========================================================================
-    username = normGuardianPhone || normGuardianEmail;
-    deliveryContact = normGuardianPhone || normGuardianEmail;
+    // Always prioritize email/gmail as portal username; fall back to phone or admission number
+    const preferredPortalEmail = normGuardianEmail || normStudentEmail;
+    username = preferredPortalEmail || normGuardianPhone || finalAdmissionNumber || "";
+    deliveryContact = preferredPortalEmail || normGuardianPhone || "";
 
     // Find or create Parent record
     let parentRecord = await basePrisma.parent.findFirst({
       where: {
         schoolId,
         OR: [
-          ...(normGuardianEmail ? [{ email: { equals: normGuardianEmail, mode: "insensitive" as const } }] : []),
+          ...(preferredPortalEmail ? [{ email: { equals: preferredPortalEmail, mode: "insensitive" as const } }] : []),
           ...(normGuardianPhone ? [{ phone: normGuardianPhone }] : []),
         ],
       },
     });
 
     const parentEmailToUse =
-      normGuardianEmail ||
+      preferredPortalEmail ||
       `${(normGuardianPhone || "guardian").replace(/[^0-9]/g, "")}@parent.${school.subdomain}`;
 
     if (!parentRecord) {
@@ -447,7 +449,8 @@ export async function createStudentWithCredentials(
     // =========================================================================
     // TERTIARY WORKFLOW: LOGIN GOES DIRECTLY TO THE STUDENT
     // =========================================================================
-    username = finalAdmissionNumber || normStudentEmail;
+    // Prioritize student email/gmail for portal login credentials
+    username = normStudentEmail || finalAdmissionNumber || normStudentPhone || "";
     deliveryContact = normStudentEmail || normStudentPhone || "";
 
     const studentPortalEmail = normStudentEmail;
@@ -568,9 +571,12 @@ export async function createStudentWithCredentials(
   }).catch(() => null);
 
   // 8. Automated Email Dispatch (Enrollment Confirmation & Credentials Notification)
-  const recipientEmail = !isTertiary ? normGuardianEmail : normStudentEmail;
+  const recipientEmail = normGuardianEmail || normStudentEmail;
   if (recipientEmail) {
     try {
+      // Ensure the dispatched portal username is the email / gmail address whenever available
+      const portalUsername = normGuardianEmail || normStudentEmail || username;
+
       await sendStudentEnrollmentConfirmationEmail({
         schoolId,
         studentId: createdStudent.id,
@@ -578,11 +584,11 @@ export async function createStudentWithCredentials(
         admissionNumber: finalAdmissionNumber,
         currentClass: createdStudent.currentClass,
         tierName: resolvedTierName,
-        studentEmail: isTertiary ? normStudentEmail : null,
+        studentEmail: normStudentEmail || null,
         parentEmail: normGuardianEmail || null,
         parentName: guardianName !== "Parent / Guardian" ? guardianName : undefined,
         parentPhone: normGuardianPhone || null,
-        username,
+        username: portalUsername,
         loginOwner,
         temporaryPassword: rawTempPassword,
         schoolName: school.name,

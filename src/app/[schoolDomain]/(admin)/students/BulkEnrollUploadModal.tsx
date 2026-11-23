@@ -364,10 +364,10 @@ export default function BulkEnrollUploadModal({
             admissionYear: resolvedYear,
             guardianName: cGuardian !== -1 ? String(row[cGuardian] || "").trim() : "",
             guardianPhone: gPhone,
-            guardianEmail: cEmail !== -1 ? String(row[cEmail] || "").trim() : "",
+            guardianEmail: (cEmail !== -1 ? String(row[cEmail] || "").trim() : "") || (cStudentEmail !== -1 ? String(row[cStudentEmail] || "").trim() : ""),
             previousSchool: cPrev !== -1 ? String(row[cPrev] || "").trim() : "",
             studentPhone: sPhone,
-            studentEmail: isTertiary && cStudentEmail !== -1 ? String(row[cStudentEmail] || "").trim() : "",
+            studentEmail: (cStudentEmail !== -1 ? String(row[cStudentEmail] || "").trim() : "") || (cEmail !== -1 ? String(row[cEmail] || "").trim() : ""),
           };
         })
         .filter(Boolean) as StudentRowInput[];

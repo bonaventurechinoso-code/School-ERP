@@ -196,7 +196,7 @@ export default function ManualStudentGridModal({
         guardianEmail: cells[10] || "",
         previousSchool: cells[11] || "",
         studentPhone: isTertiary ? cells[9] || "" : "",
-        studentEmail: isTertiary ? cells[10] || "" : "",
+        studentEmail: cells[10] || "",
       };
     });
 
@@ -218,7 +218,8 @@ export default function ManualStudentGridModal({
         r.lastName.trim() ||
         r.currentClass.trim() ||
         r.guardianPhone?.trim() ||
-        r.guardianEmail?.trim()
+        r.guardianEmail?.trim() ||
+        r.studentEmail?.trim()
     );
 
     if (nonEmpty.length === 0) {
