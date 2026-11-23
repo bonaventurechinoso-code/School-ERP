@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   X,
@@ -37,6 +37,21 @@ interface Props {
   classrooms?: Array<{ id: string; name: string }>;
   lineManagers?: Array<{ id: string; firstName: string; lastName: string; staffId?: string }>;
 }
+
+export const PRIMARY_CLASSES_OPTIONS = [
+  { id: "Primary 1A", name: "Primary 1A", baseName: "Primary 1", arm: "A" },
+  { id: "Primary 1B", name: "Primary 1B", baseName: "Primary 1", arm: "B" },
+  { id: "Primary 2A", name: "Primary 2A", baseName: "Primary 2", arm: "A" },
+  { id: "Primary 2B", name: "Primary 2B", baseName: "Primary 2", arm: "B" },
+  { id: "Primary 3A", name: "Primary 3A", baseName: "Primary 3", arm: "A" },
+  { id: "Primary 3B", name: "Primary 3B", baseName: "Primary 3", arm: "B" },
+  { id: "Primary 4A", name: "Primary 4A", baseName: "Primary 4", arm: "A" },
+  { id: "Primary 4B", name: "Primary 4B", baseName: "Primary 4", arm: "B" },
+  { id: "Primary 5A", name: "Primary 5A", baseName: "Primary 5", arm: "A" },
+  { id: "Primary 5B", name: "Primary 5B", baseName: "Primary 5", arm: "B" },
+  { id: "Primary 6A", name: "Primary 6A", baseName: "Primary 6", arm: "A" },
+  { id: "Primary 6B", name: "Primary 6B", baseName: "Primary 6", arm: "B" },
+];
 
 export const PRIMARY_STANDARD_SUBJECTS = [
   "English Studies",
@@ -90,6 +105,17 @@ export default function PrimaryStaffOnboardingModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Computed class options: merges canonical Primary 1A..Primary 6B presets with any live DB classes
+  const allClassOptions = useMemo(() => {
+    const list: Array<{ id: string; name: string; baseName?: string; arm?: string }> = [...PRIMARY_CLASSES_OPTIONS];
+    availableClasses.forEach((dbCls) => {
+      if (!list.some((o) => o.id === dbCls.id || o.name.toLowerCase() === dbCls.name.toLowerCase())) {
+        list.push({ id: dbCls.id, name: dbCls.name, baseName: dbCls.name });
+      }
+    });
+    return list;
+  }, [availableClasses]);
 
   // Fetch school classes dynamically when modal opens
   useEffect(() => {
@@ -220,31 +246,52 @@ export default function PrimaryStaffOnboardingModal({
     try {
       let assignmentsPayload: any[] = [];
       if (!isNonTeaching) {
-        if (isClassTeacher) {
-          const selectedClass = availableClasses.find((c) => c.id === assignedClassId);
+        if (isClassTeacher && assignedClassId) {
+          const selectedOpt = allClassOptions.find((c: any) => c.id === assignedClassId);
+          const baseName = selectedOpt?.baseName || selectedOpt?.name || assignedClassId;
+          const arm = selectedOpt?.arm || null;
+          const matchedDbClass = availableClasses.find(
+            (c: any) => c.id === assignedClassId || c.name.toLowerCase() === baseName.toLowerCase()
+          );
+
           assignmentsPayload = [
             {
               assignmentType: "ClassTeacher",
-              classroomId: assignedClassId,
+              classroomId: matchedDbClass ? matchedDbClass.id : null,
               metadata: {
-                className: selectedClass?.name || "Assigned Primary Class",
+                className: baseName,
+                arm: arm || "A",
+                displayLabel: selectedOpt ? selectedOpt.name : baseName,
                 roleTitle: "Class Teacher",
                 subjects: selectedSubjects,
               },
             },
           ];
-        } else if (isSubjectTeacher) {
-          assignmentsPayload = subjectTeacherClassIds.map((clsId) => {
-            const cls = availableClasses.find((c) => c.id === clsId);
-            return {
+        } else if (isSubjectTeacher && subjectTeacherClassIds.length > 0) {
+          const seenBases = new Set<string>();
+          assignmentsPayload = [];
+
+          for (const clsId of subjectTeacherClassIds) {
+            const opt = allClassOptions.find((c: any) => c.id === clsId);
+            const baseName = opt?.baseName || opt?.name || clsId;
+            if (seenBases.has(baseName.toLowerCase())) continue;
+            seenBases.add(baseName.toLowerCase());
+
+            const matchedDbClass = availableClasses.find(
+              (c: any) => c.id === clsId || c.name.toLowerCase() === baseName.toLowerCase()
+            );
+
+            assignmentsPayload.push({
               assignmentType: "SubjectTeacher",
-              classroomId: clsId,
+              classroomId: matchedDbClass ? matchedDbClass.id : null,
               metadata: {
-                className: cls?.name,
+                className: baseName,
+                arm: opt?.arm || null,
+                displayLabel: opt ? opt.name : baseName,
                 subjects: selectedSubjects,
               },
-            };
-          });
+            });
+          }
         } else if (isLeadership) {
           assignmentsPayload = [
             {
@@ -598,99 +645,76 @@ export default function PrimaryStaffOnboardingModal({
                 </span>
               </div>
 
-              {/* CLASSROOM SELECTION / EMPTY STATE CHECK */}
-              {isLoadingClasses ? (
-                <div className="p-4 text-center text-xs text-slate-500 animate-pulse">
-                  Loading school classrooms...
-                </div>
-              ) : availableClasses.length === 0 ? (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="text-xs font-bold text-amber-800">No classes found for this school</h5>
-                    <p className="text-[11px] text-amber-700 mt-0.5">
-                      Classrooms must be created before assigning teachers to them.
-                    </p>
-                    <Link
-                      href={`/${schoolDomain}/classes`}
-                      target="_blank"
-                      className="inline-block mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 underline"
-                    >
-                      Open Classes Management to create classes →
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* CASE 1: CLASS TEACHER (SINGLE CLASS) */}
-                  {isClassTeacher && (
-                    <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-700">
-                        Class Assigned (Class Teacher) <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={assignedClassId}
-                        onChange={(e) => {
-                          setAssignedClassId(e.target.value);
-                          if (errors.assignedClass) {
-                            setErrors((prev) => {
-                              const n = { ...prev };
-                              delete n.assignedClass;
-                              return n;
-                            });
-                          }
-                        }}
-                        className={`w-full text-xs font-semibold border rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 ${
-                          errors.assignedClass ? "border-red-400 bg-red-50/30" : "border-slate-300"
-                        }`}
-                      >
-                        <option value="">-- Select Class --</option>
-                        {availableClasses.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            {cls.name}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.assignedClass && (
-                        <p className="text-[11px] text-red-600 font-medium">{errors.assignedClass}</p>
-                      )}
-                    </div>
+              {/* CLASSROOM SELECTION & ROBUST FALLBACK */}
+              {/* CASE 1: CLASS TEACHER (SINGLE CLASS) */}
+              {isClassTeacher && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Assigned Primary Class / Arm (Class Teacher) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={assignedClassId}
+                    onChange={(e) => {
+                      setAssignedClassId(e.target.value);
+                      if (errors.assignedClass) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.assignedClass;
+                          return n;
+                        });
+                      }
+                    }}
+                    className={`w-full text-xs font-semibold border rounded-xl px-3.5 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 transition cursor-pointer ${
+                      errors.assignedClass ? "border-red-400 bg-red-50/30" : "border-slate-300 hover:border-slate-400"
+                    }`}
+                  >
+                    <option value="">-- Select Assigned Primary Class --</option>
+                    {allClassOptions.map((cls: any) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.assignedClass && (
+                    <p className="text-[11px] text-red-600 font-medium">{errors.assignedClass}</p>
                   )}
+                </div>
+              )}
 
-                  {/* CASE 2: SUBJECT TEACHER (MULTI-CLASS + MULTI-SUBJECT) */}
-                  {isSubjectTeacher && (
-                    <div className="space-y-4">
-                      {/* Classes Multi-select */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Classes Assigned to Teach <span className="text-red-500">*</span>
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                          {availableClasses.map((cls) => {
-                            const isChecked = subjectTeacherClassIds.includes(cls.id);
-                            return (
-                              <button
-                                key={cls.id}
-                                type="button"
-                                onClick={() => toggleSubjectClass(cls.id)}
-                                className={`px-3 py-2 rounded-xl text-xs font-semibold border text-left flex items-center justify-between transition cursor-pointer ${
-                                  isChecked
-                                    ? "bg-blue-50 border-blue-400 text-blue-800 shadow-2xs"
-                                    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                                }`}
-                              >
-                                <span className="truncate">{cls.name}</span>
-                                {isChecked && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {errors.subjectClasses && (
-                          <p className="text-[11px] text-red-600 font-medium mt-1">
-                            {errors.subjectClasses}
-                          </p>
-                        )}
-                      </div>
+              {/* CASE 2: SUBJECT TEACHER (MULTI-CLASS + MULTI-SUBJECT) */}
+              {isSubjectTeacher && (
+                <div className="space-y-4">
+                  {/* Classes Multi-select */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Classes Assigned to Teach <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {allClassOptions.map((cls: any) => {
+                        const isChecked = subjectTeacherClassIds.includes(cls.id);
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => toggleSubjectClass(cls.id)}
+                            className={`px-3 py-2 rounded-xl text-xs font-semibold border text-left flex items-center justify-between transition cursor-pointer ${
+                              isChecked
+                                ? "bg-blue-50 border-blue-400 text-blue-800 shadow-2xs"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                            }`}
+                          >
+                            <span className="truncate">{cls.name}</span>
+                            {isChecked && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {errors.subjectClasses && (
+                      <p className="text-[11px] text-red-600 font-medium mt-1">
+                        {errors.subjectClasses}
+                      </p>
+                    )}
+                  </div>
 
                       {/* Subjects Multi-select Chips */}
                       <div>
@@ -772,10 +796,8 @@ export default function PrimaryStaffOnboardingModal({
                       </div>
                     </div>
                   )}
-                </>
-              )}
-            </div>
-          ) : (
+                </div>
+              ) : (
             <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl flex items-center gap-3">
               <UserCheck className="w-4 h-4 text-slate-500 shrink-0" />
               <p className="text-xs text-slate-600 font-medium">

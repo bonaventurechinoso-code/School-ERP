@@ -13,6 +13,7 @@ import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/permissions";
 import crypto from "crypto";
 import { StaffTierCategory, isNonTeachingRole } from "@/lib/staff-roles-config";
+import { provisionDefaultClassroomsForSchool } from "@/lib/tenant-service";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -1153,6 +1154,33 @@ export async function fetchSchoolClassesAction(schoolIdentifier: string) {
       }).catch(() => []);
     }
 
+    // Auto-provision canonical classrooms if none exist for this tenant
+    if (!classrooms || classrooms.length === 0) {
+      const tiers = await basePrisma.academicTier.findMany({
+        where: { schoolId },
+        orderBy: { level: "asc" },
+      });
+
+      if (tiers.length > 0) {
+        for (const t of tiers) {
+          await provisionDefaultClassroomsForSchool(tenantDb, schoolId, t.id, t.name);
+        }
+      } else {
+        await provisionDefaultClassroomsForSchool(tenantDb, schoolId, null, "Primary School");
+      }
+
+      classrooms = await tenantDb.classroom.findMany({
+        where: { schoolId },
+        select: {
+          id: true,
+          name: true,
+          tierId: true,
+          tier: { select: { id: true, name: true } },
+        },
+        orderBy: { name: "asc" },
+      }).catch(() => []);
+    }
+
     return { success: true, data: classrooms || [] };
   } catch (error: any) {
     console.error("[fetchSchoolClassesAction] Error:", error);
@@ -1564,29 +1592,59 @@ export async function createEnterpriseStaffAction(
               select: { id: true },
             });
             if (!exists) {
-              // If not found by UUID, attempt match by metadata className (e.g. "JSS 1")
+              // If not found by UUID, attempt match by metadata className (e.g. "Primary 1" or "JSS 1")
               const baseName = assign.metadata?.className;
               if (baseName) {
-                const matched = await tx.classroom.findFirst({
+                let matched = await tx.classroom.findFirst({
                   where: {
                     schoolId,
                     name: { equals: baseName, mode: "insensitive" },
                   },
                   select: { id: true },
                 });
+                if (!matched) {
+                  const targetTier = await tx.academicTier.findFirst({
+                    where: { schoolId },
+                    orderBy: { level: "asc" },
+                  });
+                  matched = await tx.classroom.create({
+                    data: {
+                      schoolId,
+                      name: baseName,
+                      capacity: 35,
+                      tierId: targetTier?.id || null,
+                    },
+                    select: { id: true },
+                  });
+                }
                 resolvedClassroomId = matched ? matched.id : null;
               } else {
                 resolvedClassroomId = null;
               }
             }
           } else if (assign.metadata?.className) {
-            const matched = await tx.classroom.findFirst({
+            let matched = await tx.classroom.findFirst({
               where: {
                 schoolId,
                 name: { equals: assign.metadata.className, mode: "insensitive" },
               },
               select: { id: true },
             });
+            if (!matched) {
+              const targetTier = await tx.academicTier.findFirst({
+                where: { schoolId },
+                orderBy: { level: "asc" },
+              });
+              matched = await tx.classroom.create({
+                data: {
+                  schoolId,
+                  name: assign.metadata.className,
+                  capacity: 35,
+                  tierId: targetTier?.id || null,
+                },
+                select: { id: true },
+              });
+            }
             resolvedClassroomId = matched ? matched.id : null;
           }
 

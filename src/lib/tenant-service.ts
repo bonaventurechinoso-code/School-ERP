@@ -7,6 +7,7 @@ import { logAuditEvent } from "./audit-logger";
 import { isReservedSubdomain } from "./tenant-resolver";
 import { clearTenantCache } from "@/lib/tenant-status";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
+import { getCanonicalClassNamesForTier } from "./school-tier-classes";
 
 export interface CreateTenantWithAdminParams {
   slug: string;
@@ -111,6 +112,47 @@ export async function resolveTenant(schoolCode: string) {
       return null;
     }
   }
+}
+
+/**
+ * Automatically provisions canonical standard classrooms for an academic tier of a school.
+ * Safe and idempotent: will not create duplicates if classrooms already exist.
+ */
+export async function provisionDefaultClassroomsForSchool(
+  db: any,
+  schoolId: string,
+  tierId?: string | null,
+  tierName?: string
+): Promise<Array<{ id: string; name: string }>> {
+  if (!schoolId) return [];
+  const classNames = getCanonicalClassNamesForTier(tierName || "Primary School");
+  const result: Array<{ id: string; name: string }> = [];
+
+  for (const name of classNames) {
+    let existing = await db.classroom.findFirst({
+      where: {
+        schoolId,
+        name: { equals: name, mode: "insensitive" },
+      },
+      select: { id: true, name: true },
+    });
+
+    if (!existing) {
+      existing = await db.classroom.create({
+        data: {
+          schoolId,
+          name,
+          capacity: 35,
+          tierId: tierId || null,
+        },
+        select: { id: true, name: true },
+      });
+    }
+
+    result.push(existing);
+  }
+
+  return result;
 }
 
 /**
@@ -254,15 +296,22 @@ export async function createTenantWithAdmin(
       console.warn("[TENANT_SERVICE_RECORD_SYNC]:", tErr);
     }
 
-    // B. Academic tiers
+    // B. Academic tiers & standard classrooms auto-provisioning
     for (let i = 0; i < effectiveTiers.length; i++) {
-      await tx.academicTier.create({
+      const tierRecord = await tx.academicTier.create({
         data: {
           schoolId: school.id,
           name: effectiveTiers[i],
           level: i + 1,
         },
       });
+
+      // Auto-provision standard canonical classrooms for this tier so new tenants have classrooms immediately
+      try {
+        await provisionDefaultClassroomsForSchool(tx, school.id, tierRecord.id, effectiveTiers[i]);
+      } catch (classErr) {
+        console.warn(`[provisionDefaultClassroomsForSchool]: Failed for tier ${effectiveTiers[i]} in school ${school.id}:`, classErr);
+      }
     }
 
     // C. Initial 14-day manual trial subscription

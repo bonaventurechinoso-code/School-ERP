@@ -8,6 +8,7 @@ import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenan
 import { sanitizeTierSlug } from "@/lib/tenant-tier-utils";
 import StaffTable from "./StaffTable";
 import { fetchStaffPaginated } from "./actions";
+import { provisionDefaultClassroomsForSchool } from "@/lib/tenant-service";
 import { Users, UserCheck, Briefcase, Clock, ShieldCheck } from "lucide-react";
 
 export default async function StaffPage({
@@ -141,6 +142,29 @@ export default async function StaffPage({
 
   const turnoutRate = totalActive > 0 ? Math.round((todayTurnoutCount / totalActive) * 100) : 100;
 
+  // Global Auto-Provisioning: Ensure new tenants immediately have canonical classrooms in DB
+  let effectiveClassrooms = classrooms || [];
+  if (effectiveClassrooms.length === 0) {
+    try {
+      await provisionDefaultClassroomsForSchool(
+        tenantDb,
+        school.id,
+        activeTierObj?.id || null,
+        activeTierName || "Primary School"
+      );
+      effectiveClassrooms = await tenantDb.classroom.findMany({
+        where: {
+          schoolId: school.id,
+          ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }).catch(() => []);
+    } catch (err) {
+      console.warn("[StaffPage] Auto-provision classrooms fallback warning:", err);
+    }
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
@@ -248,7 +272,7 @@ export default async function StaffPage({
           schoolDomain={params.schoolDomain}
           schoolName={school.name}
           activeTier={activeTierName}
-          classrooms={classrooms}
+          classrooms={effectiveClassrooms}
         />
       </Suspense>
       

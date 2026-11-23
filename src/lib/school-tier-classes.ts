@@ -93,6 +93,42 @@ export const CANONICAL_TIER_CLASSES: Record<EducationalTierCategory, string[]> =
 };
 
 /**
+ * Returns canonical standard classroom names for an educational tier name or category.
+ */
+export function getCanonicalClassNamesForTier(tierNameOrCategory: string): string[] {
+  const norm = (tierNameOrCategory || "").trim().toLowerCase();
+  if (norm.includes("creche") || norm.includes("daycare")) {
+    return ["Creche"];
+  }
+  if (norm.includes("nursery") || norm.includes("kindergarten")) {
+    return ["Nursery 1", "Nursery 2", "Nursery 3", "Kindergarten"];
+  }
+  if (norm.includes("primary") || norm.includes("basic") || norm === "primary") {
+    return [...CANONICAL_TIER_CLASSES.PRIMARY];
+  }
+  if (norm.includes("junior secondary") || norm.includes("jss")) {
+    return ["JSS 1", "JSS 2", "JSS 3"];
+  }
+  if (norm.includes("senior secondary") || norm.includes("sss") || norm.includes("ss")) {
+    return ["SSS 1", "SSS 2", "SSS 3"];
+  }
+  if (norm.includes("secondary") || norm.includes("high") || norm === "secondary") {
+    return [...CANONICAL_TIER_CLASSES.SECONDARY];
+  }
+  if (
+    norm.includes("university") ||
+    norm.includes("polytechnic") ||
+    norm.includes("college") ||
+    norm.includes("tertiary") ||
+    norm.includes("institute") ||
+    norm.includes("monotechnic")
+  ) {
+    return ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level"];
+  }
+  return [...CANONICAL_TIER_CLASSES.PRIMARY];
+}
+
+/**
  * Maps any class name (e.g. "Primary 3", "JSS 1", "Creche", "SS 2", "100 Level")
  * to its exact Educational Tier Category, canonical name, and badge styling.
  */
