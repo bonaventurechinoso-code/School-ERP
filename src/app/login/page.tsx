@@ -667,7 +667,15 @@ function LoginPageContent() {
         const isLoginDemoTenant = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase() === "demo";
         if (!isLoginDemoTenant && sessionPayload?.mustChangePassword) {
           destination = "/change-password";
-        } else if (callbackUrl && !callbackUrl.includes("/login")) {
+        } else if (
+          callbackUrl &&
+          !callbackUrl.includes("/login") &&
+          callbackUrl !== "/" &&
+          callbackUrl !== `/${effectiveSchoolCode}` &&
+          callbackUrl !== `/${effectiveSchoolCode}/` &&
+          callbackUrl !== `/${resolvedSubdomain}` &&
+          callbackUrl !== `/${resolvedSubdomain}/`
+        ) {
           const isRestrictedRole = (rawRole || staffRole || "").toUpperCase() === "STUDENT" || (rawRole || staffRole || "").toUpperCase() === "PARENT";
           const isAdminPath = /\/(dashboard|finance|students|staff|settings|academics|bursary|admin)(\/|$)/i.test(callbackUrl);
           if (!(isRestrictedRole && isAdminPath)) {

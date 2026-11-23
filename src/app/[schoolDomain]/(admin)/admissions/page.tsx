@@ -1,4 +1,5 @@
 import React from "react";
+import { redirect } from "next/navigation";
 import { basePrisma, isDemoSchool, getDemoPrismaClient, setDemoSchoolId } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 import { checkRouteAuthorization } from "@/lib/admissions.service";
@@ -138,6 +139,9 @@ export default async function AdmissionsPage({
 
   // 1. Session and RBAC Authorization
   const session = await getSession(undefined, schoolDomain);
+  if (!session) {
+    redirect(`/${schoolDomain}/apply`);
+  }
   const auth = checkRouteAuthorization(session, { resource: "admissions", action: "view" });
 
   if (!auth.allowed) {

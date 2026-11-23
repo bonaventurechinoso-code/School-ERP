@@ -36,6 +36,10 @@ const PUBLIC_TENANT_ACTIONS = new Set([
   "track",
   "forgot-password",
   "reset-password",
+  "about",
+  "admissions",
+  "news",
+  "contact",
 ]);
 
 // Reserved system subdomains / prefixes that are not tenant codes (including common typos)
@@ -144,6 +148,7 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
     const apiPath = "/" + segments.join("/");
     // Allow public admissions and upload endpoints
     if (
+      apiPath.startsWith("/api/public") ||
       apiPath.startsWith("/api/v1/admissions/upload") ||
       apiPath.startsWith("/api/admissions/upload") ||
       apiPath.startsWith("/api/v1/admissions/public-submit") ||

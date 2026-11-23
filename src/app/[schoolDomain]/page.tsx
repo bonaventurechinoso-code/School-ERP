@@ -3,9 +3,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { generateTierMockData, formatTierLabel, getHeroImage } from "@/lib/guestPortalUtils";
+import { generateTierMockData, getHeroImage } from "@/lib/guestPortalUtils";
 import { TenantAuthActions } from "./TenantAuthActions";
-import LoginPage from "@/app/login/page";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,15 +17,17 @@ import {
   CheckCircle2, 
   Sparkles, 
   ShieldCheck, 
-  Clock, 
   Users, 
   BookOpen,
-  Layers
+  Layers,
+  MapPin,
+  Calendar,
+  Award
 } from "lucide-react";
 
 function getTierCurriculumDetails(tierName: string) {
   const upper = tierName.toUpperCase();
-  if (upper.includes("NURSERY") || upper.includes("CRECHE") || upper.includes("CRECHE") || upper.includes("EARLY")) {
+  if (upper.includes("NURSERY") || upper.includes("CRECHE") || upper.includes("EARLY")) {
     return {
       title: tierName || "Creche & Early Nursery",
       badge: "Ages 0 - 5",
@@ -83,15 +84,12 @@ function getTierCurriculumDetails(tierName: string) {
 
 export default async function PublicGuestPortalPage({
   params: paramsPromise,
-  searchParams: searchParamsPromise,
 }: {
   params: Promise<{ schoolDomain: string }> | { schoolDomain: string };
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 }) {
   const { schoolDomain } = await Promise.resolve(paramsPromise);
-  const searchParams = searchParamsPromise ? await Promise.resolve(searchParamsPromise) : {};
   const isDemo = (schoolDomain || "").toLowerCase() === "demo" || (schoolDomain || "").toLowerCase() === "sandbox";
-  const viewPortal = searchParams?.view === "portal" || searchParams?.portal === "guest";
 
   const session = await getSession(undefined, schoolDomain).catch(() => null);
 
@@ -103,12 +101,6 @@ export default async function PublicGuestPortalPage({
     session.role !== "GUEST" &&
     session.role !== "APPLICANT"
   );
-
-  // If visitor is unauthenticated on tenant subdomain and not in demo mode or explicit portal view:
-  // Render the school's dedicated login page directly on https://{subdomain}.bonaveeict.com.ng/
-  if (!isAuthedUser && !isDemo && !viewPortal) {
-    return <LoginPage />;
-  }
 
   let workspaceHref = `/portal`;
   if (isAuthedUser && session) {
@@ -129,10 +121,11 @@ export default async function PublicGuestPortalPage({
       workspaceHref = `/dashboard`;
     }
   }
+
   let school = null;
   try {
     school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain },
+      where: { subdomain: schoolDomain.toLowerCase().trim() },
       include: {
         academicTiers: {
           orderBy: { level: "asc" }
@@ -159,41 +152,6 @@ export default async function PublicGuestPortalPage({
 
   if (!school) {
     return notFound();
-  }
-
-  if (!school.isPublicPortalEnabled) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center space-y-4">
-          <div className="w-14 h-14 bg-amber-50 border border-amber-200 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
-            <Building2 className="w-7 h-7" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900">{school.name}</h1>
-          <div className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-800">
-            Portal Under Scheduled Maintenance
-          </div>
-          <p className="text-slate-500 text-sm leading-relaxed">
-            The public portal and online admissions gateway for this institution are currently offline. 
-            Please contact the school administration or call the helpline below.
-          </p>
-          {school.contactPhone && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-center gap-2 text-sm font-semibold text-slate-700">
-              <Phone className="w-4 h-4 text-indigo-600" />
-              <span>Helpline: {school.contactPhone}</span>
-            </div>
-          )}
-          <div className="pt-2">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
-            >
-              <span>Staff & Administrator Sign In</span>
-              <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   // Resolve precise tier based on academicTiers for clean nomenclature
@@ -230,11 +188,11 @@ export default async function PublicGuestPortalPage({
 
   // Use custom welcome greeting if provided and different from default
   const finalHeroTitle = isDemo
-    ? "Welcome to Apex International Academy"
+    ? `Welcome to ${school.name}`
     : ((school.welcomeGreeting && school.welcomeGreeting !== "Welcome to our institution!") 
       ? school.welcomeGreeting 
       : heroTitle);
-  const contactEmail = school.staff.length > 0 ? school.staff[0].email : "admissions@school.local";
+  const contactEmail = school.staff.length > 0 ? school.staff[0].email : `admissions@${school.subdomain}.bonaveeict.com.ng`;
   const contactPhone = school.contactPhone || "+234 (0) 800 000 0000";
   
   // Resolve institutional branding media (custom hero image/video & logo)
@@ -253,8 +211,24 @@ export default async function PublicGuestPortalPage({
     ? fallbackCampusImage
     : (getHeroImage(preciseTier) || fallbackCampusImage);
 
+  const schoolAddress = schoolConfig.address || `${school.name} Campus, Nigeria`;
+
+  // Fallback tiers if none created in database yet
+  const fallbackTiers = [
+    {
+      id: "default-tier-1",
+      name:
+        preciseTier === "NURSERY"
+          ? "Nursery & Kindergarten"
+          : preciseTier === "SECONDARY"
+          ? "Junior & Senior Secondary"
+          : "Primary Basic Education",
+    },
+  ];
+  const effectiveTiers = school.academicTiers.length > 0 ? school.academicTiers : fallbackTiers;
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
       
       {/* Top Admissions Helpline Ribbon */}
       <div className="bg-slate-900 text-slate-300 text-xs py-2 px-4 border-b border-slate-800">
@@ -287,7 +261,7 @@ export default async function PublicGuestPortalPage({
       {/* Top Navigation Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 min-h-[5rem] py-2.5 flex justify-between items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 group">
             {school.logo ? (
               <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden shadow-xs border border-slate-200 bg-white shrink-0 flex items-center justify-center p-1">
                 <Image
@@ -305,12 +279,25 @@ export default async function PublicGuestPortalPage({
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight truncate">{school.name}</h1>
+              <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight truncate group-hover:text-indigo-600 transition-colors">
+                {school.name}
+              </h1>
               <p className="text-[11px] sm:text-xs font-semibold text-indigo-600 uppercase tracking-wide leading-tight mt-0.5">
-                Academic &amp; Student Admissions
+                Official Institutional Portal
               </p>
             </div>
-          </div>
+          </Link>
+
+          {/* Center Navigation Links */}
+          <nav className="hidden lg:flex items-center gap-6 text-xs font-semibold text-slate-600">
+            <Link href="/" className="text-indigo-600 font-bold">Home</Link>
+            <Link href="#about" className="hover:text-indigo-600 transition">About</Link>
+            <Link href="#programs" className="hover:text-indigo-600 transition">Programs</Link>
+            <Link href="#admissions" className="hover:text-indigo-600 transition">Admissions</Link>
+            <Link href="#news" className="hover:text-indigo-600 transition">News</Link>
+            <Link href="#contact" className="hover:text-indigo-600 transition">Contact</Link>
+          </nav>
+
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <TenantAuthActions
               initialIsAuthed={isAuthedUser}
@@ -326,7 +313,7 @@ export default async function PublicGuestPortalPage({
       {/* Hero Section */}
       <main className="flex-1">
         <div className="relative w-full min-h-[580px] overflow-hidden bg-slate-950 text-white flex items-center">
-          {/* Full Background Media (Image or Video) */}
+          {/* Background Media */}
           <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
             {customHeroType === "video" && customHeroVideo ? (
               <video
@@ -349,21 +336,18 @@ export default async function PublicGuestPortalPage({
                 fill
                 priority
                 className="object-cover" 
-                alt={`${school.name} ${preciseTier === "UNIVERSITY" || preciseTier === "POLYTECHNIC" ? "Campus" : "School Premises"}`} 
+                alt={`${school.name} Campus Premises`} 
                 unoptimized={heroImageUrl.startsWith("data:")}
               />
             )}
-            {/* 45% Opacity Dark Overlay for clear campus image/video visibility and high-contrast text */}
-            <div className="absolute inset-0 bg-black/45 z-0 pointer-events-none" />
+            <div className="absolute inset-0 bg-black/50 z-0 pointer-events-none" />
           </div>
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">
-            {!isDemo && (
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6 shadow-sm">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
-                <span>Official Institutional Portal</span>
-              </div>
-            )}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6 shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+              <span>{schoolConfig.motto || "Inspiring Excellence, Character & Knowledge"}</span>
+            </div>
 
             <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] max-w-4xl">
               {finalHeroTitle}
@@ -379,90 +363,263 @@ export default async function PublicGuestPortalPage({
                 <span>Apply Online / Start New Application</span>
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
               </Link>
-              <a 
-                href="#contact"
+              <Link 
+                href="/admissions/track"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-white/15 hover:bg-white/25 active:scale-[0.99] text-white rounded-xl font-bold text-sm sm:text-base md:text-lg transition-all backdrop-blur-md border border-white/25 shadow-lg"
               >
-                <Phone className="w-4 h-4 text-indigo-300 shrink-0" />
-                <span>Contact Admissions</span>
-              </a>
+                <span>Track Application</span>
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Dynamic Academic Programs (Tiers) */}
-        {school.academicTiers.length > 0 && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
-            <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 mb-3">
-                <Layers className="w-3.5 h-3.5" />
-                <span>Curriculum Pathways</span>
+        {/* Section 1: About Institution Overview */}
+        <section id="about" className="max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-24 border-b border-slate-200">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>About Our Institution</span>
               </div>
-              <h3 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                Our Academic Programs
+              <h3 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                Inspiring Academic Excellence, Discipline &amp; Future Nigerian Leaders
               </h3>
-              <p className="text-slate-600 max-w-2xl mx-auto mt-2 text-sm sm:text-base leading-relaxed">
-                Explore the diverse educational pathways offered at {school.name}, structured to foster intellectual maturity and character at every developmental milestone.
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                {schoolConfig.about || finalAboutUs}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                  <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Accredited Standards</span>
+                  </div>
+                  <p className="text-xs text-slate-500">Fully compliant with state ministry curricula and regulatory examination standards.</p>
+                </div>
+                <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                  <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm">
+                    <Users className="w-4 h-4" />
+                    <span>TRCN Certified Faculty</span>
+                  </div>
+                  <p className="text-xs text-slate-500">Passionate educators providing personalized academic and character mentorship.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-indigo-900/5 rounded-3xl p-8 border border-indigo-100 space-y-6">
+              <h4 className="text-lg font-bold text-slate-900">Why Families Choose {school.name}</h4>
+              <ul className="space-y-4">
+                {[
+                  "Holistic education blending academic rigor, ICT literacy, and moral character.",
+                  "Modern educational infrastructure, laboratory spaces, and sports facilities.",
+                  "Continuous assessment tracking with transparent online portal access for parents.",
+                  "Structured pathway for national examinations and global competence."
+                ].map((point, idx) => (
+                  <li key={idx} className="flex items-start gap-3 text-xs sm:text-sm text-slate-700">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="pt-2">
+                <Link
+                  href="/about"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                >
+                  <span>Learn more about our heritage &amp; vision</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 2: Programs / Classes Offered */}
+        <section id="programs" className="max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-24 border-b border-slate-200">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 mb-3">
+              <Layers className="w-3.5 h-3.5" />
+              <span>Curriculum Pathways</span>
+            </div>
+            <h3 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+              Our Academic Programs &amp; Classes
+            </h3>
+            <p className="text-slate-600 max-w-2xl mx-auto mt-2 text-sm sm:text-base leading-relaxed">
+              Explore the diverse educational pathways offered at {school.name}, structured to foster intellectual maturity and character at every developmental milestone.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {effectiveTiers.map((tier) => {
+              const details = getTierCurriculumDetails(tier.name);
+              return (
+                <div 
+                  key={tier.id} 
+                  className="bg-white p-7 rounded-2xl shadow-xs border border-slate-200 hover:shadow-lg hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${details.badgeColor}`}>
+                        {details.badge}
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Accredited Pathway
+                      </span>
+                    </div>
+
+                    <h4 className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors mb-3">
+                      {details.title}
+                    </h4>
+
+                    <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                      {details.description}
+                    </p>
+
+                    <div className="space-y-2 border-t border-slate-100 pt-4 mb-6">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                        Key Curriculum Highlights
+                      </span>
+                      {details.highlights.map((hl, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs text-slate-700">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>{hl}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <Link 
+                      href={`/apply?tier=${encodeURIComponent(tier.id)}`}
+                      className="inline-flex items-center justify-between w-full py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                    >
+                      <span>Apply for {tier.name}</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Section 3: Admissions Gateway */}
+        <section id="admissions" className="bg-slate-900 text-white py-20 sm:py-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-indigo-300 border border-white/15">
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Admissions &amp; Enrollment</span>
+              </div>
+              <h3 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+                Simple 3-Step Enrollment Gateway
+              </h3>
+              <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                We welcome prospective pupils and students into an encouraging academic environment. Begin your enrollment in three simple steps.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {school.academicTiers.map((tier) => {
-                const details = getTierCurriculumDetails(tier.name);
-                return (
-                  <div 
-                    key={tier.id} 
-                    className="bg-white p-7 rounded-2xl shadow-xs border border-slate-200 hover:shadow-lg hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between group"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${details.badgeColor}`}>
-                          {details.badge}
-                        </span>
-                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                          Accredited Pathway
-                        </span>
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-3">
+                <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">1</span>
+                <h4 className="text-base font-bold text-white">Online Application</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Fill in candidate &amp; guardian particulars online, select designated academic tier, and submit safely without physical queues.
+                </p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-3">
+                <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">2</span>
+                <h4 className="text-base font-bold text-white">Assessment &amp; Screening</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Participate in learner readiness evaluation or entrance screening designed to determine appropriate classroom placement.
+                </p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-3">
+                <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">3</span>
+                <h4 className="text-base font-bold text-white">Admission Offer &amp; Intake</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Receive verified admission confirmation, print official student intake slip, and access online portal services.
+                </p>
+              </div>
+            </div>
 
-                      <h4 className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors mb-3">
-                        {details.title}
-                      </h4>
-
-                      <p className="text-slate-600 text-sm leading-relaxed mb-6">
-                        {details.description}
-                      </p>
-
-                      <div className="space-y-2 border-t border-slate-100 pt-4 mb-6">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                          Key Curriculum Highlights
-                        </span>
-                        {details.highlights.map((hl, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs text-slate-700">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>{hl}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100">
-                      <Link 
-                        href={`/apply?tier=${encodeURIComponent(tier.id)}`}
-                        className="inline-flex items-center justify-between w-full py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
-                      >
-                        <span>Apply for {tier.name}</span>
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Link
+                href="/apply"
+                className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg transition"
+              >
+                Apply Online Now
+              </Link>
+              <Link
+                href="/admissions/track"
+                className="px-8 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold text-sm sm:text-base rounded-xl border border-white/20 transition"
+              >
+                Track Existing Application
+              </Link>
             </div>
           </div>
-        )}
+        </section>
+
+        {/* Section 4: News & Announcements */}
+        <section id="news" className="max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-24 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-12">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Notices &amp; Bulletins</span>
+              </div>
+              <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                Institutional News &amp; Announcements
+              </h3>
+            </div>
+            <Link href="/news" className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+              View all updates <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Admissions
+              </span>
+              <h4 className="text-base font-bold text-slate-900">2026/2027 Academic Session Admissions Open</h4>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Admissions for the upcoming academic year are now being accepted online. Prospective families are encouraged to submit early.
+              </p>
+              <Link href="/apply" className="text-xs font-semibold text-indigo-600 hover:underline inline-block pt-1">
+                Read application details &rarr;
+              </Link>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                Academic Calendar
+              </span>
+              <h4 className="text-base font-bold text-slate-900">Term Dates &amp; Assessment Schedule Published</h4>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                The school administration has ratified the termly calendar including continuous assessment windows and holiday schedules.
+              </p>
+              <Link href="/news" className="text-xs font-semibold text-indigo-600 hover:underline inline-block pt-1">
+                View calendar highlights &rarr;
+              </Link>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                Portal Services
+              </span>
+              <h4 className="text-base font-bold text-slate-900">Parent &amp; Student Portal Access Active</h4>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Registered parents can log in securely to inspect fee status, report cards, daily attendance registers, and academic broadsheets.
+              </p>
+              <Link href="/login" className="text-xs font-semibold text-indigo-600 hover:underline inline-block pt-1">
+                Access portal login &rarr;
+              </Link>
+            </div>
+          </div>
+        </section>
       </main>
 
-      {/* Footer & Contact Card */}
+      {/* Footer & Contact Section */}
       <footer id="contact" className="bg-slate-900 text-slate-300 py-16 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12">
           
@@ -491,25 +648,32 @@ export default async function PublicGuestPortalPage({
                 ? demoDescription
                 : `Unified institutional portal servicing ${preciseTier === "PRIMARY" ? "pupil academic records" : preciseTier === "NURSERY" ? "early childhood care and developmental milestones" : "student academic workspaces"}, staff operations, and online admissions enrollment.`}
             </p>
-            {!isDemo && (
-              <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
-                <TenantAuthActions
-                  initialIsAuthed={isAuthedUser}
-                  workspaceHref={workspaceHref}
-                  email={session?.email}
-                  subdomain={school.subdomain}
-                  variant="footer"
-                />
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2.5 pt-1 mb-6">
+              <TenantAuthActions
+                initialIsAuthed={isAuthedUser}
+                workspaceHref={workspaceHref}
+                email={session?.email}
+                subdomain={school.subdomain}
+                variant="footer"
+              />
+            </div>
           </div>
 
           <div className="bg-white/5 p-8 rounded-2xl border border-white/10 backdrop-blur-sm">
             <h3 className="text-base font-bold text-white mb-6 uppercase tracking-wider flex items-center gap-2">
               <Phone className="w-4 h-4 text-indigo-400" />
-              <span>Contact & Enquiries</span>
+              <span>Contact &amp; Enquiries</span>
             </h3>
             <ul className="space-y-4">
+              <li className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Campus Address</p>
+                  <p className="text-white text-sm font-medium">{schoolAddress}</p>
+                </div>
+              </li>
               <li className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
                   <Phone className="w-5 h-5" />
@@ -524,29 +688,27 @@ export default async function PublicGuestPortalPage({
                   </a>
                 </div>
               </li>
-              {(session?.email || (!isDemo && contactEmail)) && (
-                <li className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Us</p>
-                    <a 
-                      href={`mailto:${session?.email || contactEmail}`} 
-                      className="text-white font-medium hover:text-indigo-400 transition-colors text-sm"
-                    >
-                      {session?.email || contactEmail}
-                    </a>
-                  </div>
-                </li>
-              )}
+              <li className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Us</p>
+                  <a 
+                    href={`mailto:${session?.email || contactEmail}`} 
+                    className="text-white font-medium hover:text-indigo-400 transition-colors text-sm"
+                  >
+                    {session?.email || contactEmail}
+                  </a>
+                </div>
+              </li>
             </ul>
           </div>
           
         </div>
         
         <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-slate-800 text-center text-xs text-slate-500">
-          <p>&copy; {new Date().getFullYear()} {school.name}. All rights reserved. Unified Student, Staff & Admissions Portal • Powered by SchoolERP.</p>
+          <p>&copy; {new Date().getFullYear()} {school.name}. All rights reserved. Unified Student, Staff &amp; Admissions Portal &bull; Powered by BonaveeICT SchoolERP.</p>
         </div>
       </footer>
     </div>
