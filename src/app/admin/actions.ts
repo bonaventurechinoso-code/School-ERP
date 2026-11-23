@@ -55,6 +55,8 @@ export async function createSchool(formData: FormData) {
     throw new Error("Passwords do not match.");
   }
 
+  const hasExplicitPassword = Boolean(password && password.trim().length > 0);
+
   const result = await createTenantWithAdmin({
     slug: subdomain,
     name,
@@ -62,9 +64,9 @@ export async function createSchool(formData: FormData) {
     adminPassword: password || "Password123",
     contactPhone,
     tiers,
-    isSelfRegistration: false,
-    mustChangePassword: true,
-    isTemporaryPassword: true,
+    isSelfRegistration: hasExplicitPassword,
+    mustChangePassword: !hasExplicitPassword,
+    isTemporaryPassword: !hasExplicitPassword,
   });
 
   try {
