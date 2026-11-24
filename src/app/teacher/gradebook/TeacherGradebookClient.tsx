@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { saveTeacherGrades } from "../actions";
+import { formatClassDisplay } from "@/lib/school-tier-classes";
 
 interface Student {
   id: string;
@@ -125,18 +126,28 @@ export function TeacherGradebookClient({
   // Rank computation
   const rankedStudents = useMemo(() => {
     const list = filteredStudents.map((s) => {
-      const g = gradesMap[s.id] || { ca1: 0, ca2: 0, exam: 0, total: 0, remarks: "" };
+      const g = gradesMap[s.id];
+      const hasScores = Boolean(
+        g &&
+        ((g.ca1 !== undefined && g.ca1 !== null && (g.ca1 as any) !== "") ||
+         (g.ca2 !== undefined && g.ca2 !== null && (g.ca2 as any) !== "") ||
+         (g.exam !== undefined && g.exam !== null && (g.exam as any) !== "") ||
+         (g.total !== undefined && g.total !== null && g.total > 0))
+      );
+      const total = hasScores ? ((Number(g?.ca1) || 0) + (Number(g?.ca2) || 0) + (Number(g?.exam) || 0)) : "";
       return {
         student: s,
-        ca1: g.ca1,
-        ca2: g.ca2,
-        exam: g.exam,
-        total: g.total,
-        remarks: g.remarks,
+        ca1: g?.ca1 ?? "",
+        ca2: g?.ca2 ?? "",
+        exam: g?.exam ?? "",
+        total,
+        hasScores,
+        remarks: g?.remarks || "",
       };
     });
 
-    const sorted = [...list].sort((a, b) => b.total - a.total);
+    const scored = list.filter((item) => item.hasScores && typeof item.total === "number");
+    const sorted = [...scored].sort((a, b) => (b.total as number) - (a.total as number));
     const rankMap = new Map<string, string>();
     sorted.forEach((item, index) => {
       const rank = index + 1;
@@ -153,17 +164,19 @@ export function TeacherGradebookClient({
 
     return list.map((item) => ({
       ...item,
-      position: rankMap.get(item.student.id) || "-",
+      position: item.hasScores ? (rankMap.get(item.student.id) || "") : "",
     }));
   }, [filteredStudents, gradesMap]);
 
   // Overall stats
-  const totalScores = rankedStudents.map((r) => r.total).filter((t) => t > 0);
+  const totalScores = rankedStudents
+    .map((r) => r.total)
+    .filter((t): t is number => typeof t === "number" && t > 0);
   const classAverage =
     totalScores.length > 0
       ? Math.round(totalScores.reduce((a, b) => a + b, 0) / totalScores.length)
       : 0;
-  const passCount = rankedStudents.filter((r) => r.total >= 40).length;
+  const passCount = rankedStudents.filter((r) => typeof r.total === "number" && r.total >= 40).length;
 
   const handleSaveGrades = () => {
     setSaveMessage(null);
@@ -234,7 +247,7 @@ export function TeacherGradebookClient({
             >
               {assignedClasses.map((cls) => (
                 <option key={cls} value={cls} className="bg-white dark:bg-zinc-900">
-                  {cls}
+                  {formatClassDisplay(cls)}
                 </option>
               ))}
             </select>
@@ -377,7 +390,7 @@ export function TeacherGradebookClient({
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
               {rankedStudents.length > 0 ? (
                 rankedStudents.map((item, idx) => {
-                  const grade = resolveGrade(item.total);
+                  const grade = item.hasScores && typeof item.total === "number" ? resolveGrade(item.total) : { letter: "", color: "" };
                   return (
                     <tr key={item.student.id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition">
                       <td className="py-3 px-3 text-slate-400 font-mono">{idx + 1}</td>
@@ -426,32 +439,36 @@ export function TeacherGradebookClient({
 
                       {/* Total Score */}
                       <td className="py-3 px-2 text-center font-mono font-black text-sm text-slate-900 dark:text-white">
-                        {item.total}
+                        {item.hasScores ? item.total : ""}
                       </td>
 
                       {/* Letter Grade */}
                       <td className="py-3 px-2 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-black border ${grade.color}`}>
-                          {grade.letter}
-                        </span>
+                        {item.hasScores && grade.letter ? (
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-black border ${grade.color}`}>
+                            {grade.letter}
+                          </span>
+                        ) : null}
                       </td>
 
                       {/* Position / Rank */}
                       <td className="py-3 px-2 text-center font-bold text-slate-600 dark:text-zinc-300">
-                        {item.position}
+                        {item.hasScores ? item.position : ""}
                       </td>
 
                       {/* Auto-Promotion Status */}
                       <td className="py-3 px-2 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${
-                          item.total >= 50
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300"
-                            : item.total >= 40
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300"
-                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300"
-                        }`}>
-                          {item.total >= 50 ? "PROMOTED" : item.total >= 40 ? "TRIAL" : "REPEAT"}
-                        </span>
+                        {item.hasScores && typeof item.total === "number" ? (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                            item.total >= 50
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300"
+                              : item.total >= 40
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300"
+                              : "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300"
+                          }`}>
+                            {item.total >= 50 ? "PROMOTED" : item.total >= 40 ? "TRIAL" : "REPEAT"}
+                          </span>
+                        ) : null}
                       </td>
 
                       {/* Teacher Remarks */}

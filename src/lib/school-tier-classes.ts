@@ -421,3 +421,16 @@ export function getClassesForSchool(
   };
 }
 
+/**
+ * Formats a classroom name for UI display according to Nigerian standard nomenclature.
+ * Example: "Basic 2" -> "Primary 2", "Basic 1" -> "Primary 1"
+ * Leaves DB strings and underlying values intact.
+ */
+export function formatClassDisplay(className?: string | null): string {
+  if (!className) return "";
+  return className
+    .replace(/\bBasic\s*([0-9]+)\b/gi, "Primary $1")
+    .replace(/\bBasic\b/gi, "Primary");
+}
+
+

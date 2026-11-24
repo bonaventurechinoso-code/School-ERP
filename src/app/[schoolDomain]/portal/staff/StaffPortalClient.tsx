@@ -38,6 +38,7 @@ import {
   FileCheck,
   KeyRound,
   ShieldAlert,
+  FileSpreadsheet,
   Menu,
   LogOut,
   ArrowLeft,
@@ -49,7 +50,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { isClassMatch } from "@/lib/class-matching";
-import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes";
+import { getClassesForSchool, getTierForClass, formatClassDisplay } from "@/lib/school-tier-classes";
 import { performTenantLogout } from "@/lib/client-logout";
 import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -303,7 +304,7 @@ export default function StaffPortalClient({
   );
   const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
   const [academicYear, setAcademicYear] = useState<string>("2026/2027");
-  const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
+  const [gradesMap, setGradesMap] = useState<Record<string, { ca1?: number | string; ca2?: number | string; exam?: number | string; remarks?: string; isSaved?: boolean }>>({});
   const [isLoadingGrades, setIsLoadingGrades] = useState(false);
   const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
 
@@ -470,17 +471,25 @@ export default function StaffPortalClient({
     if (!selectedClass || !selectedSubject) return;
     let isMounted = true;
     setIsLoadingGrades(true);
+    setGradesMap({});
     fetchClassroomGrades(schoolId, selectedClass, selectedSubject, selectedTerm)
       .then((res) => {
         if (!isMounted) return;
         if (res.success && res.grades) {
-          const map: Record<string, { ca1: number; ca2: number; exam: number; remarks: string }> = {};
+          const map: Record<string, { ca1?: number | string; ca2?: number | string; exam?: number | string; remarks?: string; isSaved?: boolean }> = {};
           res.grades.forEach((g) => {
+            const hasScore =
+              (g.ca1 !== null && g.ca1 !== undefined && g.ca1 !== "") ||
+              (g.ca2 !== null && g.ca2 !== undefined && g.ca2 !== "") ||
+              (g.exam !== null && g.exam !== undefined && g.exam !== "") ||
+              (g.totalScore !== null && g.totalScore !== undefined && g.totalScore > 0);
+
             map[g.studentId] = {
-              ca1: g.ca1,
-              ca2: g.ca2,
-              exam: g.exam,
-              remarks: "",
+              ca1: g.ca1 !== null && g.ca1 !== undefined ? g.ca1 : "",
+              ca2: g.ca2 !== null && g.ca2 !== undefined ? g.ca2 : "",
+              exam: g.exam !== null && g.exam !== undefined ? g.exam : "",
+              remarks: g.teacherRemarks || "",
+              isSaved: Boolean(hasScore),
             };
           });
           setGradesMap(map);
@@ -544,13 +553,21 @@ export default function StaffPortalClient({
     value: string | number
   ) => {
     setGradesMap((prev) => {
-      const current = prev[studentId] || { ca1: 0, ca2: 0, exam: 0, remarks: "" };
-      let parsedValue = value;
+      const current = prev[studentId] || {};
+      let parsedValue: string | number = value;
 
       if (field === "ca1" || field === "ca2") {
-        parsedValue = Math.min(20, Math.max(0, Number(value) || 0));
+        if (value === "" || value === null || value === undefined) {
+          parsedValue = "";
+        } else {
+          parsedValue = Math.min(20, Math.max(0, Number(value) || 0));
+        }
       } else if (field === "exam") {
-        parsedValue = Math.min(60, Math.max(0, Number(value) || 0));
+        if (value === "" || value === null || value === undefined) {
+          parsedValue = "";
+        } else {
+          parsedValue = Math.min(60, Math.max(0, Number(value) || 0));
+        }
       }
 
       return {
@@ -558,6 +575,7 @@ export default function StaffPortalClient({
         [studentId]: {
           ...current,
           [field]: parsedValue,
+          isSaved: false,
         },
       };
     });
@@ -612,22 +630,46 @@ export default function StaffPortalClient({
     const calculated = classStudents
       .filter((s) => Boolean(s && s.id))
       .map((student) => {
-        const entry = (gradesMap && gradesMap[student.id]) || { ca1: 0, ca2: 0, exam: 0, remarks: "" };
-        const total = (Number(entry.ca1) || 0) + (Number(entry.ca2) || 0) + (Number(entry.exam) || 0);
+        const entry = gradesMap && gradesMap[student.id];
+        const hasCa1 = entry?.ca1 !== undefined && entry?.ca1 !== null && entry?.ca1 !== "";
+        const hasCa2 = entry?.ca2 !== undefined && entry?.ca2 !== null && entry?.ca2 !== "";
+        const hasExam = entry?.exam !== undefined && entry?.exam !== null && entry?.exam !== "";
+        const hasAnyScore = hasCa1 || hasCa2 || hasExam;
+        const hasScores = hasAnyScore && Boolean(entry?.isSaved);
+
+        if (!hasScores) {
+          return {
+            student,
+            ca1: entry?.ca1 ?? "",
+            ca2: entry?.ca2 ?? "",
+            exam: entry?.exam ?? "",
+            total: "" as string | number,
+            hasScores: false,
+            grade: { letter: "", label: "", color: "" },
+            remarks: entry?.remarks || "",
+          };
+        }
+
+        const ca1Num = hasCa1 ? Number(entry?.ca1) : 0;
+        const ca2Num = hasCa2 ? Number(entry?.ca2) : 0;
+        const examNum = hasExam ? Number(entry?.exam) : 0;
+        const total = ca1Num + ca2Num + examNum;
         const grade = resolveGradeLetter(total);
         return {
           student,
-          ca1: entry.ca1,
-          ca2: entry.ca2,
-          exam: entry.exam,
+          ca1: entry?.ca1 ?? "",
+          ca2: entry?.ca2 ?? "",
+          exam: entry?.exam ?? "",
           total,
+          hasScores: true,
           grade,
-          remarks: entry.remarks || "",
+          remarks: entry?.remarks || "",
         };
       });
 
-    // Sort by total score descending to determine position
-    const sorted = [...calculated].sort((a, b) => b.total - a.total);
+    // Sort by total score descending to determine position - ONLY for students with saved scores!
+    const scoredStudents = calculated.filter((item) => item.hasScores && typeof item.total === "number");
+    const sorted = [...scoredStudents].sort((a, b) => (b.total as number) - (a.total as number));
     const ranks = new Map<string, string>();
     sorted.forEach((item, index) => {
       const rank = index + 1;
@@ -646,23 +688,43 @@ export default function StaffPortalClient({
 
     return calculated.map((item) => ({
       ...item,
-      position: (item.student?.id ? ranks.get(item.student.id) : undefined) || "-",
+      position: item.hasScores && item.student?.id ? (ranks.get(item.student.id) || "") : "",
     }));
   }, [classStudents, gradesMap, selectedClass, isCreche, isPrimary]);
 
   const handleSaveGrades = () => {
     setGradesSaveMessage(null);
     startTransition(async () => {
-      const records: GradeEntryPayload[] = classStudents.map((s) => {
-        const entry = gradesMap[s.id] || { ca1: 0, ca2: 0, exam: 0, remarks: "" };
-        const totalScore = Number(entry.ca1) + Number(entry.ca2) + Number(entry.exam);
+      const recordsToSave = classStudents.filter((s) => {
+        const entry = gradesMap[s.id];
+        if (!entry) return false;
+        return (
+          (entry.ca1 !== undefined && entry.ca1 !== null && entry.ca1 !== "") ||
+          (entry.ca2 !== undefined && entry.ca2 !== null && entry.ca2 !== "") ||
+          (entry.exam !== undefined && entry.exam !== null && entry.exam !== "") ||
+          Boolean(entry.remarks && entry.remarks.trim())
+        );
+      });
+
+      if (recordsToSave.length === 0) {
+        setGradesSaveMessage("Please enter marks for at least one student before saving.");
+        setTimeout(() => setGradesSaveMessage(null), 4000);
+        return;
+      }
+
+      const records: GradeEntryPayload[] = recordsToSave.map((s) => {
+        const entry = gradesMap[s.id] || {};
+        const ca1 = entry.ca1 !== "" && entry.ca1 !== undefined ? Number(entry.ca1) : 0;
+        const ca2 = entry.ca2 !== "" && entry.ca2 !== undefined ? Number(entry.ca2) : 0;
+        const exam = entry.exam !== "" && entry.exam !== undefined ? Number(entry.exam) : 0;
+        const totalScore = ca1 + ca2 + exam;
         return {
           studentId: s.id,
-          ca1: Number(entry.ca1) || 0,
-          ca2: Number(entry.ca2) || 0,
-          exam: Number(entry.exam) || 0,
+          ca1,
+          ca2,
+          exam,
           totalScore,
-          teacherRemarks: entry.remarks,
+          teacherRemarks: entry.remarks || "",
         };
       });
 
@@ -677,6 +739,18 @@ export default function StaffPortalClient({
 
       if (res.success) {
         setGradesSaveMessage(`Successfully persisted grades for ${res.count} students at ${res.timestamp || new Date().toLocaleTimeString()}.`);
+        setGradesMap((prev) => {
+          const next = { ...prev };
+          records.forEach((r) => {
+            if (next[r.studentId]) {
+              next[r.studentId] = {
+                ...next[r.studentId],
+                isSaved: true,
+              };
+            }
+          });
+          return next;
+        });
         setTimeout(() => setGradesSaveMessage(null), 5000);
       } else {
         setGradesSaveMessage(`Error: ${res.error}`);
@@ -1426,7 +1500,7 @@ export default function StaffPortalClient({
                       >
                         {teacherAssignedClasses.map((cls) => (
                           <option key={cls} value={cls} className="dark:bg-zinc-900 text-slate-900 dark:text-white">
-                            {cls}
+                            {formatClassDisplay(cls)}
                           </option>
                         ))}
                         {teacherAssignedClasses.length === 0 && (
@@ -1584,7 +1658,7 @@ export default function StaffPortalClient({
                     >
                       {teacherAssignedClasses.map((cls) => (
                         <option key={cls} value={cls}>
-                          {cls}
+                          {formatClassDisplay(cls)}
                         </option>
                       ))}
                     </select>
@@ -1762,7 +1836,7 @@ export default function StaffPortalClient({
                     >
                       {teacherAssignedClasses.map((cls) => (
                         <option key={cls} value={cls}>
-                          {cls}
+                          {formatClassDisplay(cls)}
                         </option>
                       ))}
                     </select>
@@ -1959,6 +2033,19 @@ export default function StaffPortalClient({
           {/* ========================================================================= */}
           {activeTab === "gradebook" && (
             <div className="space-y-6 animate-in fade-in duration-300">
+              {/* Gradebook Header */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-zinc-800">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <span>{isCreche ? "Milestone Assessment Register" : "Continuous Assessment & Exam Gradebook"}</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Class Stream: <strong className="text-slate-800 dark:text-zinc-200">{formatClassDisplay(selectedClass)}</strong> • Term: <strong className="text-slate-800 dark:text-zinc-200">{selectedTerm}</strong> • Session: <strong className="text-slate-800 dark:text-zinc-200">{selectedSession}</strong>
+                  </p>
+                </div>
+              </div>
+
               {/* Gradebook Config Bar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs">
                 <div className="flex flex-wrap items-center gap-3">
@@ -1990,7 +2077,7 @@ export default function StaffPortalClient({
 
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                      Class:
+                      {isCreche ? "Care Pod:" : "Class Stream:"}
                     </label>
                     <select
                       value={selectedClass}
@@ -1999,7 +2086,7 @@ export default function StaffPortalClient({
                     >
                       {teacherAssignedClasses.map((clsName) => (
                         <option key={clsName} value={clsName}>
-                          {clsName}
+                          {formatClassDisplay(clsName)}
                         </option>
                       ))}
                     </select>
@@ -2153,7 +2240,7 @@ export default function StaffPortalClient({
                         <tr>
                           <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
                             <p className="font-bold text-sm text-slate-700 dark:text-zinc-300">
-                              No students enrolled in {selectedClass} for {selectedSession}.
+                              No students enrolled in {formatClassDisplay(selectedClass)} for {selectedSession}.
                             </p>
                             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
                               Ask Admin to Bulk Enroll.
@@ -2165,7 +2252,7 @@ export default function StaffPortalClient({
                           if (!item || !item.student) return null;
                           const student = item.student;
                           const gradeColor = item.grade?.color || "text-slate-400";
-                          const gradeLetter = item.grade?.letter || "—";
+                          const gradeLetter = item.grade?.letter || "";
                           return (
                             <tr
                               key={student.id}
@@ -2186,7 +2273,7 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="20"
-                                  value={item.ca1 === 0 ? "0" : (item.ca1 ?? "")}
+                                  value={item.ca1 ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
                                   className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
@@ -2198,7 +2285,7 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="20"
-                                  value={item.ca2 === 0 ? "0" : (item.ca2 ?? "")}
+                                  value={item.ca2 ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
                                   className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
@@ -2210,7 +2297,7 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="60"
-                                  value={item.exam === 0 ? "0" : (item.exam ?? "")}
+                                  value={item.exam ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
                                   className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
@@ -2218,35 +2305,44 @@ export default function StaffPortalClient({
 
                               {/* Total Score */}
                               <td className="px-3 py-3.5 text-center bg-slate-50/80 dark:bg-zinc-800/40">
-                                <span
-                                  className={`font-mono text-sm font-black ${item.total >= 50
-                                      ? "text-emerald-600 dark:text-emerald-400"
-                                      : "text-rose-600 dark:text-rose-400"
+                                {item.hasScores && item.total !== "" ? (
+                                  <span
+                                    className={`font-mono text-sm font-black ${
+                                      Number(item.total) >= 50
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-rose-600 dark:text-rose-400"
                                     }`}
-                                >
-                                  {item.total}
-                                </span>
+                                  >
+                                    {item.total}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-xs text-slate-300 dark:text-zinc-600"></span>
+                                )}
                               </td>
 
                               {/* Grade Letter */}
                               <td className="px-3 py-3.5 text-center">
-                                <span
-                                  className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${gradeColor}`}
-                                >
-                                  {gradeLetter}
-                                </span>
+                                {item.hasScores && gradeLetter ? (
+                                  <span
+                                    className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${gradeColor}`}
+                                  >
+                                    {gradeLetter}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-xs text-slate-300 dark:text-zinc-600"></span>
+                                )}
                               </td>
 
                               {/* Position */}
                               <td className="px-3 py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
-                                {item.position}
+                                {item.position || ""}
                               </td>
 
                               {/* Remark */}
                               <td className="px-4 py-3.5">
                                 <input
                                   type="text"
-                                  placeholder="e.g. Excellent work, Commendable effort"
+                                  placeholder={item.hasScores ? "e.g. Excellent work, Commendable effort" : ""}
                                   value={item.remarks || ""}
                                   onChange={(e) =>
                                     handleScoreChange(student.id, "remarks", e.target.value)
@@ -2263,7 +2359,7 @@ export default function StaffPortalClient({
                 </div>
 
                 <div className="px-5 py-3 bg-slate-50 dark:bg-zinc-800/40 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400 font-semibold">
-                  <span>{isCreche ? "Care Pod:" : "Class Stream:"} {selectedClass} • {isCreche ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
+                  <span>{isCreche ? "Care Pod:" : "Class Stream:"} {formatClassDisplay(selectedClass)} • {isCreche ? "Milestone Category:" : "Subject:"} {selectedSubject}</span>
                   <span>{isCreche ? "Milestone Tracking Engine: Early Childhood Development & Pediatric Growth Standards" : isTertiary ? "Grading Engine: University Semester Examination System" : "Grading Engine: NERDC 20/20/60 Standard Continuous Assessment"}</span>
                 </div>
               </div>
@@ -3073,7 +3169,7 @@ export default function StaffPortalClient({
                               : "bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700"
                             }`}
                         >
-                          {clsName}
+                          {formatClassDisplay(clsName)}
                         </span>
                       ))}
                       {teacherAssignedClasses.length === 0 && (

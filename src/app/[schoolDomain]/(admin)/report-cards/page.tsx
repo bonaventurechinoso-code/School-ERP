@@ -21,6 +21,7 @@ import {
   getClassesForSchool,
   getTierForClass,
   EducationalTierCategory,
+  formatClassDisplay,
 } from "@/lib/school-tier-classes";
 import { isTertiaryClass, mapTertiaryScoreToGrade, getTertiaryAcademicStanding } from "@/lib/tertiary-config";
 import { getInstitutionTierConfig } from "@/lib/institution-tiers";
@@ -933,7 +934,7 @@ function ReportCardsContent() {
 
               {availableClasses.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {formatClassDisplay(c)}
                 </option>
               ))}
             </select>
