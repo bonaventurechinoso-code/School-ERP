@@ -192,30 +192,14 @@ export default function StaffPortalClient({
   const isPrimary = terminology.isPrimary;
   const isSecondary = terminology.isSecondary;
 
-  // Derived Assigned Subjects & Classes for the teacher (Strict Institutional Assignment binding)
-  const teacherAssignedSubjects = useMemo(() => {
-    if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
-      return initialAssignedSubjects;
-    }
-    if (initialTimetable && initialTimetable.length > 0) {
-      const subjectSet = new Set<string>();
-      initialTimetable.forEach((t) => {
-        if (t.course?.name) subjectSet.add(t.course.name);
-      });
-      if (subjectSet.size > 0) return Array.from(subjectSet);
-    }
-    return initialCourses.map((c) => c.name);
-  }, [initialAssignedSubjects, initialTimetable, initialCourses]);
-
-  // Gradebook State & Loading
-  const [selectedSubject, setSelectedSubject] = useState<string>(
-    teacherAssignedSubjects[0] || initialCourses[0]?.name || "General Mathematics"
+  // Tier & Class Filtering
+  const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
+  const [selectedClass, setSelectedClass] = useState<string>(
+    initialAssignedClasses[0] || initialClassrooms[0]?.name || ""
   );
-  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
-  const [academicYear, setAcademicYear] = useState<string>("2026/2027");
-  const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
-  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
-  const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSession, setSelectedSession] = useState<string>("2026/2027");
+  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
 
   const teacherAssignedClasses = useMemo(() => {
     // 1. Prioritize authoritative assignedClasses from server StaffAssignment
@@ -230,31 +214,110 @@ export default function StaffPortalClient({
     if (initialTimetable && initialTimetable.length > 0) {
       const classSet = new Set<string>();
       initialTimetable.forEach((t) => {
-        if (!selectedSubject || t.course?.name?.toLowerCase() === selectedSubject.toLowerCase()) {
-          if (t.classroom?.name) classSet.add(t.classroom.name);
-        }
+        if (t.classroom?.name) classSet.add(t.classroom.name);
       });
       if (classSet.size > 0) return Array.from(classSet);
     }
     // STRICT INSTITUTIONAL RESTRICTION: NEVER fall back to all students or all tier classes
     return [];
-  }, [initialAssignedClasses, initialClassrooms, initialTimetable, selectedSubject]);
+  }, [initialAssignedClasses, initialClassrooms, initialTimetable]);
 
-  // Tier & Class Filtering
-  const [selectedTierId, setSelectedTierId] = useState<string>(initialTiers[0]?.id || "");
-  const [selectedClass, setSelectedClass] = useState<string>(
-    initialAssignedClasses[0] || initialClassrooms[0]?.name || ""
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSession, setSelectedSession] = useState<string>("2026/2027");
-  const [selectedCohort, setSelectedCohort] = useState<string>("ALL");
-
-  // Ensure selectedSubject is valid in teacherAssignedSubjects
-  useEffect(() => {
-    if (teacherAssignedSubjects.length > 0 && !teacherAssignedSubjects.includes(selectedSubject)) {
-      setSelectedSubject(teacherAssignedSubjects[0]);
+  // Dynamic Subjects for Currently Selected Class (Nigerian Primary vs Secondary Model)
+  const availableSubjectsForClass = useMemo(() => {
+    if (!selectedClass) {
+      if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
+        return initialAssignedSubjects;
+      }
+      return Array.from(new Set(initialCourses.map((c) => c.name.trim()).filter(Boolean)));
     }
-  }, [teacherAssignedSubjects, selectedSubject]);
+
+    const normClass = selectedClass.toLowerCase();
+    const isClassPrimary =
+      normClass.includes("primary") ||
+      normClass.includes("basic") ||
+      normClass.includes("pry") ||
+      isPrimary;
+    const isClassEarlyYears =
+      normClass.includes("nursery") ||
+      normClass.includes("kg") ||
+      normClass.includes("kindergarten") ||
+      normClass.includes("creche") ||
+      normClass.includes("playgroup") ||
+      isCreche;
+
+    // 1. PRIMARY & EARLY YEARS (NERDC / UBEC Homeroom Class Teacher Model):
+    // Teacher gets ALL subjects offered by this class's tier.
+    // Class assignment IS subject assignment. NEVER filter by individual teacher course assignments.
+    if (isClassPrimary || isClassEarlyYears) {
+      const matchedClassroom = initialClassrooms.find(
+        (c) => c.name.toLowerCase() === normClass || isClassMatch(c.name, selectedClass)
+      );
+      const classTierId = matchedClassroom?.tierId;
+
+      // Filter courses belonging to this class tier (or school-wide where tierId is null)
+      const tierCourses = initialCourses.filter((c) => {
+        if (!c.tierId) return true; // School-wide course
+        if (classTierId) return c.tierId === classTierId;
+        const courseTier = initialTiers.find((t) => t.id === c.tierId);
+        if (isClassPrimary) {
+          return courseTier?.name.toLowerCase().includes("primary") || courseTier?.name.toLowerCase().includes("basic");
+        }
+        return courseTier?.name.toLowerCase().includes("nursery") || courseTier?.name.toLowerCase().includes("creche");
+      });
+
+      if (tierCourses.length > 0) {
+        return Array.from(new Set(tierCourses.map((c) => c.name.trim()).filter(Boolean)));
+      }
+
+      // Fallback: If no tier link exists yet (courses are school-wide with no class link), return all initialCourses
+      if (initialCourses.length > 0) {
+        return Array.from(new Set(initialCourses.map((c) => c.name.trim()).filter(Boolean)));
+      }
+
+      if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
+        return initialAssignedSubjects;
+      }
+
+      return [];
+    }
+
+    // 2. SECONDARY & TERTIARY (Departmental Subject Specialist Model):
+    // Teacher gets ONLY subjects explicitly assigned to them via courseId, metadata.subjects, or timetable
+    if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
+      return initialAssignedSubjects;
+    }
+    if (initialTimetable && initialTimetable.length > 0) {
+      const subjectSet = new Set<string>();
+      initialTimetable.forEach((t) => {
+        if (t.course?.name) subjectSet.add(t.course.name.trim());
+      });
+      if (subjectSet.size > 0) return Array.from(subjectSet);
+    }
+    return Array.from(new Set(initialCourses.map((c) => c.name.trim()).filter(Boolean)));
+  }, [selectedClass, isPrimary, isCreche, initialClassrooms, initialCourses, initialTiers, initialAssignedSubjects, initialTimetable]);
+
+  const teacherAssignedSubjects = availableSubjectsForClass;
+
+  // Gradebook State & Loading
+  const [selectedSubject, setSelectedSubject] = useState<string>(
+    availableSubjectsForClass[0] || initialCourses[0]?.name || "General Mathematics"
+  );
+  const [selectedTerm, setSelectedTerm] = useState<string>("1st Term");
+  const [academicYear, setAcademicYear] = useState<string>("2026/2027");
+  const [gradesMap, setGradesMap] = useState<Record<string, { ca1: number; ca2: number; exam: number; remarks: string }>>({});
+  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
+  const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
+
+  // Synchronize selectedSubject when available subjects update (e.g. switching class)
+  useEffect(() => {
+    if (availableSubjectsForClass.length > 0) {
+      if (!selectedSubject || !availableSubjectsForClass.includes(selectedSubject)) {
+        setSelectedSubject(availableSubjectsForClass[0]);
+      }
+    } else {
+      setSelectedSubject("");
+    }
+  }, [availableSubjectsForClass]);
 
   // Ensure selectedClass is valid in teacherAssignedClasses for the chosen subject
   useEffect(() => {
@@ -1893,18 +1956,27 @@ export default function StaffPortalClient({
                 <div className="flex flex-wrap items-center gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-1">
-                      Subject (Assigned):
+                      {isPrimary || (selectedClass || "").toLowerCase().includes("primary") || (selectedClass || "").toLowerCase().includes("basic")
+                        ? "Subject (Primary):"
+                        : isSecondary
+                          ? "Subject (Assigned):"
+                          : "Subject:"}
                     </label>
                     <select
                       value={selectedSubject}
                       onChange={(e) => setSelectedSubject(e.target.value)}
-                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      disabled={availableSubjectsForClass.length === 0}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {teacherAssignedSubjects.map((subName) => (
-                        <option key={subName} value={subName}>
-                          {subName}
-                        </option>
-                      ))}
+                      {availableSubjectsForClass.length === 0 ? (
+                        <option value="">No subjects found</option>
+                      ) : (
+                        availableSubjectsForClass.map((subName) => (
+                          <option key={subName} value={subName}>
+                            {subName}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
@@ -2006,15 +2078,22 @@ export default function StaffPortalClient({
 
                   <button
                     type="button"
-                    disabled={isPending || isCompilingReportCards}
+                    disabled={isPending || isCompilingReportCards || availableSubjectsForClass.length === 0}
                     onClick={handleSaveGrades}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>{isPending ? "Persisting Marks..." : isCreche ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
                   </button>
                 </div>
               </div>
+
+              {availableSubjectsForClass.length === 0 && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>No subjects found for {selectedClass}. Please add subjects for Primary in Settings &gt; Courses / Classes first.</span>
+                </div>
+              )}
 
               {compilationMessage && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-xs font-bold flex items-center gap-2">

@@ -155,6 +155,30 @@ export async function getStaffAssignedClassesAndSubjects(
         }
       }
     } catch { }
+
+    // 4. Nigerian Primary School Model (NERDC / UBEC):
+    // In Primary / Nursery, a Class Teacher teaches ALL subjects for their assigned class.
+    // If a teacher has assigned classes in Primary/Early Years and no individual subjects assigned,
+    // their class assignment confers all subjects offered by that tier (or school-wide courses).
+    const hasPrimaryClassAssignment = Array.from(assignedClassesSet).some((c) => {
+      const l = c.toLowerCase();
+      return l.includes("primary") || l.includes("basic") || l.includes("pry") || l.includes("nursery") || l.includes("kg");
+    });
+
+    if (hasPrimaryClassAssignment && assignedSubjectsSet.size === 0) {
+      try {
+        const schoolCourses = await basePrisma.course.findMany({
+          where: { schoolId },
+          select: { name: true },
+          orderBy: { name: "asc" },
+        });
+        schoolCourses.forEach((c) => {
+          if (c.name?.trim()) assignedSubjectsSet.add(c.name.trim());
+        });
+      } catch (err) {
+        console.warn("[getStaffAssignedClassesAndSubjects] Primary courses lookup notice:", err);
+      }
+    }
   } catch (err) {
     console.warn("[getStaffAssignedClassesAndSubjects] Warning:", err);
   }
@@ -296,7 +320,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
     }
 
     // Resolve teacher's strictly assigned classes and subjects
-    const { assignedClasses, assignedSubjects } = currentStaff
+    let { assignedClasses, assignedSubjects } = currentStaff
       ? await getStaffAssignedClassesAndSubjects(schoolId, currentStaff.id)
       : { assignedClasses: [], assignedSubjects: [] };
 
@@ -441,34 +465,67 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
           return assignedClasses.some((assignedCls) => isClassMatch(s.currentClass, assignedCls));
         });
 
-        // Courses: filter to courses assigned to teacher or school courses matching teacher subjects
-        if (assignedSubjects.length > 0) {
-          courses = await basePrisma.course.findMany({
-            where: {
-              schoolId,
-              OR: assignedSubjects.map((sub) => ({
-                name: { equals: sub, mode: "insensitive" },
-              })),
-            },
-            orderBy: { name: "asc" },
-          });
-          const existingCourseNames = new Set(courses.map((c) => c.name.toLowerCase()));
-          assignedSubjects.forEach((subName) => {
-            if (!existingCourseNames.has(subName.toLowerCase())) {
-              courses.push({
-                id: subName,
-                schoolId,
-                name: subName,
-                code: subName.substring(0, 4).toUpperCase(),
-              });
-            }
-          });
-        } else {
-          courses = await basePrisma.course.findMany({
+        // Courses: Query courses for the school from tenantDb first, then basePrisma fallback
+        let allSchoolCourses = await tenantDb.course.findMany({
+          where: { schoolId },
+          orderBy: { name: "asc" },
+        }).catch(() => []);
+
+        if (allSchoolCourses.length === 0 && tenantDb !== basePrisma) {
+          allSchoolCourses = await basePrisma.course.findMany({
             where: { schoolId },
             orderBy: { name: "asc" },
-            take: 10,
+          }).catch(() => []);
+        }
+
+        // Nigerian Primary School Model (NERDC / UBEC):
+        // Primary Class Teachers teach ALL subjects for their assigned class.
+        // Secondary teachers teach only their assigned subjects.
+        const primaryTiers = school?.academicTiers?.filter(
+          (t) => t.name.toUpperCase().includes("PRIMARY") || t.name.toUpperCase().includes("NURSERY") || t.name.toUpperCase().includes("CRECHE") || ((t.level ?? 99) <= 2)
+        ) || [];
+        const primaryTierIds = new Set(primaryTiers.map((t) => t.id));
+
+        const hasPrimaryClass = assignedClasses.some((cls) => {
+          const l = cls.toLowerCase();
+          return l.includes("primary") || l.includes("basic") || l.includes("pry") || l.includes("nursery") || l.includes("kg") || l.includes("creche");
+        });
+
+        if (hasPrimaryClass) {
+          // In Primary, the teacher gets ALL courses for their assigned class's tier (or school-wide courses where tierId is null)
+          const primaryCourses = allSchoolCourses.filter((c) => {
+            if (!c.tierId) return true; // School-wide course
+            return primaryTierIds.has(c.tierId);
           });
+
+          const effectivePrimaryCourses = primaryCourses.length > 0 ? primaryCourses : allSchoolCourses;
+
+          // Merge with any Secondary courses if teacher also has Secondary assigned subjects
+          if (assignedSubjects.length > 0) {
+            const secondaryCourses = allSchoolCourses.filter((c) =>
+              assignedSubjects.some((s) => s.toLowerCase() === c.name.toLowerCase())
+            );
+            const combinedMap = new Map<string, any>();
+            effectivePrimaryCourses.forEach((c) => combinedMap.set(c.id, c));
+            secondaryCourses.forEach((c) => combinedMap.set(c.id, c));
+            courses = Array.from(combinedMap.values());
+          } else {
+            courses = effectivePrimaryCourses;
+          }
+
+          // Ensure assignedSubjects includes all real Primary courses so client receives them
+          const resolvedSubjectNames = new Set(assignedSubjects);
+          courses.forEach((c) => {
+            if (c.name) resolvedSubjectNames.add(c.name.trim());
+          });
+          assignedSubjects = Array.from(resolvedSubjectNames);
+        } else if (assignedSubjects.length > 0) {
+          // Secondary / Tertiary Model: strictly filter to teacher's assigned subjects
+          courses = allSchoolCourses.filter((c) =>
+            assignedSubjects.some((s) => s.toLowerCase() === c.name.toLowerCase())
+          );
+        } else {
+          courses = [];
         }
       } else {
         // Teacher has no assigned classes yet: STRICT RESTRICTION - ZERO classrooms and ZERO students
@@ -991,7 +1048,7 @@ export async function saveClassroomGrades(
       return "F9";
     }
 
-    // 1. Resolve or create Course & Exam in tenantDb for legacy exam broadsheet consistency
+    // 1. Resolve Course & Exam in tenantDb for legacy exam broadsheet consistency
     let examRec: any = null;
     try {
       let course = await tenantDb.course.findFirst({
@@ -1000,14 +1057,21 @@ export async function saveClassroomGrades(
           OR: [{ name: { equals: subject, mode: "insensitive" } }, { id: subject }],
         },
       });
-      if (!course) {
-        course = await tenantDb.course.create({
-          data: {
+      if (!course && tenantDb !== basePrisma) {
+        course = await basePrisma.course.findFirst({
+          where: {
             schoolId,
-            name: subject,
-            code: subject.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, "") + "101",
+            OR: [{ name: { equals: subject, mode: "insensitive" } }, { id: subject }],
           },
         });
+      }
+      if (!course) {
+        // Under the Nigerian Primary Model, NEVER invent courses or fake codes like GENE101.
+        // Block save if course row does not exist in the database.
+        return {
+          success: false,
+          error: `Subject "${subject}" is not configured as an official Course. Please configure this subject in Settings > Courses / Classes before saving grades.`,
+        };
       }
 
       examRec = await tenantDb.exam.findFirst({
@@ -1029,8 +1093,11 @@ export async function saveClassroomGrades(
           },
         });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("[saveClassroomGrades] Course/Exam link fallback notice:", e);
+      if (e?.message && e.message.includes("not configured as an official Course")) {
+        return { success: false, error: e.message };
+      }
     }
 
     await basePrisma.$transaction(async (tx) => {
