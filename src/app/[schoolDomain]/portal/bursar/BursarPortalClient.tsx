@@ -289,33 +289,37 @@ export default function BursarPortalClient({
   // Handle Payment Proof Verification
   const handleVerifyProof = (proofId: string, status: "APPROVED" | "REJECTED") => {
     setStatusMessage(null);
-    startTransition(async () => {
-      const res = await verifyPaymentProofAction(initialData.school.id, proofId, status);
-      if (res.success) {
-        setPendingProofs((prev) => prev.filter((p) => p.id !== proofId));
-        setStatusMessage({
-          type: "success",
-          text: `Payment verification proof ${status === "APPROVED" ? "approved & credited" : "rejected"}`,
-        });
-      } else {
-        setStatusMessage({ type: "error", text: res.error || "Failed to process verification" });
-      }
+    startTransition(() => {
+      void (async () => {
+        const res = await verifyPaymentProofAction(initialData.school.id, proofId, status);
+        if (res.success) {
+          setPendingProofs((prev) => prev.filter((p) => p.id !== proofId));
+          setStatusMessage({
+            type: "success",
+            text: `Payment verification proof ${status === "APPROVED" ? "approved & credited" : "rejected"}`,
+          });
+        } else {
+          setStatusMessage({ type: "error", text: res.error || "Failed to process verification" });
+        }
+      })();
     });
   };
 
   // Handle Payroll Disbursal
   const handleDisbursePayroll = (recordId: string) => {
     setStatusMessage(null);
-    startTransition(async () => {
-      const res = await disbursePayrollRecordAction(initialData.school.id, recordId);
-      if (res.success) {
-        setPayrollList((prev) =>
-          prev.map((pr) => (pr.id === recordId ? { ...pr, status: "PAID" } : pr))
-        );
-        setStatusMessage({ type: "success", text: "Payroll record disbursed successfully." });
-      } else {
-        setStatusMessage({ type: "error", text: res.error || "Failed to disburse payroll" });
-      }
+    startTransition(() => {
+      void (async () => {
+        const res = await disbursePayrollRecordAction(initialData.school.id, recordId);
+        if (res.success) {
+          setPayrollList((prev) =>
+            prev.map((pr) => (pr.id === recordId ? { ...pr, status: "PAID" } : pr))
+          );
+          setStatusMessage({ type: "success", text: "Payroll record disbursed successfully." });
+        } else {
+          setStatusMessage({ type: "error", text: res.error || "Failed to disburse payroll" });
+        }
+      })();
     });
   };
 
