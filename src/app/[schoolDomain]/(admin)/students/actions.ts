@@ -296,9 +296,13 @@ export async function createStudent(
       safeRevalidatePath(`/${targetSchool.subdomain}/students`, "page");
       safeRevalidatePath(`/${targetSchool.subdomain}/students`, "layout");
       safeRevalidatePath(`/${targetSchool.subdomain}/students`);
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`, "page");
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`, "layout");
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`);
     }
 
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
+    safeRevalidatePath(`/[schoolDomain]/portal/staff`, "page");
     return { success: true, credentials: res };
   } catch (error: any) {
     console.error("[Server Action] Failed to create student:", error);
@@ -350,9 +354,13 @@ export async function updateStudent(
       safeRevalidatePath(`/${targetSchool.subdomain}/students`, "page");
       safeRevalidatePath(`/${targetSchool.subdomain}/students`, "layout");
       safeRevalidatePath(`/${targetSchool.subdomain}/students`);
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`, "page");
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`, "layout");
+      safeRevalidatePath(`/${targetSchool.subdomain}/portal/staff`);
     }
 
     safeRevalidatePath(`/[schoolDomain]/students`, "page");
+    safeRevalidatePath(`/[schoolDomain]/portal/staff`, "page");
     return { success: true };
   } catch (error: any) {
     console.error("[Server Action] Failed to update student:", error);

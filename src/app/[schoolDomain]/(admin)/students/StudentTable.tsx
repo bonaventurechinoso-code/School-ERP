@@ -71,31 +71,10 @@ interface StudentTableProps {
   initialMetrics?: StudentMetricsData;
 }
 
+import { isClassMatch } from "@/lib/class-matching";
+
 export function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
-  if (!targetClass || targetClass === "ALL" || targetClass === "All Classes") return true;
-  if (!studentClass) return false;
-  const sNorm = studentClass.trim().toLowerCase();
-  const tNorm = targetClass.trim().toLowerCase();
-  if (sNorm === tNorm) return true;
-
-  // Word boundary or prefix match (e.g., "Class 1" matches "Class 1 Gold", "Class 1A", but not "Class 10")
-  const escaped = tNorm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(^|\\b)${escaped}(\\b|[^0-9]|$)`, "i");
-  if (pattern.test(sNorm)) return true;
-
-  // Check aliases like Class 1 <-> Primary 1 <-> Basic 1
-  const tClassNum = tNorm.match(/\d+/)?.[0];
-  const sClassNum = sNorm.match(/\d+/)?.[0];
-  if (tClassNum && sClassNum && tClassNum === sClassNum) {
-    if (
-      (tNorm.includes("class") || tNorm.includes("primary") || tNorm.includes("basic")) &&
-      (sNorm.includes("class") || sNorm.includes("primary") || sNorm.includes("basic"))
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return isClassMatch(studentClass, targetClass);
 }
 
 export function getClassOptionsForTier(

@@ -1,6 +1,7 @@
 "use server";
 
-import { basePrisma, getTenantClient } from "@/lib/tenant-prisma";
+import { basePrisma, getTenantClient, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { isClassMatch } from "@/lib/class-matching";
 import { revalidatePath } from "next/cache";
 import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
@@ -176,27 +177,21 @@ export async function verifyTeacherClassAccess(
   if (!staffEmail) return false;
   try {
     const staff = await basePrisma.staff.findFirst({
-      where: { schoolId, email: staffEmail },
+      where: {
+        schoolId,
+        email: { equals: staffEmail.trim(), mode: "insensitive" },
+      },
       select: { id: true, user: { select: { role: true } } },
     });
     if (!staff) return false;
 
     const userRole = (staff.user?.role || "").toUpperCase();
-    if (["PRINCIPAL", "HEADMASTER"].includes(userRole)) {
+    if (["PRINCIPAL", "HEADMASTER", "SUPER_ADMIN"].includes(userRole)) {
       return true;
     }
 
     const { assignedClasses } = await getStaffAssignedClassesAndSubjects(schoolId, staff.id);
-    const targetNorm = targetClass.trim().toLowerCase();
-
-    return assignedClasses.some((cls) => {
-      const clsNorm = cls.trim().toLowerCase();
-      return (
-        clsNorm === targetNorm ||
-        targetNorm.startsWith(clsNorm + " ") ||
-        clsNorm.startsWith(targetNorm + " ")
-      );
-    });
+    return assignedClasses.some((cls) => isClassMatch(targetClass, cls));
   } catch (err) {
     console.error("[verifyTeacherClassAccess] Error:", err);
     return false;
@@ -358,27 +353,92 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
         classrooms = Array.from(classroomMap.values());
 
         // Strictly query ONLY students enrolled in the teacher's assigned classes
-        students = await basePrisma.student.findMany({
-          where: {
-            schoolId,
-            status: { in: ["ENROLLED", "ACTIVE"] },
-            OR: assignedClasses.flatMap((cls) => [
-              { currentClass: { equals: cls, mode: "insensitive" } },
-              { currentClass: { startsWith: cls + " ", mode: "insensitive" } },
-            ]),
-          },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            admissionNumber: true,
-            currentClass: true,
-            tierId: true,
-            status: true,
-            parentPhone: true,
-            dynamicFields: true,
-          },
-          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        const primaryTierName = school?.academicTiers?.[0]?.name || "Primary School";
+        const tenantDb = await getPrismaClientForTier(schoolId, primaryTierName);
+
+        // Build comprehensive SQL/Prisma matching conditions for assignedClasses
+        const classConditions: any[] = [];
+        assignedClasses.forEach((cls) => {
+          const trimmed = cls.trim();
+          classConditions.push({ currentClass: { equals: trimmed, mode: "insensitive" } });
+          classConditions.push({ currentClass: { startsWith: trimmed + " ", mode: "insensitive" } });
+          classConditions.push({ currentClass: { startsWith: trimmed, mode: "insensitive" } });
+
+          // Extract base class (without arm suffix e.g. "Primary 2 A" -> "Primary 2")
+          const baseName = trimmed
+            .replace(/\s*[\(\[-].*?[\)\]-]/g, "")
+            .replace(/\s+[a-z]$/i, "")
+            .trim();
+          if (baseName && baseName.toLowerCase() !== trimmed.toLowerCase()) {
+            classConditions.push({ currentClass: { equals: baseName, mode: "insensitive" } });
+            classConditions.push({ currentClass: { startsWith: baseName + " ", mode: "insensitive" } });
+            classConditions.push({ currentClass: { startsWith: baseName, mode: "insensitive" } });
+          }
+
+          // Numeric equivalents for Nigerian K-12 tiers
+          const numMatch = trimmed.match(/\d+/)?.[0];
+          if (numMatch) {
+            const lower = trimmed.toLowerCase();
+            if (lower.includes("primary") || lower.includes("basic") || lower.includes("class") || lower.includes("pry")) {
+              classConditions.push({ currentClass: { contains: `Primary ${numMatch}`, mode: "insensitive" } });
+              classConditions.push({ currentClass: { contains: `Basic ${numMatch}`, mode: "insensitive" } });
+              classConditions.push({ currentClass: { contains: `Class ${numMatch}`, mode: "insensitive" } });
+              classConditions.push({ currentClass: { contains: `Pry ${numMatch}`, mode: "insensitive" } });
+            } else if (lower.includes("jss") || lower.includes("js")) {
+              classConditions.push({ currentClass: { contains: `JSS ${numMatch}`, mode: "insensitive" } });
+              classConditions.push({ currentClass: { contains: `JS ${numMatch}`, mode: "insensitive" } });
+            } else if (lower.includes("sss") || lower.includes("ss")) {
+              classConditions.push({ currentClass: { contains: `SSS ${numMatch}`, mode: "insensitive" } });
+              classConditions.push({ currentClass: { contains: `SS ${numMatch}`, mode: "insensitive" } });
+            }
+          }
+        });
+
+        const statusFilter = {
+          in: ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"],
+        };
+
+        const studentSelect = {
+          id: true,
+          firstName: true,
+          lastName: true,
+          admissionNumber: true,
+          currentClass: true,
+          tierId: true,
+          status: true,
+          parentPhone: true,
+          dynamicFields: true,
+        };
+
+        const whereFilter = {
+          schoolId,
+          status: statusFilter,
+          OR: classConditions,
+        };
+
+        // 1. Query tenantDb first (respecting tier isolation)
+        let fetchedStudents = await tenantDb.student
+          .findMany({
+            where: whereFilter,
+            select: studentSelect,
+            orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+          })
+          .catch(() => []);
+
+        // 2. Fallback to basePrisma if tenantDb returned no records and is separate
+        if (fetchedStudents.length === 0 && tenantDb !== basePrisma) {
+          fetchedStudents = await basePrisma.student
+            .findMany({
+              where: whereFilter,
+              select: studentSelect,
+              orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+            })
+            .catch(() => []);
+        }
+
+        // 3. Post-filter with canonical isClassMatch to ensure strict classroom security boundaries
+        students = fetchedStudents.filter((s) => {
+          return assignedClasses.some((assignedCls) => isClassMatch(s.currentClass, assignedCls));
         });
 
         // Courses: filter to courses assigned to teacher or school courses matching teacher subjects
@@ -418,7 +478,10 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
       }
     } else {
       // Non-teaching or administrative oversight roles (Principal, Headmaster, etc.)
-      const [allCls, allCourses, allStudents] = await Promise.all([
+      const primaryTierName = school?.academicTiers?.[0]?.name || "Primary School";
+      const tenantDb = await getPrismaClientForTier(schoolId, primaryTierName);
+
+      const [allCls, allCourses, allStudentsFromTenant] = await Promise.all([
         basePrisma.classroom.findMany({
           where: { schoolId },
           orderBy: { name: "asc" },
@@ -427,10 +490,10 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
           where: { schoolId },
           orderBy: { name: "asc" },
         }),
-        basePrisma.student.findMany({
+        tenantDb.student.findMany({
           where: {
             schoolId,
-            status: { in: ["ENROLLED", "ACTIVE"] },
+            status: { in: ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"] },
           },
           select: {
             id: true,
@@ -444,8 +507,30 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
             dynamicFields: true,
           },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-        }),
+        }).catch(() => []),
       ]);
+
+      let allStudents = allStudentsFromTenant;
+      if (allStudents.length === 0 && tenantDb !== basePrisma) {
+        allStudents = await basePrisma.student.findMany({
+          where: {
+            schoolId,
+            status: { in: ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"] },
+          },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            admissionNumber: true,
+            currentClass: true,
+            tierId: true,
+            status: true,
+            parentPhone: true,
+            dynamicFields: true,
+          },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        }).catch(() => []);
+      }
       classrooms = allCls;
       courses = allCourses;
       students = allStudents;

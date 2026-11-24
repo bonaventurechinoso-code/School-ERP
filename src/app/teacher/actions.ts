@@ -1,6 +1,7 @@
 "use server";
 
-import { basePrisma } from "@/lib/tenant-prisma";
+import { basePrisma, getPrismaClientForTier } from "@/lib/tenant-prisma";
+import { isClassMatch } from "@/lib/class-matching";
 import { getSession } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -182,10 +183,11 @@ export async function getMyClassOverview() {
     basePrisma.student.findMany({
       where: {
         schoolId: ctx.schoolId,
-        status: { in: ["ENROLLED", "ACTIVE"] },
+        status: { in: ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"] },
         OR: [
-          { currentClass: { equals: primaryClass } },
-          { currentClass: { contains: primaryClass } },
+          { currentClass: { equals: primaryClass, mode: "insensitive" } },
+          { currentClass: { startsWith: primaryClass, mode: "insensitive" } },
+          { currentClass: { contains: primaryClass, mode: "insensitive" } },
         ],
       },
       select: {
@@ -886,39 +888,85 @@ export async function getTeacherStudents(searchQuery?: string, classFilter?: str
   const ctx = await getTeacherContext();
   if (!ctx) throw new Error("Unauthorized");
 
+  const statusFilter = {
+    in: ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"],
+  };
+
   const whereClause: any = {
     schoolId: ctx.schoolId,
-    status: { in: ["ENROLLED", "ACTIVE"] },
+    status: statusFilter,
   };
 
   if (classFilter) {
-    whereClause.currentClass = { contains: classFilter };
+    whereClause.currentClass = { contains: classFilter, mode: "insensitive" };
+  } else if (ctx.assignedClasses && ctx.assignedClasses.length > 0) {
+    whereClause.OR = ctx.assignedClasses.flatMap((cls) => [
+      { currentClass: { equals: cls, mode: "insensitive" } },
+      { currentClass: { startsWith: cls, mode: "insensitive" } },
+      { currentClass: { contains: cls, mode: "insensitive" } },
+    ]);
   }
 
   if (searchQuery) {
-    whereClause.OR = [
-      { firstName: { contains: searchQuery } },
-      { lastName: { contains: searchQuery } },
-      { admissionNumber: { contains: searchQuery } },
+    const searchConditions = [
+      { firstName: { contains: searchQuery, mode: "insensitive" as const } },
+      { lastName: { contains: searchQuery, mode: "insensitive" as const } },
+      { admissionNumber: { contains: searchQuery, mode: "insensitive" as const } },
     ];
+    if (whereClause.OR) {
+      whereClause.AND = [{ OR: searchConditions }];
+    } else {
+      whereClause.OR = searchConditions;
+    }
   }
 
-  const students = await basePrisma.student.findMany({
-    where: whereClause,
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      admissionNumber: true,
-      currentClass: true,
-      parentPhone: true,
-      dynamicFields: true,
-      status: true,
-      createdAt: true,
-    },
-    orderBy: [{ currentClass: "asc" }, { lastName: "asc" }],
-    take: 50,
-  });
+  const tenantDb = await getPrismaClientForTier(ctx.schoolId, "Primary School");
+  let students = await tenantDb.student
+    .findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        admissionNumber: true,
+        currentClass: true,
+        parentPhone: true,
+        dynamicFields: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: [{ currentClass: "asc" }, { lastName: "asc" }],
+      take: 100,
+    })
+    .catch(() => []);
+
+  if (students.length === 0 && tenantDb !== basePrisma) {
+    students = await basePrisma.student
+      .findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          admissionNumber: true,
+          currentClass: true,
+          parentPhone: true,
+          dynamicFields: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: [{ currentClass: "asc" }, { lastName: "asc" }],
+        take: 100,
+      })
+      .catch(() => []);
+  }
+
+  // Strictly filter to assigned classes
+  if (ctx.assignedClasses && ctx.assignedClasses.length > 0) {
+    students = students.filter((s) =>
+      ctx.assignedClasses.some((assignedCls) => isClassMatch(s.currentClass, assignedCls))
+    );
+  }
 
   const formattedStudents = students.map((s) => ({
     id: s.id,

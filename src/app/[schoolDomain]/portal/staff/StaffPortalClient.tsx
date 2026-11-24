@@ -48,6 +48,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
+import { isClassMatch } from "@/lib/class-matching";
 import { getClassesForSchool, getTierForClass } from "@/lib/school-tier-classes";
 import { performTenantLogout } from "@/lib/client-logout";
 import { resolveInstitutionalTier } from "@/lib/tier-naming";
@@ -258,7 +259,7 @@ export default function StaffPortalClient({
   // Ensure selectedClass is valid in teacherAssignedClasses for the chosen subject
   useEffect(() => {
     if (teacherAssignedClasses.length > 0) {
-      if (!selectedClass || !teacherAssignedClasses.includes(selectedClass)) {
+      if (!selectedClass || !teacherAssignedClasses.some((cls) => isClassMatch(cls, selectedClass))) {
         setSelectedClass(teacherAssignedClasses[0]);
       }
     } else {
@@ -332,7 +333,7 @@ export default function StaffPortalClient({
     const cohorts = new Set<string>();
     initialStudents.forEach((s) => {
       const sClass = s.currentClass || s.class;
-      if (!selectedClass || sClass?.toLowerCase() === selectedClass.toLowerCase()) {
+      if (!selectedClass || isClassMatch(sClass, selectedClass)) {
         const c =
           (s as any).cohort ||
           (s.dynamicFields as any)?.cohort ||
@@ -358,7 +359,7 @@ export default function StaffPortalClient({
         (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")
       ).trim();
 
-      const matchesClass = !selectedClass || studentClass?.toLowerCase() === selectedClass.toLowerCase();
+      const matchesClass = !selectedClass || isClassMatch(studentClass, selectedClass);
       const matchesCohort = selectedCohort === "ALL" || studentCohort === selectedCohort;
       const matchesSearch =
         !searchQuery ||
