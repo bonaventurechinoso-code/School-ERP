@@ -24,7 +24,8 @@ import {
   getAcademicPeriodVariants,
   formatAcademicPeriod,
 } from "./tertiary-config";
-import { getTierForClass } from "./school-tier-classes";
+import { getTierForClass, formatClassDisplay } from "./school-tier-classes";
+import { isClassMatch } from "./class-matching";
 import { getSecondaryDemoProfile, CANONICAL_SECONDARY_PROFILES, JSS_CANONICAL_SUBJECTS } from "./secondary-demo-data";
 
 export interface SaveAssessmentPayload {
@@ -511,38 +512,79 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
     payload.tierName
   );
 
-  // 1. Fetch all students in this class from the designated tier database
-  const students = await tierDb.student.findMany({
+  // 1. Fetch all students in this class from the designated tier database with isClassMatch & basePrisma fallback
+  let allStudents = await tierDb.student.findMany({
     where: {
       schoolId,
-      currentClass: className,
     },
     select: {
       id: true,
       firstName: true,
       lastName: true,
       admissionNumber: true,
+      currentClass: true,
+      status: true,
     },
-  });
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  }).catch(() => []);
+
+  let students = allStudents.filter((s: any) => isClassMatch(s.currentClass, className));
+
+  if (students.length === 0 && tierDb !== basePrisma) {
+    const baseStudents = await basePrisma.student.findMany({
+      where: {
+        schoolId,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        admissionNumber: true,
+        currentClass: true,
+        status: true,
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }).catch(() => []);
+    students = baseStudents.filter((s: any) => isClassMatch(s.currentClass, className));
+  }
+
+  // Filter for enrolled/active students if available, otherwise include all matched
+  const activeStudents = students.filter((s: any) =>
+    !s.status || ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"].includes(s.status)
+  );
+  if (activeStudents.length > 0) {
+    students = activeStudents;
+  }
 
   if (students.length === 0) {
-    throw new Error(`No students found enrolled in classroom "${className}".`);
+    throw new Error(`No students found enrolled in classroom "${formatClassDisplay(className)}".`);
   }
 
   // 2. Fetch all grade records for this class and term (Single Source of Truth)
   const studentIds = students.map((s: any) => s.id);
   const termVariants = getAcademicPeriodVariants(term);
 
-  const gradeRecords = await tierDb.gradeRecord.findMany({
+  let gradeRecords = await tierDb.gradeRecord.findMany({
     where: {
       schoolId,
       term: { in: termVariants },
       studentId: { in: studentIds },
     },
     orderBy: { updatedAt: "desc" },
-  });
+  }).catch(() => []);
 
-  const academicRecords = gradeRecords.length === 0 ? await tierDb.academicRecord.findMany({
+  if (gradeRecords.length === 0 && tierDb !== basePrisma) {
+    gradeRecords = await basePrisma.gradeRecord.findMany({
+      where: {
+        schoolId,
+        term: { in: termVariants },
+        studentId: { in: studentIds },
+      },
+      orderBy: { updatedAt: "desc" },
+    }).catch(() => []);
+  }
+
+  let academicRecords = gradeRecords.length === 0 ? await tierDb.academicRecord.findMany({
     where: {
       schoolId,
       term: { in: termVariants },
@@ -550,7 +592,19 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
       studentId: { in: studentIds },
     },
     orderBy: { subject: "asc" },
-  }) : [];
+  }).catch(() => []) : [];
+
+  if (gradeRecords.length === 0 && academicRecords.length === 0 && tierDb !== basePrisma) {
+    academicRecords = await basePrisma.academicRecord.findMany({
+      where: {
+        schoolId,
+        term: { in: termVariants },
+        academicYear,
+        studentId: { in: studentIds },
+      },
+      orderBy: { subject: "asc" },
+    }).catch(() => []);
+  }
 
   const classTier = getTierForClass(className);
   const isCreche = isCrecheClass(className);
@@ -718,6 +772,27 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
       teacherRemarks: r.teacherRemarks,
     }));
 
+    const cardData = {
+      className,
+      tier: tierCategory,
+      totalScore,
+      averageScore,
+      gradeLetter: overallLetter,
+      gpa,
+      classPosition: (tierCategory === "NURSERY" && !isCrecheClass(className)) ? null : ranking?.classPosition ?? null,
+      totalStudentsInClass: students.length,
+      totalSubjects: studentRecords.length,
+      passedSubjects,
+      failedSubjects,
+      narrativeSummary,
+      developmentIndicators,
+      teacherRemarks: remarks.teacherRemarks,
+      principalRemarks: remarks.principalRemarks,
+      nextTermBegins: payload.nextTermBegins || null,
+      status: "COMPILED" as const,
+      academicRecordSnapshot,
+    };
+
     const card = await tierDb.reportCard.upsert({
       where: {
         schoolId_studentId_term_academicYear: {
@@ -727,51 +802,36 @@ export async function compileClassReportCards(payload: CompileClassPayload) {
           academicYear,
         },
       },
-      update: {
-        className,
-        tier: tierCategory,
-        totalScore,
-        averageScore,
-        gradeLetter: overallLetter,
-        gpa,
-        classPosition: (tierCategory === "NURSERY" && !isCrecheClass(className)) ? null : ranking?.classPosition ?? null,
-        totalStudentsInClass: students.length,
-        totalSubjects: studentRecords.length,
-        passedSubjects,
-        failedSubjects,
-        narrativeSummary,
-        developmentIndicators,
-        teacherRemarks: remarks.teacherRemarks,
-        principalRemarks: remarks.principalRemarks,
-        nextTermBegins: payload.nextTermBegins || null,
-        status: "COMPILED",
-        academicRecordSnapshot,
-      },
+      update: cardData,
       create: {
         schoolId,
         studentId: student.id,
         term,
         academicYear,
-        className,
-        tier: tierCategory,
-        totalScore,
-        averageScore,
-        gradeLetter: overallLetter,
-        gpa,
-        classPosition: (tierCategory === "NURSERY" && !isCrecheClass(className)) ? null : ranking?.classPosition ?? null,
-        totalStudentsInClass: students.length,
-        totalSubjects: studentRecords.length,
-        passedSubjects,
-        failedSubjects,
-        narrativeSummary,
-        developmentIndicators,
-        teacherRemarks: remarks.teacherRemarks,
-        principalRemarks: remarks.principalRemarks,
-        nextTermBegins: payload.nextTermBegins || null,
-        status: "COMPILED",
-        academicRecordSnapshot,
+        ...cardData,
       },
     });
+
+    if (tierDb !== basePrisma) {
+      await basePrisma.reportCard.upsert({
+        where: {
+          schoolId_studentId_term_academicYear: {
+            schoolId,
+            studentId: student.id,
+            term,
+            academicYear,
+          },
+        },
+        update: cardData,
+        create: {
+          schoolId,
+          studentId: student.id,
+          term,
+          academicYear,
+          ...cardData,
+        },
+      }).catch(() => {});
+    }
 
     compiledCards.push(card);
   }
@@ -958,12 +1018,9 @@ export async function getClassResultSheet(
 
   const termVariants = getAcademicPeriodVariants(term);
 
-  // Fetch students, their report cards, and active grade records
-  const students = await tierDb.student.findMany({
-    where: {
-      schoolId,
-      currentClass: className,
-    },
+  // Fetch students, their report cards, and active grade records using isClassMatch & basePrisma fallback
+  let allStudents = await tierDb.student.findMany({
+    where: { schoolId },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: {
       reportCards: {
@@ -976,7 +1033,30 @@ export async function getClassResultSheet(
         where: { term: { in: termVariants } },
       },
     },
-  });
+  }).catch(() => []);
+
+  let matchedStudents = allStudents.filter((s: any) => isClassMatch(s.currentClass, className));
+
+  if (matchedStudents.length === 0 && tierDb !== basePrisma) {
+    const baseStudents = await basePrisma.student.findMany({
+      where: { schoolId },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include: {
+        reportCards: {
+          where: { term: { in: termVariants } },
+        },
+        GradeRecord: {
+          where: { term: { in: termVariants } },
+        },
+        academicRecords: {
+          where: { term: { in: termVariants } },
+        },
+      },
+    }).catch(() => []);
+    matchedStudents = baseStudents.filter((s: any) => isClassMatch(s.currentClass, className));
+  }
+
+  const students = matchedStudents;
 
   // Extract distinct subjects in this classroom from GradeRecord first
   const subjectSet = new Set<string>();

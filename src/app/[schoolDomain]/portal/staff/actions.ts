@@ -8,7 +8,7 @@ import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
-import { getTierForClass } from "@/lib/school-tier-classes";
+import { getTierForClass, formatClassDisplay } from "@/lib/school-tier-classes";
 import { getSession } from "@/lib/auth";
 import { getStandardSubjectsForClass, matchSubjectAlias, isNurseryClass as isCurriculumNursery, isCrecheClass as isCurriculumCreche } from "@/lib/nigerian-curriculum";
 
@@ -1392,7 +1392,7 @@ export async function compileClassReportCardsFromStaffPortal(
       success: true,
       compiledCount: result.totalCompiled,
       data: result,
-      message: `Successfully compiled ${result.totalCompiled} report cards for ${className} (${term}, ${academicYear}).`,
+      message: `Successfully compiled ${result.totalCompiled} report cards for ${formatClassDisplay(className)} (${term}, ${academicYear}).`,
     };
   } catch (error: any) {
     console.error("[compileClassReportCardsFromStaffPortal Error]:", error);
