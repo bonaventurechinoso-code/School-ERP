@@ -444,7 +444,9 @@ export default function StudentReportCardModal({
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   <tr>
-                    <th className="px-5 py-3.5 text-left">Subject / Course Title</th>
+                    <th className="px-5 py-3.5 text-left">
+                      {isHigherEd ? "Course Title" : isCreche ? "Developmental Learning Area" : "Subject"}
+                    </th>
 
                     {/* Secondary Columns */}
                     {isSecondary && (

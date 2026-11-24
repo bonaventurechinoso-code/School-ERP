@@ -333,7 +333,7 @@ export function resolveInstitutionalTier(
     periodOrdinal: (n = 1) =>
       `${n}${n === 1 ? "st" : n === 2 ? "nd" : "rd"} Term`,
     classroomNoun: "Class",
-    classroomsNoun: "Classes (Basic 1 - 6)",
+    classroomsNoun: "Classes (Primary 1 - 6)",
     regNumberNoun: "Admission / Reg #",
     classLevelLabel: "Class / Section",
     curriculumEngineLabel:

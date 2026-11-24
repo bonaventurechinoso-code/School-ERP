@@ -39,7 +39,7 @@ const AVAILABLE_TIER_OPTIONS: TierOption[] = [
   {
     id: "PRIMARY",
     label: "Primary School",
-    description: "Basic elementary education covering classes Basic 1 through Basic 6",
+    description: "Primary education covering classes Primary 1 through Primary 6",
     badgeStyle: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
   },
   {
@@ -51,7 +51,7 @@ const AVAILABLE_TIER_OPTIONS: TierOption[] = [
   {
     id: "PRIMARY_SECONDARY",
     label: "Combined Primary & Secondary School",
-    description: "Seamless single-campus continuum from Basic 1 through SS 3 graduation",
+    description: "Seamless single-campus continuum from Primary 1 through SS 3 graduation",
     badgeStyle: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
   },
   {

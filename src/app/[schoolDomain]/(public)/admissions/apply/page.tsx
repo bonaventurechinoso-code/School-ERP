@@ -230,8 +230,8 @@ export default function ApplyPage({
               <option value="Creche">Creche</option>
               <option value="Nursery 1">Nursery 1</option>
               <option value="Nursery 2">Nursery 2</option>
-              <option value="Basic 1">Basic 1 (Primary)</option>
-              <option value="Basic 4">Basic 4 (Primary)</option>
+              <option value="Primary 1">Primary 1</option>
+              <option value="Primary 4">Primary 4</option>
               <option value="JSS 1">JSS 1 (Junior Secondary)</option>
               <option value="SSS 1">SSS 1 (Senior Secondary)</option>
               <option value="ND 1">ND 1 (Polytechnic)</option>

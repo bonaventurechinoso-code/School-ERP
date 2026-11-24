@@ -55,6 +55,7 @@ import { resolveInstitutionalTier } from "@/lib/tier-naming";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import SecurityPasswordForm from "@/components/SecurityPasswordForm";
 import ChangeEmailCard from "@/components/ChangeEmailCard";
+import { getStandardSubjectsForClass, matchSubjectAlias } from "@/lib/nigerian-curriculum";
 import {
   saveClassroomAttendance,
   saveClassroomGrades,
@@ -246,39 +247,37 @@ export default function StaffPortalClient({
       isCreche;
 
     // 1. PRIMARY & EARLY YEARS (NERDC / UBEC Homeroom Class Teacher Model):
-    // Teacher gets ALL subjects offered by this class's tier.
-    // Class assignment IS subject assignment. NEVER filter by individual teacher course assignments.
+    // Teacher gets ALL subjects offered by this class's tier according to Nigerian Educational System.
+    // Class assignment IS subject assignment. Populated with exact subjects for this class.
     if (isClassPrimary || isClassEarlyYears) {
-      const matchedClassroom = initialClassrooms.find(
-        (c) => c.name.toLowerCase() === normClass || isClassMatch(c.name, selectedClass)
+      const standardList = getStandardSubjectsForClass(
+        selectedClass,
+        isClassEarlyYears ? "NURSERY" : "PRIMARY"
       );
-      const classTierId = matchedClassroom?.tierId;
 
-      // Filter courses belonging to this class tier (or school-wide where tierId is null)
-      const tierCourses = initialCourses.filter((c) => {
-        if (!c.tierId) return true; // School-wide course
-        if (classTierId) return c.tierId === classTierId;
-        const courseTier = initialTiers.find((t) => t.id === c.tierId);
-        if (isClassPrimary) {
-          return courseTier?.name.toLowerCase().includes("primary") || courseTier?.name.toLowerCase().includes("basic");
+      // Merge standard subjects with initialCourses (resolving aliases like "General Mathematics")
+      const resolvedList: string[] = [];
+      const usedCourseNames = new Set<string>();
+
+      standardList.forEach((stdSubj) => {
+        const existingMatch = initialCourses.find((c) => matchSubjectAlias(c.name, stdSubj));
+        if (existingMatch && existingMatch.name) {
+          resolvedList.push(existingMatch.name.trim());
+          usedCourseNames.add(existingMatch.name.toLowerCase().trim());
+        } else {
+          resolvedList.push(stdSubj);
+          usedCourseNames.add(stdSubj.toLowerCase().trim());
         }
-        return courseTier?.name.toLowerCase().includes("nursery") || courseTier?.name.toLowerCase().includes("creche");
       });
 
-      if (tierCourses.length > 0) {
-        return Array.from(new Set(tierCourses.map((c) => c.name.trim()).filter(Boolean)));
-      }
+      // Include any additional custom courses in the school's tier
+      initialCourses.forEach((c) => {
+        if (c.name && !usedCourseNames.has(c.name.toLowerCase().trim())) {
+          resolvedList.push(c.name.trim());
+        }
+      });
 
-      // Fallback: If no tier link exists yet (courses are school-wide with no class link), return all initialCourses
-      if (initialCourses.length > 0) {
-        return Array.from(new Set(initialCourses.map((c) => c.name.trim()).filter(Boolean)));
-      }
-
-      if (initialAssignedSubjects && initialAssignedSubjects.length > 0) {
-        return initialAssignedSubjects;
-      }
-
-      return [];
+      return Array.from(new Set(resolvedList.filter(Boolean)));
     }
 
     // 2. SECONDARY & TERTIARY (Departmental Subject Specialist Model):
@@ -2272,7 +2271,9 @@ export default function StaffPortalClient({
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
                   {isCreche
                     ? `Scheduled infant feeding times, nap windows, diaper checks, and outdoor sensory sessions for ${selectedClass}.`
-                    : `Assigned lecture periods, course codes, and classroom halls for ${staffName}.`}
+                    : isTertiary
+                      ? `Assigned lecture periods, course codes, and lecture halls for ${staffName}.`
+                      : `Assigned teaching schedule, subjects, and classroom timetable for ${staffName}.`}
                 </p>
               </div>
 

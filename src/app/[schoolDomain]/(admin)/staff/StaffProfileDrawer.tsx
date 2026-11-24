@@ -1166,12 +1166,12 @@ export default function StaffProfileDrawer({
                             className="w-full border border-slate-300 rounded-xl p-2.5 font-medium bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                           >
                             <option value="">-- Select Class --</option>
-                            <option value="Basic 1">Basic 1</option>
-                            <option value="Basic 2">Basic 2</option>
-                            <option value="Basic 3">Basic 3</option>
-                            <option value="Basic 4">Basic 4</option>
-                            <option value="Basic 5">Basic 5</option>
-                            <option value="Basic 6">Basic 6</option>
+                            <option value="Primary 1">Primary 1</option>
+                            <option value="Primary 2">Primary 2</option>
+                            <option value="Primary 3">Primary 3</option>
+                            <option value="Primary 4">Primary 4</option>
+                            <option value="Primary 5">Primary 5</option>
+                            <option value="Primary 6">Primary 6</option>
                             <option value="Floating / Specialist">Floating / Specialist</option>
                           </select>
                         </div>

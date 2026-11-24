@@ -181,6 +181,12 @@ export async function fetchPrincipalPortalInitialData(
       where: { schoolId },
       include: {
         department: true,
+        assignments: {
+          include: {
+            classroom: true,
+            course: true,
+          },
+        },
       },
       orderBy: [{ status: "asc" }, { lastName: "asc" }],
     }),
@@ -275,17 +281,22 @@ export async function fetchPrincipalPortalInitialData(
     teacherName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : "Assigned Teacher",
   }));
 
-  const staffDirectory: StaffDirectoryItem[] = staffList.map((s) => ({
-    id: s.id,
-    firstName: s.firstName,
-    lastName: s.lastName,
-    email: s.email,
-    department: s.department?.name || "Academic Division",
-    role: (s as any).role || "Teacher / Staff Member",
-    status: s.status,
-    phone: null,
-    joinedDate: s.createdAt.toISOString().split("T")[0],
-  }));
+  const staffDirectory: StaffDirectoryItem[] = staffList.map((s) => {
+    const assignedClass = s.assignments?.find((a: any) => a.classroom?.name)?.classroom?.name ||
+      s.assignments?.[0]?.classroom?.name ||
+      null;
+    return {
+      id: s.id,
+      firstName: s.firstName,
+      lastName: s.lastName,
+      email: s.email,
+      department: assignedClass ? `Class: ${assignedClass}` : (s.department?.name || "Academic Division"),
+      role: (s as any).role || "Teacher / Staff Member",
+      status: s.status,
+      phone: null,
+      joinedDate: s.createdAt.toISOString().split("T")[0],
+    };
+  });
 
   const institutionalNotices: InstitutionalNoticeItem[] = notices.map((n) => ({
     id: n.id,

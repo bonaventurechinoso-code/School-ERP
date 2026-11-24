@@ -226,7 +226,13 @@ export async function fetchStaffPaginated(
                 PayrollRecord: {
                   orderBy: { payDate: "desc" },
                   take: 1,
-                }
+                },
+                assignments: {
+                  include: {
+                    classroom: true,
+                    course: true,
+                  },
+                },
               },
             });
           }, { cursor, limit });
@@ -249,13 +255,48 @@ export async function fetchStaffPaginated(
             }
           }
 
-          const enhancedItems = items.map((staff: any) => ({
-            ...staff,
-            role: metadataMap[staff.id]?.designation || staff.user?.role || "TEACHER",
-            metadata: metadataMap[staff.id] || null,
-            todayAttendance: staff.StaffAttendance?.[0] || null,
-            latestPayroll: staff.PayrollRecord?.[0] || null,
-          }));
+          const enhancedItems = items.map((staff: any) => {
+            const rawAssignments = staff.assignments || [];
+            const assignedClassList: string[] = [];
+            const assignedSubjectList: string[] = [];
+
+            rawAssignments.forEach((a: any) => {
+              if (a.classroom?.name) assignedClassList.push(a.classroom.name);
+              if (a.course?.name) assignedSubjectList.push(a.course.name);
+              if (a.metadata) {
+                try {
+                  const m = typeof a.metadata === "string" ? JSON.parse(a.metadata) : a.metadata;
+                  if (m?.className && !assignedClassList.includes(m.className)) assignedClassList.push(m.className);
+                  if (m?.assignedClass && !assignedClassList.includes(m.assignedClass)) assignedClassList.push(m.assignedClass);
+                  if (m?.subjectName && !assignedSubjectList.includes(m.subjectName)) assignedSubjectList.push(m.subjectName);
+                  if (Array.isArray(m?.subjects)) {
+                    m.subjects.forEach((sub: string) => {
+                      if (!assignedSubjectList.includes(sub)) assignedSubjectList.push(sub);
+                    });
+                  }
+                } catch {}
+              }
+            });
+
+            const metaRow = metadataMap[staff.id] || null;
+            if (metaRow?.assigned_class && !assignedClassList.includes(metaRow.assigned_class)) {
+              assignedClassList.push(metaRow.assigned_class);
+            }
+            if (metaRow?.assigned_subjects && !assignedSubjectList.includes(metaRow.assigned_subjects)) {
+              assignedSubjectList.push(metaRow.assigned_subjects);
+            }
+
+            return {
+              ...staff,
+              role: metaRow?.designation || staff.user?.role || "TEACHER",
+              metadata: metaRow,
+              todayAttendance: staff.StaffAttendance?.[0] || null,
+              latestPayroll: staff.PayrollRecord?.[0] || null,
+              assignedClass: assignedClassList[0] || metaRow?.assigned_class || "",
+              assignedClasses: assignedClassList,
+              assignedSubjects: assignedSubjectList.join(", ") || metaRow?.assigned_subjects || "",
+            };
+          });
 
           return {
             ...paginatedResult,
@@ -744,7 +785,7 @@ export async function updateStaffProfile(
         UPDATE bonavee_staff_metadata 
         SET assigned_class = $2, assigned_subjects = $3, updated_at = NOW() 
         WHERE staff_id = $1
-      `, staffId, clsName, data.assignedSubjects || null).catch(() => {});
+      `, staffId, clsName, data.assignedSubjects || null).catch(() => { });
 
       let matchedCls = await basePrisma.classroom.findFirst({
         where: {

@@ -28,7 +28,7 @@ interface TierSwitcherProps {
  */
 export const COMPLETE_TRIAL_TIERS: TierItem[] = [
   { id: "tier-nursery", name: "Creche / Nursery", sublabel: "Early Childhood Care", slug: "nursery" },
-  { id: "tier-primary", name: "Primary School", sublabel: "Basic 1 - 6", slug: "primary" },
+  { id: "tier-primary", name: "Primary School", sublabel: "Primary 1 - 6", slug: "primary" },
   { id: "tier-secondary", name: "Secondary School", sublabel: "Junior & Senior Secondary", slug: "secondary" },
   { id: "tier-uni", name: "University", sublabel: "Undergraduate & Postgraduate", slug: "university" },
   { id: "tier-poly", name: "Polytechnic", sublabel: "ND & HND Programs", slug: "polytechnic" },

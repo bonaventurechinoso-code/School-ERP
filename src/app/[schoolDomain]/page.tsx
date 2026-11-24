@@ -38,9 +38,9 @@ function getTierCurriculumDetails(tierName: string) {
   }
   if (upper.includes("PRIMARY") || upper.includes("BASIC") || upper.includes("ELEMENTARY")) {
     return {
-      title: tierName || "Primary & Basic Education",
-      badge: "Basic 1 - 6",
-      badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+      title: tierName || "Primary Education",
+      badge: "Primary 1 - 6",
+      badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
       description: "Comprehensive foundational education emphasizing core literacy, numeracy, introductory STEM, moral instruction, and continuous assessment.",
       highlights: ["Core English & Mathematics", "Introductory Science & ICT", "Creative Arts & Cultural Studies", "Continuous Assessment (C.A.)"]
     };

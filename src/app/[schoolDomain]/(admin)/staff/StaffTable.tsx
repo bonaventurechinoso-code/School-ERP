@@ -55,6 +55,8 @@ import {
   Key,
   X,
   Sparkles,
+  GraduationCap,
+  BookOpen,
 } from "lucide-react";
 
 export interface StaffTableProps {
@@ -992,16 +994,79 @@ export default function StaffTable({
                         <span className="text-[10px] text-indigo-600 font-medium">{tierBadgeLabel}</span>
                       </td>
 
-                      {/* DEPARTMENT */}
+                      {/* SUBJECT / CLASS ASSIGNED / DEPARTMENT */}
                       <td className="p-4">
-                        {staff.department ? (
-                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
-                            <Building2 className="w-3 h-3 text-slate-500" />
-                            {staff.department.name}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">Unassigned</span>
-                        )}
+                        {(() => {
+                          const classList: string[] = staff.assignedClasses && staff.assignedClasses.length > 0
+                            ? [...staff.assignedClasses]
+                            : staff.assignedClass
+                              ? [staff.assignedClass]
+                              : [];
+                          
+                          if (meta.assigned_class && !classList.includes(meta.assigned_class)) {
+                            classList.push(meta.assigned_class);
+                          }
+
+                          const subjectList: string[] = staff.assignedSubjects
+                            ? staff.assignedSubjects.split(",").map((s: string) => s.trim()).filter(Boolean)
+                            : meta.assigned_subjects
+                              ? meta.assigned_subjects.split(",").map((s: string) => s.trim()).filter(Boolean)
+                              : [];
+
+                          // Tertiary tier: render Department / Faculty
+                          if (isTertiary) {
+                            if (staff.department?.name) {
+                              return (
+                                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                  <Building2 className="w-3 h-3 text-slate-500" />
+                                  {staff.department.name}
+                                </span>
+                              );
+                            }
+                            return <span className="text-slate-400 italic text-[11px]">Unassigned Dept</span>;
+                          }
+
+                          // Basic Education (Creche, Nursery, Primary) & Secondary
+                          if (classList.length > 0 || subjectList.length > 0) {
+                            return (
+                              <div className="space-y-1">
+                                {classList.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {classList.map((cls) => (
+                                      <span
+                                        key={cls}
+                                        className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md text-[11px] border border-emerald-200"
+                                      >
+                                        <GraduationCap className="w-3 h-3 text-emerald-600" />
+                                        <span>{cls}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {subjectList.length > 0 && (
+                                  <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
+                                    <BookOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                    <span className="truncate max-w-[200px]" title={subjectList.join(", ")}>
+                                      {subjectList.join(", ")}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Fallback to department if configured
+                          if (staff.department?.name) {
+                            return (
+                              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                <Building2 className="w-3 h-3 text-slate-500" />
+                                {staff.department.name}
+                              </span>
+                            );
+                          }
+
+                          return <span className="text-slate-400 italic text-[11px]">Unassigned</span>;
+                        })()}
                       </td>
 
                       {/* TRCN & QUALIFICATION */}

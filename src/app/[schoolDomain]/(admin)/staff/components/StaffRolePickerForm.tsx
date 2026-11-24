@@ -192,7 +192,7 @@ export default function StaffRolePickerForm({
             id: "Class Teacher",
             title: "Class Teacher",
             category: "teaching",
-            badgeText: "Single Class (Basic 1-6)",
+            badgeText: "Single Class (Primary 1-6)",
             description: "Primary custodian of one classroom; teaches core subjects, takes daily register & termly scores.",
             trcnStatus: "mandatory",
           },

@@ -133,7 +133,7 @@ export const INSTITUTION_TIERS: Record<InstitutionTierKey, InstitutionTierDefini
   PRIMARY: {
     key: "PRIMARY",
     name: "Primary School",
-    badgeLabel: "9-Year Basic Education (Primary)",
+    badgeLabel: "Primary Education (Primary 1 - 6)",
     badgeCode: "PRIMARY",
     badgeColor: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
     classes: [
@@ -177,7 +177,7 @@ export const INSTITUTION_TIERS: Record<InstitutionTierKey, InstitutionTierDefini
       assessmentSubtitle: "NERDC 20/20/60 continuous assessment and foundational academic evaluation.",
       gradingSystem: "NERDC Primary Scale (Distinction / Very Good / Credit / Pass / Fail)",
       rankingMetric: "Continuous Assessment & Class Position",
-      curriculumLabel: "Primary Basic Education Curriculum",
+      curriculumLabel: "Primary School Curriculum",
 
       revenueLabel: "Termly Revenue",
       billingTitle: "Termly School Fees & Levies",

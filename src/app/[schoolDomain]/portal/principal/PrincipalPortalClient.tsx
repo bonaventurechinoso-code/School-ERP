@@ -1623,7 +1623,7 @@ export default function PrincipalPortalClient({
                     <thead className="bg-slate-50 dark:bg-zinc-800/50 text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800">
                       <tr>
                         <th className="py-3 px-4">{terminology.staffTableHead}</th>
-                        <th className="py-3 px-4">Department</th>
+                        <th className="py-3 px-4">{terminology.isTertiary ? "Department / Faculty" : "Subject / Class Assigned"}</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Joined</th>
                         <th className="py-3 px-4 text-right">Executive Action</th>

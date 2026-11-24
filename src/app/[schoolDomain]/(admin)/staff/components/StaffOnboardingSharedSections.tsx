@@ -547,7 +547,7 @@ export default function StaffOnboardingSharedSections({
               )}
               {tierCategory === "PRIMARY" && (
                 <>
-                  <option value="Academic">Academic (Basic 1 - 6)</option>
+                  <option value="Academic">Academic (Primary 1 - 6)</option>
                   <option value="Administration">Administration</option>
                   <option value="Bursary & Accounts">Bursary & Accounts</option>
                   <option value="Support Services">Support Services</option>
