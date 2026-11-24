@@ -400,7 +400,9 @@ export default function StaffPortalClient({
           (s as any).cohort ||
           (s.dynamicFields as any)?.cohort ||
           (s.dynamicFields as any)?.admissionYear ||
-          (s.admissionNumber ? s.admissionNumber.split("/")[1] : null);
+          (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+            ? s.admissionNumber.split("/")[1]
+            : s.admissionNumber || null);
         if (c && /^\d{4}$/.test(String(c).trim())) {
           cohorts.add(String(c).trim());
         }
@@ -411,22 +413,25 @@ export default function StaffPortalClient({
 
   // Filtered Students for the selected class, session, cohort & search
   const classStudents = useMemo(() => {
-    return initialStudents.filter((s) => {
+    return (initialStudents || []).filter((s) => {
+      if (!s) return false;
       const studentClass = s.currentClass || s.class;
       const studentReg = s.admissionNumber || s.registrationNumber;
       const studentCohort = String(
         (s as any).cohort ||
         (s.dynamicFields as any)?.cohort ||
         (s.dynamicFields as any)?.admissionYear ||
-        (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")
+        (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+          ? s.admissionNumber.split("/")[1]
+          : s.admissionNumber || "")
       ).trim();
 
       const matchesClass = !selectedClass || isClassMatch(studentClass, selectedClass);
       const matchesCohort = selectedCohort === "ALL" || studentCohort === selectedCohort;
       const matchesSearch =
         !searchQuery ||
-        `${s.firstName} ${s.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        studentReg?.toLowerCase().includes(searchQuery.toLowerCase());
+        `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (studentReg && String(studentReg).toLowerCase().includes(searchQuery.toLowerCase()));
 
       return matchesClass && matchesCohort && matchesSearch;
     });
@@ -604,20 +609,22 @@ export default function StaffPortalClient({
       return { letter: "F9", label: "Fail", color: "text-rose-500" };
     }
 
-    const calculated = classStudents.map((student) => {
-      const entry = gradesMap[student.id] || { ca1: 0, ca2: 0, exam: 0, remarks: "" };
-      const total = Number(entry.ca1) + Number(entry.ca2) + Number(entry.exam);
-      const grade = resolveGradeLetter(total);
-      return {
-        student,
-        ca1: entry.ca1,
-        ca2: entry.ca2,
-        exam: entry.exam,
-        total,
-        grade,
-        remarks: entry.remarks,
-      };
-    });
+    const calculated = classStudents
+      .filter((s) => Boolean(s && s.id))
+      .map((student) => {
+        const entry = (gradesMap && gradesMap[student.id]) || { ca1: 0, ca2: 0, exam: 0, remarks: "" };
+        const total = (Number(entry.ca1) || 0) + (Number(entry.ca2) || 0) + (Number(entry.exam) || 0);
+        const grade = resolveGradeLetter(total);
+        return {
+          student,
+          ca1: entry.ca1,
+          ca2: entry.ca2,
+          exam: entry.exam,
+          total,
+          grade,
+          remarks: entry.remarks || "",
+        };
+      });
 
     // Sort by total score descending to determine position
     const sorted = [...calculated].sort((a, b) => b.total - a.total);
@@ -632,12 +639,14 @@ export default function StaffPortalClient({
             : rank % 10 === 3 && rank !== 13
               ? "rd"
               : "th";
-      ranks.set(item.student.id, `${rank}${suffix}`);
+      if (item.student?.id) {
+        ranks.set(item.student.id, `${rank}${suffix}`);
+      }
     });
 
     return calculated.map((item) => ({
       ...item,
-      position: ranks.get(item.student.id) || "-",
+      position: (item.student?.id ? ranks.get(item.student.id) : undefined) || "-",
     }));
   }, [classStudents, gradesMap, selectedClass, isCreche, isPrimary]);
 
@@ -1685,7 +1694,7 @@ export default function StaffPortalClient({
                               {s.currentClass || s.class || selectedClass}
                             </td>
                             <td className="px-6 py-3.5 font-mono font-bold text-indigo-600 dark:text-indigo-400" title="Cohort = Year group that started together at this school. Example: Cohort 2026 = all students admitted to this school in 2026. It stays the same even when they move to Primary 2, 3, etc.">
-                              {(s as any).cohort || (s.dynamicFields as any)?.cohort || (s.dynamicFields as any)?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "2026")}
+                              {(s as any).cohort || (s.dynamicFields as any)?.cohort || (s.dynamicFields as any)?.admissionYear || (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/") ? s.admissionNumber.split("/")[1] : "2026")}
                             </td>
                             <td className="px-6 py-3.5">
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
@@ -2152,96 +2161,102 @@ export default function StaffPortalClient({
                           </td>
                         </tr>
                       ) : (
-                        gradedMatrix.map((item) => (
-                          <tr
-                            key={item.student.id}
-                            className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors"
-                          >
-                            <td className="px-5 py-3.5">
-                              <p className="font-bold text-slate-900 dark:text-white">
-                                {item.student.lastName}, {item.student.firstName}
-                              </p>
-                              <span className="font-mono text-[10px] text-slate-400">
-                                {item.student.admissionNumber || item.student.registrationNumber || "NO REG"}
-                              </span>
-                            </td>
+                        gradedMatrix.map((item) => {
+                          if (!item || !item.student) return null;
+                          const student = item.student;
+                          const gradeColor = item.grade?.color || "text-slate-400";
+                          const gradeLetter = item.grade?.letter || "—";
+                          return (
+                            <tr
+                              key={student.id}
+                              className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                            >
+                              <td className="px-5 py-3.5">
+                                <p className="font-bold text-slate-900 dark:text-white">
+                                  {student.lastName || ""}, {student.firstName || ""}
+                                </p>
+                                <span className="font-mono text-[10px] text-slate-400">
+                                  {student.admissionNumber || (student as any).registrationNumber || "NO REG"}
+                                </span>
+                              </td>
 
-                            {/* CA 1 */}
-                            <td className="px-3 py-3.5 text-center">
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                value={item.ca1 || ""}
-                                onChange={(e) => handleScoreChange(item.student.id, "ca1", e.target.value)}
-                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            </td>
+                              {/* CA 1 */}
+                              <td className="px-3 py-3.5 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="20"
+                                  value={item.ca1 === 0 ? "0" : (item.ca1 ?? "")}
+                                  onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
+                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </td>
 
-                            {/* CA 2 */}
-                            <td className="px-3 py-3.5 text-center">
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                value={item.ca2 || ""}
-                                onChange={(e) => handleScoreChange(item.student.id, "ca2", e.target.value)}
-                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            </td>
+                              {/* CA 2 */}
+                              <td className="px-3 py-3.5 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="20"
+                                  value={item.ca2 === 0 ? "0" : (item.ca2 ?? "")}
+                                  onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
+                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </td>
 
-                            {/* Exam */}
-                            <td className="px-3 py-3.5 text-center">
-                              <input
-                                type="number"
-                                min="0"
-                                max="60"
-                                value={item.exam || ""}
-                                onChange={(e) => handleScoreChange(item.student.id, "exam", e.target.value)}
-                                className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            </td>
+                              {/* Exam */}
+                              <td className="px-3 py-3.5 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="60"
+                                  value={item.exam === 0 ? "0" : (item.exam ?? "")}
+                                  onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
+                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </td>
 
-                            {/* Total Score */}
-                            <td className="px-3 py-3.5 text-center bg-slate-50/80 dark:bg-zinc-800/40">
-                              <span
-                                className={`font-mono text-sm font-black ${item.total >= 50
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : "text-rose-600 dark:text-rose-400"
-                                  }`}
-                              >
-                                {item.total}
-                              </span>
-                            </td>
+                              {/* Total Score */}
+                              <td className="px-3 py-3.5 text-center bg-slate-50/80 dark:bg-zinc-800/40">
+                                <span
+                                  className={`font-mono text-sm font-black ${item.total >= 50
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-rose-600 dark:text-rose-400"
+                                    }`}
+                                >
+                                  {item.total}
+                                </span>
+                              </td>
 
-                            {/* Grade Letter */}
-                            <td className="px-3 py-3.5 text-center">
-                              <span
-                                className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${item.grade.color}`}
-                              >
-                                {item.grade.letter}
-                              </span>
-                            </td>
+                              {/* Grade Letter */}
+                              <td className="px-3 py-3.5 text-center">
+                                <span
+                                  className={`font-mono font-extrabold text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 ${gradeColor}`}
+                                >
+                                  {gradeLetter}
+                                </span>
+                              </td>
 
-                            {/* Position */}
-                            <td className="px-3 py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
-                              {item.position}
-                            </td>
+                              {/* Position */}
+                              <td className="px-3 py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
+                                {item.position}
+                              </td>
 
-                            {/* Remark */}
-                            <td className="px-4 py-3.5">
-                              <input
-                                type="text"
-                                placeholder="e.g. Excellent work, Commendable effort"
-                                value={item.remarks}
-                                onChange={(e) =>
-                                  handleScoreChange(item.student.id, "remarks", e.target.value)
-                                }
-                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            </td>
-                          </tr>
-                        ))
+                              {/* Remark */}
+                              <td className="px-4 py-3.5">
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Excellent work, Commendable effort"
+                                  value={item.remarks || ""}
+                                  onChange={(e) =>
+                                    handleScoreChange(student.id, "remarks", e.target.value)
+                                  }
+                                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

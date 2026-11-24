@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden: You do not have permission to save grades." }, { status: 403 });
     }
 
-    const tenantId = payload.tenantId as string;
+    const tenantId = (payload.tenantId as string) || (payload.schoolId as string);
     if (!tenantId) {
       return NextResponse.json({ error: "Tenant context missing." }, { status: 400 });
     }

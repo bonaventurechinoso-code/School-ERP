@@ -256,8 +256,8 @@ function resolveTierGrade(tierCategory: EducationalTierCategory, score: number) 
 function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
   if (!targetClass || targetClass === "ALL") return true;
   if (!studentClass) return false;
-  const s = studentClass.trim().toLowerCase();
-  const t = targetClass.trim().toLowerCase();
+  const s = (studentClass || "").trim().toLowerCase();
+  const t = (targetClass || "").trim().toLowerCase();
   if (s === t) return true;
 
   const sCompact = s.replace(/\s+/g, "");
@@ -394,7 +394,7 @@ export default function AnnualCompiledSheet({
     const gr = gradeRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        r.subject?.toLowerCase() === (subject || "").toLowerCase() &&
         termVariants.includes(r.term) &&
         matchesClass(r.className, selectedClass)
     );
@@ -406,7 +406,7 @@ export default function AnnualCompiledSheet({
     const ar = academicRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        r.subject?.toLowerCase() === (subject || "").toLowerCase() &&
         termVariants.includes(r.term)
     );
     if (ar) {
@@ -577,8 +577,8 @@ export default function AnnualCompiledSheet({
     const q = searchQuery.toLowerCase();
     return annualBroadsheetData.filter(
       (r) =>
-        `${r.student.lastName} ${r.student.firstName}`.toLowerCase().includes(q) ||
-        r.student.regNo.toLowerCase().includes(q)
+        `${r.student?.lastName || ""} ${r.student?.firstName || ""}`.toLowerCase().includes(q) ||
+        (r.student?.regNo && String(r.student.regNo).toLowerCase().includes(q))
     );
   }, [annualBroadsheetData, searchQuery]);
 

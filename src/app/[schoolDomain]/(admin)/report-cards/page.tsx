@@ -710,7 +710,9 @@ function ReportCardsContent() {
       const ca1Num = s.ca1 !== "" && !isNaN(parseFloat(s.ca1)) ? parseFloat(s.ca1) : 0;
       const ca2Num = s.ca2 !== "" && !isNaN(parseFloat(s.ca2)) ? parseFloat(s.ca2) : 0;
       const examNum = s.exam !== "" && !isNaN(parseFloat(s.exam)) ? parseFloat(s.exam) : 0;
-      const total = s.total !== undefined && s.total > 0 ? s.total : Math.round((ca1Num + ca2Num + examNum) * 10) / 10;
+      const total = subject
+        ? Math.round((ca1Num + ca2Num + examNum) * 10) / 10
+        : (s.total !== undefined && s.total > 0 ? s.total : Math.round((ca1Num + ca2Num + examNum) * 10) / 10);
       const overallTotal = s.overallTotal || (s.subjects && s.subjects.length > 0 ? s.subjects.reduce((acc: number, sub: any) => acc + (sub.total || 0), 0) : total);
       const hasScores = Boolean(s.ca1 !== "" || s.ca2 !== "" || s.exam !== "" || total > 0 || (s.subjects && s.subjects.length > 0));
       const isCompiled = (s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0 || (s.subjects && s.subjects.length > 0);
@@ -732,7 +734,7 @@ function ReportCardsContent() {
       if (b.total !== a.total) {
         return b.total - a.total; // strictly descending numerical order
       }
-      return a.name.localeCompare(b.name);
+      return (a.name || "").localeCompare(b.name || "");
     });
 
     const rankMap = new Map<string, number>();
@@ -754,15 +756,15 @@ function ReportCardsContent() {
         status: student.isCompiled ? "Compiled" : "Pending Review",
       };
     });
-  }, [roster]);
+  }, [roster, subject]);
 
   const filteredRoster = useMemo(() => {
     if (!searchQuery.trim()) return rankedRoster;
     const q = searchQuery.toLowerCase();
     return rankedRoster.filter(
       (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.admissionNumber && s.admissionNumber.toLowerCase().includes(q))
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.admissionNumber && String(s.admissionNumber).toLowerCase().includes(q))
     );
   }, [rankedRoster, searchQuery]);
 
@@ -1226,7 +1228,7 @@ function ReportCardsContent() {
                     const pos = getPositionBadge(student.rank);
                     const studentTierCat = getTierForClass(student.currentClass || className).category;
                     const grade = getGradeInfo(student.total, studentTierCat, student.isCompiled, student.currentClass || className);
-                    const initials = student.name
+                    const initials = (student.name || "")
                       .split(/[\s,]+/)
                       .filter(Boolean)
                       .slice(0, 2)
@@ -1373,8 +1375,8 @@ function ReportCardsContent() {
                                   <span className="font-extrabold text-base text-slate-900 dark:text-white">
                                     {student.total > 0 ? `${student.total}%` : "—"}
                                   </span>
-                                  {student.total > 0 && grade.grade && (
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass}`}>
+                                  {student.total > 0 && grade?.grade && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${grade.badgeClass || ""}`}>
                                       {grade.grade}
                                     </span>
                                   )}
@@ -1412,9 +1414,9 @@ function ReportCardsContent() {
                                       ca2: sub.ca2,
                                       exam: sub.exam,
                                       total: sub.total,
-                                      grade: sub.grade || grade.grade,
+                                      grade: sub.grade || grade?.grade || "—",
                                       subjectPosition: student.rank > 0 ? getOrdinalSuffix(student.rank) : "1st",
-                                      remark: sub.remarks || (isTertiaryTier ? mapTertiaryScoreToGrade(sub.total, "4.0").remark : (grade.grade === "Distinction" || grade.grade === "Excellent" ? "Distinction in subject concepts" : grade.grade.startsWith("Very") ? "Very good performance" : grade.grade.startsWith("Credit") || grade.grade === "Good" ? "Credit pass" : grade.grade === "Developing" ? "Developing well" : grade.grade === "Needs Support" ? "Needs support" : "Pass")),
+                                      remark: sub.remarks || (isTertiaryTier ? mapTertiaryScoreToGrade(sub.total, "4.0").remark : ((grade?.grade === "Distinction" || grade?.grade === "Excellent") ? "Distinction in subject concepts" : (grade?.grade && typeof grade.grade === "string" && grade.grade.startsWith("Very")) ? "Very good performance" : (grade?.grade && typeof grade.grade === "string" && (grade.grade.startsWith("Credit") || grade.grade === "Good")) ? "Credit pass" : grade?.grade === "Developing" ? "Developing well" : grade?.grade === "Needs Support" ? "Needs support" : "Pass")),
                                     }))
                                   : [];
 
@@ -1433,7 +1435,7 @@ function ReportCardsContent() {
                                   totalStudents: stats.totalStudents,
                                   overallTotal: student.overallTotal || student.total,
                                   overallAverage: student.overallAverage || (student.overallTotal ? Math.round((student.overallTotal / (student.subjectsCount || (student.subjects ? student.subjects.length : 1))) * 100) / 100 : student.total),
-                                  overallGrade: student.isCompiled ? grade.grade : (isEarlyYearsTier ? "Needs Support" : "—"),
+                                  overallGrade: student.isCompiled ? (grade?.grade || "—") : (isEarlyYearsTier ? "Needs Support" : "—"),
                                   status: student.status,
                                   teacherRemarks: student.teacherRemarks ?? undefined,
                                   principalRemarks: student.principalRemarks ?? undefined,

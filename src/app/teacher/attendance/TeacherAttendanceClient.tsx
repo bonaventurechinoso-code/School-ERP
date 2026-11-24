@@ -56,7 +56,13 @@ export function TeacherAttendanceClient({
   const availableCohorts = React.useMemo(() => {
     const cohorts = new Set<string>();
     students.forEach((s) => {
-      const c = s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : null);
+      const c =
+        s.cohort ||
+        s.dynamicFields?.cohort ||
+        s.dynamicFields?.admissionYear ||
+        (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+          ? s.admissionNumber.split("/")[1]
+          : s.admissionNumber || null);
       if (c && /^\d{4}$/.test(String(c).trim())) {
         cohorts.add(String(c).trim());
       }
@@ -68,7 +74,14 @@ export function TeacherAttendanceClient({
   const filteredStudents = React.useMemo(() => {
     return students.filter((s) => {
       if (selectedCohort === "ALL") return true;
-      const c = String(s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")).trim();
+      const c = String(
+        s.cohort ||
+        s.dynamicFields?.cohort ||
+        s.dynamicFields?.admissionYear ||
+        (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+          ? s.admissionNumber.split("/")[1]
+          : s.admissionNumber || "")
+      ).trim();
       return c === selectedCohort;
     });
   }, [students, selectedCohort]);

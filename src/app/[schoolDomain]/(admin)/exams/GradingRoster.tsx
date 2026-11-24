@@ -527,7 +527,7 @@ export default function GradingRoster({
 
     const stableList = [...cohortStudents].sort((a, b) => {
       if (a.admissionNumber && b.admissionNumber) {
-        return a.admissionNumber.localeCompare(b.admissionNumber);
+        return String(a.admissionNumber).localeCompare(String(b.admissionNumber));
       }
       return (a.lastName || "").localeCompare(b.lastName || "");
     });
@@ -558,7 +558,8 @@ export default function GradingRoster({
   const termVariants = useMemo(() => getTermVariants(selectedTerm), [selectedTerm]);
 
   const getStudentSubjectScore = useCallback((studentId: string, subject: string) => {
-    const localKey = `${studentId}__${subject.toLowerCase()}`;
+    const subClean = (subject || "").toLowerCase();
+    const localKey = `${studentId}__${subClean}`;
     if (localScoresOverride[localKey]) {
       return localScoresOverride[localKey];
     }
@@ -567,7 +568,7 @@ export default function GradingRoster({
     const gr = gradeRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        r.subject?.toLowerCase() === subClean &&
         termVariants.includes(r.term) &&
         matchesClass(r.className, selectedClass)
     );
@@ -583,7 +584,7 @@ export default function GradingRoster({
     const ar = academicRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subject.toLowerCase() &&
+        r.subject?.toLowerCase() === subClean &&
         termVariants.includes(r.term)
     );
     if (ar) {
@@ -597,7 +598,7 @@ export default function GradingRoster({
     // C. Check ExamResult via Exam
     const examMatch = exams.find(
       (e) =>
-        e.course?.name?.toLowerCase() === subject.toLowerCase() &&
+        e.course?.name?.toLowerCase() === subClean &&
         termVariants.includes(e.semester)
     );
     if (examMatch) {
@@ -617,7 +618,7 @@ export default function GradingRoster({
     if (isDemo) {
       const demoProfile = getSecondaryDemoProfile(studentId);
       if (demoProfile && (tierCategory === "SECONDARY" || matchesClass(selectedClass, "JSS 1"))) {
-        const match = demoProfile.subjects.find((s) => s.subject.toLowerCase() === subject.toLowerCase());
+        const match = demoProfile.subjects.find((s) => (s.subject || "").toLowerCase() === subClean);
         if (match) {
           return {
             ca1: match.ca1,
@@ -631,7 +632,7 @@ export default function GradingRoster({
 
       // Check mock student initial values
       const mockStudent = cohortStudents.find((s) => s.id === studentId);
-      if (mockStudent && (mockStudent as any).initialScores && subject.toLowerCase().includes("math")) {
+      if (mockStudent && (mockStudent as any).initialScores && subClean.includes("math")) {
         const init = (mockStudent as any).initialScores;
         const ca1 = Number(init.ca1 || init.assignment || init.observation) || 0;
         const ca2 = Number(init.ca2 || init.test || init.classwork) || 0;
@@ -772,8 +773,8 @@ export default function GradingRoster({
     const q = searchQuery.toLowerCase();
     return broadsheetData.filter(
       (row) =>
-        `${row.student.lastName} ${row.student.firstName}`.toLowerCase().includes(q) ||
-        row.student.regNo.toLowerCase().includes(q)
+        `${row.student?.lastName || ""} ${row.student?.firstName || ""}`.toLowerCase().includes(q) ||
+        (row.student?.regNo && String(row.student.regNo).toLowerCase().includes(q))
     );
   }, [broadsheetData, searchQuery]);
 
@@ -833,9 +834,10 @@ export default function GradingRoster({
               total: tot,
               remarks: rec.remarks || "",
             };
-            newOverrides[`${rec.studentId}__${rec.subject.toLowerCase()}`] = data;
+            const subKey = (rec.subject || "").toLowerCase();
+            newOverrides[`${rec.studentId}__${subKey}`] = data;
             if (rec.mockStudentId) {
-              newOverrides[`${rec.mockStudentId}__${rec.subject.toLowerCase()}`] = data;
+              newOverrides[`${rec.mockStudentId}__${subKey}`] = data;
             }
           });
           setLocalScoresOverride((prev) => ({ ...prev, ...newOverrides }));
@@ -910,14 +912,14 @@ export default function GradingRoster({
     const exam = Math.min(60, Math.max(0, Number(modalState.exam) || 0));
     const total = ca1 + ca2 + exam;
 
-    const localKey = `${modalState.student.id}__${modalState.subject.toLowerCase()}`;
+    const localKey = `${modalState.student.id}__${(modalState.subject || "").toLowerCase()}`;
     setLocalScoresOverride((prev) => ({
       ...prev,
       [localKey]: { ca1, ca2, exam, total, remarks: modalState.remarks },
     }));
 
     setModalState((prev) => ({ ...prev, isOpen: false }));
-    setToastMessage(`Saved marks for ${modalState.student.firstName} in ${modalState.subject}`);
+    setToastMessage(`Saved marks for ${modalState.student.firstName || "student"} in ${modalState.subject}`);
     setTimeout(() => setToastMessage(null), 3500);
 
     // Persist via Server Action

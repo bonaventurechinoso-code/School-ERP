@@ -241,7 +241,7 @@ export async function fetchAnnualBroadsheet(
       if (b.annualAverage !== a.annualAverage) {
         return b.annualAverage - a.annualAverage;
       }
-      return a.name.localeCompare(b.name);
+      return (a.name || "").localeCompare(b.name || "");
     });
 
     // 5. Assign positions

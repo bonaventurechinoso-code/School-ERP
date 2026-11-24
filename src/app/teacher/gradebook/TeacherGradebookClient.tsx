@@ -70,7 +70,13 @@ export function TeacherGradebookClient({
   const availableCohorts = useMemo(() => {
     const cohorts = new Set<string>();
     students.forEach((s) => {
-      const c = s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "");
+      const c =
+        s.cohort ||
+        s.dynamicFields?.cohort ||
+        s.dynamicFields?.admissionYear ||
+        (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+          ? s.admissionNumber.split("/")[1]
+          : s.admissionNumber || "");
       if (c && /^\d{4}$/.test(String(c).trim())) {
         cohorts.add(String(c).trim());
       }
@@ -82,7 +88,14 @@ export function TeacherGradebookClient({
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       if (selectedCohort === "ALL") return true;
-      const c = String(s.cohort || s.dynamicFields?.cohort || s.dynamicFields?.admissionYear || (s.admissionNumber ? s.admissionNumber.split("/")[1] : "")).trim();
+      const c = String(
+        s.cohort ||
+        s.dynamicFields?.cohort ||
+        s.dynamicFields?.admissionYear ||
+        (typeof s.admissionNumber === "string" && s.admissionNumber.includes("/")
+          ? s.admissionNumber.split("/")[1]
+          : s.admissionNumber || "")
+      ).trim();
       return c === selectedCohort;
     });
   }, [students, selectedCohort]);

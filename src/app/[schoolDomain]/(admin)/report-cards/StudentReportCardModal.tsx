@@ -350,7 +350,7 @@ export default function StudentReportCardModal({
                 {isHigherEd ? "PROGRAMME / FACULTY" : "COHORT"}
               </span>
               <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm block mt-0.5">
-                {isHigherEd ? "B.Sc Computing / Science" : (studentData.cohort || (studentData.admissionNumber ? studentData.admissionNumber.split("/")[1] : "2026"))}
+                {isHigherEd ? "B.Sc Computing / Science" : (studentData.cohort || (typeof studentData.admissionNumber === "string" && studentData.admissionNumber.includes("/") ? studentData.admissionNumber.split("/")[1] : "2026"))}
               </span>
               <span className="text-[9px] text-slate-400 italic block">
                 {isHigherEd ? "4-Year Honours Degree" : "Started together"}

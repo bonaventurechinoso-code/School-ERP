@@ -267,7 +267,7 @@ export async function GET(req: NextRequest) {
           return {
             id: student.id,
             admissionNumber: student.admissionNumber || `GW/2026/${(student.currentClass || "CLASS").replace(/\s+/g, "")}/${student.id.slice(0, 3)}`,
-            name: `${student.lastName}, ${student.firstName}`,
+            name: [student.lastName, student.firstName].filter(Boolean).join(", ") || String(student.admissionNumber || "Student"),
             currentClass: resolvedClass,
             tier: resolvedTierName,
             ca1,
