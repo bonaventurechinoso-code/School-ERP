@@ -497,7 +497,9 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
 
         if (hasPrimaryClass) {
           // In Primary / Early Years, the teacher gets ALL standard subjects for their assigned class(es)
-          const primaryTier = primaryTiers[0] || null;
+          // Resolve tierId from matched classrooms or DB academicTier
+          const matchedClassroomWithTier = classrooms.find((c) => c.tierId);
+          const resolvedPrimaryTierId = matchedClassroomWithTier?.tierId || primaryTiers[0]?.id || null;
           const neededSubjects = new Set<string>();
 
           assignedClasses.forEach((cls) => {
@@ -520,7 +522,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
                   data: {
                     schoolId,
                     name: subj,
-                    tierId: primaryTier?.id || null,
+                    tierId: resolvedPrimaryTierId,
                     code: null, // Nigerian Primary/Nursery subjects have NO course code
                   },
                 });
@@ -532,7 +534,7 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
                   schoolId,
                   name: subj,
                   code: null,
-                  tierId: primaryTier?.id || null,
+                  tierId: resolvedPrimaryTierId,
                 };
                 allSchoolCourses.push(mockCourse);
                 existingMap.set(subj.toLowerCase(), mockCourse);
@@ -1119,13 +1121,34 @@ export async function saveClassroomGrades(
         });
       }
       if (!course) {
+        // Query DB classroom or AcademicTier for the real database tierId
+        const dbClassroom = await basePrisma.classroom.findFirst({
+          where: {
+            schoolId,
+            name: { equals: className.trim(), mode: "insensitive" },
+          },
+          select: { tierId: true },
+        });
+
+        const dbTier = dbClassroom?.tierId
+          ? null
+          : await basePrisma.academicTier.findFirst({
+              where: {
+                schoolId,
+                name: { contains: "Primary", mode: "insensitive" },
+              },
+              select: { id: true },
+            });
+
+        const resolvedTierId = dbClassroom?.tierId || dbTier?.id || null;
+
         // Automatically create official Course row for this Nigerian curriculum subject
         try {
           course = await basePrisma.course.create({
             data: {
               schoolId,
               name: subject.trim(),
-              tierId: classTier?.id || null,
+              tierId: resolvedTierId,
               code: null, // Primary / Nursery / Creche subjects have NO course code
             },
           });
@@ -1136,24 +1159,26 @@ export async function saveClassroomGrades(
         }
       }
 
-      examRec = await tenantDb.exam.findFirst({
-        where: {
-          schoolId,
-          courseId: course.id,
-          semester: term,
-        },
-      });
-      if (!examRec) {
-        examRec = await tenantDb.exam.create({
-          data: {
+      if (course) {
+        examRec = await tenantDb.exam.findFirst({
+          where: {
             schoolId,
             courseId: course.id,
-            name: `${subject} (${term})`,
             semester: term,
-            date: new Date(),
-            maxScore: 100,
           },
         });
+        if (!examRec) {
+          examRec = await tenantDb.exam.create({
+            data: {
+              schoolId,
+              courseId: course.id,
+              name: `${subject} (${term})`,
+              semester: term,
+              date: new Date(),
+              maxScore: 100,
+            },
+          });
+        }
       }
     } catch (e: any) {
       console.warn("[saveClassroomGrades] Course/Exam link fallback notice:", e);
