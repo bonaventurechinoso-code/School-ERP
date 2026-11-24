@@ -36,6 +36,22 @@
       "purpose": "maskable"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-register-pixel-7-verified.png",
+      "sizes": "1080x2400",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile Admissions & Portal"
+    },
+    {
+      "src": "/screenshots/secondary-staff-section-d.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Staff & Teacher Workspace"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Student Login",

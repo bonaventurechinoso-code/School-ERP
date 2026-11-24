@@ -69,6 +69,18 @@ export default async function TenantLayout({
     return notFound();
   }
 
+  // Subdomain alias canonical redirect (e.g. capitalcity -> capital-city)
+  if (school && school.subdomain && school.subdomain.toLowerCase() !== schoolDomain.toLowerCase()) {
+    const headerList = await headers();
+    const host = (headerList.get("x-forwarded-host") || headerList.get("host") || "").toLowerCase();
+    if (host.startsWith(`${schoolDomain.toLowerCase()}.`)) {
+      const proto = headerList.get("x-forwarded-proto") || "https";
+      const rawPath = headerList.get("x-pathname") || "/";
+      const targetHost = host.replace(new RegExp(`^${schoolDomain.toLowerCase()}\\.`), `${school.subdomain.toLowerCase()}.`);
+      return redirect(`${proto}://${targetHost}${rawPath === "/" ? "" : rawPath}`);
+    }
+  }
+
   // SUSPENSION ENFORCEMENT: Block access to protected tenant routes if institution is suspended/inactive
   const isSuspended =
     school.isActive === false ||

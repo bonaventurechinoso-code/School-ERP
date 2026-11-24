@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 
 export const metadata: Metadata = {
   title: "Multi-Tenant School ERP",
@@ -73,6 +74,7 @@ export default function RootLayout({
       <body className="h-full flex flex-col bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-slate-50 transition-colors duration-300 overflow-x-hidden">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
+          <PWAInstallPrompt />
         </ThemeProvider>
       </body>
     </html>

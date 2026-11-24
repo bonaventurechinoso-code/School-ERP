@@ -249,7 +249,7 @@ export async function getCachedSchool(subdomain: string) {
         }
 
         const { basePrisma } = await import("./tenant-prisma");
-        const schoolRecord = await basePrisma.school.findFirst({
+        let schoolRecord = await basePrisma.school.findFirst({
           where: {
             OR: [
               { subdomain: { equals: normalizedDomain, mode: "insensitive" } },
@@ -262,6 +262,30 @@ export async function getCachedSchool(subdomain: string) {
             },
           },
         });
+
+        // Resilient fallback: match without hyphens/spaces (e.g., 'capitalcity' matches 'capital-city')
+        if (!schoolRecord) {
+          const cleanSub = normalizedDomain.replace(/[^a-z0-9]/g, "");
+          const allSchools = await basePrisma.school.findMany({
+            select: { id: true, subdomain: true, slug: true },
+          });
+          const match = allSchools.find((s) => {
+            const sub = (s.subdomain || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const slg = (s.slug || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            return sub === cleanSub || slg === cleanSub;
+          });
+          if (match) {
+            schoolRecord = await basePrisma.school.findUnique({
+              where: { id: match.id },
+              include: {
+                academicTiers: {
+                  orderBy: { level: "asc" },
+                },
+              },
+            });
+          }
+        }
+
         if (schoolRecord) {
           const isSuspended =
             schoolRecord.isSuspended === true ||

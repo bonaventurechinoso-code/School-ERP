@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 import { useSession } from "@/lib/session-context";
 import { performTenantLogout } from "@/lib/client-logout";
 
@@ -113,13 +113,28 @@ export function TenantAuthActions({
   }
 
   return (
-    <Link
-      href="/login"
-      className="inline-flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm border border-slate-800"
-    >
-      <span>Portal Login</span>
-      <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-    </Link>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("trigger-pwa-install"));
+          }
+        }}
+        className="inline-flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs sm:text-sm font-semibold transition cursor-pointer"
+        title="Install School App"
+      >
+        <Download className="w-3.5 h-3.5 text-indigo-600" />
+        <span className="hidden sm:inline">Install App</span>
+      </button>
+      <Link
+        href="/login"
+        className="inline-flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold transition-all shadow-xs text-xs sm:text-sm border border-slate-800"
+      >
+        <span>Portal Login</span>
+        <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+      </Link>
+    </div>
   );
 }
 

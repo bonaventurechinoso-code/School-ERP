@@ -124,8 +124,14 @@ export default async function PublicGuestPortalPage({
 
   let school = null;
   try {
-    school = await basePrisma.school.findUnique({
-      where: { subdomain: schoolDomain.toLowerCase().trim() },
+    const normalizedDomain = schoolDomain.toLowerCase().trim();
+    school = await basePrisma.school.findFirst({
+      where: {
+        OR: [
+          { subdomain: { equals: normalizedDomain, mode: "insensitive" } },
+          { slug: { equals: normalizedDomain, mode: "insensitive" } },
+        ],
+      },
       include: {
         academicTiers: {
           orderBy: { level: "asc" }
@@ -136,6 +142,33 @@ export default async function PublicGuestPortalPage({
         }
       }
     });
+
+    // Resilient fallback: match without hyphens (e.g., 'capitalcity' matches 'capital-city')
+    if (!school) {
+      const cleanSub = normalizedDomain.replace(/[^a-z0-9]/g, "");
+      const allSchools = await basePrisma.school.findMany({
+        select: { id: true, subdomain: true, slug: true },
+      });
+      const match = allSchools.find((s) => {
+        const sub = (s.subdomain || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const slg = (s.slug || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        return sub === cleanSub || slg === cleanSub;
+      });
+      if (match) {
+        school = await basePrisma.school.findUnique({
+          where: { id: match.id },
+          include: {
+            academicTiers: {
+              orderBy: { level: "asc" }
+            },
+            staff: {
+              take: 1,
+              orderBy: { createdAt: 'asc' }
+            }
+          }
+        });
+      }
+    }
   } catch (error) {
     console.error("Tenant DB fetch error:", error);
     return (
