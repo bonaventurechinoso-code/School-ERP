@@ -294,7 +294,7 @@ export default function StaffPortalClient({
       if (subjectSet.size > 0) return Array.from(subjectSet);
     }
     return Array.from(new Set(initialCourses.map((c) => c.name.trim()).filter(Boolean)));
-  }, [selectedClass, isPrimary, isCreche, initialClassrooms, initialCourses, initialTiers, initialAssignedSubjects, initialTimetable]);
+  }, [selectedClass, isPrimary, isCreche, initialCourses, initialAssignedSubjects, initialTimetable]);
 
   const teacherAssignedSubjects = availableSubjectsForClass;
 
@@ -317,7 +317,7 @@ export default function StaffPortalClient({
     } else {
       setSelectedSubject("");
     }
-  }, [availableSubjectsForClass]);
+  }, [availableSubjectsForClass, selectedSubject]);
 
   // Ensure selectedClass is valid in teacherAssignedClasses for the chosen subject
   useEffect(() => {
