@@ -597,7 +597,7 @@ model Course {
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   name String // e.g., "Intro to Algebra"
-  code String // e.g., "MATH101"
+  code String? // e.g., "MATH101" (Optional for Creche, Nursery, Primary & Secondary subjects)
 
   tierId String?
   tier   AcademicTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)

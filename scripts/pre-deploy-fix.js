@@ -185,6 +185,9 @@ async function fixDatabase(connectionUrl, dbLabel) {
       CREATE INDEX IF NOT EXISTS "StaffAssignment_classroomId_idx" ON "StaffAssignment"("classroomId");
       CREATE INDEX IF NOT EXISTS "StaffAssignment_courseId_idx" ON "StaffAssignment"("courseId");
       CREATE INDEX IF NOT EXISTS "StaffAssignment_assignmentType_idx" ON "StaffAssignment"("assignmentType");
+
+      -- Ensure Course code column is nullable for Nigerian Early Years, Primary, and Secondary subjects
+      ALTER TABLE "Course" ALTER COLUMN "code" DROP NOT NULL;
     `).catch((err) => {
       console.warn(`[PRE_DEPLOY_FIX] [${dbLabel}] Notice on enterprise staff schema DDL:`, err.message);
     });

@@ -470,16 +470,16 @@ export async function fetchStaffPortalInitialData(schoolId: string, staffEmail?:
         });
 
         // Courses: Query courses for the school from tenantDb first, then basePrisma fallback
-        let allSchoolCourses = await tenantDb.course.findMany({
+        let allSchoolCourses: any[] = (await tenantDb.course.findMany({
           where: { schoolId },
           orderBy: { name: "asc" },
-        }).catch(() => []);
+        }).catch(() => [])) as any[];
 
         if (allSchoolCourses.length === 0 && tenantDb !== basePrisma) {
-          allSchoolCourses = await basePrisma.course.findMany({
+          allSchoolCourses = (await basePrisma.course.findMany({
             where: { schoolId },
             orderBy: { name: "asc" },
-          }).catch(() => []);
+          }).catch(() => [])) as any[];
         }
 
         // Nigerian Primary School Model (NERDC / UBEC):
