@@ -245,6 +245,10 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
               : overallGradeVal === "Needs Support" || overallGradeVal === "Fail" || overallGradeVal === "F" ? "Fail"
                 : "Standing";
 
+      const positionLabel = isCreche || isNursery ? "ASSESSMENT PROFILE" : "CLASS POSITION";
+      const positionVal = isCreche || isNursery ? "MILESTONES" : (data.classPosition && data.classPosition !== "N/A" ? data.classPosition : "—");
+      const positionSub = isCreche ? "Early Years Milestones" : isNursery ? "Pre-Primary Evaluation" : `of ${data.totalStudents || 1} students`;
+
       const metrics = isTertiary
         ? [
           { label: "SEMESTER GPA", val: tertiaryGpaStr, sub: "Scale: 4.00 Max", color: "#1E3A8A" },
@@ -254,7 +258,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           { label: "ACADEMIC STANDING", val: tertiaryStanding.toUpperCase(), sub: tertiaryGpa >= 2.0 ? "In Good Standing" : "Academic Probation", color: "#16A34A" },
         ]
         : [
-          { label: "CLASS POSITION", val: data.classPosition || "1st", sub: `of ${data.totalStudents || 1} students`, color: "#1E3A8A" },
+          { label: positionLabel, val: positionVal, sub: positionSub, color: "#1E3A8A" },
           { label: "TOTAL SCORE", val: data.totalScore !== undefined && data.totalScore !== null ? String(data.totalScore) : "0", sub: `Max: ${data.maxPossibleScore ?? (data.subjects.length * 100)}`, color: "#0F172A" },
           { label: "TERMINAL AVERAGE", val: typeof data.averageScore === "number" ? `${data.averageScore.toFixed(1)}%` : `${data.averageScore || "0.0%"}`, sub: "Weighted Aggregate", color: "#2563EB" },
           { label: "OVERALL GRADE", val: overallGradeVal, sub: gradeRemarkSub, color: "#16A34A" },
@@ -277,7 +281,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       currentY += 40;
 
-      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE
+      // 4. MULTI-SUBJECT EVALUATION COMPOSITE TABLE (Nigerian Educational Standard)
       let tableHeaders: string[];
       let colWidths: number[];
 
@@ -301,11 +305,10 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           "ASSESSMENT (50)",
           "TOTAL (100)",
           "GRADE",
-          "POS.",
-          "AVG",
+          "CLASS AVG",
           "DEVELOPMENTAL REMARK"
         ];
-        colWidths = [190, 44, 44, 48, 42, 36, 36, 116];
+        colWidths = [205, 48, 48, 50, 44, 44, 92];
       } else if (isEarlyYearsWithExam) {
         tableHeaders = [
           isNursery ? "SUBJECT / LEARNING DOMAIN" : "ACTIVITY / CURRICULUM DISCIPLINE",
@@ -314,14 +317,13 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           "EXAM (60)",
           "TOTAL (100)",
           "GRADE",
-          "POS.",
-          "AVG",
+          "CLASS AVG",
           "DEVELOPMENTAL REMARK"
         ];
-        colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
+        colWidths = [185, 38, 38, 42, 44, 40, 42, 102];
       } else {
-        tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "POS.", "AVG", "REMARK"];
-        colWidths = [170, 34, 34, 40, 42, 38, 34, 34, 95];
+        tableHeaders = ["SUBJECT / CURRICULUM DISCIPLINE", "1ST CA (20)", "2ND CA (20)", "EXAM (60)", "TOTAL (100)", "GRADE", "CLASS AVG", "TEACHER REMARK"];
+        colWidths = [185, 38, 38, 42, 44, 40, 42, 102];
       }
 
       // Table Header Row
@@ -369,7 +371,6 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
             .stroke();
 
           let rowX = margin;
-          const subPosition = sub.subjectPosition || `${rowIdx + 1}${rowIdx === 0 ? "st" : rowIdx === 1 ? "nd" : rowIdx === 2 ? "rd" : "th"}`;
           const ca1Str = sub.ca1 !== null && sub.ca1 !== undefined ? String(sub.ca1) : "—";
           const ca2Str = sub.ca2 !== null && sub.ca2 !== undefined ? String(sub.ca2) : "—";
           const examStr = sub.exam !== null && sub.exam !== undefined ? String(sub.exam) : "—";
@@ -394,7 +395,6 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
                 ca2Str,
                 totalStr,
                 sub.grade || "—",
-                subPosition,
                 String(sub.classAverage || 68),
                 sub.remark || (isNursery ? "Very Good Progress" : "Satisfactory Progress"),
               ]
@@ -405,12 +405,11 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
                 examStr,
                 totalStr,
                 sub.grade || "—",
-                subPosition,
                 String(sub.classAverage || 68),
                 sub.remark || "Satisfactory",
               ]);
 
-          const gradeColIdx = isTertiary ? 5 : (isEarlyYearsNoExam ? 4 : 5);
+          const gradeColIdx = isTertiary ? 5 : 4;
           const totalColIdx = isTertiary ? 4 : (isEarlyYearsNoExam ? 3 : 4);
 
           rowVals.forEach((val, cIdx) => {

@@ -39,6 +39,8 @@ import {
   mapTertiaryScoreToGrade,
   getTertiaryClassification,
 } from "@/lib/tertiary-config";
+import { isClassMatch } from "@/lib/class-matching";
+import { matchSubjectAlias } from "@/lib/nigerian-curriculum";
 
 type GradingRosterProps = {
   schoolId: string;
@@ -50,6 +52,7 @@ type GradingRosterProps = {
   examResults: any[];
   gradeRecords?: any[];
   academicRecords?: any[];
+  reportCards?: any[];
   courses?: any[];
   classrooms?: any[];
   academicTiers?: any[];
@@ -223,21 +226,7 @@ function isClassInTier(cls: string, tierCode: string): boolean {
 }
 
 function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
-  if (!targetClass || targetClass === "ALL") return true;
-  if (!studentClass) return false;
-  const s = studentClass.trim().toLowerCase();
-  const t = targetClass.trim().toLowerCase();
-  if (s === t) return true;
-
-  const sCompact = s.replace(/\s+/g, "");
-  const tCompact = t.replace(/\s+/g, "");
-  if (sCompact === tCompact) return true;
-
-  const sNorm = sCompact.replace("sss", "ss");
-  const tNorm = tCompact.replace("sss", "ss");
-  if (sNorm === tNorm) return true;
-
-  return false;
+  return isClassMatch(studentClass, targetClass);
 }
 
 function getOrdinalSuffix(rank: number): string {
@@ -356,6 +345,7 @@ export default function GradingRoster({
   examResults,
   gradeRecords = [],
   academicRecords = [],
+  reportCards = [],
   courses = [],
   classrooms = [],
   academicTiers = [],
@@ -452,38 +442,14 @@ export default function GradingRoster({
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 4. Resolve ALL Subjects for the Class and Tier (Assigned curriculum subjects for Class + Tier)
-  const classSubjects = useMemo(() => {
-    // A. Start with all assigned curriculum subjects for the selected class & tier (guarantees all subjects display even with no scores)
-    const standardSubjects = getSubjectsForClassAndTier(selectedClass, tierCategory);
-    const subjectsSet = new Set<string>(standardSubjects);
-
-    // B. Include any recorded subjects specifically for this class & term in GradeRecord
-    const termVars = getTermVariants(selectedTerm);
-    gradeRecords.forEach((gr) => {
-      if (matchesClass(gr.className, selectedClass) && termVars.includes(gr.term)) {
-        if (gr.subject && gr.subject.trim()) subjectsSet.add(gr.subject.trim());
-      }
-    });
-
-    // C. Include any recorded subjects specifically for this class & term in AcademicRecord
-    academicRecords.forEach((ar) => {
-      if (matchesClass(ar.className, selectedClass) && termVars.includes(ar.term)) {
-        if (ar.subject && ar.subject.trim()) subjectsSet.add(ar.subject.trim());
-      }
-    });
-
-    return Array.from(subjectsSet);
-  }, [selectedClass, tierCategory, selectedTerm, gradeRecords, academicRecords]);
-
-  // 5. Filter Students in this Class
+  // 4. Filter Students in this Class
   const rawFilteredStudents = useMemo(() => {
     return students.filter((student) => {
       const status = student.status || "ENROLLED";
       if (status !== "ENROLLED" && status !== "ACTIVE") return false;
 
-      // Filter by the selected class
-      if (!matchesClass(student.currentClass, selectedClass)) return false;
+      // Filter by the selected class using canonical isClassMatch
+      if (!isClassMatch(student.currentClass, selectedClass)) return false;
 
       return true;
     });
@@ -498,7 +464,7 @@ export default function GradingRoster({
       if (isTertiaryTier) {
         return DEFAULT_MOCK_TERTIARY_STUDENTS;
       }
-      if (tierCategory === "SECONDARY" && (matchesClass(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
+      if (tierCategory === "SECONDARY" && (isClassMatch(selectedClass, "JSS 1") || activeTierCode === "SECONDARY")) {
         return DEFAULT_MOCK_JSS1_STUDENTS;
       }
       if (tierCategory === "PRIMARY") {
@@ -510,6 +476,59 @@ export default function GradingRoster({
     }
     return rawFilteredStudents;
   }, [rawFilteredStudents, selectedClass, activeTierCode, tierCategory, isDemo, isTertiaryTier]);
+
+  // 5. Resolve ALL Subjects for the Class and Tier (Assigned curriculum subjects for Class + Tier + Any recorded subjects)
+  const classSubjects = useMemo(() => {
+    // A. Start with all assigned curriculum subjects for the selected class & tier (guarantees all subjects display even with no scores)
+    const standardSubjects = getSubjectsForClassAndTier(selectedClass, tierCategory);
+    const subjectsSet = new Set<string>(standardSubjects);
+
+    const classStudentIds = new Set(cohortStudents.map((s) => s.id));
+    const termVars = getTermVariants(selectedTerm);
+
+    const matchesTerm = (termStr?: string | null) => {
+      if (!termStr) return false;
+      const t = termStr.toLowerCase();
+      return termVars.some((tv) => t.includes(tv.toLowerCase()));
+    };
+
+    // B. Include any recorded subjects specifically for this class & term in GradeRecord
+    gradeRecords.forEach((gr) => {
+      const isForClass = isClassMatch(gr.className, selectedClass) || classStudentIds.has(gr.studentId);
+      if (isForClass && matchesTerm(gr.term)) {
+        if (gr.subject && gr.subject.trim()) subjectsSet.add(gr.subject.trim());
+      }
+    });
+
+    // C. Include any recorded subjects specifically for this class & term in AcademicRecord
+    academicRecords.forEach((ar) => {
+      const isForClass = isClassMatch(ar.className, selectedClass) || classStudentIds.has(ar.studentId);
+      if (isForClass && matchesTerm(ar.term)) {
+        if (ar.subject && ar.subject.trim()) subjectsSet.add(ar.subject.trim());
+      }
+    });
+
+    // D. Include any recorded subjects in ReportCard snapshots
+    reportCards.forEach((rc) => {
+      const isForClass = isClassMatch(rc.className, selectedClass) || classStudentIds.has(rc.studentId);
+      if (isForClass && matchesTerm(rc.term) && rc.academicRecordSnapshot) {
+        try {
+          const snap = typeof rc.academicRecordSnapshot === "string"
+            ? JSON.parse(rc.academicRecordSnapshot)
+            : rc.academicRecordSnapshot;
+          if (Array.isArray(snap)) {
+            snap.forEach((item: any) => {
+              if (item.subject && item.subject.trim()) {
+                subjectsSet.add(item.subject.trim());
+              }
+            });
+          }
+        } catch {}
+      }
+    });
+
+    return Array.from(subjectsSet);
+  }, [selectedClass, tierCategory, selectedTerm, gradeRecords, academicRecords, reportCards, cohortStudents]);
 
   // Assign Permanent Registration Numbers
   const studentsWithRegNo = useMemo(() => {
@@ -558,34 +577,48 @@ export default function GradingRoster({
   const termVariants = useMemo(() => getTermVariants(selectedTerm), [selectedTerm]);
 
   const getStudentSubjectScore = useCallback((studentId: string, subject: string) => {
-    const subClean = (subject || "").toLowerCase();
+    const subClean = (subject || "").trim().toLowerCase();
     const localKey = `${studentId}__${subClean}`;
     if (localScoresOverride[localKey]) {
       return localScoresOverride[localKey];
     }
 
+    const isSubMatch = (candidateSub?: string | null) => {
+      if (!candidateSub) return false;
+      const c = candidateSub.trim().toLowerCase();
+      if (c === subClean) return true;
+      return matchSubjectAlias(candidateSub, subject);
+    };
+
+    const matchesTerm = (termStr?: string | null) => {
+      if (!termStr) return false;
+      const t = termStr.toLowerCase();
+      return termVariants.some((tv) => t.includes(tv.toLowerCase()));
+    };
+
     // A. Check GradeRecord
     const gr = gradeRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subClean &&
-        termVariants.includes(r.term) &&
-        matchesClass(r.className, selectedClass)
+        isSubMatch(r.subject) &&
+        matchesTerm(r.term) &&
+        (!r.className || isClassMatch(r.className, selectedClass))
     );
     if (gr) {
       const ca1 = Number(gr.ca1) || 0;
       const ca2 = Number(gr.ca2) || 0;
       const exam = Number(gr.exam) || 0;
       const total = Number(gr.totalScore) || ca1 + ca2 + exam;
-      return { ca1, ca2, exam, total, remarks: "" };
+      return { ca1, ca2, exam, total, remarks: (gr as any).remarks || "" };
     }
 
     // B. Check AcademicRecord
     const ar = academicRecords.find(
       (r) =>
         r.studentId === studentId &&
-        r.subject?.toLowerCase() === subClean &&
-        termVariants.includes(r.term)
+        isSubMatch(r.subject) &&
+        matchesTerm(r.term) &&
+        (!r.className || isClassMatch(r.className, selectedClass))
     );
     if (ar) {
       const ca1 = Number(ar.test1) || 0;
@@ -595,11 +628,36 @@ export default function GradingRoster({
       return { ca1, ca2, exam, total, remarks: ar.teacherRemarks || "" };
     }
 
-    // C. Check ExamResult via Exam
+    // C. Check ReportCard snapshot
+    const rc = reportCards.find(
+      (r) =>
+        r.studentId === studentId &&
+        matchesTerm(r.term) &&
+        (!r.className || isClassMatch(r.className, selectedClass))
+    );
+    if (rc && rc.academicRecordSnapshot) {
+      try {
+        const snap = typeof rc.academicRecordSnapshot === "string"
+          ? JSON.parse(rc.academicRecordSnapshot)
+          : rc.academicRecordSnapshot;
+        if (Array.isArray(snap)) {
+          const snapMatch = snap.find((item: any) => isSubMatch(item.subject));
+          if (snapMatch) {
+            const ca1 = Number(snapMatch.ca1 ?? snapMatch.test1) || 0;
+            const ca2 = Number(snapMatch.ca2 ?? snapMatch.test2) || 0;
+            const exam = Number(snapMatch.exam ?? snapMatch.finalExam) || 0;
+            const total = Number(snapMatch.totalScore ?? snapMatch.total) || ca1 + ca2 + exam;
+            return { ca1, ca2, exam, total, remarks: snapMatch.teacherRemarks || "" };
+          }
+        }
+      } catch {}
+    }
+
+    // D. Check ExamResult via Exam
     const examMatch = exams.find(
       (e) =>
-        e.course?.name?.toLowerCase() === subClean &&
-        termVariants.includes(e.semester)
+        isSubMatch(e.course?.name) &&
+        matchesTerm(e.semester)
     );
     if (examMatch) {
       const er = examResults.find(
@@ -617,8 +675,8 @@ export default function GradingRoster({
     // Check canonical secondary demo profile ONLY for public demo tenant
     if (isDemo) {
       const demoProfile = getSecondaryDemoProfile(studentId);
-      if (demoProfile && (tierCategory === "SECONDARY" || matchesClass(selectedClass, "JSS 1"))) {
-        const match = demoProfile.subjects.find((s) => (s.subject || "").toLowerCase() === subClean);
+      if (demoProfile && (tierCategory === "SECONDARY" || isClassMatch(selectedClass, "JSS 1"))) {
+        const match = demoProfile.subjects.find((s) => isSubMatch(s.subject));
         if (match) {
           return {
             ca1: match.ca1,
@@ -642,7 +700,7 @@ export default function GradingRoster({
     }
 
     return null;
-  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, exams, examResults, cohortStudents, tierCategory, isDemo]);
+  }, [localScoresOverride, gradeRecords, termVariants, selectedClass, academicRecords, reportCards, exams, examResults, cohortStudents, tierCategory, isDemo]);
 
   // 7. Master Broadsheet Computation: One row per student, ALL subjects across
   const broadsheetData = useMemo(() => {

@@ -76,7 +76,6 @@ export function StudentReportCardPortalModule({
           total: ca.total,
           grade: ca.grade,
           isNotEntered,
-          subjectPosition: (ca as any).subjectPosition || (idx === 0 ? "1st" : idx === 1 ? "2nd" : idx === 2 ? "3rd" : `${idx + 1}th`),
           classAverage: (ca as any).classAverage || 68,
           remark: (ca as any).remark || (ca.grade ? getGradeRemark(ca.grade) : (isSecondary ? (ca.total >= 75 ? "Distinction" : ca.total >= 70 ? "Very Good" : ca.total >= 65 ? "Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail") : (ca.total >= 75 ? "Distinction" : ca.total >= 65 ? "Very Good" : ca.total >= 50 ? "Credit" : ca.total >= 40 ? "Pass" : isNotEntered ? "-" : "Fail"))),
         };
@@ -436,13 +435,13 @@ export function StudentReportCardPortalModule({
           {/* Class Position */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700/80">
             <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 block">
-              Class Position
+              {isHigherEd ? "Semester GPA" : isEarlyChildhood ? "Assessment Profile" : "Class Position"}
             </span>
             <div className="text-2xl font-black text-amber-600 mt-1">
-              {positionDisplay}
+              {isEarlyChildhood ? "Milestones" : positionDisplay}
             </div>
             <span className="text-[10px] text-amber-600 font-semibold block mt-0.5">
-              Top Ranked Scholar
+              {isEarlyChildhood ? "Early Years Evaluation" : isHigherEd ? "Scale: 4.00 Max" : "Class Standing"}
             </span>
           </div>
 
@@ -515,7 +514,6 @@ export function StudentReportCardPortalModule({
                       <th className="px-4 py-3 text-center">Exam (60)</th>
                       <th className="px-4 py-3 text-center">Total (100)</th>
                       <th className="px-4 py-3 text-center">Grade</th>
-                      <th className="px-4 py-3 text-center">Position</th>
                     </>
                   )}
                   {isEarlyChildhood && (
@@ -527,7 +525,6 @@ export function StudentReportCardPortalModule({
                       )}
                       <th className="px-4 py-3 text-center">Total (100)</th>
                       <th className="px-4 py-3 text-center">Grade</th>
-                      <th className="px-4 py-3 text-center">Position</th>
                     </>
                   )}
                   {isHigherEd && (
@@ -547,7 +544,6 @@ export function StudentReportCardPortalModule({
                       <th className="px-4 py-3 text-center">Exam (60)</th>
                       <th className="px-4 py-3 text-center">Total (100)</th>
                       <th className="px-4 py-3 text-center">Grade</th>
-                      <th className="px-4 py-3 text-center">Position</th>
                     </>
                   )}
                   <th className="px-5 py-3 text-right">Teacher Remark</th>
@@ -579,9 +575,6 @@ export function StudentReportCardPortalModule({
                             {sub.computedGrade}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center font-semibold text-slate-500 dark:text-zinc-400">
-                          {sub.subjectPosition || "—"}
-                        </td>
                       </>
                     )}
 
@@ -612,9 +605,6 @@ export function StudentReportCardPortalModule({
                           }`}>
                             {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-zinc-300">
-                          {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
                         </td>
                       </>
                     )}
@@ -667,14 +657,11 @@ export function StudentReportCardPortalModule({
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded font-black text-xs ${
                             sub.isNotEntered
-                              ? "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
-                              : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
+                                ? "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
                           }`}>
                             {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-center font-semibold text-slate-500 dark:text-zinc-400">
-                          {sub.isNotEntered ? "-" : (sub.subjectPosition || "—")}
                         </td>
                       </>
                     )}

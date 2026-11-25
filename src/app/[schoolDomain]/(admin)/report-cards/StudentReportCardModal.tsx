@@ -124,7 +124,6 @@ export default function StudentReportCardModal({
       return {
         ...sub,
         isNotEntered,
-        subjectPosition: sub.subjectPosition || `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
       };
     });
   })();
@@ -375,13 +374,13 @@ export default function StudentReportCardModal({
             {/* Position / GPA Card */}
             <div className="bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 text-center">
               <span className="text-amber-800 dark:text-amber-300 font-bold text-xs uppercase tracking-wider block">
-                {isHigherEd ? "Semester GPA" : "Class Position"}
+                {isHigherEd ? "Semester GPA" : (isCreche || isNursery) ? "Assessment Profile" : "Class Position"}
               </span>
               <div className="text-2xl font-black text-amber-900 dark:text-amber-200 font-mono mt-1">
-                {isHigherEd ? (tertiaryGPA?.gpa.toFixed(2) || "0.00") : positionString}
+                {isHigherEd ? (tertiaryGPA?.gpa.toFixed(2) || "0.00") : (isCreche || isNursery) ? "Milestones" : positionString}
               </div>
               <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-                {isHigherEd ? "Scale: 4.00 Max" : `Out of ${totalStudents} Students`}
+                {isHigherEd ? "Scale: 4.00 Max" : (isCreche || isNursery) ? "Early Years Evaluation" : `Out of ${totalStudents} Students`}
               </span>
             </div>
 
@@ -456,7 +455,6 @@ export default function StudentReportCardModal({
                         <th className="px-3 py-3.5 text-center">Exam (60)</th>
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
-                        <th className="px-3 py-3.5 text-center">Position</th>
                         <th className="px-5 py-3.5 text-left">Subject Teacher Remark</th>
                       </>
                     )}
@@ -469,7 +467,6 @@ export default function StudentReportCardModal({
                         <th className="px-3 py-3.5 text-center">Exam (60)</th>
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
-                        <th className="px-3 py-3.5 text-center">Position</th>
                         <th className="px-5 py-3.5 text-left">Remark</th>
                       </>
                     )}
@@ -484,7 +481,6 @@ export default function StudentReportCardModal({
                         )}
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
-                        <th className="px-3 py-3.5 text-center">Position</th>
                         <th className="px-5 py-3.5 text-left">Remark</th>
                       </>
                     )}
@@ -499,7 +495,6 @@ export default function StudentReportCardModal({
                         )}
                         <th className="px-4 py-3.5 text-center">Total (100)</th>
                         <th className="px-3 py-3.5 text-center">Grade</th>
-                        <th className="px-3 py-3.5 text-center">Position</th>
                         <th className="px-5 py-3.5 text-left">Remark</th>
                       </>
                     )}
@@ -561,9 +556,6 @@ export default function StudentReportCardModal({
                               {sub.computedGrade}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
-                            {sub.subjectPosition || "1st"}
-                          </td>
                           <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
                             {sub.computedRemark}
                           </td>
@@ -593,9 +585,6 @@ export default function StudentReportCardModal({
                             }`}>
                               {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                             </span>
-                          </td>
-                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
-                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
                           </td>
                           <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
                             {sub.computedRemark}
@@ -632,9 +621,6 @@ export default function StudentReportCardModal({
                               {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
-                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
-                          </td>
                           <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
                             {sub.computedRemark}
                           </td>
@@ -669,9 +655,6 @@ export default function StudentReportCardModal({
                             }`}>
                               {sub.isNotEntered ? "Not Entered" : sub.computedGrade}
                             </span>
-                          </td>
-                          <td className="px-3 py-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
-                            {sub.isNotEntered ? "—" : (sub.subjectPosition || "—")}
                           </td>
                           <td className="px-5 py-3 text-slate-600 dark:text-slate-300 italic">
                             {sub.computedRemark}

@@ -220,7 +220,6 @@ export async function GET(req: NextRequest) {
           exam,
           total,
           grade: letter,
-          subjectPosition: `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}`,
           classAverage: 68,
           remark: resolveZipRemark(letter),
         };
@@ -246,7 +245,6 @@ export async function GET(req: NextRequest) {
                 exam,
                 total,
                 grade: letter,
-                subjectPosition: `${sIdx + 1}${sIdx === 0 ? "st" : sIdx === 1 ? "nd" : sIdx === 2 ? "rd" : "th"}`,
                 classAverage: 68,
                 remark: item.teacherRemarks || resolveZipRemark(letter),
               };
@@ -269,7 +267,6 @@ export async function GET(req: NextRequest) {
             exam: sub.exam,
             total: sub.total,
             grade: sub.gradeLetter,
-            subjectPosition: `${sIdx + 1}${sIdx === 0 ? "st" : sIdx === 1 ? "nd" : sIdx === 2 ? "rd" : "th"}`,
             classAverage: 68,
             remark: sub.remarks,
           }));
@@ -291,7 +288,10 @@ export async function GET(req: NextRequest) {
         : resolveZipGrade(avgNum));
 
       const demoProfile = isSecondary && isDemo ? (getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber)) : null;
-      const rankStr = existingReportCard?.classPosition
+      const isEarlyYears = tierCategory === "NURSERY" || isCrecheClass(className) || isNurseryClass(className);
+      const rankStr = isEarlyYears
+        ? "N/A"
+        : existingReportCard?.classPosition
         ? `${existingReportCard.classPosition}${String(existingReportCard.classPosition).endsWith("1") && !String(existingReportCard.classPosition).endsWith("11") ? "st" : String(existingReportCard.classPosition).endsWith("2") && !String(existingReportCard.classPosition).endsWith("12") ? "nd" : String(existingReportCard.classPosition).endsWith("3") && !String(existingReportCard.classPosition).endsWith("13") ? "rd" : "th"}`
         : (demoProfile ? demoProfile.positionString : `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}`);
       const admissionNumber = student.admissionNumber || demoProfile?.admissionNumber || "Pending";

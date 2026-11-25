@@ -209,7 +209,6 @@ export async function GET(req: NextRequest) {
           grade: letter,
           gp: tertiaryGrade?.gp,
           qualityPoints: tertiaryGrade ? tertiaryGrade.gp * (tertiaryCourse?.creditUnits || 3) : undefined,
-          subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
           remark: resolvePdfRemark(letter),
         });
@@ -228,7 +227,6 @@ export async function GET(req: NextRequest) {
           exam,
           total,
           grade: letter,
-          subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
           remark: ar.teacherRemarks || resolvePdfRemark(letter),
         });
@@ -244,7 +242,6 @@ export async function GET(req: NextRequest) {
           exam: sub.exam,
           total: sub.total,
           grade: sub.gradeLetter,
-          subjectPosition: `${idx + 1}${idx === 0 ? "st" : idx === 1 ? "nd" : idx === 2 ? "rd" : "th"}`,
           classAverage: 68,
           remark: sub.remarks,
         });
@@ -277,7 +274,10 @@ export async function GET(req: NextRequest) {
     });
     const rankNum = existingReportCard?.classPosition;
     const totalInClass = existingReportCard?.totalStudentsInClass || (demoProfile ? 5 : 1);
-    const rankSuffix = rankNum
+    const isEarlyYears = tierCategory === "NURSERY" || isCrecheClass(currentClass) || isNurseryClass(currentClass);
+    const rankSuffix = isEarlyYears
+      ? "N/A"
+      : rankNum
       ? `${rankNum}${rankNum === 1 ? "st" : rankNum === 2 ? "nd" : rankNum === 3 ? "rd" : "th"}`
       : (demoProfile ? demoProfile.positionString : "1st");
 

@@ -74,7 +74,7 @@ export default async function ExamsPage({
   const isPrimary = tierConfig.key === "PRIMARY";
   const tenantDb = await getPrismaClientForTier(school.id, activeTierName);
   
-  const [courses, exams, students, examResults, rawStaff, gradeRecords, academicRecords, classrooms] = await Promise.all([
+  const [courses, exams, rawStudents, examResults, rawStaff, rawGradeRecords, rawAcademicRecords, rawReportCards, classrooms] = await Promise.all([
     tenantDb.course.findMany({
       where: {
         schoolId: school.id,
@@ -124,11 +124,78 @@ export default async function ExamsPage({
       where: { schoolId: school.id },
       orderBy: { updatedAt: "desc" },
     }).catch(() => []),
+    tenantDb.reportCard.findMany({
+      where: { schoolId: school.id },
+      orderBy: { updatedAt: "desc" },
+    }).catch(() => []),
     tenantDb.classroom.findMany({
       where: { schoolId: school.id },
       orderBy: { name: "asc" },
     }).catch(() => []),
   ]);
+
+  let students = [...rawStudents];
+  let gradeRecords = [...rawGradeRecords];
+  let academicRecords = [...rawAcademicRecords];
+  let reportCards = [...rawReportCards];
+
+  if (tenantDb !== basePrisma) {
+    const [baseStudents, baseGrades, baseAcademic, baseReportCards] = await Promise.all([
+      basePrisma.student.findMany({
+        where: {
+          schoolId: school.id,
+          status: { in: ["ENROLLED", "ACTIVE"] },
+          ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
+        },
+        include: { tier: true },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
+      }).catch(() => []),
+      basePrisma.gradeRecord.findMany({
+        where: { schoolId: school.id },
+        orderBy: { updatedAt: "desc" },
+      }).catch(() => []),
+      basePrisma.academicRecord.findMany({
+        where: { schoolId: school.id },
+        orderBy: { updatedAt: "desc" },
+      }).catch(() => []),
+      basePrisma.reportCard.findMany({
+        where: { schoolId: school.id },
+        orderBy: { updatedAt: "desc" },
+      }).catch(() => []),
+    ]);
+
+    const sIds = new Set(students.map((s: any) => s.id));
+    for (const bs of baseStudents) {
+      if (!sIds.has(bs.id)) {
+        students.push(bs);
+        sIds.add(bs.id);
+      }
+    }
+
+    const gIds = new Set(gradeRecords.map((g: any) => g.id));
+    for (const bg of baseGrades) {
+      if (!gIds.has(bg.id)) {
+        gradeRecords.push(bg);
+        gIds.add(bg.id);
+      }
+    }
+
+    const aIds = new Set(academicRecords.map((a: any) => a.id));
+    for (const ba of baseAcademic) {
+      if (!aIds.has(ba.id)) {
+        academicRecords.push(ba);
+        aIds.add(ba.id);
+      }
+    }
+
+    const rcIds = new Set(reportCards.map((rc: any) => rc.id));
+    for (const brc of baseReportCards) {
+      if (!rcIds.has(brc.id)) {
+        reportCards.push(brc);
+        rcIds.add(brc.id);
+      }
+    }
+  }
 
   const staff = rawStaff.map((s: any) => ({
     id: s.id,
@@ -279,6 +346,7 @@ export default async function ExamsPage({
             examResults={examResults}
             gradeRecords={gradeRecords}
             academicRecords={academicRecords}
+            reportCards={reportCards}
             courses={courses}
             classrooms={classrooms}
             academicTiers={school.academicTiers}
@@ -295,6 +363,7 @@ export default async function ExamsPage({
             examResults={examResults}
             gradeRecords={gradeRecords}
             academicRecords={academicRecords}
+            reportCards={reportCards}
             courses={courses}
             classrooms={classrooms}
             academicTiers={school.academicTiers}

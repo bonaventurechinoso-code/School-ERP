@@ -1421,7 +1421,6 @@ function ReportCardsContent() {
                                       exam: sub.exam,
                                       total: sub.total,
                                       grade: sub.grade || grade?.grade || "—",
-                                      subjectPosition: student.rank > 0 ? getOrdinalSuffix(student.rank) : "1st",
                                       remark: sub.remarks || (isTertiaryTier ? mapTertiaryScoreToGrade(sub.total, "4.0").remark : ((grade?.grade === "Distinction" || grade?.grade === "Excellent") ? "Distinction in subject concepts" : (grade?.grade && typeof grade.grade === "string" && grade.grade.startsWith("Very")) ? "Very good performance" : (grade?.grade && typeof grade.grade === "string" && (grade.grade.startsWith("Credit") || grade.grade === "Good")) ? "Credit pass" : grade?.grade === "Developing" ? "Developing well" : grade?.grade === "Needs Support" ? "Needs support" : "Pass")),
                                     }))
                                   : [];
