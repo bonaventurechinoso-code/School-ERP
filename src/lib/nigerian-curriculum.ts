@@ -234,35 +234,96 @@ export function getStandardSubjectsForClass(
 
 /**
  * Normalizes subject names to find equivalent subjects in database
- * e.g. "Mathematics" <-> "General Mathematics"
+ * e.g. "Mathematics" <-> "General Mathematics" <-> "Maths"
  *      "English Language" <-> "English Studies"
  *      "Computer Studies" <-> "Computer Studies / ICT"
+ *      "Basic Science" <-> "Basic Science & Technology"
+ *      "Christian Religious Studies" <-> "C.R.K" <-> "CRS"
+ *      "Civic Education" <-> "Civic Education / National Values"
+ *      "Physical & Health Education" <-> "PHE"
+ *      "Cultural & Creative Arts (CCA)" <-> "Creative Arts" <-> "CCA"
  */
 export function matchSubjectAlias(name1: string, name2: string): boolean {
   if (!name1 || !name2) return false;
   const a = name1.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
   const b = name2.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  if (!a || !b) return false;
   if (a === b) return true;
 
+  // Containment fallback for compound Nigerian disciplines (min 4 chars)
+  if ((a.length >= 4 && b.includes(a)) || (b.length >= 4 && a.includes(b))) {
+    return true;
+  }
+
   // Math aliases
-  const isMathA = a === "mathematics" || a === "generalmathematics" || a === "maths";
-  const isMathB = b === "mathematics" || b === "generalmathematics" || b === "maths";
-  if (isMathA && isMathB) return true;
+  const isMath = (s: string) => s === "mathematics" || s === "generalmathematics" || s === "maths" || s === "math" || s === "numeracy";
+  if (isMath(a) && isMath(b)) return true;
 
   // English aliases
-  const isEngA = a === "english" || a === "englishstudies" || a === "englishlanguage";
-  const isEngB = b === "english" || b === "englishstudies" || b === "englishlanguage";
-  if (isEngA && isEngB) return true;
+  const isEng = (s: string) => s === "english" || s === "englishstudies" || s === "englishlanguage" || s === "literacy" || s === "phonics" || s === "grammar";
+  if (isEng(a) && isEng(b)) return true;
 
   // Science aliases
-  const isSciA = a.includes("basicscience");
-  const isSciB = b.includes("basicscience");
-  if (isSciA && isSciB) return true;
+  const isSci = (s: string) => s.includes("basicscience") || s.includes("basictech") || s === "bst" || s === "science";
+  if (isSci(a) && isSci(b)) return true;
 
-  // ICT aliases
-  const isIctA = a.includes("ict") || a.includes("computer");
-  const isIctB = b.includes("ict") || b.includes("computer");
-  if (isIctA && isIctB) return true;
+  // Social Studies (Separate from Civic Education)
+  const isSocial = (s: string) => s.includes("socialstudies") || s === "social" || s === "socialnorms";
+  if (isSocial(a) && isSocial(b)) return true;
+
+  // Civic / National Values (Separate from Social Studies)
+  const isCivic = (s: string) => (s.includes("civic") || s.includes("nationalvalues")) && !s.includes("socialstudies");
+  if (isCivic(a) && isCivic(b)) return true;
+
+  // Religious Studies
+  const isCRS = (s: string) => s === "crs" || s === "crk" || s.includes("christianreligious") || s === "crstudies" || s === "crknowledge" || s === "bibleknowledge";
+  if (isCRS(a) && isCRS(b)) return true;
+
+  const isIRS = (s: string) => s === "irs" || s === "irk" || s.includes("islamicreligious") || s.includes("islamicstudies") || s === "arabic";
+  if (isIRS(a) && isIRS(b)) return true;
+
+  // Physical & Health Education (PHE)
+  const isPHE = (s: string) => s === "phe" || s === "pe" || s.includes("physicalhealth") || s.includes("physicaleducation") || s === "healthhabits";
+  if (isPHE(a) && isPHE(b)) return true;
+
+  // Creative & Cultural Arts (CCA)
+  const isCCA = (s: string) => s === "cca" || s.includes("creativearts") || s.includes("culturalcreative") || s.includes("fineart") || s === "music";
+  if (isCCA(a) && isCCA(b)) return true;
+
+  // ICT / Computer
+  const isIct = (s: string) => s.includes("ict") || s.includes("computer") || s.includes("dataprocessing") || s.includes("informationtech");
+  if (isIct(a) && isIct(b)) return true;
+
+  // Agriculture / Pre-Vocational
+  const isAgric = (s: string) => s.includes("agric") || s.includes("agriculture") || s.includes("prevocational") || s.includes("homeeconomics");
+  if (isAgric(a) && isAgric(b)) return true;
+
+  // Reasoning / Aptitude
+  const isVerbal = (s: string) => s.includes("verbalreasoning") || s.includes("verbalaptitude") || s === "verbal";
+  if (isVerbal(a) && isVerbal(b)) return true;
+
+  const isQuant = (s: string) => s.includes("quantitativereasoning") || s.includes("quantitativeaptitude") || s === "quantitative" || s === "quant";
+  if (isQuant(a) && isQuant(b)) return true;
+
+  const isVoc = (s: string) => s.includes("vocationalreasoning") || s.includes("vocationalaptitude") || s === "vocational";
+  if (isVoc(a) && isVoc(b)) return true;
+
+  // Languages
+  const isFrench = (s: string) => s.includes("french");
+  if (isFrench(a) && isFrench(b)) return true;
+
+  const isYoruba = (s: string) => s.includes("yoruba");
+  if (isYoruba(a) && isYoruba(b)) return true;
+
+  const isIgbo = (s: string) => s.includes("igbo");
+  if (isIgbo(a) && isIgbo(b)) return true;
+
+  const isHausa = (s: string) => s.includes("hausa");
+  if (isHausa(a) && isHausa(b)) return true;
+
+  // History
+  const isHistory = (s: string) => s.includes("history");
+  if (isHistory(a) && isHistory(b)) return true;
 
   return false;
 }

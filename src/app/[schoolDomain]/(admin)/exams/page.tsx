@@ -91,8 +91,6 @@ export default async function ExamsPage({
     tenantDb.student.findMany({
       where: {
         schoolId: school.id,
-        status: { in: ["ENROLLED", "ACTIVE"] },
-        ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
       },
       include: { tier: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
@@ -144,8 +142,6 @@ export default async function ExamsPage({
       basePrisma.student.findMany({
         where: {
           schoolId: school.id,
-          status: { in: ["ENROLLED", "ACTIVE"] },
-          ...(activeTierObj ? { tierId: activeTierObj.id } : {}),
         },
         include: { tier: true },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]

@@ -256,6 +256,24 @@ function resolveTierGrade(tierCategory: EducationalTierCategory, score: number) 
   };
 }
 
+function isTermMatch(candidateTerm?: string | null, targetTerm?: string | null): boolean {
+  if (!candidateTerm || !targetTerm) return true;
+  const c = candidateTerm.trim().toLowerCase();
+  const t = targetTerm.trim().toLowerCase();
+  if (c === t) return true;
+  if (c.includes(t) || t.includes(c)) return true;
+
+  const is1 = (s: string) => s.includes("1") || s.includes("first") || s.includes("one");
+  const is2 = (s: string) => s.includes("2") || s.includes("second") || s.includes("two");
+  const is3 = (s: string) => s.includes("3") || s.includes("third") || s.includes("three");
+
+  if (is1(t) && is1(c)) return true;
+  if (is2(t) && is2(c)) return true;
+  if (is3(t) && is3(c)) return true;
+
+  return false;
+}
+
 function matchesClass(studentClass?: string | null, targetClass?: string): boolean {
   return isClassMatch(studentClass, targetClass);
 }
@@ -327,30 +345,55 @@ export default function AnnualCompiledSheet({
 
   // Filter students
   const filteredStudents = useMemo(() => {
-    return students.filter((student) => {
-      const status = student.status || "ENROLLED";
-      if (status !== "ENROLLED" && status !== "ACTIVE") return false;
-      return matchesClass(student.currentClass, selectedClass);
+    const classStudentIdsFromRecords = new Set<string>();
+    gradeRecords.forEach((gr) => {
+      if (matchesClass(gr.className, selectedClass)) classStudentIdsFromRecords.add(gr.studentId);
     });
-  }, [students, selectedClass]);
+    academicRecords.forEach((ar) => {
+      if (matchesClass(ar.className, selectedClass)) classStudentIdsFromRecords.add(ar.studentId);
+    });
+    reportCards.forEach((rc) => {
+      if (matchesClass(rc.className, selectedClass)) classStudentIdsFromRecords.add(rc.studentId);
+    });
+
+    return students.filter((student) => {
+      const statusUpper = (student.status || "ENROLLED").toUpperCase();
+      if (!["ENROLLED", "ACTIVE", "ADMITTED"].includes(statusUpper) && !classStudentIdsFromRecords.has(student.id)) {
+        return false;
+      }
+      if (!matchesClass(student.currentClass, selectedClass) && !classStudentIdsFromRecords.has(student.id)) {
+        return false;
+      }
+      return true;
+    });
+  }, [students, selectedClass, gradeRecords, academicRecords, reportCards]);
 
   // Curriculum subjects (standard assigned + any recorded in DB for students in this class)
   const classSubjects = useMemo(() => {
     const standardSubjects = getSubjectsForClassAndTier(selectedClass, tierCategory);
-    const subjectsSet = new Set<string>(standardSubjects);
+    const subjectsList: string[] = [...standardSubjects];
     const classStudentIds = new Set(filteredStudents.map((s) => s.id));
+
+    const addRecordedSubject = (subj?: string | null) => {
+      if (!subj || !subj.trim()) return;
+      const clean = subj.trim();
+      const existingMatch = subjectsList.find((s) => matchSubjectAlias(s, clean));
+      if (!existingMatch) {
+        subjectsList.push(clean);
+      }
+    };
 
     gradeRecords.forEach((gr) => {
       const isForClass = matchesClass(gr.className, selectedClass) || classStudentIds.has(gr.studentId);
       if (isForClass) {
-        if (gr.subject && gr.subject.trim()) subjectsSet.add(gr.subject.trim());
+        addRecordedSubject(gr.subject);
       }
     });
 
     academicRecords.forEach((ar) => {
       const isForClass = matchesClass(ar.className, selectedClass) || classStudentIds.has(ar.studentId);
       if (isForClass) {
-        if (ar.subject && ar.subject.trim()) subjectsSet.add(ar.subject.trim());
+        addRecordedSubject(ar.subject);
       }
     });
 
@@ -362,17 +405,13 @@ export default function AnnualCompiledSheet({
             ? JSON.parse(rc.academicRecordSnapshot)
             : rc.academicRecordSnapshot;
           if (Array.isArray(snap)) {
-            snap.forEach((item: any) => {
-              if (item.subject && item.subject.trim()) {
-                subjectsSet.add(item.subject.trim());
-              }
-            });
+            snap.forEach((item: any) => addRecordedSubject(item.subject));
           }
         } catch {}
       }
     });
 
-    return Array.from(subjectsSet);
+    return subjectsList;
   }, [selectedClass, tierCategory, gradeRecords, academicRecords, reportCards, filteredStudents]);
 
   // Assign permanent registration numbers
@@ -396,13 +435,6 @@ export default function AnnualCompiledSheet({
 
   // Lookup Term Score: checks 1st Term, 2nd Term, 3rd Term
   const getTermScore = useCallback((studentId: string, subject: string, termName: string) => {
-    const tLower = termName.toLowerCase();
-    const termVariants = tLower.includes("1")
-      ? ["1st Term", "First Term", "Term 1", "1st term", "1st Semester", "First Semester"]
-      : tLower.includes("2")
-      ? ["2nd Term", "Second Term", "Term 2", "2nd term", "2nd Semester", "Second Semester"]
-      : ["3rd Term", "Third Term", "Term 3", "3rd term"];
-
     const subClean = (subject || "").trim().toLowerCase();
 
     const isSubMatch = (candidateSub?: string | null) => {
@@ -412,19 +444,13 @@ export default function AnnualCompiledSheet({
       return matchSubjectAlias(candidateSub, subject);
     };
 
-    const matchesTerm = (termStr?: string | null) => {
-      if (!termStr) return false;
-      const t = termStr.toLowerCase();
-      return termVariants.some((tv) => t.includes(tv.toLowerCase()));
-    };
-
     // 1. GradeRecord
     const gr = gradeRecords.find(
       (r) =>
         r.studentId === studentId &&
         isSubMatch(r.subject) &&
-        matchesTerm(r.term) &&
-        (!r.className || matchesClass(r.className, selectedClass))
+        isTermMatch(r.term, termName) &&
+        (!r.className || matchesClass(r.className, selectedClass) || r.studentId === studentId)
     );
     if (gr) {
       return Number(gr.totalScore) || (Number(gr.ca1) || 0) + (Number(gr.ca2) || 0) + (Number(gr.exam) || 0);
@@ -435,8 +461,8 @@ export default function AnnualCompiledSheet({
       (r) =>
         r.studentId === studentId &&
         isSubMatch(r.subject) &&
-        matchesTerm(r.term) &&
-        (!r.className || matchesClass(r.className, selectedClass))
+        isTermMatch(r.term, termName) &&
+        (!r.className || matchesClass(r.className, selectedClass) || r.studentId === studentId)
     );
     if (ar) {
       return Number(ar.totalScore) || (Number(ar.test1) || 0) + (Number(ar.test2) || 0) + (Number(ar.finalExam) || 0);
@@ -446,8 +472,8 @@ export default function AnnualCompiledSheet({
     const rc = reportCards.find(
       (r) =>
         r.studentId === studentId &&
-        matchesTerm(r.term) &&
-        (!r.className || matchesClass(r.className, selectedClass))
+        isTermMatch(r.term, termName) &&
+        (!r.className || matchesClass(r.className, selectedClass) || r.studentId === studentId)
     );
     if (rc && rc.academicRecordSnapshot) {
       try {
