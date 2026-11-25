@@ -6,6 +6,7 @@ import { cacheAside, buildCacheKey } from "@/lib/cache";
 import { getTierForClass } from "@/lib/school-tier-classes";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
 import { getAcademicPeriodVariants } from "@/lib/tertiary-config";
+import { isClassMatch } from "@/lib/class-matching";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
     const className = url.searchParams.get("className") || "";
     const subject = url.searchParams.get("subject") || "";
     const paramSchoolId = url.searchParams.get("schoolId") || url.searchParams.get("tenantId");
+    const isFresh = url.searchParams.get("fresh") === "true";
 
     let tenantId = "";
     if (sessionToken) {
@@ -70,33 +72,40 @@ export async function GET(req: NextRequest) {
 
     const roster = await cacheAside({
       key: cacheKey,
-      ttlSeconds: 600, // 10 minutes sliding TTL
+      ttlSeconds: 60,
+      bypassCache: isFresh,
       fetchFn: async () => {
         const tenantDb = getTenantClient(tenantId);
 
-        // Normalize class variants (e.g., SS 1 vs SSS 1, JSS 1 vs JSS1)
-        const classVariants = className ? [className] : [];
-        if (className) {
-          if (className.startsWith("SS ")) {
-            classVariants.push(className.replace("SS ", "SSS "));
-          } else if (className.startsWith("SSS ")) {
-            classVariants.push(className.replace("SSS ", "SS "));
-          }
-          if (className.includes(" ")) {
-            classVariants.push(className.replace(/\s+/g, ""));
-          }
-        }
-
-        // Fetch enrolled students matching className (or all if not specified)
-        let students = await tenantDb.student.findMany({
+        // Fetch enrolled students matching className with isClassMatch & basePrisma fallback
+        let allStudents = await tenantDb.student.findMany({
           where: {
             schoolId: tenantId,
-            status: { in: ["ENROLLED", "ACTIVE"] },
-            ...(classVariants.length > 0 ? { currentClass: { in: classVariants } } : {})
           },
           include: { tier: true },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-        });
+        }).catch(() => []);
+
+        if (allStudents.length === 0 && tenantDb !== basePrisma) {
+          allStudents = await basePrisma.student.findMany({
+            where: {
+              schoolId: tenantId,
+            },
+            include: { tier: true },
+            orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+          }).catch(() => []);
+        }
+
+        let students = className
+          ? allStudents.filter((s: any) => isClassMatch(s.currentClass, className))
+          : allStudents;
+
+        const activeEnrolled = students.filter((s: any) =>
+          !s.status || ["ENROLLED", "Enrolled", "enrolled", "ACTIVE", "Active", "active"].includes(s.status)
+        );
+        if (activeEnrolled.length > 0) {
+          students = activeEnrolled;
+        }
 
         // Support 1st Semester / 1st Term variants across tiers
         const termVariants = getAcademicPeriodVariants(term);
@@ -141,42 +150,70 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Fetch existing grade records
-        const studentIds = students.map(s => s.id);
-        const whereClause: any = {
-          schoolId: tenantId,
-          term: { in: termVariants },
-          ...(classVariants.length > 0 ? { className: { in: classVariants } } : {}),
-        };
-        if (subject && subject.trim() !== "ALL") {
-          whereClause.subject = subject.trim();
+        // Fetch existing grade records specifically for matched students
+        const studentIds = students.map((s: any) => s.id);
+
+        let gradeRecords = studentIds.length > 0 ? await tenantDb.gradeRecord.findMany({
+          where: {
+            schoolId: tenantId,
+            term: { in: termVariants },
+            studentId: { in: studentIds },
+            ...(subject && subject.trim() !== "ALL" ? { subject: subject.trim() } : {}),
+          },
+        }).catch(() => []) : [];
+
+        if (gradeRecords.length === 0 && studentIds.length > 0 && tenantDb !== basePrisma) {
+          gradeRecords = await basePrisma.gradeRecord.findMany({
+            where: {
+              schoolId: tenantId,
+              term: { in: termVariants },
+              studentId: { in: studentIds },
+              ...(subject && subject.trim() !== "ALL" ? { subject: subject.trim() } : {}),
+            },
+          }).catch(() => []);
         }
 
-        const gradeRecords = await tenantDb.gradeRecord.findMany({
-          where: whereClause,
-        }).catch(() => []);
-
         // Also fetch AcademicRecord
-        const academicRecords = await tenantDb.academicRecord.findMany({
+        let academicRecords = studentIds.length > 0 ? await tenantDb.academicRecord.findMany({
           where: {
             schoolId: tenantId,
             term: { in: termVariants },
-            ...(classVariants.length > 0 ? { className: { in: classVariants } } : {}),
+            studentId: { in: studentIds },
           },
-        }).catch(() => []);
+        }).catch(() => []) : [];
 
-        // Also fetch ReportCard records for dynamic teacher & principal remarks
-        const reportCards = await tenantDb.reportCard.findMany({
+        if (academicRecords.length === 0 && studentIds.length > 0 && tenantDb !== basePrisma) {
+          academicRecords = await basePrisma.academicRecord.findMany({
+            where: {
+              schoolId: tenantId,
+              term: { in: termVariants },
+              studentId: { in: studentIds },
+            },
+          }).catch(() => []);
+        }
+
+        // Also fetch ReportCard records for compiled snapshots, ranks, and remarks
+        let reportCards = studentIds.length > 0 ? await tenantDb.reportCard.findMany({
           where: {
             schoolId: tenantId,
             term: { in: termVariants },
-            ...(classVariants.length > 0 ? { className: { in: classVariants } } : {}),
+            studentId: { in: studentIds },
           },
-        }).catch(() => []);
+        }).catch(() => []) : [];
+
+        if (reportCards.length === 0 && studentIds.length > 0 && tenantDb !== basePrisma) {
+          reportCards = await basePrisma.reportCard.findMany({
+            where: {
+              schoolId: tenantId,
+              term: { in: termVariants },
+              studentId: { in: studentIds },
+            },
+          }).catch(() => []);
+        }
 
         // Group grades by studentId (deduplicating identical subjects across period aliases)
         const studentGradesMap = new Map<string, any[]>();
-        gradeRecords.forEach((gr) => {
+        gradeRecords.forEach((gr: any) => {
           const list = studentGradesMap.get(gr.studentId) || [];
           const existingIdx = list.findIndex((item) => item.subject === gr.subject);
           const entry = {
@@ -198,7 +235,7 @@ export async function GET(req: NextRequest) {
           studentGradesMap.set(gr.studentId, list);
         });
 
-        academicRecords.forEach((ar) => {
+        academicRecords.forEach((ar: any) => {
           const list = studentGradesMap.get(ar.studentId) || [];
           // Avoid duplicate subject
           if (!list.some((item) => item.subject?.toLowerCase() === ar.subject?.toLowerCase())) {
@@ -214,43 +251,74 @@ export async function GET(req: NextRequest) {
           }
         });
 
-        return students.map(student => {
+        return students.map((student: any) => {
+          const rc = reportCards.find((r: any) => r.studentId === student.id);
           let sGrades = studentGradesMap.get(student.id) || [];
+
+          // If no direct grade records, but reportCard has academicRecordSnapshot, hydrate sGrades from snapshot!
+          if (sGrades.length === 0 && rc?.academicRecordSnapshot) {
+            try {
+              const snapshot = typeof rc.academicRecordSnapshot === "string"
+                ? JSON.parse(rc.academicRecordSnapshot)
+                : rc.academicRecordSnapshot;
+              if (Array.isArray(snapshot) && snapshot.length > 0) {
+                sGrades = snapshot.map((item: any) => ({
+                  subject: item.subject,
+                  ca1: Number(item.ca1 ?? item.test1) || 0,
+                  ca2: Number(item.ca2 ?? item.test2) || 0,
+                  exam: Number(item.exam ?? item.finalExam) || 0,
+                  total: Number(item.totalScore ?? item.total) || 0,
+                  grade: item.gradeLetter ?? item.grade,
+                  remarks: item.teacherRemarks || "",
+                }));
+              }
+            } catch (snapErr) {
+              console.warn("Failed to parse academicRecordSnapshot:", snapErr);
+            }
+          }
+
           if (sGrades.length === 0 && isDemo) {
             const demoProfile = getSecondaryDemoProfile(student.id) || getSecondaryDemoProfile(student.admissionNumber) || getSecondaryDemoProfile(`${student.firstName} ${student.lastName}`);
             if (demoProfile && (className.toUpperCase().includes("JSS") || (student.currentClass && student.currentClass.toUpperCase().includes("JSS")) || student.tier?.name?.toLowerCase().includes("secondary"))) {
               sGrades = demoProfile.subjects;
             }
           }
+
           const hasScores = sGrades.length > 0;
+          const isCompiled = Boolean(rc || hasScores);
 
           let ca1 = "";
           let ca2 = "";
           let exam = "";
-          let totalScore = 0;
-          let averageScore = 0;
+          let totalScore = rc?.totalScore !== undefined && rc?.totalScore !== null ? Number(rc.totalScore) : 0;
+          let averageScore = rc?.averageScore !== undefined && rc?.averageScore !== null ? Number(rc.averageScore) : 0;
 
           if (subject && subject.trim() !== "ALL") {
-            const matchSub = sGrades.find(g => g.subject?.toLowerCase() === subject.toLowerCase());
+            const matchSub = sGrades.find((g: any) => g.subject?.toLowerCase() === subject.toLowerCase());
             if (matchSub) {
               ca1 = String(matchSub.ca1);
               ca2 = String(matchSub.ca2);
               exam = String(matchSub.exam);
               totalScore = matchSub.total;
+              averageScore = matchSub.total;
             }
           } else if (hasScores) {
-            totalScore = sGrades.reduce((acc, curr) => acc + curr.total, 0);
-            averageScore = Math.round((totalScore / sGrades.length) * 100) / 100;
+            if (totalScore === 0) {
+              totalScore = sGrades.reduce((acc: number, curr: any) => acc + curr.total, 0);
+            }
+            if (averageScore === 0) {
+              averageScore = Math.round((totalScore / sGrades.length) * 100) / 100;
+            }
             if (sGrades.length === 1) {
-              // Copy CA1, CA2, Exam exactly from the single GradeRecord (no recalculation or 0.2/0.6 weighting)
+              // Copy CA1, CA2, Exam exactly from the single GradeRecord
               ca1 = String(sGrades[0].ca1);
               ca2 = String(sGrades[0].ca2);
               exam = String(sGrades[0].exam);
             } else {
               // Multi-subject: exact average of actual CA1, CA2, Exam entered by teacher
-              ca1 = String(Math.round(sGrades.reduce((acc, c) => acc + c.ca1, 0) / sGrades.length));
-              ca2 = String(Math.round(sGrades.reduce((acc, c) => acc + c.ca2, 0) / sGrades.length));
-              exam = String(Math.round(sGrades.reduce((acc, c) => acc + c.exam, 0) / sGrades.length));
+              ca1 = String(Math.round(sGrades.reduce((acc: number, c: any) => acc + c.ca1, 0) / sGrades.length));
+              ca2 = String(Math.round(sGrades.reduce((acc: number, c: any) => acc + c.ca2, 0) / sGrades.length));
+              exam = String(Math.round(sGrades.reduce((acc: number, c: any) => acc + c.exam, 0) / sGrades.length));
             }
           }
 
@@ -259,7 +327,6 @@ export async function GET(req: NextRequest) {
             ? student.tier.name
             : getTierForClass(resolvedClass).name;
 
-          const rc = reportCards.find((r: any) => r.studentId === student.id);
           const dynamicTeacherRemark = rc?.teacherRemarks ||
             sGrades.map((g: any) => g.remarks).find((rem: any) => rem && typeof rem === "string" && rem.trim().length > 0) ||
             "";
@@ -273,14 +340,18 @@ export async function GET(req: NextRequest) {
             ca1,
             ca2,
             exam,
-            total: hasScores ? averageScore : 0,
+            total: (hasScores || rc) ? averageScore : 0,
             overallTotal: totalScore,
             overallAverage: averageScore,
-            subjectsCount: sGrades.length,
+            overallGrade: rc?.gradeLetter || undefined,
+            rank: rc?.classPosition ? (parseInt(String(rc.classPosition)) || 0) : 0,
+            classPosition: rc?.classPosition ? String(rc.classPosition) : undefined,
+            totalStudents: rc?.totalStudentsInClass || students.length,
+            subjectsCount: sGrades.length || rc?.totalSubjects || 0,
             subjects: sGrades,
             teacherRemarks: dynamicTeacherRemark,
             principalRemarks: rc?.principalRemarks || "",
-            isCompiled: hasScores,
+            isCompiled,
           };
         });
       },

@@ -5,6 +5,7 @@ import { isClassMatch } from "@/lib/class-matching";
 import { revalidatePath } from "next/cache";
 import { compileClassReportCards } from "@/lib/report-card-service";
 import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 import { isCrecheClass, resolveCrecheConfig, mapCrecheScoreToGrade } from "@/lib/creche-config";
 import { isNurseryClass, resolveNurseryConfig, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 import { isTertiaryClass, resolveTertiaryCourse, mapTertiaryScoreToGrade } from "@/lib/tertiary-config";
@@ -1387,7 +1388,11 @@ export async function compileClassReportCardsFromStaffPortal(
       academicYear,
       tierName,
     });
+    await invalidateGradingNamespace(schoolId);
+    clearL1TenantCache(schoolId);
     safeRevalidate("/[schoolDomain]/portal/staff", "page");
+    safeRevalidate("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/exams", "page");
     return {
       success: true,
       compiledCount: result.totalCompiled,

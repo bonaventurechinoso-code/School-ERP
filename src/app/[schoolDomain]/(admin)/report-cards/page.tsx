@@ -404,6 +404,10 @@ interface StudentScore {
   total?: number;
   overallTotal?: number;
   overallAverage?: number;
+  overallGrade?: string;
+  rank?: number;
+  classPosition?: string;
+  totalStudents?: number;
   subjectsCount?: number;
   subjects?: any[];
   isCompiled?: boolean;
@@ -671,7 +675,7 @@ function ReportCardsContent() {
 
     setIsLoading(true);
     fetch(
-      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term || "1st Term").trim())}&className=${encodeURIComponent(String(targetClass).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
+      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term || "1st Term").trim())}&className=${encodeURIComponent(String(targetClass).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}&fresh=true`
     )
       .then((res) => res.json())
       .then((data) => {
@@ -688,7 +692,7 @@ function ReportCardsContent() {
     if (!className || !term) return;
     setIsLoading(true);
     fetch(
-      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}`
+      `/api/v1/report-cards/roster?term=${encodeURIComponent(String(term).trim())}&className=${encodeURIComponent(String(className).trim())}&subject=${encodeURIComponent(String(subject || "").trim())}&schoolId=${encodeURIComponent(tenant.id || "")}&fresh=true`
     )
       .then((res) => res.json())
       .then((data) => {
@@ -716,7 +720,7 @@ function ReportCardsContent() {
         : (s.total !== undefined && s.total > 0 ? s.total : Math.round((ca1Num + ca2Num + examNum) * 10) / 10);
       const overallTotal = s.overallTotal || (s.subjects && s.subjects.length > 0 ? s.subjects.reduce((acc: number, sub: any) => acc + (sub.total || 0), 0) : total);
       const hasScores = Boolean(s.ca1 !== "" || s.ca2 !== "" || s.exam !== "" || total > 0 || (s.subjects && s.subjects.length > 0));
-      const isCompiled = (s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0 || (s.subjects && s.subjects.length > 0);
+      const isCompiled = s.isCompiled !== undefined ? Boolean(s.isCompiled) : ((s.ca1 !== "" && s.ca2 !== "" && s.exam !== "") || total > 0 || (s.subjects && s.subjects.length > 0));
       return {
         ...s,
         ca1Num,
@@ -750,7 +754,8 @@ function ReportCardsContent() {
 
     // Return the sorted active class dataset so highest scores render first
     return sorted.map((student) => {
-      const rank = rankMap.get(student.id) || 0;
+      const calculatedRank = rankMap.get(student.id) || 0;
+      const rank = (student as any).rank && (student as any).rank > 0 ? (student as any).rank : calculatedRank;
       return {
         ...student,
         rank,

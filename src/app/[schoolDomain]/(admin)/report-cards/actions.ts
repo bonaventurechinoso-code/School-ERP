@@ -11,6 +11,8 @@ import {
   CompileStudentPayload,
 } from "@/lib/report-card-service";
 import { revalidatePath } from "next/cache";
+import { invalidateGradingNamespace } from "@/lib/cache-invalidation";
+import { clearL1TenantCache } from "@/lib/cache";
 
 function safeRevalidate(path: string, type?: "page" | "layout") {
   try {
@@ -42,7 +44,10 @@ export async function saveAcademicRecordAction(payload: SaveAssessmentPayload) {
 export async function compileClassReportCardsAction(payload: CompileClassPayload) {
   try {
     const result = await compileClassReportCards(payload);
+    await invalidateGradingNamespace(payload.schoolId);
+    clearL1TenantCache(payload.schoolId);
     safeRevalidate("/[schoolDomain]/report-cards", "page");
+    safeRevalidate("/[schoolDomain]/portal/staff", "page");
     return { success: true, data: result };
   } catch (error: any) {
     console.error("[compileClassReportCardsAction] Error:", error);
