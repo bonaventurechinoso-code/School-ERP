@@ -1533,7 +1533,21 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
     const { schoolName, subdomain, adminEmail, adminPassword, contactPhone, schoolId } = payload;
     const portalUrl = getTenantLoginUrl(subdomain);
     const brandColor = "#4f46e5";
-    const subject = `🎉 Welcome to School ERP - ${schoolName} Portal Access Credentials`;
+    const subject = `[School ERP] Institutional Portal Access Credentials - ${schoolName}`;
+
+    const emailText = `
+Welcome to School ERP!
+
+Your institutional workspace for ${schoolName} has been configured.
+
+Portal Access Credentials:
+- School Name: ${schoolName}
+- Portal URL: ${portalUrl}
+- Admin Login: ${adminEmail}
+- Password: ${adminPassword || "(Configured during registration)"}
+
+Direct Portal URL: ${portalUrl}
+`.trim();
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -1617,6 +1631,7 @@ export async function sendSchoolRegistrationSuccessEmail(payload: SchoolRegistra
       to: adminEmail,
       subject,
       html: emailHtml,
+      text: emailText,
       schoolId,
       recipientType: "ADMIN",
       logCategory: "TENANT_REGISTRATION",
@@ -1719,7 +1734,7 @@ export async function sendStudentEnrollmentConfirmationEmail(payload: StudentEnr
     const tenantName = schoolName || "School ERP";
     const portalUrl = subdomain ? getTenantLoginUrl(subdomain) : "https://bonaveeict.com.ng/login";
     const brandColor = "#4f46e5";
-    const subject = `🎉 Enrollment Confirmation & Login Credentials - ${studentName} (${tenantName})`;
+    const subject = `[School ERP] Enrollment Confirmation & Login Credentials - ${studentName} (${tenantName})`;
 
     // Determine login role and owner
     const isGuardianLogin = loginOwner === "GUARDIAN" || (!loginOwner && !studentEmail && !!parentEmail);
@@ -1953,7 +1968,7 @@ export async function sendStaffEnrollmentConfirmationEmail(payload: StaffEnrollm
     const tenantName = schoolName || "School ERP";
     const portalUrl = subdomain ? getTenantLoginUrl(subdomain) : "https://bonaveeict.com.ng/login";
     const brandColor = "#4f46e5";
-    const subject = `🎉 Staff Enrollment Confirmation - Welcome to ${tenantName}`;
+    const subject = `[School ERP] Staff Enrollment Confirmation - Welcome to ${tenantName}`;
 
     const normalizedStaffEmail = staffEmail?.trim().toLowerCase();
     if (!normalizedStaffEmail || !normalizedStaffEmail.includes("@")) {
@@ -2666,7 +2681,7 @@ export async function sendSchoolApprovalEmail(payload: {
     const code = slug || subdomain;
     const loginLink = code ? getTenantLoginUrl(code) : "https://bonaveeict.com.ng/login";
     const fromAddress = process.env.RESEND_FROM || "Bonavee School <noreply@bonaveeict.com.ng>";
-    const subject = `🎉 Congratulations! Your School ${schoolName} has been Approved`;
+    const subject = `[School ERP] School Approved - ${schoolName} Portal Activated`;
 
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">

@@ -397,13 +397,12 @@ export async function middleware(req: NextRequest) {
   if (hostInfo.subdomain) {
     const subdomain = hostInfo.subdomain;
 
-    // Handle Cross-Subdomain SSO Handshake (Super Admin & Demo Environment)
+    // Handle Cross-Subdomain SSO Handshake (Super Admin)
     const ssoToken = req.nextUrl.searchParams.get("sso_token");
     if (ssoToken) {
       try {
         const { payload } = await jose.jwtVerify(ssoToken, SECRET_KEY);
         const isSuperAdmin = payload.isSuperAdmin === true || payload.role === "SUPER_ADMIN";
-        const isDemo = payload.isDemo === true || payload.type === "demo_sso" || subdomain === "demo";
         const tokenType = payload.type;
 
         if (isSuperAdmin && (tokenType === "super_admin_sso" || !tokenType)) {
@@ -452,69 +451,6 @@ export async function middleware(req: NextRequest) {
           };
           redirectResponse.cookies.set("session", sessionJwt, cookieOpts);
           redirectResponse.cookies.set("accessToken", sessionJwt, cookieOpts);
-
-          for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
-            redirectResponse.headers.set(k, v);
-          }
-          return redirectResponse;
-        } else if (isDemo && (tokenType === "demo_sso" || payload.isDemo || subdomain === "demo")) {
-          const sessionTokenId =
-            (payload.sessionToken as string) ||
-            `demo-sso-${Date.now()}`;
-
-          const sessionJwt = await new jose.SignJWT({
-            jti: sessionTokenId,
-            sessionToken: sessionTokenId,
-            sessionId: sessionTokenId,
-            id: sessionTokenId,
-            token: sessionTokenId,
-            userId: (payload.userId as string) || `${subdomain}-admin-staff`,
-            email: (payload.email as string) || `${subdomain}.admin@schoolerp.local`,
-            tenantId: (payload.tenantId as string) || subdomain,
-            schoolDomain: (payload.schoolDomain as string) || subdomain,
-            tenantName: (payload.tenantName as string) || (subdomain === "sandbox" ? "Trial Sandbox Academy" : "Apex International Academy"),
-            role: "TENANT_ADMIN",
-            userRole: "TENANT_ADMIN",
-            staffRole: "School Administrator",
-            activeTiers: (payload.activeTiers as string[]) || [
-              "Creche / Nursery",
-              "Primary School",
-              "Secondary School",
-              "Higher Institution / University",
-            ],
-            permissions: ["*"],
-            isDemo: true,
-          })
-            .setProtectedHeader({ alg: "HS256" })
-            .setIssuedAt()
-            .setExpirationTime(Math.floor(Date.now() / 1000) + 24 * 60 * 60)
-            .sign(SECRET_KEY);
-
-          const cleanUrl = new URL(req.nextUrl.pathname, req.url);
-          req.nextUrl.searchParams.forEach((val, key) => {
-            if (key !== "sso_token") {
-              cleanUrl.searchParams.set(key, val);
-            }
-          });
-
-          const isProd = process.env.NODE_ENV === "production";
-          const redirectResponse = NextResponse.redirect(cleanUrl, 307);
-          const cookieOpts = {
-            httpOnly: true,
-            secure: isProd,
-            sameSite: "lax" as const,
-            path: "/",
-            maxAge: 24 * 60 * 60,
-          };
-          redirectResponse.cookies.set("session", sessionJwt, cookieOpts);
-          redirectResponse.cookies.set("accessToken", sessionJwt, cookieOpts);
-          redirectResponse.cookies.set("activeTier", "Primary School", {
-            httpOnly: false,
-            secure: isProd,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 24 * 60 * 60,
-          });
 
           for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
             redirectResponse.headers.set(k, v);
@@ -612,65 +548,6 @@ export async function middleware(req: NextRequest) {
     const claims = await extractAndVerifyToken(req);
 
     if (!claims || !claims.userId) {
-      // Demo / Sandbox Environment Auto-Entry: never lock demo/sandbox visitors behind credentials
-      if (subdomain === "demo" || subdomain === "sandbox") {
-        const sessionTokenId = `${subdomain}-auto-${Date.now()}`;
-        const sessionJwt = await new jose.SignJWT({
-          jti: sessionTokenId,
-          sessionToken: sessionTokenId,
-          sessionId: sessionTokenId,
-          id: sessionTokenId,
-          token: sessionTokenId,
-          userId: `${subdomain}-admin-staff`,
-          email: `${subdomain}.admin@schoolerp.local`,
-          tenantId: subdomain,
-          schoolDomain: subdomain,
-          tenantName: subdomain === "sandbox" ? "Trial Sandbox Academy" : "Apex International Academy",
-          role: "TENANT_ADMIN",
-          userRole: "TENANT_ADMIN",
-          staffRole: "School Administrator",
-          activeTiers: [
-            "Creche / Nursery",
-            "Primary School",
-            "Secondary School",
-            "Higher Institution / University",
-          ],
-          permissions: ["*"],
-          isDemo: true,
-        })
-          .setProtectedHeader({ alg: "HS256" })
-          .setIssuedAt()
-          .setExpirationTime(Math.floor(Date.now() / 1000) + 24 * 60 * 60)
-          .sign(SECRET_KEY);
-
-        const targetPath = pathname === "/" || pathname === "/login" ? "/dashboard" : pathname;
-        const autoLoginUrl = new URL(targetPath, req.url);
-        autoLoginUrl.search = req.nextUrl.search;
-        const autoResponse = NextResponse.redirect(autoLoginUrl, 307);
-        const isProd = process.env.NODE_ENV === "production";
-        const cookieOpts = {
-          httpOnly: true,
-          secure: isProd,
-          sameSite: "lax" as const,
-          path: "/",
-          maxAge: 24 * 60 * 60,
-        };
-        autoResponse.cookies.set("session", sessionJwt, cookieOpts);
-        autoResponse.cookies.set("accessToken", sessionJwt, cookieOpts);
-        autoResponse.cookies.set("activeTier", "Primary School", {
-          httpOnly: false,
-          secure: isProd,
-          sameSite: "lax",
-          path: "/",
-          maxAge: 24 * 60 * 60,
-        });
-
-        for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
-          autoResponse.headers.set(k, v);
-        }
-        return autoResponse;
-      }
-
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("callbackUrl", pathname);
       const redirectResponse = NextResponse.redirect(loginUrl);
@@ -835,39 +712,6 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(targetUrl, 307);
     }
 
-    // On localhost, allow direct path-based access to demo tenants to avoid Windows *.localhost DNS failure
-    if (hostInfo.baseDomain === "localhost" || hostInfo.hostname === "localhost" || hostInfo.hostname === "127.0.0.1") {
-      if (targetSlug.startsWith("demo") || targetSlug === "sandbox") {
-        const demoToken = await new jose.SignJWT({
-          userId: `${targetSlug}-admin-staff`,
-          email: `${targetSlug}.admin@schoolerp.local`,
-          role: "TENANT_ADMIN",
-          userRole: "TENANT_ADMIN",
-          tenantSlug: targetSlug,
-          schoolDomain: targetSlug,
-          tenantName: targetSlug,
-          isDemo: true,
-          type: "demo_sso",
-        })
-          .setProtectedHeader({ alg: "HS256" })
-          .setIssuedAt()
-          .setExpirationTime(Math.floor(Date.now() / 1000) + 24 * 60 * 60)
-          .sign(SECRET_KEY);
-
-        const cookieOpts = {
-          httpOnly: true,
-          secure: false,
-          sameSite: "lax" as const,
-          path: "/",
-          maxAge: 24 * 60 * 60,
-        };
-        const res = NextResponse.next();
-        res.cookies.set("session", demoToken, cookieOpts);
-        res.cookies.set("accessToken", demoToken, cookieOpts);
-        return res;
-      }
-    }
-
     const targetUrl = buildTenantUrl(targetSlug, hostHeader, remainingPath, protoHeader);
     const redirectUrl = new URL(targetUrl);
     redirectUrl.search = req.nextUrl.search;
@@ -891,25 +735,6 @@ export async function middleware(req: NextRequest) {
         .sign(SECRET_KEY);
 
       redirectUrl.searchParams.set("sso_token", ssoToken);
-      return NextResponse.redirect(redirectUrl, 307);
-    } else if (targetSlug.startsWith("demo") || targetSlug === "sandbox") {
-      const demoToken = await new jose.SignJWT({
-        userId: `${targetSlug}-admin-staff`,
-        email: `${targetSlug}.admin@schoolerp.local`,
-        role: "TENANT_ADMIN",
-        userRole: "TENANT_ADMIN",
-        tenantSlug: targetSlug,
-        schoolDomain: targetSlug,
-        tenantName: targetSlug === "sandbox" ? "Trial Sandbox Academy" : "Apex International Academy",
-        isDemo: true,
-        type: "demo_sso",
-      })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("5m")
-        .sign(SECRET_KEY);
-
-      redirectUrl.searchParams.set("sso_token", demoToken);
       return NextResponse.redirect(redirectUrl, 307);
     }
 

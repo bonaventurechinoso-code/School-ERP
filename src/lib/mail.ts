@@ -200,17 +200,127 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
   let activeProvider: MailDispatchResult["provider"] = "NONE";
   let resultMessageId: string | undefined = undefined;
 
+  // ---------------------------------------------------------------------------
+  // Transactional Headers & Delivery Configuration (RFC 5322, RFC 2076 & RFC 2156)
+  // ---------------------------------------------------------------------------
+  // Injects push-triggering headers so mobile mail applications (Gmail, Outlook,
+  // Apple Mail) wake up immediately via APNs/FCM and place the notification directly
+  // in the Primary Inbox, rather than waiting for background network refresh.
+  const emailDomain = (effectiveFrom.match(/@([^>]+)/)?.[1] || "bonaveeict.com.ng").trim();
+  const customMessageId = `<${Date.now()}.${Math.random().toString(36).substring(2, 10)}@${emailDomain}>`;
+  const rfcDate = new Date().toUTCString();
+
+  const transactionalHeaders: Record<string, string> = {
+    "X-Priority": "1",               // 1 = Highest
+    "Priority": "urgent",            // RFC 2156
+    "Importance": "high",            // RFC 2076
+    "X-MSMail-Priority": "High",     // Microsoft Outlook/Exchange immediate push
+    "Precedence": "first-class",     // Prevents classification as bulk/promotions
+    "Auto-Submitted": "auto-generated", // Identifies critical transactional automated notice
+    "X-Auto-Response-Suppress": "All, OOF, AutoReply",
+    "X-Mailer": "SchoolERP-Transactional-Engine/2.0",
+    "Date": rfcDate,
+    "Message-ID": customMessageId,
+  };
+
+  const plainTextContent = text || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
   // Prepare attachments for Resend
   const resendAttachments = attachments?.map((att) => ({
     filename: att.filename,
     content: Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content),
   }));
 
-  // ---------------------------------------------------------------------------
-  // Provider 1: Resend SDK
-  // ---------------------------------------------------------------------------
   const resendClient = getResendClient();
-  if (resendClient) {
+  const preferSmtp = Boolean(
+    (process.env.EMAIL_PROVIDER || process.env.MAIL_PROVIDER || "").toUpperCase() === "SMTP" ||
+    (config.smtpConfig && !config.resendApiKey)
+  );
+
+  type DispatchOutcome = {
+    success: boolean;
+    provider: MailDispatchResult["provider"];
+    deliveryStatus: string;
+    messageId?: string;
+    error?: string;
+  };
+
+  // Helper: Attempt SMTP delivery
+  const dispatchViaSmtp = async (): Promise<DispatchOutcome | null> => {
+    if (!config.smtpConfig) return null;
+    try {
+      console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting SMTP delivery via ${config.smtpConfig.host}:${config.smtpConfig.port}...`);
+      const nodemailer = await import("nodemailer");
+      const transporter = nodemailer.createTransport({
+        host: config.smtpConfig.host,
+        port: config.smtpConfig.port,
+        secure: config.smtpConfig.secure,
+        auth: {
+          user: config.smtpConfig.auth.user,
+          pass: config.smtpConfig.auth.pass,
+        },
+        pool: false,
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
+        tls: {
+          rejectUnauthorized: false,
+          minVersion: "TLSv1.2",
+        },
+      });
+
+      // Align SMTP sender with authenticated SMTP user to prevent 550 sender rejection (e.g. Gmail / Brevo)
+      let smtpFrom = effectiveFrom;
+      const smtpUser = config.smtpConfig.auth.user;
+      if (smtpUser && smtpUser.includes("@")) {
+        const smtpUserDomain = smtpUser.split("@")[1]?.toLowerCase();
+        const effectiveDomain = effectiveFrom.match(/@([^>]+)/)?.[1]?.toLowerCase();
+        if (!effectiveDomain || effectiveDomain !== smtpUserDomain) {
+          smtpFrom = `${config.fromName} <${smtpUser}>`;
+        }
+      }
+
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: recipients,
+        replyTo: effectiveFrom !== smtpFrom ? effectiveFrom : undefined,
+        subject,
+        html,
+        text: plainTextContent,
+        priority: "high",
+        date: new Date(),
+        messageId: customMessageId,
+        headers: transactionalHeaders,
+        attachments: attachments?.map((att) => ({
+          filename: att.filename,
+          content: att.content,
+          contentType: att.contentType,
+        })),
+      });
+
+      const messageId = info.messageId || customMessageId;
+      console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via SMTP to [${recipients.join(", ")}] (id: ${messageId})`);
+      return {
+        success: true,
+        provider: "SMTP",
+        deliveryStatus: `DELIVERED_SMTP (id: ${messageId})`,
+        messageId,
+      };
+    } catch (smtpEx: any) {
+      const err = `SMTP dispatch failed: ${smtpEx?.message || String(smtpEx)}`;
+      console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] SMTP dispatch exception:`, smtpEx);
+      return {
+        success: false,
+        provider: "NONE",
+        deliveryStatus: "FAILED_SMTP",
+        error: err,
+      };
+    }
+  };
+
+  // Helper: Attempt Resend delivery
+  const dispatchViaResend = async (): Promise<DispatchOutcome | null> => {
+    if (!resendClient) return null;
     try {
       console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting delivery via Resend SDK...`);
       const { data, error } = await resendClient.emails.send({
@@ -218,12 +328,13 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
         to: recipients,
         subject,
         html,
-        text: text || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+        text: plainTextContent,
+        headers: transactionalHeaders,
         attachments: resendAttachments,
       });
 
       if (error) {
-        deliveryError = `Resend API Error: ${error.name || "Error"} - ${error.message}`;
+        let resendError = `Resend API Error: ${error.name || "Error"} - ${error.message}`;
         console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend SDK returned an error:`, {
           error,
           from: effectiveFrom,
@@ -246,91 +357,88 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
               to: recipients,
               subject,
               html,
-              text: text || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+              text: plainTextContent,
+              headers: transactionalHeaders,
               attachments: resendAttachments,
             });
 
             if (fallbackResult.data?.id) {
-              resultMessageId = fallbackResult.data.id;
-              deliveryStatus = `DELIVERED_RESEND_SANDBOX (id: ${fallbackResult.data.id})`;
-              activeProvider = "RESEND";
-              deliveryError = undefined;
               console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend sandbox to [${recipients.join(", ")}] (id: ${fallbackResult.data.id})`);
+              return {
+                success: true,
+                provider: "RESEND",
+                deliveryStatus: `DELIVERED_RESEND_SANDBOX (id: ${fallbackResult.data.id})`,
+                messageId: fallbackResult.data.id,
+              };
             } else if (fallbackResult.error) {
-              deliveryError = `Resend API Error: ${fallbackResult.error.name || "Error"} - ${fallbackResult.error.message}`;
+              resendError = `Resend API Error: ${fallbackResult.error.name || "Error"} - ${fallbackResult.error.message}`;
               console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend sandbox fallback also failed:`, fallbackResult.error);
             }
           } catch (fbEx: any) {
-            deliveryError = `Resend fallback exception: ${fbEx?.message || String(fbEx)}`;
+            resendError = `Resend fallback exception: ${fbEx?.message || String(fbEx)}`;
             console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend sandbox fallback exception:`, fbEx);
           }
         }
+
+        return {
+          success: false,
+          provider: "NONE",
+          deliveryStatus: "FAILED_RESEND",
+          error: resendError,
+        };
       } else if (data?.id) {
-        resultMessageId = data.id;
-        deliveryStatus = `DELIVERED_RESEND (id: ${data.id})`;
-        activeProvider = "RESEND";
         console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via Resend SDK to [${recipients.join(", ")}] (id: ${data.id})`);
+        return {
+          success: true,
+          provider: "RESEND",
+          deliveryStatus: `DELIVERED_RESEND (id: ${data.id})`,
+          messageId: data.id,
+        };
       }
     } catch (resendEx: any) {
-      deliveryError = `Resend SDK exception: ${resendEx?.message || String(resendEx)}`;
+      const err = `Resend SDK exception: ${resendEx?.message || String(resendEx)}`;
       console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] Resend SDK execution exception:`, resendEx);
+      return {
+        success: false,
+        provider: "NONE",
+        deliveryStatus: "FAILED_RESEND_EXCEPTION",
+        error: err,
+      };
+    }
+    return null;
+  };
+
+  // Execute in resolved preference order
+  let outcome: DispatchOutcome | null = null;
+  if (preferSmtp) {
+    outcome = await dispatchViaSmtp();
+    if (!outcome?.success) {
+      const resendOutcome = await dispatchViaResend();
+      if (resendOutcome?.success) {
+        outcome = resendOutcome;
+      } else if (resendOutcome?.error) {
+        deliveryError = `${outcome?.error || "SMTP failed"} | ${resendOutcome.error}`;
+      }
+    }
+  } else {
+    outcome = await dispatchViaResend();
+    if (!outcome?.success) {
+      const smtpOutcome = await dispatchViaSmtp();
+      if (smtpOutcome?.success) {
+        outcome = smtpOutcome;
+      } else if (smtpOutcome?.error) {
+        deliveryError = `${outcome?.error || "Resend failed"} | ${smtpOutcome.error}`;
+      }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Provider 2: SMTP Fallback (Nodemailer)
-  // ---------------------------------------------------------------------------
-  if ((!activeProvider || activeProvider === "NONE") && config.smtpConfig) {
-    try {
-      console.log(`[EMAIL_DISPATCH] [${logCategory}] Attempting SMTP delivery via ${config.smtpConfig.host}:${config.smtpConfig.port}...`);
-      const nodemailer = await import("nodemailer");
-      const transporter = nodemailer.createTransport({
-        host: config.smtpConfig.host,
-        port: config.smtpConfig.port,
-        secure: config.smtpConfig.secure,
-        auth: {
-          user: config.smtpConfig.auth.user,
-          pass: config.smtpConfig.auth.pass,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-      });
-
-      // Align SMTP sender with authenticated SMTP user to prevent 550 sender rejection (e.g. Gmail / Brevo)
-      let smtpFrom = effectiveFrom;
-      const smtpUser = config.smtpConfig.auth.user;
-      if (smtpUser && smtpUser.includes("@")) {
-        const smtpUserDomain = smtpUser.split("@")[1]?.toLowerCase();
-        const effectiveDomain = effectiveFrom.match(/@([^>]+)/)?.[1]?.toLowerCase();
-        if (!effectiveDomain || effectiveDomain !== smtpUserDomain) {
-          smtpFrom = `${config.fromName} <${smtpUser}>`;
-        }
-      }
-
-      const info = await transporter.sendMail({
-        from: smtpFrom,
-        to: recipients,
-        replyTo: effectiveFrom !== smtpFrom ? effectiveFrom : undefined,
-        subject,
-        html,
-        text,
-        attachments: attachments?.map((att) => ({
-          filename: att.filename,
-          content: att.content,
-          contentType: att.contentType,
-        })),
-      });
-
-      resultMessageId = info.messageId;
-      deliveryStatus = `DELIVERED_SMTP (id: ${info.messageId})`;
-      activeProvider = "SMTP";
-      deliveryError = undefined;
-      console.log(`[EMAIL_DISPATCH] [${logCategory}] Successfully delivered via SMTP to [${recipients.join(", ")}] (id: ${info.messageId})`);
-    } catch (smtpEx: any) {
-      deliveryError = `SMTP dispatch failed: ${smtpEx?.message || String(smtpEx)}`;
-      console.error(`[EMAIL_SYNC_ERROR] [${logCategory}] SMTP dispatch exception:`, smtpEx);
-    }
+  if (outcome?.success) {
+    activeProvider = outcome.provider;
+    deliveryStatus = outcome.deliveryStatus;
+    resultMessageId = outcome.messageId;
+    deliveryError = undefined;
+  } else if (outcome?.error) {
+    deliveryError = outcome.error;
   }
 
   // ---------------------------------------------------------------------------

@@ -256,110 +256,7 @@ function MarketingNavbar() {
 
 export default function LandingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
-  const [loadingGateway, setLoadingGateway] = useState<"trial" | "demo" | null>(null);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const copyToClipboard = (text: string, key: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 2000);
-    }
-  };
-
-  const demoTenantsList = [
-    {
-      id: "creche",
-      name: "Demo Creche",
-      tier: "Creche",
-      subdomain: "demo-creche",
-      tagline: "Early Childhood & Toddler Care",
-      classes: "Creche 1, Creche 2",
-      badge: "Ages 0 - 2",
-      badgeColor: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800",
-      accentBorder: "hover:border-pink-500/50",
-      accentBg: "from-pink-500/10 via-transparent to-transparent",
-      icon: Baby,
-      email: "demo-creche@demo.com",
-      password: "Demo@123",
-      features: ["Sensory Development Tracking", "Daily Care Logs & Attendance", "Guardian Contact Directory"],
-    },
-    {
-      id: "nursery",
-      name: "Demo Nursery",
-      tier: "Nursery",
-      subdomain: "demo-nursery",
-      tagline: "Foundation, Phonics & KG",
-      classes: "Nursery 1, Nursery 2, KG",
-      badge: "Ages 3 - 5",
-      badgeColor: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-      accentBorder: "hover:border-amber-500/50",
-      accentBg: "from-amber-500/10 via-transparent to-transparent",
-      icon: School,
-      email: "demo-nursery@demo.com",
-      password: "Demo@123",
-      features: ["Early Numeracy & Phonics", "Montessori Milestone Scoring", "Classroom Activity Logs"],
-    },
-    {
-      id: "primary",
-      name: "Demo Primary",
-      tier: "Primary",
-      subdomain: "demo-primary",
-      tagline: "Primary Education Curriculum",
-      classes: "Primary 1 – Primary 6",
-      badge: "Primary 1 - 6",
-      badgeColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
-      accentBorder: "hover:border-emerald-500/50",
-      accentBg: "from-emerald-500/10 via-transparent to-transparent",
-      icon: BookOpen,
-      email: "demo-primary@demo.com",
-      password: "Demo@123",
-      features: ["CA1, CA2 & Exam Continuous Grading", "Term Broadsheets & Report Cards", "Tuition & Fee Verification"],
-    },
-    {
-      id: "secondary",
-      name: "Demo Secondary",
-      tier: "Secondary",
-      subdomain: "demo-secondary",
-      tagline: "Junior & Senior Secondary",
-      classes: "JSS 1–3, SSS 1–3",
-      badge: "WAEC / NECO",
-      badgeColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
-      accentBorder: "hover:border-blue-500/50",
-      accentBg: "from-blue-500/10 via-transparent to-transparent",
-      icon: Building,
-      email: "demo-secondary@demo.com",
-      password: "Demo@123",
-      features: ["Senior WAEC/NECO Examination Tracks", "Subject Teachers & Form Masters", "Cumulative GPA & Transcripts"],
-    },
-    {
-      id: "university",
-      name: "Demo University",
-      tier: "University",
-      subdomain: "demo-university",
-      tagline: "Higher Institution & Faculties",
-      classes: "Departments: Computer Science, Business Admin • Levels: 100–400",
-      badge: "Tertiary Degree",
-      badgeColor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
-      accentBorder: "hover:border-purple-500/50",
-      accentBg: "from-purple-500/10 via-transparent to-transparent",
-      icon: GraduationCap,
-      email: "demo-university@demo.com",
-      password: "Demo@123",
-      features: ["Departmental Course Registration", "Credit Unit Grade Point Average", "Faculty & Senate Roster"],
-    },
-  ];
-
-  const handleLaunchDemo = (demo: typeof demoTenantsList[0]) => {
-    const baseUrl =
-      typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? window.location.origin
-        : (process.env.NEXT_PUBLIC_APP_URL || "https://bonaveeict.com.ng");
-    const targetUrl = `${baseUrl}/login?email=${encodeURIComponent(demo.email)}&school=${encodeURIComponent(demo.subdomain)}`;
-    window.location.assign(targetUrl);
-  };
   const [isTrialSubmitting, setIsTrialSubmitting] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
   const [trialForm, setTrialForm] = useState({
@@ -447,34 +344,6 @@ export default function LandingPage() {
     }
   };
 
-  const handleGatewayNavigation = async (type: "trial" | "demo", endpoint: string) => {
-    // Prevent duplicate firing if a request is already in-flight
-    if (loadingGateway) return;
-    setLoadingGateway(type);
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gateway returned HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data?.redirectUrl) {
-        window.location.assign(data.redirectUrl);
-        return;
-      }
-      window.location.assign(endpoint);
-    } catch (err) {
-      console.error(`[GATEWAY_INITIALIZATION_ERROR] Failed to navigate to ${type}:`, err);
-      // Fallback navigation directly to endpoint GET route
-      window.location.assign(endpoint);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 font-sans selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-300">
       {/* Navigation Header */}
@@ -483,49 +352,48 @@ export default function LandingPage() {
       </SessionProvider>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-32 w-full max-w-full overflow-x-hidden px-4 sm:px-6 bg-slate-900">
-        {/* Background Image Integration - Full width display on mobile, panoramic cover on desktop */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          {/* Ambient blurred backdrop for seamless filling on mobile */}
-          <div className="block md:hidden absolute inset-0 z-0">
-            <Image
-              src="/assets/images/hero-graduation.jpg"
-              alt=""
-              fill
-              aria-hidden="true"
-              className="object-cover blur-xl opacity-35 scale-110"
-              priority
-            />
-          </div>
-          {/* Main Hero Background: Full width on mobile devices (object-contain object-top) and object-cover on desktop */}
+      <section className="relative w-full max-w-full overflow-x-hidden bg-slate-900 text-white">
+        {/* Desktop Background Image - hidden on mobile, sparkling clean panoramic cover on desktop with zero blur */}
+        <div className="hidden md:block absolute inset-0 z-0 overflow-hidden">
           <Image
             src="/assets/images/hero-graduation.jpg"
             alt="Students graduating and celebrating"
             fill
-            className="w-full h-full object-contain object-top md:object-cover md:object-center transition-all duration-300"
-            sizes="(max-width: 768px) 100vw, 100vw"
+            quality={95}
             priority
+            className="w-full h-full object-cover object-center"
+            sizes="100vw"
+          />
+          {/* Subtle clean gradient overlay on desktop: maintains photo vibrancy and sharpness with zero blur */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/25 pointer-events-none" />
+        </div>
+
+        {/* Mobile Full-Width Background Image: Displayed cleanly at the top with ZERO text overlay */}
+        <div className="block md:hidden w-full relative aspect-[16/10] sm:aspect-[16/9] overflow-hidden bg-slate-950">
+          <Image
+            src="/assets/images/hero-graduation.jpg"
+            alt="Students graduating and celebrating"
+            fill
+            quality={95}
+            priority
+            className="w-full h-full object-cover object-top"
+            sizes="100vw"
           />
         </div>
 
-        {/* Dark overlay layer with smooth mobile gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/75 to-slate-950 md:bg-slate-950/70 z-10 pointer-events-none"></div>
-
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-100/10 dark:bg-blue-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-100/10 dark:bg-purple-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
-
-        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/50 border border-blue-400/50 text-blue-300 text-xs font-bold uppercase tracking-wider mb-8 backdrop-blur-sm shadow-sm">
+        {/* Hero Content: Pushed completely below the image on mobile devices, centered over background on desktop */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center pt-8 pb-16 md:pt-28 md:pb-32">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/50 border border-blue-400/50 text-blue-300 text-xs font-bold uppercase tracking-wider mb-6 md:mb-8 shadow-sm">
             <span className="flex h-2 w-2 rounded-full bg-blue-400"></span>
             Version 2.0 Now Live
           </div>
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-8 leading-tight drop-shadow-lg">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-6 md:mb-8 leading-tight drop-shadow-lg">
             The Unified Engine for <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
               Modern Education
             </span>
           </h1>
-          <p className="text-xl md:text-2xl text-slate-200 font-semibold max-w-3xl mx-auto mb-12 leading-relaxed drop-shadow-md">
+          <p className="text-base sm:text-xl md:text-2xl text-slate-200 font-semibold max-w-3xl mx-auto mb-8 md:mb-12 leading-relaxed drop-shadow-md">
             A single, scalable ERP platform designed to drive operational excellence from Early Childhood Centers to Universities and Polytechnics. Manage admissions, finance, and academics in one place.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -533,20 +401,19 @@ export default function LandingPage() {
               type="button"
               id="start-free-trial-btn"
               onClick={() => setIsTrialModalOpen(true)}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-75 disabled:cursor-not-allowed disabled:pointer-events-none text-white px-8 py-4 rounded-full font-bold text-base sm:text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Start Free Trial</span>
               <ArrowRight className="h-5 w-5" />
             </button>
-            <button
-              type="button"
-              id="explore-demo-btn"
-              onClick={() => setIsDemoModalOpen(true)}
-              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm px-8 py-4 rounded-full font-bold text-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            <Link
+              href="/register"
+              id="onboard-institution-hero-btn"
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/20 px-8 py-4 rounded-full font-bold text-base sm:text-lg transition-all shadow-sm flex items-center justify-center gap-2"
             >
-              <Sparkles className="h-5 w-5 text-amber-300" />
-              <span>Explore Demo Environment</span>
-            </button>
+              <span>Onboard Institution</span>
+              <ArrowRight className="h-5 w-5" />
+            </Link>
           </div>
         </div>
       </section>
@@ -744,13 +611,12 @@ export default function LandingPage() {
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Platform Gateways</h4>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsDemoModalOpen(true)}
-                    className="text-left hover:text-blue-400 transition-colors cursor-pointer"
+                  <Link
+                    href="/register"
+                    className="text-left hover:text-blue-400 transition-colors"
                   >
-                    Institutional Demo Environments (5 Tiers)
-                  </button>
+                    14-Day Free Trial Provisioning
+                  </Link>
                 </li>
                 <li><Link href="/portal/student" className="hover:text-blue-400 transition-colors">Student Learning Portal</Link></li>
                 <li><Link href="/portal/staff" className="hover:text-blue-400 transition-colors">Staff & Faculty Portal</Link></li>
@@ -790,135 +656,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-      {/* Demo Chooser Modal */}
-      {isDemoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
-          <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[92vh] overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => setIsDemoModalOpen(false)}
-              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* Modal Header */}
-            <div className="mb-8 text-center max-w-2xl mx-auto">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 mb-2">
-                <Sparkles className="w-3.5 h-3.5" />
-                Live Demo Environments • 5 Institutional Tiers
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                Select an Institutional Demo
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                Experience full administrative and academic workflows with pre-populated pupil rosters, courses, grading, invoices, and attendance records inside the Main App.
-              </p>
-            </div>
-
-            {/* 5 Demo Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {demoTenantsList.map((demo) => {
-                const IconComponent = demo.icon;
-                return (
-                  <div
-                    key={demo.id}
-                    className={`relative flex flex-col justify-between rounded-2xl p-5 bg-gradient-to-b ${demo.accentBg} bg-white dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-800 ${demo.accentBorder} transition-all duration-300 hover:shadow-xl group`}
-                  >
-                    <div>
-                      {/* Tier Header */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700/60 shadow-xs shrink-0 text-slate-800 dark:text-slate-100">
-                          <IconComponent className="w-6 h-6" />
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${demo.badgeColor}`}>
-                          {demo.badge}
-                        </span>
-                      </div>
-
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                        {demo.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                        {demo.tagline}
-                      </p>
-
-                      {/* Class / Department badges */}
-                      <div className="mb-4 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 rounded-lg p-2.5 border border-slate-200/60 dark:border-slate-700/60">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Classes & Scope</span>
-                        {demo.classes}
-                      </div>
-
-                      {/* Credentials Box */}
-                      <div className="bg-slate-50 dark:bg-slate-900/90 rounded-xl p-3 border border-slate-200 dark:border-slate-800 text-xs space-y-2 mb-4">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[11px] font-semibold text-slate-400">Email:</span>
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-mono text-slate-900 dark:text-slate-100 truncate text-[11px]">
-                              {demo.email}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(demo.email, `${demo.id}-email`)}
-                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0"
-                              title="Copy Email"
-                            >
-                              {copiedKey === `${demo.id}-email` ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-1 border-t border-slate-200/60 dark:border-slate-800 pt-1.5">
-                          <span className="text-[11px] font-semibold text-slate-400">Password:</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-[11px]">
-                              {demo.password}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(demo.password, `${demo.id}-pass`)}
-                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0"
-                              title="Copy Password"
-                            >
-                              {copiedKey === `${demo.id}-pass` ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleLaunchDemo(demo)}
-                      className="w-full mt-2 bg-slate-900 hover:bg-blue-600 dark:bg-slate-800 dark:hover:bg-blue-600 text-white py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm group-hover:shadow-md cursor-pointer"
-                    >
-                      <span>Launch {demo.tier} Demo</span>
-                      <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer Note */}
-            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
-              <span>All demo data is isolated and filtered by school tenant ID.</span>
-              <span>Credentials auto-fill upon launching the Main App login.</span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Free Trial Modal */}
       {isTrialModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">

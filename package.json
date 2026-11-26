@@ -11,8 +11,6 @@
     "build": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\" && next build",
     "build:local": "prisma generate && next build",
     "build:render": "rm -rf .next && npx prisma generate && next build",
-    "demo:setup": "node scripts/init-demo-db.js",
-    "seed:demo": "node scripts/seed-demo-tenants.js",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push"

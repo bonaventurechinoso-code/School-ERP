@@ -53,36 +53,22 @@ let cachedDemoSchoolId: string | null = null;
 
 /**
  * Checks if a given schoolId corresponds to the isolated Demo Playground environment.
+ * Demo environment has been purged. Always returns false.
  */
-export function isDemoSchool(schoolId?: string | null): boolean {
-  if (!schoolId) return false;
-  const s = String(schoolId).trim().toLowerCase();
-  if (s === "demo") return true;
-  if (cachedDemoSchoolId && schoolId === cachedDemoSchoolId) return true;
+export function isDemoSchool(_schoolId?: string | null): boolean {
   return false;
 }
 
 /**
- * Caches the resolved Demo School UUID from DEMO_DATABASE_URL.
+ * Caches the resolved Demo School UUID (no-op stub).
  */
-export function setDemoSchoolId(id: string): void {
-  cachedDemoSchoolId = id;
-}
+export function setDemoSchoolId(_id: string): void {}
 
 /**
- * Resolves the isolated PrismaClient for the Demo Playground environment.
- * Strictly uses process.env.DEMO_DATABASE_URL.
- * In production (NODE_ENV === "production"), if DEMO_DATABASE_URL is not configured,
- * it throws an explicit error to prevent Demo from ever using the Production database.
+ * Resolves the isolated PrismaClient for legacy callers (returns basePrisma).
  */
 export function getDemoPrismaClient(): PrismaClient {
-  const demoUrl = process.env.DEMO_DATABASE_URL;
-  if (!demoUrl) {
-    // If dedicated DEMO_DATABASE_URL is not provided, fall back safely to basePrisma
-    // (Demo School is already provisioned with subdomain 'demo' in the primary database)
-    return basePrisma;
-  }
-  return TenantConnectionManager.getClientForUrl(demoUrl);
+  return basePrisma;
 }
 
 /**

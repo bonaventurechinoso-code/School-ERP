@@ -78,27 +78,14 @@ function LoginPageContent() {
     }
   }, [resolvedSubdomain]);
 
-  // Auto-fill username/email from query params if supplied (e.g. from notification link or demo chooser)
+  // Auto-fill username/email from query params if supplied (e.g. from notification link)
   useEffect(() => {
     const queryEmail = searchParams.get("email") || searchParams.get("username") || searchParams.get("login");
     const querySchool = searchParams.get("school") || searchParams.get("schoolDomain") || searchParams.get("tenant") || searchParams.get("code");
 
-    const demoMap: Record<string, string> = {
-      "demo-creche@demo.com": "demo-creche",
-      "demo-nursery@demo.com": "demo-nursery",
-      "demo-primary@demo.com": "demo-primary",
-      "demo-secondary@demo.com": "demo-secondary",
-      "demo-university@demo.com": "demo-university",
-    };
-
     if (queryEmail) {
       const cleanEmail = queryEmail.trim();
       setEmail((prev) => (prev ? prev : cleanEmail));
-      if (demoMap[cleanEmail.toLowerCase()]) {
-        const matchingSchool = demoMap[cleanEmail.toLowerCase()];
-        setResolvedSubdomain(matchingSchool);
-        setSchoolCode(matchingSchool);
-      }
     }
 
     if (querySchool) {
@@ -398,27 +385,6 @@ function LoginPageContent() {
     };
   }, [resolvedSubdomain]);
 
-  // Demo Tenant Evaluation & Verified Seed Credentials
-  const DEMO_EMAIL = "demo.admin@schoolerp.local";
-  const DEMO_PASSWORD = "Password123!";
-  const DEMO_SCHOOL_CODE = "demo";
-
-  const isDemoTenant =
-    (resolvedSubdomain || "").trim().toLowerCase() === "demo" ||
-    (resolvedSubdomain || "").trim().toLowerCase().startsWith("demo-") ||
-    (schoolCode || "").trim().toLowerCase() === "demo" ||
-    (schoolCode || "").trim().toLowerCase().startsWith("demo-") ||
-    (routeSchool || "").trim().toLowerCase() === "demo" ||
-    (routeSchool || "").trim().toLowerCase().startsWith("demo-");
-
-  const DEMO_TENANT_MAP: Record<string, string> = {
-    "demo-creche@demo.com": "demo-creche",
-    "demo-nursery@demo.com": "demo-nursery",
-    "demo-primary@demo.com": "demo-primary",
-    "demo-secondary@demo.com": "demo-secondary",
-    "demo-university@demo.com": "demo-university",
-  };
-
   // Unified Form Submission & Dynamic SaaS Resolution Flow
   const performLogin = async (customEmail?: string, customPassword?: string, customSchoolCode?: string) => {
     isLoggingInRef.current = true;
@@ -432,19 +398,18 @@ function LoginPageContent() {
     const normalizedEmail = emailToUse.trim().toLowerCase();
     const effectiveSchoolCode = isSuperAdmin
       ? ""
-      : (schoolCodeToUse.trim() || resolvedSubdomain || DEMO_TENANT_MAP[normalizedEmail] || "").trim().toLowerCase();
+      : (schoolCodeToUse.trim() || resolvedSubdomain || "").trim().toLowerCase();
     const targetDomain = effectiveSchoolCode;
 
-    // Check if authenticating without a school code as super admin or demo tenant
+    // Check if authenticating without a school code as super admin
     const isKnownSuperAdmin =
       isSuperAdmin ||
       normalizedEmail === "bonaventure.chinoso@gmail.com" ||
       normalizedEmail === "admin@bonaveeict.com.ng" ||
       normalizedEmail === "superadmin@platform.com";
-    const isKnownDemoAccount = Boolean(DEMO_TENANT_MAP[normalizedEmail]);
 
     // Immediate client-side validation guard: School code is mandatory for institutional workspace access
-    if (!isSuperAdmin && !effectiveSchoolCode && !isKnownSuperAdmin && !isKnownDemoAccount) {
+    if (!isSuperAdmin && !effectiveSchoolCode && !isKnownSuperAdmin) {
       const errorMsg = "School Code is required to access your workspace.";
       setSchoolCodeError(errorMsg);
       showToast(errorMsg, "error");
@@ -559,7 +524,6 @@ function LoginPageContent() {
 
       // 3. Extract verified JWT session payload
       let sessionPayload: any = null;
-      const isTargetDemo = (effectiveSchoolCode || resolvedSubdomain || "").trim().toLowerCase() === "demo";
       if (apiLoginData && apiLoginData.success) {
         const effectiveToken = apiLoginData.token || apiLoginData.accessToken || apiLoginData.sessionToken;
         sessionPayload = {
@@ -576,7 +540,7 @@ function LoginPageContent() {
           permissions: apiLoginData.permissions || [],
           sessionToken: apiLoginData.sessionToken || effectiveToken,
           token: effectiveToken,
-          mustChangePassword: !isTargetDemo && Boolean(apiLoginData.mustChangePassword),
+          mustChangePassword: Boolean(apiLoginData.mustChangePassword),
         };
       }
 
@@ -663,9 +627,8 @@ function LoginPageContent() {
       if (isSuperAdmin || isSuperAdminUser || rawRole === "SUPER_ADMIN") {
         destination = "/super-admin";
       } else {
-        // Check forced initial password reset for standard accounts (bypassed conditionally for demo tenant)
-        const isLoginDemoTenant = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase() === "demo";
-        if (!isLoginDemoTenant && sessionPayload?.mustChangePassword) {
+        // Check forced initial password reset for standard accounts
+        if (sessionPayload?.mustChangePassword) {
           const targetCode = (effectiveSchoolCode || resolvedSubdomain || sessionPayload?.schoolDomain || "").trim().toLowerCase().replace(/^\//, "");
           destination = resolvedSubdomain ? "/change-password" : (targetCode ? `/${targetCode}/change-password` : "/change-password");
         } else if (
@@ -751,15 +714,6 @@ function LoginPageContent() {
     await performLogin();
   };
 
-  const handleDemoLogin = async () => {
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    if (!resolvedSubdomain) {
-      setSchoolCode(DEMO_SCHOOL_CODE);
-    }
-    await performLogin(DEMO_EMAIL, DEMO_PASSWORD, DEMO_SCHOOL_CODE);
-  };
-
   const rawTenantName = tenantBranding?.name || (resolvedSubdomain ? resolvedSubdomain.charAt(0).toUpperCase() + resolvedSubdomain.slice(1) : "");
   const visualTenantName =
     !rawTenantName ||
@@ -767,7 +721,7 @@ function LoginPageContent() {
       rawTenantName.toLowerCase() === "localhost" ||
       rawTenantName.toLowerCase() === "root" ||
       rawTenantName.toLowerCase() === "default"
-      ? (resolvedSubdomain?.toLowerCase() === "demo" ? "Apex International Academy" : "")
+      ? ""
       : rawTenantName;
 
   return (
@@ -1025,44 +979,6 @@ function LoginPageContent() {
               </Link>
             </div>
 
-            {/* Demo Credentials Box - Visible ONLY on Demo Tenant */}
-            {isDemoTenant && (
-              <div className="rounded-xl border border-sky-200/80 bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-50 p-3.5 sm:p-4 text-xs space-y-2.5 shadow-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-sky-100">
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                    <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Demo Credentials - For Evaluation Only</span>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
-                    Active Demo
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Email
-                    </span>
-                    <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-900 select-all">
-                      <span className="truncate">{DEMO_EMAIL}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Password
-                    </span>
-                    <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-900 select-all">
-                      <span>{DEMO_PASSWORD}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                  <span>Role: School Administrator (Headmaster) &bull; Opens Demo Dashboard</span>
-                </p>
-              </div>
-            )}
-
             {/* Sign In Action Button with Spinner */}
             <button
               type="submit"
@@ -1078,28 +994,6 @@ function LoginPageContent() {
                 <span>Sign In</span>
               )}
             </button>
-
-            {/* One-Click Demo Login Button - Visible ONLY on Demo Tenant */}
-            {isDemoTenant && (
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={isSubmitting}
-                className="w-full py-3 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 text-sky-900 font-semibold text-sm transition-all duration-200 inline-flex items-center justify-center gap-2 focus:outline-none focus:ring-4 focus:ring-sky-100 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
-                    <span>Entering Demo Environment...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-sky-600" />
-                    <span>Login as Demo User</span>
-                  </>
-                )}
-              </button>
-            )}
           </form>
 
           {/* Bottom Security Note */}

@@ -373,9 +373,9 @@ export default async function PublicGuestPortalPage({
 
       {/* Hero Section */}
       <main className="flex-1">
-        <div className="relative w-full min-h-[580px] overflow-hidden bg-slate-950 text-white flex items-center">
-          {/* Background Media - Full width on mobile devices with ambient fill, panoramic on desktop */}
-          <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
+        <div className="relative w-full overflow-hidden bg-slate-950 text-white">
+          {/* Desktop Background Media - hidden on mobile, sparkling clean panoramic cover on desktop with zero blur */}
+          <div className="hidden md:block absolute inset-0 w-full h-full z-0 overflow-hidden">
             {customHeroType === "video" && customHeroVideo ? (
               <video
                 key={customHeroVideo}
@@ -384,7 +384,7 @@ export default async function PublicGuestPortalPage({
                 muted
                 playsInline
                 preload="auto"
-                className="w-full h-full object-contain object-top md:object-cover md:object-center"
+                className="w-full h-full object-cover object-center"
               >
                 <source
                   src={customHeroVideo}
@@ -392,31 +392,49 @@ export default async function PublicGuestPortalPage({
                 />
               </video>
             ) : (
-              <>
-                <div className="block md:hidden absolute inset-0 z-0">
-                  <Image 
-                    src={heroImageUrl} 
-                    fill
-                    aria-hidden="true"
-                    className="object-cover blur-xl opacity-35 scale-110" 
-                    alt="" 
-                    unoptimized={true}
-                  />
-                </div>
-                <Image 
-                  src={heroImageUrl} 
-                  fill
-                  priority
-                  className="w-full h-full object-contain object-top md:object-cover md:object-center" 
-                  alt={`${school.name} Campus Premises`} 
-                  unoptimized={true}
-                />
-              </>
+              <Image 
+                src={heroImageUrl} 
+                fill
+                priority
+                className="w-full h-full object-cover object-center" 
+                alt={`${school.name} Campus Premises`} 
+                unoptimized={true}
+              />
             )}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-slate-950 md:bg-black/50 z-0 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/25 z-0 pointer-events-none" />
           </div>
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">
+          {/* Mobile Full-Width Media Container: Displayed cleanly at the top with ZERO text overlay */}
+          <div className="block md:hidden w-full relative aspect-[16/10] sm:aspect-[16/9] overflow-hidden bg-slate-950">
+            {customHeroType === "video" && customHeroVideo ? (
+              <video
+                key={customHeroVideo}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                className="w-full h-full object-cover object-center"
+              >
+                <source
+                  src={customHeroVideo}
+                  type={customHeroVideo.endsWith(".webm") ? "video/webm" : "video/mp4"}
+                />
+              </video>
+            ) : (
+              <Image 
+                src={heroImageUrl} 
+                fill
+                priority
+                className="w-full h-full object-cover object-center" 
+                alt={`${school.name} Campus Premises`} 
+                unoptimized={true}
+              />
+            )}
+          </div>
+
+          {/* Hero Content: Pushed completely below the image on mobile devices, centered over background on desktop */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-10 md:py-28">
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-indigo-200 mb-6 shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
               <span>{schoolConfig.motto || "Inspiring Excellence, Character & Knowledge"}</span>
