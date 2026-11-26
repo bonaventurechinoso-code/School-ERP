@@ -873,6 +873,47 @@ export async function saveBroadsheetScore(
   const remarks = payload.remarks || getGradeRemark(letter);
 
   try {
+    // 0. Academic Integrity Check: Prevent admin from overwriting teacher-submitted scores
+    const existingGrade = await tenantDb.gradeRecord.findFirst({
+      where: {
+        schoolId,
+        studentId: payload.studentId,
+        term,
+        className,
+        subject: { equals: subject, mode: "insensitive" },
+      },
+    }).catch(() => null);
+
+    const existingAcademic = !existingGrade
+      ? await tenantDb.academicRecord.findFirst({
+          where: {
+            schoolId,
+            studentId: payload.studentId,
+            term,
+            subject: { equals: subject, mode: "insensitive" },
+          },
+        }).catch(() => null)
+      : null;
+
+    const hasSavedScore =
+      (existingGrade &&
+        ((existingGrade.totalScore != null && existingGrade.totalScore > 0) ||
+          (existingGrade.ca1 != null && existingGrade.ca1 > 0) ||
+          (existingGrade.ca2 != null && existingGrade.ca2 > 0) ||
+          (existingGrade.exam != null && existingGrade.exam > 0))) ||
+      (existingAcademic &&
+        ((existingAcademic.totalScore != null && existingAcademic.totalScore > 0) ||
+          ((existingAcademic as any).ca1 != null && (existingAcademic as any).ca1 > 0) ||
+          ((existingAcademic as any).ca2 != null && (existingAcademic as any).ca2 > 0) ||
+          ((existingAcademic as any).exam != null && (existingAcademic as any).exam > 0)));
+
+    if (hasSavedScore) {
+      return {
+        success: false,
+        error: "Academic Integrity Lock: Teacher-submitted scores cannot be modified by administrators.",
+      };
+    }
+
     // 1. Synchronize GradeRecord
     await tenantDb.gradeRecord.upsert({
       where: {

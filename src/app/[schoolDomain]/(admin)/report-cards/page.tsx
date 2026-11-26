@@ -14,6 +14,7 @@ import {
   Search,
   FileText,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import StudentReportCardModal, { ReportCardStudentData } from "./StudentReportCardModal";
@@ -411,6 +412,7 @@ interface StudentScore {
   subjectsCount?: number;
   subjects?: any[];
   isCompiled?: boolean;
+  hasScores?: boolean;
   saving?: boolean;
   saved?: boolean;
   error?: string;
@@ -826,6 +828,16 @@ function ReportCardsContent() {
   };
 
   const handleScoreChange = (id: string, field: "ca1" | "ca2" | "exam", value: string) => {
+    const targetStudent = roster.find((s) => s.id === id);
+    if (targetStudent && (targetStudent.hasScores || targetStudent.isCompiled || (targetStudent as any).saved)) {
+      setActionFeedback({
+        message: "Academic Integrity Lock: Scores saved by subject teachers cannot be edited by administrators.",
+        type: "error",
+      });
+      setTimeout(() => setActionFeedback(null), 5000);
+      return;
+    }
+
     setRoster((prev) =>
       prev.map((s) => {
         if (s.id === id) {
@@ -1287,41 +1299,83 @@ function ReportCardsContent() {
                           <>
                             {/* CA 1 */}
                             <td className="px-6 py-4">
-                              <input 
-                                type="number" 
-                                max="20" 
-                                min="0" 
-                                value={student.ca1}
-                                onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
-                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                                placeholder="0 - 20"
-                              />
+                              <div className="flex items-center justify-center gap-1">
+                                <input 
+                                  type="number" 
+                                  max="20" 
+                                  min="0" 
+                                  value={student.ca1}
+                                  disabled={Boolean(student.hasScores || student.isCompiled || student.ca1 !== "")}
+                                  readOnly={Boolean(student.hasScores || student.isCompiled || student.ca1 !== "")}
+                                  onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
+                                  className={`w-20 border rounded-lg p-1.5 text-center text-sm font-semibold outline-none transition shadow-xs ${
+                                    student.hasScores || student.isCompiled || student.ca1 !== ""
+                                      ? "bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-90"
+                                      : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                                  }`}
+                                  placeholder="0 - 20"
+                                  title={student.hasScores || student.isCompiled || student.ca1 !== "" ? "Scores saved by subject teacher cannot be edited by administrators." : "Enter CA 1"}
+                                />
+                                {(student.hasScores || student.isCompiled || student.ca1 !== "") && (
+                                  <span title="Teacher Submitted (Locked)">
+                                    <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* CA 2 */}
                             <td className="px-6 py-4">
-                              <input 
-                                type="number" 
-                                max="20" 
-                                min="0" 
-                                value={student.ca2}
-                                onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
-                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                                placeholder="0 - 20"
-                              />
+                              <div className="flex items-center justify-center gap-1">
+                                <input 
+                                  type="number" 
+                                  max="20" 
+                                  min="0" 
+                                  value={student.ca2}
+                                  disabled={Boolean(student.hasScores || student.isCompiled || student.ca2 !== "")}
+                                  readOnly={Boolean(student.hasScores || student.isCompiled || student.ca2 !== "")}
+                                  onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
+                                  className={`w-20 border rounded-lg p-1.5 text-center text-sm font-semibold outline-none transition shadow-xs ${
+                                    student.hasScores || student.isCompiled || student.ca2 !== ""
+                                      ? "bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-90"
+                                      : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                                  }`}
+                                  placeholder="0 - 20"
+                                  title={student.hasScores || student.isCompiled || student.ca2 !== "" ? "Scores saved by subject teacher cannot be edited by administrators." : "Enter CA 2"}
+                                />
+                                {(student.hasScores || student.isCompiled || student.ca2 !== "") && (
+                                  <span title="Teacher Submitted (Locked)">
+                                    <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Exam */}
                             <td className="px-6 py-4">
-                              <input 
-                                type="number" 
-                                max="60" 
-                                min="0" 
-                                value={student.exam}
-                                onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
-                                className="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-1.5 text-center text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-400 outline-none transition shadow-xs" 
-                                placeholder="0 - 60"
-                              />
+                              <div className="flex items-center justify-center gap-1">
+                                <input 
+                                  type="number" 
+                                  max="60" 
+                                  min="0" 
+                                  value={student.exam}
+                                  disabled={Boolean(student.hasScores || student.isCompiled || student.exam !== "")}
+                                  readOnly={Boolean(student.hasScores || student.isCompiled || student.exam !== "")}
+                                  onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
+                                  className={`w-20 border rounded-lg p-1.5 text-center text-sm font-semibold outline-none transition shadow-xs ${
+                                    student.hasScores || student.isCompiled || student.exam !== ""
+                                      ? "bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-90"
+                                      : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                                  }`}
+                                  placeholder="0 - 60"
+                                  title={student.hasScores || student.isCompiled || student.exam !== "" ? "Scores saved by subject teacher cannot be edited by administrators." : "Enter Exam"}
+                                />
+                                {(student.hasScores || student.isCompiled || student.exam !== "") && (
+                                  <span title="Teacher Submitted (Locked)">
+                                    <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Calculated Total Score */}

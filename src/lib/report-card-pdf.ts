@@ -346,9 +346,11 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
 
       // Render Subjects List strictly from database (Single Source of Truth)
       const subjects = data.subjects && data.subjects.length > 0 ? data.subjects : [];
+      const displaySubjects = subjects.slice(0, 16);
+      const rowHeight = displaySubjects.length > 13 ? 12 : displaySubjects.length > 10 ? 13.5 : 15;
+      const cellFontSize = displaySubjects.length > 13 ? 5.5 : 6;
 
-      const rowHeight = 15;
-      if (subjects.length === 0) {
+      if (displaySubjects.length === 0) {
         doc.rect(margin, currentY, contentWidth, rowHeight * 2)
           .fillColor("#FFFFFF")
           .fill()
@@ -361,7 +363,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
           .text("No assessment scores entered yet in Teacher Gradebook for this session.", margin + 10, currentY + 10, { width: contentWidth - 20, align: "center" });
         currentY += rowHeight * 2;
       } else {
-        subjects.slice(0, 11).forEach((sub, rowIdx) => {
+        displaySubjects.forEach((sub, rowIdx) => {
           const isEven = rowIdx % 2 === 0;
           doc.rect(margin, currentY, contentWidth, rowHeight)
             .fillColor(isEven ? "#FFFFFF" : "#F8FAFC")
@@ -425,7 +427,7 @@ export async function generateReportCardPdf(data: ReportCardPdfData): Promise<Bu
                     : "#1D4ED8";
             }
             doc.font(font)
-              .fontSize(6)
+              .fontSize(cellFontSize)
               .fillColor(color)
               .text(val, rowX + paddingLeft, currentY + 4, { width: colWidths[cIdx] - paddingLeft, align });
             rowX += colWidths[cIdx];

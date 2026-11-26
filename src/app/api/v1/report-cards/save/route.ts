@@ -69,6 +69,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Student not found in this tenant." }, { status: 404 });
     }
 
+    // Academic Integrity Lock: Administrators cannot modify scores submitted and saved by subject teachers
+    const existingGrade = await basePrisma.gradeRecord.findUnique({
+      where: {
+        schoolId_studentId_term_className_subject: {
+          schoolId: tenantId,
+          studentId: studentId,
+          term: term,
+          className: className,
+          subject: subject,
+        },
+      },
+    });
+
+    if (role === "ADMIN" && existingGrade) {
+      return NextResponse.json(
+        { error: "Forbidden: Academic integrity policy forbids administrators from modifying scores saved by subject teachers." },
+        { status: 403 }
+      );
+    }
+
     await basePrisma.gradeRecord.upsert({
       where: {
         schoolId_studentId_term_className_subject: {

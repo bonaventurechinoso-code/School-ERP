@@ -7,11 +7,10 @@
   --foreground: #0f172a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --foreground: #f8fafc;
-  }
+/* Explicit class-based dark mode only. Automated OS-level media query switching removed */
+.dark {
+  --background: #090d16;
+  --foreground: #f8fafc;
 }
 
 html,
@@ -24,4 +23,61 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Global A4 Printing Paper Specifications */
+@page {
+  size: A4 portrait;
+  margin: 8mm 10mm;
+}
+
+@media print {
+  html,
+  body {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+}
+
+/* High-Contrast Visible Form Controls & Placeholders for Dark Mode */
+input,
+textarea,
+select {
+  color: inherit;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  color-scheme: dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #94a3b8 !important; /* Tailwind slate-400 - high visibility against dark backgrounds */
+  opacity: 1 !important;
+}
+
+/* Ensure data inside dark mode inputs is always legible and never white-on-white or dark-on-dark */
+.dark input[type="text"],
+.dark input[type="number"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="search"],
+.dark input[type="tel"],
+.dark input[type="url"],
+.dark textarea,
+.dark select {
+  color: #f8fafc;
 }

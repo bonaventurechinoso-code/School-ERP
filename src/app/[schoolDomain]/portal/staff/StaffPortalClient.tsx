@@ -47,6 +47,8 @@ import {
   Bell,
   Mail,
   MessageSquare,
+  Lock,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { isClassMatch } from "@/lib/class-matching";
@@ -307,6 +309,7 @@ export default function StaffPortalClient({
   const [gradesMap, setGradesMap] = useState<Record<string, { ca1?: number | string; ca2?: number | string; exam?: number | string; remarks?: string; isSaved?: boolean }>>({});
   const [isLoadingGrades, setIsLoadingGrades] = useState(false);
   const [gradesSaveMessage, setGradesSaveMessage] = useState<string | null>(null);
+  const [isGradesLocked, setIsGradesLocked] = useState(false);
 
   // Synchronize selectedSubject when available subjects update (e.g. switching class)
   useEffect(() => {
@@ -477,12 +480,15 @@ export default function StaffPortalClient({
         if (!isMounted) return;
         if (res.success && res.grades) {
           const map: Record<string, { ca1?: number | string; ca2?: number | string; exam?: number | string; remarks?: string; isSaved?: boolean }> = {};
+          let anySaved = false;
           res.grades.forEach((g) => {
             const hasScore =
               (g.ca1 !== null && g.ca1 !== undefined && g.ca1 !== "") ||
               (g.ca2 !== null && g.ca2 !== undefined && g.ca2 !== "") ||
               (g.exam !== null && g.exam !== undefined && g.exam !== "") ||
               (g.totalScore !== null && g.totalScore !== undefined && g.totalScore > 0);
+
+            if (hasScore) anySaved = true;
 
             map[g.studentId] = {
               ca1: g.ca1 !== null && g.ca1 !== undefined ? g.ca1 : "",
@@ -493,6 +499,7 @@ export default function StaffPortalClient({
             };
           });
           setGradesMap(map);
+          setIsGradesLocked(anySaved);
         }
       })
       .catch((err) => console.error("Failed to load grade records:", err))
@@ -552,6 +559,7 @@ export default function StaffPortalClient({
     field: "ca1" | "ca2" | "exam" | "remarks",
     value: string | number
   ) => {
+    if (isGradesLocked) return;
     setGradesMap((prev) => {
       const current = prev[studentId] || {};
       let parsedValue: string | number = value;
@@ -738,6 +746,7 @@ export default function StaffPortalClient({
       );
 
       if (res.success) {
+        setIsGradesLocked(true);
         setGradesSaveMessage(`Successfully persisted grades for ${res.count} students at ${res.timestamp || new Date().toLocaleTimeString()}.`);
         setGradesMap((prev) => {
           const next = { ...prev };
@@ -2156,6 +2165,24 @@ export default function StaffPortalClient({
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2 justify-end">
+                  {isGradesLocked && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Scores Locked</span>
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={availableSubjectsForClass.length === 0}
+                    onClick={() => setIsGradesLocked((prev) => !prev)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-bold shadow-xs transition cursor-pointer"
+                    title={isGradesLocked ? "Unlock gradebook score boxes for editing" : "Lock score boxes"}
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>{isGradesLocked ? "Edit Scores" : "Lock Scores"}</span>
+                  </button>
+
                   <button
                     type="button"
                     disabled={isCompilingReportCards || isPending}
@@ -2173,9 +2200,10 @@ export default function StaffPortalClient({
 
                   <button
                     type="button"
-                    disabled={isPending || isCompilingReportCards || availableSubjectsForClass.length === 0}
+                    disabled={isPending || isCompilingReportCards || availableSubjectsForClass.length === 0 || isGradesLocked}
                     onClick={handleSaveGrades}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    title={isGradesLocked ? "Scores are locked. Click 'Edit Scores' to modify before saving." : "Save continuous assessment marks and lock"}
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>{isPending ? "Persisting Marks..." : isCreche ? "Save Milestone Assessments" : "Save Grades (Dual Sync)"}</span>
@@ -2273,9 +2301,16 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="20"
+                                  disabled={isGradesLocked}
+                                  readOnly={isGradesLocked}
                                   value={item.ca1 ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "ca1", e.target.value)}
-                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className={`w-16 mx-auto px-2 py-1.5 border rounded-lg text-center font-mono font-bold text-xs focus:outline-none transition ${
+                                    isGradesLocked
+                                      ? "bg-slate-100 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                                      : "bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                                  }`}
+                                  title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "1st CA (Max 20)"}
                                 />
                               </td>
 
@@ -2285,9 +2320,16 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="20"
+                                  disabled={isGradesLocked}
+                                  readOnly={isGradesLocked}
                                   value={item.ca2 ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "ca2", e.target.value)}
-                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className={`w-16 mx-auto px-2 py-1.5 border rounded-lg text-center font-mono font-bold text-xs focus:outline-none transition ${
+                                    isGradesLocked
+                                      ? "bg-slate-100 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                                      : "bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                                  }`}
+                                  title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "2nd CA (Max 20)"}
                                 />
                               </td>
 
@@ -2297,9 +2339,16 @@ export default function StaffPortalClient({
                                   type="number"
                                   min="0"
                                   max="60"
+                                  disabled={isGradesLocked}
+                                  readOnly={isGradesLocked}
                                   value={item.exam ?? ""}
                                   onChange={(e) => handleScoreChange(student.id, "exam", e.target.value)}
-                                  className="w-16 mx-auto px-2 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-center font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className={`w-16 mx-auto px-2 py-1.5 border rounded-lg text-center font-mono font-bold text-xs focus:outline-none transition ${
+                                    isGradesLocked
+                                      ? "bg-slate-100 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                                      : "bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                                  }`}
+                                  title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "Exam (Max 60)"}
                                 />
                               </td>
 
@@ -2342,12 +2391,19 @@ export default function StaffPortalClient({
                               <td className="px-4 py-3.5">
                                 <input
                                   type="text"
+                                  disabled={isGradesLocked}
+                                  readOnly={isGradesLocked}
                                   placeholder={item.hasScores ? "e.g. Excellent work, Commendable effort" : ""}
                                   value={item.remarks || ""}
                                   onChange={(e) =>
                                     handleScoreChange(student.id, "remarks", e.target.value)
                                   }
-                                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className={`w-full px-2.5 py-1.5 border rounded-lg text-xs placeholder:text-slate-400 focus:outline-none transition ${
+                                    isGradesLocked
+                                      ? "bg-slate-100 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                                      : "bg-slate-50 dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                                  }`}
+                                  title={isGradesLocked ? "Remarks locked. Click 'Edit Scores' above to edit." : "Teacher Remark"}
                                 />
                               </td>
                             </tr>

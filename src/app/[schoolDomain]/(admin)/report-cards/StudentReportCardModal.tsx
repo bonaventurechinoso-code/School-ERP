@@ -215,6 +215,35 @@ export default function StudentReportCardModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white print:static">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          body {
+            visibility: hidden !important;
+            background: #ffffff !important;
+          }
+          #printable-report-card-sheet,
+          #printable-report-card-sheet * {
+            visibility: visible !important;
+          }
+          #printable-report-card-sheet {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 210mm !important;
+            margin: 0 auto !important;
+            padding: 4mm 6mm !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        }
+      `}</style>
       
       {/* Modal Card Wrapper */}
       <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[95vh] print:max-h-none print:shadow-none print:border-none print:w-full print:rounded-none">
@@ -266,7 +295,7 @@ export default function StudentReportCardModal({
         </div>
 
         {/* Scrollable Printable Report Sheet Content */}
-        <div ref={printRef} className="overflow-y-auto p-6 sm:p-10 space-y-8 print:p-6 print:space-y-6 print:overflow-visible">
+        <div id="printable-report-card-sheet" ref={printRef} className="overflow-y-auto p-6 sm:p-10 space-y-8 print:p-6 print:space-y-6 print:overflow-visible">
           
           {/* ========================================================= */}
           {/* 1. OFFICIAL INSTITUTIONAL HEADER                          */}

@@ -10,6 +10,8 @@ import {
   Sparkles,
   TrendingUp,
   FileSpreadsheet,
+  Lock,
+  Pencil,
 } from "lucide-react";
 import { saveTeacherGrades } from "../actions";
 import { formatClassDisplay } from "@/lib/school-tier-classes";
@@ -67,6 +69,11 @@ export function TeacherGradebookClient({
   const [isPending, startTransition] = useTransition();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
+  const hasInitialScores = useMemo(() => {
+    return Object.values(initialGradesMap || {}).some((g: any) => g && (g.ca1 || g.ca2 || g.exam));
+  }, [initialGradesMap]);
+  const [isGradesLocked, setIsGradesLocked] = useState(hasInitialScores);
+
   // Compute distinct cohorts present in students list
   const availableCohorts = useMemo(() => {
     const cohorts = new Set<string>();
@@ -106,6 +113,7 @@ export function TeacherGradebookClient({
     field: "ca1" | "ca2" | "exam" | "remarks",
     value: string
   ) => {
+    if (isGradesLocked) return;
     setGradesMap((prev) => {
       const current = prev[studentId] || { ca1: 0, ca2: 0, exam: 0, total: 0, remarks: "" };
       const numVal = field === "remarks" ? 0 : Math.max(0, Number(value) || 0);
@@ -201,6 +209,7 @@ export function TeacherGradebookClient({
           payload
         );
         if (res.success) {
+          setIsGradesLocked(true);
           setSaveMessage(`Successfully saved marks for ${res.count} students.`);
           setTimeout(() => setSaveMessage(null), 4000);
         }
@@ -311,11 +320,29 @@ export function TeacherGradebookClient({
             </select>
           </div>
 
+          {isGradesLocked && (
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
+              <Lock className="w-3.5 h-3.5" />
+              <span>Scores Locked</span>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsGradesLocked((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-bold shadow-xs transition cursor-pointer"
+            title={isGradesLocked ? "Unlock gradebook score boxes for editing" : "Lock score boxes"}
+          >
+            <Pencil className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>{isGradesLocked ? "Edit Scores" : "Lock Scores"}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleSaveGrades}
-            disabled={isPending}
+            disabled={isPending || isGradesLocked}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+            title={isGradesLocked ? "Scores are locked. Click 'Edit Scores' to modify before saving." : "Save and lock scores"}
           >
             <Save className="w-4 h-4" />
             <span>{isPending ? "Saving..." : "Save Scores"}</span>
@@ -407,9 +434,16 @@ export function TeacherGradebookClient({
                           type="number"
                           min={0}
                           max={20}
+                          disabled={isGradesLocked}
+                          readOnly={isGradesLocked}
                           value={item.ca1 || ""}
                           onChange={(e) => handleScoreChange(item.student.id, "ca1", e.target.value)}
-                          className="w-16 p-1.5 text-center font-mono font-bold rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-emerald-500"
+                          className={`w-16 p-1.5 text-center font-mono font-bold rounded-lg border transition ${
+                            isGradesLocked
+                              ? "bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                              : "bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border-slate-200 dark:border-zinc-700 focus:outline-emerald-500"
+                          }`}
+                          title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "1st CA (Max 20)"}
                         />
                       </td>
 
@@ -419,9 +453,16 @@ export function TeacherGradebookClient({
                           type="number"
                           min={0}
                           max={20}
+                          disabled={isGradesLocked}
+                          readOnly={isGradesLocked}
                           value={item.ca2 || ""}
                           onChange={(e) => handleScoreChange(item.student.id, "ca2", e.target.value)}
-                          className="w-16 p-1.5 text-center font-mono font-bold rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-emerald-500"
+                          className={`w-16 p-1.5 text-center font-mono font-bold rounded-lg border transition ${
+                            isGradesLocked
+                              ? "bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                              : "bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border-slate-200 dark:border-zinc-700 focus:outline-emerald-500"
+                          }`}
+                          title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "2nd CA (Max 20)"}
                         />
                       </td>
 
@@ -431,9 +472,16 @@ export function TeacherGradebookClient({
                           type="number"
                           min={0}
                           max={60}
+                          disabled={isGradesLocked}
+                          readOnly={isGradesLocked}
                           value={item.exam || ""}
                           onChange={(e) => handleScoreChange(item.student.id, "exam", e.target.value)}
-                          className="w-16 p-1.5 text-center font-mono font-bold rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-emerald-500"
+                          className={`w-16 p-1.5 text-center font-mono font-bold rounded-lg border transition ${
+                            isGradesLocked
+                              ? "bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                              : "bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border-slate-200 dark:border-zinc-700 focus:outline-emerald-500"
+                          }`}
+                          title={isGradesLocked ? "Score locked. Click 'Edit Scores' above to edit." : "Exam (Max 60)"}
                         />
                       </td>
 
@@ -475,10 +523,17 @@ export function TeacherGradebookClient({
                       <td className="py-3 px-3">
                         <input
                           type="text"
-                          placeholder="e.g. Excellent aptitude"
+                          disabled={isGradesLocked}
+                          readOnly={isGradesLocked}
+                          placeholder={isGradesLocked ? "" : "e.g. Excellent aptitude"}
                           value={item.remarks}
                           onChange={(e) => handleScoreChange(item.student.id, "remarks", e.target.value)}
-                          className="w-full min-w-[140px] px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 focus:outline-emerald-500"
+                          className={`w-full min-w-[140px] px-2.5 py-1 text-xs rounded-lg border transition ${
+                            isGradesLocked
+                              ? "bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 cursor-not-allowed opacity-85"
+                              : "bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border-slate-200 dark:border-zinc-700 focus:outline-emerald-500 placeholder:text-slate-400"
+                          }`}
+                          title={isGradesLocked ? "Remarks locked. Click 'Edit Scores' above to edit." : "Teacher Remarks"}
                         />
                       </td>
                     </tr>

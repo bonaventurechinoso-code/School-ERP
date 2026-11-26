@@ -9,6 +9,7 @@ import { getTierForClass } from "@/lib/school-tier-classes";
 import { isCrecheClass } from "@/lib/creche-config";
 import { isNurseryClass, mapNurseryScoreToGrade } from "@/lib/nursery-config";
 import { getSecondaryDemoProfile } from "@/lib/secondary-demo-data";
+import { getAcademicPeriodVariants } from "@/lib/tertiary-config";
 import { isClassMatch } from "@/lib/class-matching";
 
 export async function GET(req: NextRequest) {
@@ -39,9 +40,37 @@ export async function GET(req: NextRequest) {
       tenantId = paramSchoolId;
     }
 
+    // Resolve tenantId if it is a subdomain / slug rather than a database UUID
+    let resolvedSchool: { id: string; name: string; subdomain: string | null; contactPhone: string | null } | null = null;
+    if (tenantId) {
+      resolvedSchool = await basePrisma.school.findFirst({
+        where: {
+          OR: [
+            { id: tenantId },
+            { subdomain: tenantId },
+            ...(paramSchoolId ? [{ id: paramSchoolId }, { subdomain: paramSchoolId }] : []),
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          subdomain: true,
+          contactPhone: true,
+        },
+      });
+      if (resolvedSchool) {
+        tenantId = resolvedSchool.id;
+      }
+    }
+
     if (!tenantId) {
-      const defaultSchool = await basePrisma.school.findFirst({ select: { id: true } });
-      tenantId = defaultSchool?.id || "";
+      const defaultSchool = await basePrisma.school.findFirst({
+        select: { id: true, name: true, subdomain: true, contactPhone: true },
+      });
+      if (defaultSchool) {
+        tenantId = defaultSchool.id;
+        resolvedSchool = defaultSchool;
+      }
     }
 
     if (!tenantId) {
@@ -51,7 +80,7 @@ export async function GET(req: NextRequest) {
     const tenantDb = getTenantClient(tenantId);
 
     // 1. Fetch School Details
-    const school = await basePrisma.school.findUnique({
+    const school = resolvedSchool || await basePrisma.school.findUnique({
       where: { id: tenantId },
       select: {
         id: true,
@@ -146,13 +175,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch grades for all students in this class
     const studentIds = students.map((s) => s.id);
-    const termVariants = term === "1st Term" ? ["1st Term", "First Term"]
-      : term === "2nd Term" ? ["2nd Term", "Second Term"]
-        : term === "3rd Term" ? ["3rd Term", "Third Term"]
-          : term === "First Term" ? ["First Term", "1st Term"]
-            : term === "Second Term" ? ["Second Term", "2nd Term"]
-              : term === "Third Term" ? ["Third Term", "3rd Term"]
-                : [term];
+    const termVariants = getAcademicPeriodVariants(term);
 
     let allGradeRecords = studentIds.length > 0 ? await tenantDb.gradeRecord.findMany({
       where: {
@@ -164,6 +187,25 @@ export async function GET(req: NextRequest) {
 
     if (allGradeRecords.length === 0 && studentIds.length > 0 && tenantDb !== basePrisma) {
       allGradeRecords = await basePrisma.gradeRecord.findMany({
+        where: {
+          schoolId: tenantId,
+          studentId: { in: studentIds },
+          term: { in: termVariants },
+        },
+      }).catch(() => []);
+    }
+
+    // Also fetch AcademicRecord
+    let allAcademicRecords = studentIds.length > 0 ? await tenantDb.academicRecord.findMany({
+      where: {
+        schoolId: tenantId,
+        studentId: { in: studentIds },
+        term: { in: termVariants },
+      },
+    }).catch(() => []) : [];
+
+    if (allAcademicRecords.length === 0 && studentIds.length > 0 && tenantDb !== basePrisma) {
+      allAcademicRecords = await basePrisma.academicRecord.findMany({
         where: {
           schoolId: tenantId,
           studentId: { in: studentIds },
@@ -196,6 +238,21 @@ export async function GET(req: NextRequest) {
         gradesByStudent.set(gr.studentId, []);
       }
       gradesByStudent.get(gr.studentId)!.push(gr);
+    });
+
+    allAcademicRecords.forEach((ar: any) => {
+      const list = gradesByStudent.get(ar.studentId) || [];
+      if (!list.some((item) => (item.subject || "").toLowerCase() === (ar.subject || "").toLowerCase())) {
+        list.push({
+          subject: ar.subject,
+          ca1: Number(ar.test1) || 0,
+          ca2: Number(ar.test2) || 0,
+          exam: Number(ar.finalExam) || 0,
+          totalScore: Number(ar.totalScore) || (Number(ar.test1) || 0) + (Number(ar.test2) || 0) + (Number(ar.finalExam) || 0),
+          remarks: ar.teacherRemarks || "",
+        });
+        gradesByStudent.set(ar.studentId, list);
+      }
     });
 
     const reportCardsByStudent = new Map<string, any>();
@@ -254,6 +311,15 @@ export async function GET(req: NextRequest) {
           console.warn("Failed to parse existingReportCard academicRecordSnapshot:", snapErr);
         }
       }
+
+      // Deduplicate subjects by name
+      const seenSubs = new Set<string>();
+      subjectsList = subjectsList.filter((s) => {
+        const norm = (s.subject || "").trim().toLowerCase();
+        if (!norm || seenSubs.has(norm)) return false;
+        seenSubs.add(norm);
+        return true;
+      });
 
       const isDemo = (school?.subdomain || "").toLowerCase() === "demo";
 

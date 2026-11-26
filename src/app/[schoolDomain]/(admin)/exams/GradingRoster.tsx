@@ -23,6 +23,7 @@ import {
   Sparkles,
   Trash2,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { isCrecheClass } from "@/lib/creche-config";
 import {
@@ -351,6 +352,7 @@ interface ScoreModalState {
   ca2: number;
   exam: number;
   remarks: string;
+  isLocked?: boolean;
 }
 
 export default function GradingRoster({
@@ -977,6 +979,13 @@ export default function GradingRoster({
 
   const handleOpenScoreModal = (student: any, subject: string) => {
     const currentScore = getStudentSubjectScore(student.id, subject);
+    const hasExistingScore = Boolean(
+      currentScore &&
+      (Number(currentScore.ca1) > 0 ||
+        Number(currentScore.ca2) > 0 ||
+        Number(currentScore.exam) > 0 ||
+        Number(currentScore.total) > 0)
+    );
     setModalState({
       isOpen: true,
       student,
@@ -985,11 +994,12 @@ export default function GradingRoster({
       ca2: currentScore?.ca2 || 0,
       exam: currentScore?.exam || 0,
       remarks: currentScore?.remarks || "",
+      isLocked: hasExistingScore,
     });
   };
 
   const handleSaveModalScore = () => {
-    if (!modalState.student || !modalState.subject) return;
+    if (!modalState.student || !modalState.subject || modalState.isLocked) return;
 
     const ca1 = Math.min(20, Math.max(0, Number(modalState.ca1) || 0));
     const ca2 = Math.min(20, Math.max(0, Number(modalState.ca2) || 0));
@@ -1567,6 +1577,15 @@ export default function GradingRoster({
             </div>
 
             <div className="space-y-4">
+              {modalState.isLocked && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                  <Lock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    <strong>Academic Integrity Lock:</strong> Scores recorded by subject teachers are locked and cannot be modified by administrators.
+                  </span>
+                </div>
+              )}
+
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-500 dark:text-slate-400">Subject:</span>
                 <span className="font-black text-slate-900 dark:text-white">{modalState.subject}</span>
@@ -1581,9 +1600,13 @@ export default function GradingRoster({
                     type="number"
                     min="0"
                     max="20"
+                    disabled={modalState.isLocked}
+                    readOnly={modalState.isLocked}
                     value={modalState.ca1 || ""}
                     onChange={(e) => setModalState((prev) => ({ ...prev, ca1: Math.min(20, Math.max(0, Number(e.target.value) || 0)) }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={`w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      modalState.isLocked ? "opacity-75 cursor-not-allowed bg-slate-100 dark:bg-slate-900" : ""
+                    }`}
                   />
                 </div>
 
@@ -1595,9 +1618,13 @@ export default function GradingRoster({
                     type="number"
                     min="0"
                     max="20"
+                    disabled={modalState.isLocked}
+                    readOnly={modalState.isLocked}
                     value={modalState.ca2 || ""}
                     onChange={(e) => setModalState((prev) => ({ ...prev, ca2: Math.min(20, Math.max(0, Number(e.target.value) || 0)) }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={`w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      modalState.isLocked ? "opacity-75 cursor-not-allowed bg-slate-100 dark:bg-slate-900" : ""
+                    }`}
                   />
                 </div>
 
@@ -1609,9 +1636,13 @@ export default function GradingRoster({
                     type="number"
                     min="0"
                     max="60"
+                    disabled={modalState.isLocked}
+                    readOnly={modalState.isLocked}
                     value={modalState.exam || ""}
                     onChange={(e) => setModalState((prev) => ({ ...prev, exam: Math.min(60, Math.max(0, Number(e.target.value) || 0)) }))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={`w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      modalState.isLocked ? "opacity-75 cursor-not-allowed bg-slate-100 dark:bg-slate-900" : ""
+                    }`}
                   />
                 </div>
               </div>
@@ -1630,10 +1661,14 @@ export default function GradingRoster({
                 </label>
                 <input
                   type="text"
+                  disabled={modalState.isLocked}
+                  readOnly={modalState.isLocked}
                   value={modalState.remarks}
                   onChange={(e) => setModalState((prev) => ({ ...prev, remarks: e.target.value }))}
                   placeholder="e.g. Excellent conceptual grasp"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    modalState.isLocked ? "opacity-75 cursor-not-allowed bg-slate-100 dark:bg-slate-900" : ""
+                  }`}
                 />
               </div>
             </div>
@@ -1644,16 +1679,18 @@ export default function GradingRoster({
                 onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
                 className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               >
-                Cancel
+                {modalState.isLocked ? "Close" : "Cancel"}
               </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleSaveModalScore}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
-              >
-                {isPending ? "Persisting..." : "Save Score"}
-              </button>
+              {!modalState.isLocked && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={handleSaveModalScore}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                >
+                  {isPending ? "Persisting..." : "Save Score"}
+                </button>
+              )}
             </div>
           </div>
         </div>

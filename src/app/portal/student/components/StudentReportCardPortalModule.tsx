@@ -343,7 +343,36 @@ export function StudentReportCardPortalModule({
       </div>
 
       {/* 2. Official Printable Report Card Sheet */}
-      <div className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-3xl shadow-xl p-6 sm:p-10 space-y-8 print:border-none print:shadow-none print:p-6 print:rounded-none print:space-y-6">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          body {
+            visibility: hidden !important;
+            background: #ffffff !important;
+          }
+          #student-portal-printable-sheet,
+          #student-portal-printable-sheet * {
+            visibility: visible !important;
+          }
+          #student-portal-printable-sheet {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 210mm !important;
+            margin: 0 auto !important;
+            padding: 4mm 6mm !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        }
+      `}</style>
+      <div id="student-portal-printable-sheet" className="bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-3xl shadow-xl p-6 sm:p-10 space-y-8 print:border-none print:shadow-none print:p-6 print:rounded-none print:space-y-6">
         
         {/* ========================================================= */}
         {/* A. OFFICIAL INSTITUTIONAL CREST & HEADER                  */}
