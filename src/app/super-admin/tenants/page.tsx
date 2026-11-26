@@ -192,6 +192,42 @@ export default function SuperAdminTenantsPage() {
 
   useEffect(() => {
     fetchTenants();
+
+    const onFocus = () => fetchTenants();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchTenants();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "school_erp_tenant_registered_at" || e.key === "superadmin_soft_deleted_tenants_v1") {
+        fetchTenants();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("storage", onStorage);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("school_erp_tenants_sync");
+        bc.onmessage = () => fetchTenants();
+      }
+    } catch {}
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchTenants();
+      }
+    }, 8000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("storage", onStorage);
+      if (bc) bc.close();
+      clearInterval(interval);
+    };
   }, [fetchTenants]);
 
   const handleToggleStatus = async (tenant: SuperAdminTenantRow) => {

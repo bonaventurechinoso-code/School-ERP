@@ -484,19 +484,32 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-24 pb-32 w-full max-w-full overflow-x-hidden px-4 sm:px-6 bg-slate-900">
-        {/* Background Image Integration */}
+        {/* Background Image Integration - Full width display on mobile, panoramic cover on desktop */}
         <div className="absolute inset-0 z-0 overflow-hidden">
+          {/* Ambient blurred backdrop for seamless filling on mobile */}
+          <div className="block md:hidden absolute inset-0 z-0">
+            <Image
+              src="/assets/images/hero-graduation.jpg"
+              alt=""
+              fill
+              aria-hidden="true"
+              className="object-cover blur-xl opacity-35 scale-110"
+              priority
+            />
+          </div>
+          {/* Main Hero Background: Full width on mobile devices (object-contain object-top) and object-cover on desktop */}
           <Image
             src="/assets/images/hero-graduation.jpg"
             alt="Students graduating and celebrating"
             fill
-            className="object-cover"
+            className="w-full h-full object-contain object-top md:object-cover md:object-center transition-all duration-300"
+            sizes="(max-width: 768px) 100vw, 100vw"
             priority
           />
         </div>
 
-        {/* Dark overlay layer */}
-        <div className="absolute inset-0 bg-slate-950/70 z-10 pointer-events-none"></div>
+        {/* Dark overlay layer with smooth mobile gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/75 to-slate-950 md:bg-slate-950/70 z-10 pointer-events-none"></div>
 
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-100/10 dark:bg-blue-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-100/10 dark:bg-purple-900/10 blur-3xl mix-blend-overlay z-10 pointer-events-none"></div>

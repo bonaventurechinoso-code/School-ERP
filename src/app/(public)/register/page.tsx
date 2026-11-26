@@ -81,6 +81,34 @@ export default function RegisterTenantPage() {
 
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
   const [registrationData, setRegistrationData] = useState<RegistrationResult | null>(null);
+  const [isResending, setIsResending] = useState(false);
+  const [resendResultText, setResendResultText] = useState<string | null>(null);
+
+  const handleResendCredentialsEmail = async () => {
+    if (!registrationData) return;
+    setIsResending(true);
+    setResendResultText(null);
+    try {
+      const res = await fetch("/api/tenants/resend-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subdomain: registrationData.subdomain,
+          adminEmail: registrationData.adminEmail,
+        }),
+      });
+      const resJson = await res.json();
+      if (res.ok && resJson.success) {
+        setResendResultText("✓ Confirmation email successfully delivered to inbox!");
+      } else {
+        setResendResultText(resJson.message || resJson.error || "Email delivery failed or pending provider setup.");
+      }
+    } catch {
+      setResendResultText("Network error attempting to resend email.");
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   // Success screen countdown & interaction states
   const [countdown, setCountdown] = useState(25);
@@ -458,6 +486,18 @@ export default function RegisterTenantPage() {
       setStep(3); // Transition directly to Step 3: SUCCESS CONFIRMATION VIEW
       setCountdown(25);
       setIsCountdownPaused(false);
+
+      // Broadcast tenant creation across open browser tabs and sync localStorage
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("school_erp_tenants_sync");
+          bc.postMessage({ type: "TENANT_CREATED", timestamp: Date.now() });
+          bc.close();
+        }
+      } catch {}
+      try {
+        window.localStorage.setItem("school_erp_tenant_registered_at", Date.now().toString());
+      } catch {}
 
     } catch (err: any) {
       console.error("[TENANT_REGISTRATION_EXCEPTION]:", err);
@@ -1037,23 +1077,39 @@ export default function RegisterTenantPage() {
                   </div>
 
                   {/* Email Dispatch Status Callout */}
-                  <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 border ${
+                  <div className={`p-3.5 rounded-xl text-xs flex flex-col gap-2 border ${
                     registrationData.emailSent
                       ? "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900/60 text-blue-800 dark:text-blue-200"
                       : "bg-slate-100 dark:bg-zinc-800/80 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300"
                   }`}>
-                    <Mail className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
-                    <div className="leading-relaxed">
-                      {registrationData.emailSent ? (
-                        <>
-                          <strong>Credentials Email Dispatched:</strong> A welcome confirmation email with complete workspace access instructions has been delivered to <strong>{registrationData.adminEmail}</strong>.
-                        </>
-                      ) : (
-                        <>
-                          <strong>Access Notification:</strong> Please save your administrator credentials above. You can log into your administrative workspace directly anytime.
-                        </>
-                      )}
+                    <div className="flex items-start gap-2.5">
+                      <Mail className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                      <div className="leading-relaxed flex-1">
+                        {registrationData.emailSent ? (
+                          <>
+                            <strong>Credentials Email Dispatched:</strong> A welcome confirmation email with complete workspace access instructions has been delivered to <strong>{registrationData.adminEmail}</strong>.
+                          </>
+                        ) : (
+                          <>
+                            <strong>Credentials Notification:</strong> Please save your master login credentials shown above. Email status: <em>{registrationData.emailStatus || "Pending Provider Configuration"}</em>.
+                          </>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isResending}
+                        onClick={handleResendCredentialsEmail}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition disabled:opacity-50 shrink-0 cursor-pointer flex items-center gap-1"
+                      >
+                        {isResending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                        <span>{isResending ? "Sending..." : "Resend Email"}</span>
+                      </button>
                     </div>
+                    {resendResultText && (
+                      <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 pl-6.5">
+                        {resendResultText}
+                      </div>
+                    )}
                   </div>
 
                   {/* Sticky Action Footer */}

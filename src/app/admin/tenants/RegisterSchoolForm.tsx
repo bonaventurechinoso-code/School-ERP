@@ -135,6 +135,16 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
       }
 
       setSuccessMsg(`Tenant "${trimmedName}" (${cleanSubdomain}) successfully created!`);
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("school_erp_tenants_sync");
+          bc.postMessage({ type: "TENANT_CREATED", timestamp: Date.now() });
+          bc.close();
+        }
+      } catch {}
+      try {
+        window.localStorage.setItem("school_erp_tenant_registered_at", Date.now().toString());
+      } catch {}
       const createdTenantData = data.tenant ? {
         id: data.tenant.id,
         name: data.tenant.name || trimmedName,

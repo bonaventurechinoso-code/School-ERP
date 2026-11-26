@@ -52,14 +52,44 @@ export interface MailDispatchResult {
  * Resolves current mail configuration from environment variables.
  */
 export function getMailConfig() {
-  const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+  const resendApiKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || "").trim();
 
-  // SMTP Settings
-  const host = (process.env.SMTP_HOST || process.env.MAIL_HOST || "").trim();
-  const port = parseInt(process.env.SMTP_PORT || process.env.MAIL_PORT || "587", 10);
-  const user = (process.env.SMTP_USER || process.env.MAIL_USERNAME || process.env.MAIL_USER || "").trim();
-  const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASSWORD || "").trim();
-  const secureEnv = (process.env.SMTP_SECURE || process.env.MAIL_SECURE || "").trim().toLowerCase();
+  // SMTP Settings - Support all common environment variable conventions
+  const host = (
+    process.env.SMTP_HOST ||
+    process.env.MAIL_HOST ||
+    process.env.EMAIL_HOST ||
+    ""
+  ).trim();
+  const portStr = (
+    process.env.SMTP_PORT ||
+    process.env.MAIL_PORT ||
+    process.env.EMAIL_PORT ||
+    ""
+  ).trim();
+  const port = parseInt(portStr || "587", 10);
+  const user = (
+    process.env.SMTP_USER ||
+    process.env.SMTP_USERNAME ||
+    process.env.MAIL_USERNAME ||
+    process.env.MAIL_USER ||
+    process.env.EMAIL_USER ||
+    ""
+  ).trim();
+  const pass = (
+    process.env.SMTP_PASS ||
+    process.env.SMTP_PASSWORD ||
+    process.env.MAIL_PASSWORD ||
+    process.env.MAIL_PASS ||
+    process.env.EMAIL_PASSWORD ||
+    ""
+  ).trim();
+  const secureEnv = (
+    process.env.SMTP_SECURE ||
+    process.env.MAIL_SECURE ||
+    process.env.MAIL_ENCRYPTION ||
+    ""
+  ).trim().toLowerCase();
   const secure = secureEnv === "true" || secureEnv === "ssl" || port === 465;
 
   let smtpConfig: { host: string; port: number; secure: boolean; auth: { user: string; pass: string } } | undefined = undefined;
@@ -67,8 +97,18 @@ export function getMailConfig() {
     smtpConfig = { host, port, secure, auth: { user, pass } };
   }
 
-  const fromName = (process.env.EMAIL_FROM_NAME || process.env.MAIL_FROM_NAME || "School ERP").trim();
-  const rawFrom = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_FROM || "").trim();
+  const fromName = (
+    process.env.EMAIL_FROM_NAME ||
+    process.env.MAIL_FROM_NAME ||
+    "School ERP"
+  ).trim();
+  const rawFrom = (
+    process.env.RESEND_FROM ||
+    process.env.EMAIL_FROM ||
+    process.env.MAIL_FROM ||
+    process.env.SMTP_FROM ||
+    ""
+  ).trim();
 
   let fullFrom: string;
   let fromEmail: string;
@@ -257,9 +297,21 @@ export async function sendMail(options: MailOptions): Promise<MailDispatchResult
         socketTimeout: 15000,
       });
 
+      // Align SMTP sender with authenticated SMTP user to prevent 550 sender rejection (e.g. Gmail / Brevo)
+      let smtpFrom = effectiveFrom;
+      const smtpUser = config.smtpConfig.auth.user;
+      if (smtpUser && smtpUser.includes("@")) {
+        const smtpUserDomain = smtpUser.split("@")[1]?.toLowerCase();
+        const effectiveDomain = effectiveFrom.match(/@([^>]+)/)?.[1]?.toLowerCase();
+        if (!effectiveDomain || effectiveDomain !== smtpUserDomain) {
+          smtpFrom = `${config.fromName} <${smtpUser}>`;
+        }
+      }
+
       const info = await transporter.sendMail({
-        from: effectiveFrom,
+        from: smtpFrom,
         to: recipients,
+        replyTo: effectiveFrom !== smtpFrom ? effectiveFrom : undefined,
         subject,
         html,
         text,

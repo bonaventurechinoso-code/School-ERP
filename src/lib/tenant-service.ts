@@ -8,6 +8,7 @@ import { isReservedSubdomain } from "./tenant-resolver";
 import { clearTenantCache } from "@/lib/tenant-status";
 import { invalidateTenantMetadata } from "@/lib/cache-invalidation";
 import { getCanonicalClassNamesForTier } from "./school-tier-classes";
+import { revalidatePath } from "next/cache";
 
 export interface CreateTenantWithAdminParams {
   slug: string;
@@ -532,6 +533,21 @@ export async function createTenantWithAdmin(
     } catch (auditErr) {
       console.warn("[PASSWORD_POLICY_AUDIT_WARNING]:", auditErr);
     }
+  }
+
+  // Ensure instant reflection in all administration consoles by purging SSR cache
+  try {
+    revalidatePath("/admin/tenants");
+    revalidatePath("/admin/tenants", "page");
+    revalidatePath("/super-admin/tenants");
+    revalidatePath("/super-admin/tenants", "page");
+    revalidatePath("/dashboard/super-admin/tenants");
+    revalidatePath("/dashboard/super-admin/tenants", "page");
+    revalidatePath("/dashboard/super-admin");
+    revalidatePath("/admin");
+    revalidatePath("/admin/saas");
+  } catch (revalErr) {
+    console.warn("[TENANT_REVALIDATION_WARNING]:", revalErr);
   }
 
   return { school, user, staff, emailResult };

@@ -46,7 +46,7 @@ export default function TenantsDirectoryPage() {
     let isMounted = true;
     async function loadRealTimeSchools() {
       try {
-        const res = await fetch("/api/super-admin/tenants");
+        const res = await fetch("/api/super-admin/tenants", { cache: "no-store" });
         if (res.ok) {
           const json = await res.json();
           const list = json?.data?.schools || json?.data?.tenants;
@@ -59,8 +59,42 @@ export default function TenantsDirectoryPage() {
       }
     }
     loadRealTimeSchools();
+
+    const onFocus = () => loadRealTimeSchools();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") loadRealTimeSchools();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "school_erp_tenant_registered_at" || e.key === "superadmin_soft_deleted_tenants_v1") {
+        loadRealTimeSchools();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("storage", onStorage);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("school_erp_tenants_sync");
+        bc.onmessage = () => loadRealTimeSchools();
+      }
+    } catch {}
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadRealTimeSchools();
+      }
+    }, 8000);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("storage", onStorage);
+      if (bc) bc.close();
+      clearInterval(interval);
     };
   }, []);
 

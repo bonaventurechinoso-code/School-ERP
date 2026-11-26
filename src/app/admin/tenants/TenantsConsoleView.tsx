@@ -16,6 +16,8 @@ import {
   X,
   RotateCcw,
   Activity,
+  Mail,
+  Loader2,
 } from "lucide-react";
 import RegisterSchoolDrawer from "./RegisterSchoolDrawer";
 
@@ -29,6 +31,8 @@ export interface TenantSchoolItem {
   name: string;
   subdomain: string;
   contactPhone?: string | null;
+  contactEmail?: string;
+  email?: string;
   status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | "DELETED";
   isActive: boolean;
   students_count?: number;
@@ -281,22 +285,75 @@ export default function TenantsConsoleView({
     }
   }, []);
 
-  useEffect(() => {
-    fetchTenants();
-  }, [fetchTenants]);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+  const [resendStatusMsg, setResendStatusMsg] = useState<{ id: string; text: string; isError?: boolean } | null>(null);
+
+  const handleResendEmail = async (tenant: TenantSchoolItem) => {
+    setResendingEmailId(tenant.id);
+    setResendStatusMsg(null);
+    try {
+      const res = await fetch("/api/tenants/resend-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: tenant.id,
+          subdomain: tenant.subdomain,
+          adminEmail: tenant.contactEmail || tenant.email,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setResendStatusMsg({ id: tenant.id, text: "Credentials email dispatched successfully!" });
+      } else {
+        setResendStatusMsg({ id: tenant.id, text: data.message || data.error || "Delivery pending or failed.", isError: true });
+      }
+    } catch (err: any) {
+      setResendStatusMsg({ id: tenant.id, text: err?.message || "Failed to dispatch email", isError: true });
+    } finally {
+      setResendingEmailId(null);
+      setTimeout(() => setResendStatusMsg(null), 6000);
+    }
+  };
 
   useEffect(() => {
-    if (initialSchools && initialSchools.length > 0) {
-      const deletedIds = new Set(getSoftDeletedIds());
-      const normalized: TenantSchoolItem[] = initialSchools
-        .filter((r) => !deletedIds.has(r.id) && !deletedIds.has(r.subdomain))
-        .map((s) => ({
-          ...s,
-          status: s.isActive ? "ACTIVE" : "SUSPENDED",
-        }));
-      setTenants(normalized);
-    }
-  }, [initialSchools]);
+    fetchTenants();
+
+    const onFocus = () => fetchTenants();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchTenants();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "school_erp_tenant_registered_at" || e.key === "superadmin_soft_deleted_tenants_v1") {
+        fetchTenants();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("storage", onStorage);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("school_erp_tenants_sync");
+        bc.onmessage = () => fetchTenants();
+      }
+    } catch {}
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchTenants();
+      }
+    }, 8000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("storage", onStorage);
+      if (bc) bc.close();
+      clearInterval(interval);
+    };
+  }, [fetchTenants]);
 
   const handleToggleStatus = async (tenant: TenantSchoolItem) => {
     const id = tenant.id;
@@ -813,6 +870,21 @@ export default function TenantsConsoleView({
 
                           <button
                             type="button"
+                            disabled={resendingEmailId === tenant.id}
+                            onClick={() => handleResendEmail(tenant)}
+                            title="Resend welcome confirmation and login credentials email"
+                            className="bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                          >
+                            {resendingEmailId === tenant.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Mail className="w-3.5 h-3.5" />
+                            )}
+                            <span>Email</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => {
                               setTenantToDelete(tenant);
                               setDeleteConfirmText("");
@@ -823,6 +895,11 @@ export default function TenantsConsoleView({
                             <span>Delete</span>
                           </button>
                         </div>
+                        {resendStatusMsg?.id === tenant.id && (
+                          <div className={`text-[11px] font-semibold mt-1 ${resendStatusMsg.isError ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {resendStatusMsg.text}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -922,6 +999,20 @@ export default function TenantsConsoleView({
 
                     <button
                       type="button"
+                      disabled={resendingEmailId === tenant.id}
+                      onClick={() => handleResendEmail(tenant)}
+                      className="flex-1 sm:flex-none min-w-[75px] justify-center bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer text-center whitespace-nowrap disabled:opacity-50"
+                    >
+                      {resendingEmailId === tenant.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Mail className="w-3.5 h-3.5" />
+                      )}
+                      <span>Email</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => {
                         setTenantToDelete(tenant);
                         setDeleteConfirmText("");
@@ -932,6 +1023,11 @@ export default function TenantsConsoleView({
                       <span>Delete</span>
                     </button>
                   </div>
+                  {resendStatusMsg?.id === tenant.id && (
+                    <div className={`text-[11px] font-semibold px-1 ${resendStatusMsg.isError ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                      {resendStatusMsg.text}
+                    </div>
+                  )}
                 </div>
               );
             })

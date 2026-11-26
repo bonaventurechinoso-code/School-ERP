@@ -374,7 +374,7 @@ export default async function PublicGuestPortalPage({
       {/* Hero Section */}
       <main className="flex-1">
         <div className="relative w-full min-h-[580px] overflow-hidden bg-slate-950 text-white flex items-center">
-          {/* Background Media */}
+          {/* Background Media - Full width on mobile devices with ambient fill, panoramic on desktop */}
           <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
             {customHeroType === "video" && customHeroVideo ? (
               <video
@@ -384,7 +384,7 @@ export default async function PublicGuestPortalPage({
                 muted
                 playsInline
                 preload="auto"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain object-top md:object-cover md:object-center"
               >
                 <source
                   src={customHeroVideo}
@@ -392,16 +392,28 @@ export default async function PublicGuestPortalPage({
                 />
               </video>
             ) : (
-              <Image 
-                src={heroImageUrl} 
-                fill
-                priority
-                className="object-cover" 
-                alt={`${school.name} Campus Premises`} 
-                unoptimized={true}
-              />
+              <>
+                <div className="block md:hidden absolute inset-0 z-0">
+                  <Image 
+                    src={heroImageUrl} 
+                    fill
+                    aria-hidden="true"
+                    className="object-cover blur-xl opacity-35 scale-110" 
+                    alt="" 
+                    unoptimized={true}
+                  />
+                </div>
+                <Image 
+                  src={heroImageUrl} 
+                  fill
+                  priority
+                  className="w-full h-full object-contain object-top md:object-cover md:object-center" 
+                  alt={`${school.name} Campus Premises`} 
+                  unoptimized={true}
+                />
+              </>
             )}
-            <div className="absolute inset-0 bg-black/50 z-0 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-slate-950 md:bg-black/50 z-0 pointer-events-none" />
           </div>
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full flex flex-col items-center justify-center text-center py-20 md:py-28">

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { basePrisma } from "@/lib/tenant-prisma";
 import { triggerSSLProvisioning, warmAndVerifySSLHandshake } from "@/lib/ssl-provisioning";
 import bcrypt from "bcryptjs";
@@ -290,9 +291,10 @@ export async function POST(request: Request) {
       const primaryStaff = newSchools[0].staff;
 
       // Dispatch Registration Success Email to the School Admin
+      let combinedEmailResult: any = null;
       try {
         console.log(`[REGISTER_EMAIL] Triggering registration success email for combined tenant: ${adminEmail}...`);
-        const emailResult = await sendSchoolRegistrationSuccessEmail({
+        combinedEmailResult = await sendSchoolRegistrationSuccessEmail({
           schoolName,
           subdomain: combinedSubdomain,
           adminEmail,
@@ -301,12 +303,13 @@ export async function POST(request: Request) {
           tiers: ['CRECHE', 'PRIMARY', 'SECONDARY'],
           schoolId: primarySchool.id,
         });
-        console.log(`[REGISTER_EMAIL] Completed with status:`, emailResult?.deliveryStatus);
-        if (!emailResult?.success) {
-          console.error(`[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Delivery failure:`, emailResult?.error);
+        console.log(`[REGISTER_EMAIL] Completed with status:`, combinedEmailResult?.deliveryStatus);
+        if (!combinedEmailResult?.success) {
+          console.error(`[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Delivery failure:`, combinedEmailResult?.error);
         }
       } catch (emailErr) {
         console.error("[EMAIL_SYNC_ERROR] [TENANT_REGISTRATION] Exception:", emailErr);
+        combinedEmailResult = { success: false, error: (emailErr as any)?.message || String(emailErr) };
       }
 
       // Trigger Super-Admin notification record and email alert
@@ -363,6 +366,12 @@ export async function POST(request: Request) {
         sessionToken: distinctSessionToken,
       });
 
+      const emailSent = Boolean(combinedEmailResult?.success);
+      const emailStatus = combinedEmailResult?.deliveryStatus || (emailSent ? "DELIVERED" : "PENDING_CONFIGURATION");
+      const portalUrl = buildTenantUrl(combinedSubdomain, hostHeader, "/", proto);
+      const loginUrl = buildTenantUrl(combinedSubdomain, hostHeader, "/login", proto);
+      const dashboardUrl = buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto);
+
       const response = NextResponse.json({
         success: true,
         message: "Combined tenants successfully provisioned.",
@@ -378,16 +387,27 @@ export async function POST(request: Request) {
         subdomain: combinedSubdomain,
         schoolName,
         adminEmail,
+        emailSent,
+        emailStatus,
+        emailError: combinedEmailResult?.error || null,
+        credentials: {
+          schoolName,
+          subdomain: combinedSubdomain,
+          adminEmail,
+          adminPassword: adminPassword || password,
+          portalUrl,
+          loginUrl,
+        },
         sslReady: sslSyncResult.sslReady,
         targetFqdn: sslSyncResult.targetFqdn,
-        portalUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/", proto),
-        subdomainUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/", proto),
-        fullDirectPortalUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/", proto),
-        loginUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/login", proto),
-        subdomainLoginUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/login", proto),
-        dashboardUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto),
-        subdomainDashboardUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/dashboard", proto),
-        redirectUrl: buildTenantUrl(combinedSubdomain, hostHeader, "/", proto),
+        portalUrl,
+        subdomainUrl: portalUrl,
+        fullDirectPortalUrl: portalUrl,
+        loginUrl,
+        subdomainLoginUrl: loginUrl,
+        dashboardUrl,
+        subdomainDashboardUrl: dashboardUrl,
+        redirectUrl: portalUrl,
         sessionToken: sessionResult.sessionToken,
         token: sessionResult.cookieToken,
         sessionPayload: {
@@ -412,6 +432,18 @@ export async function POST(request: Request) {
         sessionResult.cookieToken,
         getSecureCookieOptions(SESSION_MAX_AGE_SECONDS)
       );
+
+      try {
+        revalidatePath("/admin/tenants");
+        revalidatePath("/admin/tenants", "page");
+        revalidatePath("/super-admin/tenants");
+        revalidatePath("/super-admin/tenants", "page");
+        revalidatePath("/dashboard/super-admin/tenants");
+        revalidatePath("/dashboard/super-admin/tenants", "page");
+        revalidatePath("/dashboard/super-admin");
+        revalidatePath("/admin");
+        revalidatePath("/admin/saas");
+      } catch {}
 
       return response;
     }
@@ -475,6 +507,7 @@ export async function POST(request: Request) {
       adminEmail,
       emailSent,
       emailStatus,
+      emailError: newSchool.emailResult?.error || null,
       credentials: {
         schoolName,
         subdomain: formattedSubdomain,
@@ -517,6 +550,18 @@ export async function POST(request: Request) {
       sessionResult.cookieToken,
       getSecureCookieOptions(SESSION_MAX_AGE_SECONDS)
     );
+
+    try {
+      revalidatePath("/admin/tenants");
+      revalidatePath("/admin/tenants", "page");
+      revalidatePath("/super-admin/tenants");
+      revalidatePath("/super-admin/tenants", "page");
+      revalidatePath("/dashboard/super-admin/tenants");
+      revalidatePath("/dashboard/super-admin/tenants", "page");
+      revalidatePath("/dashboard/super-admin");
+      revalidatePath("/admin");
+      revalidatePath("/admin/saas");
+    } catch {}
 
     return response;
 

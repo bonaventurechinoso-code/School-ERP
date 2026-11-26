@@ -254,14 +254,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        tenants: result,
-        schools: result,
-        totalCount: result.length,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          tenants: result,
+          schools: result,
+          totalCount: result.length,
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+          "CDN-Cache-Control": "no-store",
+          "Surrogate-Control": "no-store",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("[SuperAdmin:Tenants GET] Error:", error);
     return NextResponse.json(
