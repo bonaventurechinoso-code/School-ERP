@@ -4,10 +4,19 @@ import React, { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, ShieldCheck, Clock, ArrowRight, Building, Sparkles } from "lucide-react";
+import RegisterTenantPage from "@/app/(public)/register/page";
 
 function OnboardingContent() {
   const searchParams = useSearchParams();
-  const tenantSlug = searchParams.get("tenant") || "trial";
+  const rawTenant = searchParams.get("tenant");
+
+  // If accessed directly without a tenant parameter (e.g. /onboarding or /onboarding?tier=...),
+  // seamlessly render the full institutional registration onboarding flow!
+  if (!rawTenant) {
+    return <RegisterTenantPage />;
+  }
+
+  const tenantSlug = rawTenant;
   const schoolName = tenantSlug
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))

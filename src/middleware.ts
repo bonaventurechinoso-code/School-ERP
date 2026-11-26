@@ -42,6 +42,8 @@ const PUBLIC_TENANT_ACTIONS = new Set([
   "admissions",
   "news",
   "contact",
+  "register",
+  "onboarding",
 ]);
 
 // Reserved system subdomains / prefixes that are not tenant codes (including common typos)
@@ -525,6 +527,21 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(apexSuperAdminUrl, 307);
     }
 
+    // B1. Global Institutional Onboarding & Registration paths accessed on a tenant subdomain redirect to the canonical platform apex
+    if (
+      lowerPath === "/register" ||
+      lowerPath.startsWith("/register/") ||
+      lowerPath === "/onboarding" ||
+      lowerPath.startsWith("/onboarding/")
+    ) {
+      const apexUrl = new URL(
+        pathname,
+        `${hostInfo.protocol}://${hostInfo.baseDomain}${hostInfo.port && hostInfo.baseDomain === "localhost" ? ":" + hostInfo.port : ""}`
+      );
+      apexUrl.search = req.nextUrl.search;
+      return NextResponse.redirect(apexUrl, 307);
+    }
+
     // C. Redundant slug in path on subdomain: 301 redirect to subdomain-only URL
     // e.g. https://[slug].bonaveeict.com.ng/[slug] -> https://[slug].bonaveeict.com.ng/
     // e.g. https://[slug].bonaveeict.com.ng/[slug]/login -> https://[slug].bonaveeict.com.ng/login
@@ -790,6 +807,18 @@ export async function middleware(req: NextRequest) {
     const targetSlug = firstSegment;
     const remainingSegments = segments.slice(1);
     const remainingPath = remainingSegments.length > 0 ? "/" + remainingSegments.join("/") : "";
+
+    // Platform-wide onboarding and registration redirects to apex
+    if (
+      remainingPath === "/register" ||
+      remainingPath.startsWith("/register/") ||
+      remainingPath === "/onboarding" ||
+      remainingPath.startsWith("/onboarding/")
+    ) {
+      const targetUrl = new URL(remainingPath, req.url);
+      targetUrl.search = req.nextUrl.search;
+      return NextResponse.redirect(targetUrl, 307);
+    }
 
     // On localhost, allow direct path-based access to demo tenants to avoid Windows *.localhost DNS failure
     if (hostInfo.baseDomain === "localhost" || hostInfo.hostname === "localhost" || hostInfo.hostname === "127.0.0.1") {

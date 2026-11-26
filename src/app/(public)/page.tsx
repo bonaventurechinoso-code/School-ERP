@@ -572,7 +572,9 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-24 bg-white dark:bg-zinc-950 transition-colors duration-300">
+      <section id="pricing" className="py-24 bg-white dark:bg-zinc-950 transition-colors duration-300 relative">
+        <div id="institutional" className="absolute -top-24 opacity-0 pointer-events-none" />
+        <div id="solutions" className="absolute -top-24 opacity-0 pointer-events-none" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Transparent, Tiered Pricing</h2>
@@ -609,7 +611,8 @@ export default function LandingPage() {
 
           <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {/* Card 1 */}
-            <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
+            <div id="primary" className="scroll-mt-24 relative bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
+              <div id="creche" className="absolute -top-24 opacity-0 pointer-events-none" />
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Basic Education Setup</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Creches, Nursery, and Primary schools.</p>
               <div className="mb-6">
@@ -627,7 +630,7 @@ export default function LandingPage() {
             </div>
 
             {/* Card 2 */}
-            <div className="bg-blue-600 dark:bg-blue-900 text-white border border-blue-500 dark:border-blue-800 rounded-3xl p-8 flex flex-col relative transform lg:-translate-y-4 shadow-2xl shadow-blue-900/20">
+            <div id="secondary" className="scroll-mt-24 bg-blue-600 dark:bg-blue-900 text-white border border-blue-500 dark:border-blue-800 rounded-3xl p-8 flex flex-col relative transform lg:-translate-y-4 shadow-2xl shadow-blue-900/20">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500 dark:bg-blue-700 text-white text-xs font-bold uppercase tracking-widest py-1 px-3 rounded-full">Most Popular</div>
               <h3 className="text-2xl font-bold mb-2">Secondary Excellence Plan</h3>
               <p className="text-blue-100 dark:text-blue-200 text-sm mb-6 min-h-[40px]">Targeted at Junior & Senior Secondary schools.</p>
@@ -648,7 +651,7 @@ export default function LandingPage() {
             </div>
 
             {/* Card 3 */}
-            <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
+            <div id="higher-ed" className="scroll-mt-24 bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col hover:border-blue-300 dark:hover:border-blue-800 transition-all">
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Enterprise Higher Ed</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 min-h-[40px]">Targeted at Universities, Polytechnics, and Colleges of Education.</p>
               <div className="mb-6">
