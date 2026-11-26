@@ -277,6 +277,9 @@ export async function POST(request: Request) {
           createdSchools.push({ school, staff });
         }
         return createdSchools;
+      }, {
+        maxWait: 15000,
+        timeout: 60000,
       });
 
       // Synchronize SSL generation with onboarding pipeline

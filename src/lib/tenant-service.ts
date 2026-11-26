@@ -117,7 +117,7 @@ export async function resolveTenant(schoolCode: string) {
 
 /**
  * Automatically provisions canonical standard classrooms for an academic tier of a school.
- * Safe and idempotent: will not create duplicates if classrooms already exist.
+ * Safe, fast, and idempotent: batch inserts missing classrooms using createMany.
  */
 export async function provisionDefaultClassroomsForSchool(
   db: any,
@@ -127,33 +127,39 @@ export async function provisionDefaultClassroomsForSchool(
 ): Promise<Array<{ id: string; name: string }>> {
   if (!schoolId) return [];
   const classNames = getCanonicalClassNamesForTier(tierName || "Primary School");
-  const result: Array<{ id: string; name: string }> = [];
+  if (!classNames || classNames.length === 0) return [];
 
-  for (const name of classNames) {
-    let existing = await db.classroom.findFirst({
-      where: {
-        schoolId,
-        name: { equals: name, mode: "insensitive" },
-      },
+  try {
+    const existing = await db.classroom.findMany({
+      where: { schoolId },
       select: { id: true, name: true },
     });
+    const existingSet = new Set(existing.map((c: any) => c.name.toLowerCase().trim()));
 
-    if (!existing) {
-      existing = await db.classroom.create({
-        data: {
-          schoolId,
-          name,
-          capacity: 35,
-          tierId: tierId || null,
-        },
-        select: { id: true, name: true },
+    const toCreate = classNames
+      .filter((name) => !existingSet.has(name.toLowerCase().trim()))
+      .map((name) => ({
+        schoolId,
+        name,
+        capacity: 35,
+        tierId: tierId || null,
+      }));
+
+    if (toCreate.length > 0) {
+      await db.classroom.createMany({
+        data: toCreate,
+        skipDuplicates: true,
       });
     }
 
-    result.push(existing);
+    return await db.classroom.findMany({
+      where: { schoolId },
+      select: { id: true, name: true },
+    });
+  } catch (batchErr) {
+    console.warn(`[provisionDefaultClassroomsForSchool] Batch provision notice:`, batchErr);
+    return [];
   }
-
-  return result;
 }
 
 /**
@@ -240,180 +246,189 @@ export async function createTenantWithAdmin(
     ? params.isTemporaryPassword
     : !isSelfReg;
 
-  // 4. Atomic Transaction: School + Tiers + Subscription + Department + User + Staff
-  const transactionResult = await basePrisma.$transaction(async (tx) => {
-    // A. School row: status ACTIVE, slug and subdomain strictly canonicalSlug
-    let derivedTier: any = "TERTIARY";
-    const lowerName = trimmedName.toLowerCase();
-    const joinedTiers = effectiveTiers.join(" ").toLowerCase();
-    if (lowerName.includes("creche") || joinedTiers.includes("creche")) {
-      derivedTier = "CRECHE";
-    } else if (lowerName.includes("primary") || joinedTiers.includes("primary") || joinedTiers.includes("nursery")) {
-      derivedTier = "PRIMARY";
-    } else if (lowerName.includes("secondary") || joinedTiers.includes("secondary") || joinedTiers.includes("high")) {
-      derivedTier = "SECONDARY";
-    }
+  // 4. Atomic Transaction: Core Tenant Identity (School + Tiers + Subscription + Department + User + Staff)
+  const transactionResult = await basePrisma.$transaction(
+    async (tx) => {
+      // A. School row: status ACTIVE, slug and subdomain strictly canonicalSlug
+      let derivedTier: any = "TERTIARY";
+      const lowerName = trimmedName.toLowerCase();
+      const joinedTiers = effectiveTiers.join(" ").toLowerCase();
+      if (lowerName.includes("creche") || joinedTiers.includes("creche")) {
+        derivedTier = "CRECHE";
+      } else if (lowerName.includes("primary") || joinedTiers.includes("primary") || joinedTiers.includes("nursery")) {
+        derivedTier = "PRIMARY";
+      } else if (lowerName.includes("secondary") || joinedTiers.includes("secondary") || joinedTiers.includes("high")) {
+        derivedTier = "SECONDARY";
+      }
 
-    const school = await tx.school.create({
-      data: {
-        name: trimmedName,
-        subdomain: canonicalSlug,
-        slug: canonicalSlug,
-        status: "ACTIVE",
-        tier: derivedTier,
-        tertiaryType: derivedTier === "TERTIARY" ? (tertiaryType as any) || "UNIVERSITY" : null,
-        contactPhone: contactPhone?.trim() || null,
-        isActive: true,
-        isBanned: false,
-        trialStartDate: now,
-        trialEndDate: fourteenDaysOut,
-        collectionMode: "MANUAL_BANK_TRANSFER",
-      },
-    });
-
-    // A2. Synchronize Tenant model record (stores slug and customDomain: null)
-    try {
-      await tx.tenant.upsert({
-        where: { subdomain: canonicalSlug },
-        update: {
-          schoolName: trimmedName,
-          adminEmail: normalizedEmail,
+      const school = await tx.school.create({
+        data: {
+          name: trimmedName,
+          subdomain: canonicalSlug,
           slug: canonicalSlug,
-          customDomain: null,
+          status: "ACTIVE",
+          tier: derivedTier,
+          tertiaryType: derivedTier === "TERTIARY" ? (tertiaryType as any) || "UNIVERSITY" : null,
+          contactPhone: contactPhone?.trim() || null,
+          isActive: true,
+          isBanned: false,
+          trialStartDate: now,
+          trialEndDate: fourteenDaysOut,
+          collectionMode: "MANUAL_BANK_TRANSFER",
+        },
+      });
+
+      // A2. Synchronize Tenant model record (stores slug and customDomain: null)
+      try {
+        await tx.tenant.upsert({
+          where: { subdomain: canonicalSlug },
+          update: {
+            schoolName: trimmedName,
+            adminEmail: normalizedEmail,
+            slug: canonicalSlug,
+            customDomain: null,
+            status: "ACTIVE",
+          },
+          create: {
+            schoolName: trimmedName,
+            subdomain: canonicalSlug,
+            slug: canonicalSlug,
+            customDomain: null,
+            adminEmail: normalizedEmail,
+            contactPhone: contactPhone?.trim() || "",
+            institutionTypes: effectiveTiers,
+            status: "ACTIVE",
+          },
+        });
+      } catch (tErr) {
+        console.warn("[TENANT_SERVICE_RECORD_SYNC]:", tErr);
+      }
+
+      // B. Academic tiers
+      const createdTiers: Array<{ id: string; name: string }> = [];
+      for (let i = 0; i < effectiveTiers.length; i++) {
+        const tierRecord = await tx.academicTier.create({
+          data: {
+            schoolId: school.id,
+            name: effectiveTiers[i],
+            level: i + 1,
+          },
+        });
+        createdTiers.push({ id: tierRecord.id, name: effectiveTiers[i] });
+      }
+
+      // C. Initial 14-day manual trial subscription
+      await tx.subscription.create({
+        data: {
+          schoolId: school.id,
+          plan: "14_DAY_TRIAL",
+          amount: 0.0,
+          status: "ACTIVE",
+          paymentMethod: "MANUAL",
+          verifiedByAdmin: true,
+          expiresAt: fourteenDaysOut,
+        },
+      });
+
+      // D. Initial school payment record
+      await tx.schoolPayment.create({
+        data: {
+          schoolId: school.id,
+          amount: 0.0,
+          type: "SUBSCRIPTION",
+          status: "VERIFIED",
+        },
+      });
+
+      // E. Default Department
+      const dept = await tx.department.create({
+        data: {
+          schoolId: school.id,
+          name: "Administration",
+        },
+      });
+
+      // F. User row in platform DB (authoritative auth record)
+      const user = await tx.user.upsert({
+        where: { schoolId_email: { schoolId: school.id, email: normalizedEmail } },
+        update: {
+          passwordHash,
+          role: "SCHOOL_ADMIN",
+          mustChangePassword: mustChange,
           status: "ACTIVE",
         },
         create: {
-          schoolName: trimmedName,
-          subdomain: canonicalSlug,
-          slug: canonicalSlug,
-          customDomain: null,
-          adminEmail: normalizedEmail,
-          contactPhone: contactPhone?.trim() || "",
-          institutionTypes: effectiveTiers,
+          schoolId: school.id,
+          email: normalizedEmail,
+          passwordHash,
+          role: "SCHOOL_ADMIN",
+          mustChangePassword: mustChange,
           status: "ACTIVE",
         },
       });
-    } catch (tErr) {
-      console.warn("[TENANT_SERVICE_RECORD_SYNC]:", tErr);
-    }
 
-    // B. Academic tiers & standard classrooms auto-provisioning
-    for (let i = 0; i < effectiveTiers.length; i++) {
-      const tierRecord = await tx.academicTier.create({
+      // G. Staff row linked directly to User
+      const staff = await tx.staff.create({
         data: {
           schoolId: school.id,
-          name: effectiveTiers[i],
-          level: i + 1,
+          userId: user.id,
+          firstName: "Admin",
+          lastName: "User",
+          email: normalizedEmail,
+          departmentId: dept.id,
+          status: "ACTIVE",
+          activeAt: now,
         },
       });
 
-      // Auto-provision standard canonical classrooms for this tier so new tenants have classrooms immediately
+      // H. Backward-compatible security table sync (User & Staff)
       try {
-        await provisionDefaultClassroomsForSchool(tx, school.id, tierRecord.id, effectiveTiers[i]);
-      } catch (classErr) {
-        console.warn(`[provisionDefaultClassroomsForSchool]: Failed for tier ${effectiveTiers[i]} in school ${school.id}:`, classErr);
-      }
+        await tx.$executeRawUnsafe(
+          `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (user_id)
+           DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
+          user.id,
+          school.id,
+          mustChange,
+          isTemp
+        );
+        await tx.$executeRawUnsafe(
+          `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (user_id)
+           DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
+          staff.id,
+          school.id,
+          mustChange,
+          isTemp
+        );
+      } catch { }
+
+      // I. Optional schema boundary creation
+      try {
+        await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${canonicalSlug}";`);
+      } catch { }
+
+      return { school, user, staff, createdTiers };
+    },
+    {
+      maxWait: 15000, // Maximum time Prisma client waits to acquire transaction lock (15s)
+      timeout: 60000, // Extended transaction timeout to avoid expired transaction exceptions (60s)
     }
+  );
 
-    // C. Initial 14-day manual trial subscription
-    await tx.subscription.create({
-      data: {
-        schoolId: school.id,
-        plan: "14_DAY_TRIAL",
-        amount: 0.0,
-        status: "ACTIVE",
-        paymentMethod: "MANUAL",
-        verifiedByAdmin: true,
-        expiresAt: fourteenDaysOut,
-      },
-    });
+  const { school, user, staff, createdTiers } = transactionResult;
 
-    // D. Initial school payment record
-    await tx.schoolPayment.create({
-      data: {
-        schoolId: school.id,
-        amount: 0.0,
-        type: "SUBSCRIPTION",
-        status: "VERIFIED",
-      },
-    });
-
-    // E. Default Department
-    const dept = await tx.department.create({
-      data: {
-        schoolId: school.id,
-        name: "Administration",
-      },
-    });
-
-    // F. User row in platform DB (authoritative auth record)
-    const user = await tx.user.upsert({
-      where: { schoolId_email: { schoolId: school.id, email: normalizedEmail } },
-      update: {
-        passwordHash,
-        role: "SCHOOL_ADMIN",
-        mustChangePassword: mustChange,
-        status: "ACTIVE",
-      },
-      create: {
-        schoolId: school.id,
-        email: normalizedEmail,
-        passwordHash,
-        role: "SCHOOL_ADMIN",
-        mustChangePassword: mustChange,
-        status: "ACTIVE",
-      },
-    });
-
-    // G. Staff row linked directly to User
-    const staff = await tx.staff.create({
-      data: {
-        schoolId: school.id,
-        userId: user.id,
-        firstName: "Admin",
-        lastName: "User",
-        email: normalizedEmail,
-        departmentId: dept.id,
-        status: "ACTIVE",
-        activeAt: now,
-      },
-    });
-
-    // H. Backward-compatible security table sync (User & Staff)
+  // 5. Post-Commit Actions (Only executed after transaction has committed successfully)
+  // Standard classrooms auto-provisioning (Batch executed post-commit for maximum speed & safety)
+  for (const ct of createdTiers) {
     try {
-      await tx.$executeRawUnsafe(
-        `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT (user_id)
-         DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
-        user.id,
-        school.id,
-        mustChange,
-        isTemp
-      );
-      await tx.$executeRawUnsafe(
-        `INSERT INTO bonavee_user_security (user_id, school_id, must_change_password, is_temporary_password, password_updated_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT (user_id)
-         DO UPDATE SET must_change_password = $3, is_temporary_password = $4, password_updated_at = NOW();`,
-        staff.id,
-        school.id,
-        mustChange,
-        isTemp
-      );
-    } catch { }
-
-    // I. Optional schema boundary creation
-    try {
-      await tx.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "tenant_${canonicalSlug}";`);
-    } catch { }
-
-    return { school, user, staff };
-  });
-
-  const { school, user, staff } = transactionResult;
-
-  // 5. Post-Commit Actions (Only executed if transaction committed successfully)
+      await provisionDefaultClassroomsForSchool(basePrisma, school.id, ct.id, ct.name);
+    } catch (classErr) {
+      console.warn(`[provisionDefaultClassroomsForSchool]: Failed for tier ${ct.name} in school ${school.id}:`, classErr);
+    }
+  }
   // Super admin store cache
   try {
     registerTenantInStore({
