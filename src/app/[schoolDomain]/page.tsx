@@ -1,10 +1,12 @@
 import { basePrisma } from "@/lib/tenant-prisma";
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { generateTierMockData, getHeroImage } from "@/lib/guestPortalUtils";
 import { TenantAuthActions } from "./TenantAuthActions";
+import RegisterTenantPage from "@/app/(public)/register/page";
+import OnboardingPage from "@/app/onboarding/page";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -89,7 +91,33 @@ export default async function PublicGuestPortalPage({
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 }) {
   const { schoolDomain } = await Promise.resolve(paramsPromise);
-  const isDemo = (schoolDomain || "").toLowerCase() === "demo" || (schoolDomain || "").toLowerCase() === "sandbox";
+  const normalized = (schoolDomain || "").toLowerCase().trim();
+  if (normalized === "register") {
+    return <RegisterTenantPage />;
+  }
+  if (normalized === "onboarding") {
+    return <OnboardingPage />;
+  }
+  if (normalized === "login") {
+    redirect("/login");
+  }
+  if (normalized === "forgot-password") {
+    redirect("/forgot-password");
+  }
+  if (normalized === "reset-password") {
+    redirect("/reset-password");
+  }
+  if (normalized === "admin" || normalized === "super-admin") {
+    redirect("/super-admin");
+  }
+  if (normalized === "portal-not-found") {
+    redirect("/portal-not-found");
+  }
+  if (normalized === "access-denied") {
+    redirect("/access-denied");
+  }
+
+  const isDemo = normalized === "demo" || normalized === "sandbox";
 
   const session = await getSession(undefined, schoolDomain).catch(() => null);
 

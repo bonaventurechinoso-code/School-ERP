@@ -48,6 +48,9 @@ const PUBLIC_TENANT_ACTIONS = new Set([
 
 // Reserved system subdomains / prefixes that are not tenant codes (including common typos)
 const SYSTEM_PREFIXES = new Set([
+  "register",
+  "onboarding",
+  "login",
   "api",
   "_next",
   "admin",
@@ -119,6 +122,18 @@ function isPublicRoute(pathname: string, req?: NextRequest): boolean {
   // Never allow super-admin or admin paths to be treated as public
   if (isSuperAdminPath(lowerPath)) {
     return false;
+  }
+
+  // Explicit global onboarding and registration routes are always public
+  if (
+    lowerPath === "/register" ||
+    lowerPath.startsWith("/register/") ||
+    lowerPath.startsWith("/register?") ||
+    lowerPath === "/onboarding" ||
+    lowerPath.startsWith("/onboarding/") ||
+    lowerPath.startsWith("/onboarding?")
+  ) {
+    return true;
   }
 
   // 1. Static assets and Next.js internals

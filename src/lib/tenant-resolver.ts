@@ -4,6 +4,9 @@
  */
 
 export const RESERVED_SUBDOMAINS = new Set([
+  "register",
+  "onboarding",
+  "login",
   "www",
   "admin",
   "api",
